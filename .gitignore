@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.env.*
+*.log
+.next/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime/temp
+.tmp/
+.temp/
+*.pid
+*.seed
+*.pid.lock
