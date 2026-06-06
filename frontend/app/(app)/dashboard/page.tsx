@@ -6,6 +6,10 @@ import { DashboardSection } from "@/components/dashboard/dashboard-section";
 import { SummaryCard } from "@/components/dashboard/summary-card";
 import { PageHeader } from "@/components/layout/page-header";
 import {
+  ProjectHealthBadge,
+  ProjectHealthFactors,
+} from "@/components/projects/project-health-badge";
+import {
   getMyDashboard,
   type ApiDashboardIssue,
   type ApiDashboardProject,
@@ -57,7 +61,7 @@ export default function DashboardPage() {
 
       {!isLoading && !error && dashboard ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <SummaryCard
               label="Total Tasks"
               value={dashboard.taskSummary.total}
@@ -77,6 +81,15 @@ export default function DashboardPage() {
               tone="danger"
               value={dashboard.taskSummary.overdue}
             />
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
+              <p className="text-sm font-medium text-slate-500">
+                Delivery Health
+              </p>
+              <div className="mt-4">
+                <ProjectHealthBadge status={dashboard.health.status} />
+                <ProjectHealthFactors factors={dashboard.health.factors} />
+              </div>
+            </section>
           </section>
 
           <DashboardSection
@@ -116,7 +129,7 @@ function DashboardLoadingState() {
   return (
     <div className="space-y-6">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
+        {Array.from({ length: 5 }).map((_, index) => (
           <div
             className="h-32 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
             key={index}
@@ -147,9 +160,10 @@ function ProjectItem({ project }: { project: ApiDashboardProject }) {
           </p>
         </div>
         <span className="shrink-0 capitalize text-slate-500">
-          {formatLabel(project.status)}
+          <ProjectHealthBadge status={project.health?.status ?? "GREEN"} />
         </span>
       </div>
+      <ProjectHealthFactors factors={project.health?.factors} />
     </Link>
   );
 }

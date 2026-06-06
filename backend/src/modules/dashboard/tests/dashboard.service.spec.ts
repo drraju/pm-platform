@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { HealthCalculationService } from '../../health/health-calculation.service';
+import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Project } from '../../projects/entities/project.entity';
 import { Issue } from '../../raid/entities/issue.entity';
@@ -42,6 +44,7 @@ describe('DashboardService', () => {
         { provide: getRepositoryToken(Task), useValue: tasksRepository },
         { provide: getRepositoryToken(Risk), useValue: risksRepository },
         { provide: getRepositoryToken(Issue), useValue: issuesRepository },
+        HealthCalculationService,
       ],
     }).compile();
 
@@ -125,12 +128,24 @@ describe('DashboardService', () => {
       assignedProjects: [
         {
           id: 'owned-project',
+          health: {
+            factors: [
+              'No critical issues, high risks, or overdue task threshold breaches',
+            ],
+            status: ProjectHealthStatus.Green,
+          },
           name: 'Owned Project',
           role: 'owner',
           status: 'active',
         },
         {
           id: 'member-project',
+          health: {
+            factors: [
+              'No critical issues, high risks, or overdue task threshold breaches',
+            ],
+            status: ProjectHealthStatus.Green,
+          },
           name: 'Member Project',
           role: ProjectRole.Manager,
           status: 'at_risk',
@@ -176,15 +191,19 @@ describe('DashboardService', () => {
           projectName: 'Member Project',
         },
       ],
+      health: {
+        factors: ['1 critical issue open', '25% tasks overdue (1/4)'],
+        status: ProjectHealthStatus.Red,
+      },
     });
 
     expect(projectsRepository.find).toHaveBeenCalledWith({
       order: { createdAt: 'DESC' },
-      relations: { owner: true },
+      relations: { issues: true, owner: true, risks: true, tasks: true },
       where: { ownerId: userId },
     });
     expect(projectMembersRepository.find).toHaveBeenCalledWith({
-      relations: { project: { owner: true } },
+      relations: { project: { issues: true, owner: true, risks: true, tasks: true } },
       where: { userId },
     });
     expect(tasksRepository.find).toHaveBeenNthCalledWith(1, {

@@ -14,6 +14,13 @@ export type ApiUser = {
   role?: ApiRole | null;
 };
 
+export type ApiProjectHealthStatus = "GREEN" | "AMBER" | "RED";
+
+export type ApiProjectHealth = {
+  status: ApiProjectHealthStatus;
+  factors: string[];
+};
+
 export type ApiProject = {
   id: string;
   name: string;
@@ -24,6 +31,10 @@ export type ApiProject = {
   ownerId?: string | null;
   owner?: ApiUser | null;
   members?: ApiProjectMember[];
+  tasks?: ApiTask[];
+  risks?: ApiRaidItem[];
+  issues?: ApiRaidItem[];
+  health?: ApiProjectHealth;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -94,6 +105,7 @@ export type ApiDashboardProject = {
   name: string;
   status: string;
   role: string;
+  health?: ApiProjectHealth;
 };
 
 export type ApiDashboardTask = {
@@ -124,6 +136,7 @@ export type ApiMeDashboard = {
   upcomingTasks: ApiDashboardTask[];
   openRisks: ApiDashboardRisk[];
   openIssues: ApiDashboardIssue[];
+  health: ApiProjectHealth;
 };
 
 type RequestOptions = RequestInit & {

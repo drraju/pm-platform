@@ -1,15 +1,17 @@
 import React from "react";
+import {
+  ProjectWorkspaceTable,
+  type ProjectWorkspaceTableColumn,
+} from "@/components/projects/project-workspace-table";
 import type { ApiRaidItem } from "@/features/projects";
 
-type RegisterColumn = {
-  header: string;
-  render: (item: ApiRaidItem) => string;
-};
+type RegisterColumn = ProjectWorkspaceTableColumn<ApiRaidItem>;
 
 type ProjectWorkspaceRegisterSectionProps = {
   columns: RegisterColumn[];
   description: string;
   emptyMessage: string;
+  isLoading?: boolean;
   items: ApiRaidItem[];
   title: string;
 };
@@ -18,6 +20,7 @@ export function ProjectWorkspaceRegisterSection({
   columns,
   description,
   emptyMessage,
+  isLoading = false,
   items,
   title,
 }: ProjectWorkspaceRegisterSectionProps) {
@@ -33,44 +36,12 @@ export function ProjectWorkspaceRegisterSection({
         </span>
       </div>
 
-      <div className="mt-5 overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <tr>
-              {columns.map((column) => (
-                <th className="px-3 py-3" key={column.header}>
-                  {column.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.length === 0 ? (
-              <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={columns.length}>
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : null}
-            {items.map((item) => (
-              <tr key={item.id}>
-                {columns.map((column, index) => (
-                  <td
-                    className={
-                      index === 0
-                        ? "px-3 py-3 font-semibold text-slate-950"
-                        : "px-3 py-3 capitalize text-slate-600"
-                    }
-                    key={`${item.id}-${column.header}`}
-                  >
-                    {column.render(item)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ProjectWorkspaceTable
+        columns={columns}
+        emptyMessage={emptyMessage}
+        isLoading={isLoading}
+        items={items}
+      />
     </section>
   );
 }

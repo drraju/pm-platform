@@ -5,6 +5,10 @@ import { useParams } from "next/navigation";
 import React from "react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import {
+  ProjectHealthBadge,
+  ProjectHealthFactors,
+} from "@/components/projects/project-health-badge";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
 import {
   formatRaidLabel,
@@ -105,6 +109,10 @@ export default function ProjectWorkspacePage() {
   const issues = project.issues ?? [];
   const assumptions = project.assumptions ?? [];
   const dependencies = project.dependencies ?? [];
+  const health = project.health ?? {
+    factors: ['No critical issues, high risks, or overdue task threshold breaches'],
+    status: "GREEN" as const,
+  };
 
   return (
     <div className="space-y-6">
@@ -115,6 +123,23 @@ export default function ProjectWorkspacePage() {
       />
 
       {error ? <ErrorMessage message={error} /> : null}
+
+      <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">
+              Delivery Health
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Calculated from open critical issues, high risks, and overdue task percentage.
+            </p>
+          </div>
+          <div>
+            <ProjectHealthBadge status={health.status} />
+            <ProjectHealthFactors factors={health.factors} />
+          </div>
+        </div>
+      </section>
 
       <ProjectWorkspaceOverview project={project} />
       <ProjectWorkspaceSummary tasks={tasks} />

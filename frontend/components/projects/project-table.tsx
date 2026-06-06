@@ -2,6 +2,10 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
+import {
+  ProjectHealthBadge,
+  ProjectHealthFactors,
+} from "@/components/projects/project-health-badge";
 import type { ApiProject } from "@/features/projects";
 
 type ProjectTableProps = {
@@ -23,9 +27,10 @@ export function ProjectTable({
 
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-      <div className="hidden grid-cols-[1.3fr_0.7fr_1fr_0.7fr_0.8fr_110px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+      <div className="hidden grid-cols-[1.3fr_0.7fr_0.7fr_1fr_0.7fr_0.8fr_110px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
         <span>Name</span>
         <span>Status</span>
+        <span>Health</span>
         <span>Owner</span>
         <span>Team</span>
         <span>Created</span>
@@ -46,7 +51,7 @@ export function ProjectTable({
         {projects.map((project) => (
           <article
             aria-label={`Open ${project.name}`}
-            className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand/30 md:grid-cols-[1.3fr_0.7fr_1fr_0.7fr_0.8fr_110px] md:items-center"
+            className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand/30 md:grid-cols-[1.3fr_0.7fr_0.7fr_1fr_0.7fr_0.8fr_110px] md:items-center"
             key={project.id}
             onClick={() => openProject(project.id)}
             onKeyDown={(event) => {
@@ -70,6 +75,13 @@ export function ProjectTable({
                 Status:{" "}
               </span>
               {formatLabel(project.status)}
+            </span>
+            <span>
+              <span className="mb-1 block font-medium text-slate-500 md:hidden">
+                Health
+              </span>
+              <ProjectHealthBadge status={project.health?.status ?? "GREEN"} />
+              <ProjectHealthFactors factors={project.health?.factors} />
             </span>
             <span className="text-slate-600">
               <span className="font-medium text-slate-500 md:hidden">

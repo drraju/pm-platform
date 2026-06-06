@@ -6,6 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../common/enums/project-role.enum';
+import { HealthCalculationService } from '../health/health-calculation.service';
+import { ProjectHealthDto } from '../health/dto/project-health.dto';
 import { Task } from '../tasks/entities/task.entity';
 import { Assumption } from '../raid/entities/assumption.entity';
 import { Dependency } from '../raid/entities/dependency.entity';
@@ -23,6 +25,8 @@ import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
 import { ProjectMember } from './entities/project-member.entity';
 import { Project } from './entities/project.entity';
 
+type ProjectWithHealth = Project & { health: ProjectHealthDto };
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -34,6 +38,7 @@ export class ProjectsService {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly healthCalculationService: HealthCalculationService,
   ) {}
 
   create(createProjectDto: CreateProjectDto): Promise<Project> {
@@ -42,14 +47,16 @@ export class ProjectsService {
     );
   }
 
-  findAll(): Promise<Project[]> {
-    return this.projectsRepository.find({
+  async findAll(): Promise<ProjectWithHealth[]> {
+    const projects = await this.projectsRepository.find({
       order: { createdAt: 'DESC' },
-      relations: { owner: true },
+      relations: { issues: true, owner: true, risks: true, tasks: true },
     });
+
+    return projects.map((project) => this.withHealth(project));
   }
 
-  async findOne(id: string): Promise<Project> {
+  async findOne(id: string): Promise<ProjectWithHealth> {
     const project = await this.projectsRepository.findOne({
       where: { id },
       relations: {
@@ -66,20 +73,20 @@ export class ProjectsService {
       throw new NotFoundException(`Project ${id} not found`);
     }
 
-    return project;
+    return this.withHealth(project);
   }
 
   async update(
     id: string,
     updateProjectDto: UpdateProjectDto,
   ): Promise<Project> {
-    const project = await this.findOne(id);
+    const project = await this.findProjectEntity(id);
     Object.assign(project, updateProjectDto);
     return this.projectsRepository.save(project);
   }
 
   async remove(id: string): Promise<void> {
-    const project = await this.findOne(id);
+    const project = await this.findProjectEntity(id);
     await this.projectsRepository.softRemove(project);
   }
 
@@ -229,6 +236,26 @@ export class ProjectsService {
     }
   }
 
+  private async findProjectEntity(id: string): Promise<Project> {
+    const project = await this.projectsRepository.findOne({
+      where: { id },
+      relations: {
+        assumptions: { owner: true },
+        dependencies: { owner: true },
+        issues: { owner: true },
+        members: { user: true },
+        owner: true,
+        risks: { owner: true },
+        tasks: { assignee: true },
+      },
+    });
+    if (!project) {
+      throw new NotFoundException(`Project ${id} not found`);
+    }
+
+    return project;
+  }
+
   private async ensureUserExists(userId: string): Promise<void> {
     const user = await this.usersRepository.findOne({
       select: { id: true },
@@ -309,5 +336,15 @@ export class ProjectsService {
           }
         : null,
     };
+  }
+
+  private withHealth(project: Project): ProjectWithHealth {
+    return Object.assign(project, {
+      health: this.healthCalculationService.calculate({
+        issues: project.issues,
+        risks: project.risks,
+        tasks: project.tasks,
+      }),
+    });
   }
 }

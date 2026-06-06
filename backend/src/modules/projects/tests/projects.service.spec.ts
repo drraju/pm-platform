@@ -4,6 +4,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { HealthCalculationService } from '../../health/health-calculation.service';
+import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
 import { Task } from '../../tasks/entities/task.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectMember } from '../entities/project-member.entity';
@@ -70,6 +72,7 @@ describe('ProjectsService', () => {
           provide: getRepositoryToken(User),
           useValue: usersRepository,
         },
+        HealthCalculationService,
       ],
     }).compile();
 
@@ -104,17 +107,35 @@ describe('ProjectsService', () => {
   it('lists projects with owner details newest first', async () => {
     projectsRepository.find?.mockResolvedValue([{ id: projectId }]);
 
-    await expect(service.findAll()).resolves.toEqual([{ id: projectId }]);
+    await expect(service.findAll()).resolves.toEqual([
+      {
+        health: {
+          factors: [
+            'No critical issues, high risks, or overdue task threshold breaches',
+          ],
+          status: ProjectHealthStatus.Green,
+        },
+        id: projectId,
+      },
+    ]);
     expect(projectsRepository.find).toHaveBeenCalledWith({
       order: { createdAt: 'DESC' },
-      relations: { owner: true },
+      relations: { issues: true, owner: true, risks: true, tasks: true },
     });
   });
 
   it('loads project details with members, tasks, and RAID context', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
 
-    await expect(service.findOne(projectId)).resolves.toEqual({ id: projectId });
+    await expect(service.findOne(projectId)).resolves.toEqual({
+      health: {
+        factors: [
+          'No critical issues, high risks, or overdue task threshold breaches',
+        ],
+        status: ProjectHealthStatus.Green,
+      },
+      id: projectId,
+    });
     expect(projectsRepository.findOne).toHaveBeenCalledWith({
       where: { id: projectId },
       relations: {

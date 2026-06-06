@@ -20,6 +20,8 @@ export {
 export type {
   ApiProject,
   ApiProjectDetails,
+  ApiProjectHealth,
+  ApiProjectHealthStatus,
   ApiProjectMember,
   ApiRaidItem,
   ApiTask,

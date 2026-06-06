@@ -47,7 +47,11 @@ export default function ProjectsPage() {
             return {
               ...project,
               createdAt: project.createdAt ?? details.createdAt,
+              health: details.health ?? project.health,
+              issues: details.issues ?? project.issues,
               members: details.members ?? project.members,
+              risks: details.risks ?? project.risks,
+              tasks: details.tasks ?? project.tasks,
             };
           } catch {
             return project;

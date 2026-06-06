@@ -18,9 +18,9 @@ import { RolePermission } from '../src/modules/users/entities/role-permission.en
 import { User } from '../src/modules/users/entities/user.entity';
 
 const seedNamespace = 'pm-platform-dev-seed-v2';
-const defaultPassword = 'Password123!';
+export const defaultPassword = 'Password123!';
 
-function seedUuid(key: string): string {
+export function seedUuid(key: string): string {
   const hash = createHash('sha1').update(`${seedNamespace}:${key}`).digest('hex');
   return [
     hash.slice(0, 8),
@@ -223,6 +223,19 @@ const requiredEntityNames = [
   'Dependency',
   'Notification',
 ];
+
+export const developmentSeedData = {
+  assumptionTitles,
+  defaultPassword,
+  dependencyTitles,
+  issueTitles,
+  memberships,
+  projects,
+  requiredEntityNames,
+  riskTitles,
+  taskTitlesByProject,
+  users,
+};
 
 const appDataSource = new DataSource(createDataSourceOptions());
 
@@ -533,7 +546,7 @@ async function main() {
   }
 }
 
-function verifyRequiredEntities(dataSource: DataSource) {
+export function verifyRequiredEntities(dataSource: DataSource) {
   const loadedEntityNames = new Set(
     dataSource.entityMetadatas.map((metadata) => metadata.targetName),
   );
@@ -548,8 +561,10 @@ function verifyRequiredEntities(dataSource: DataSource) {
   }
 }
 
-main().catch((error) => {
-  console.error('Seed failed');
-  console.error(error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Seed failed');
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

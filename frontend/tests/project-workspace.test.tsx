@@ -8,6 +8,7 @@ import {
   formatRaidOwner,
 } from "@/components/projects/project-workspace-register-section";
 import { ProjectWorkspaceSummary } from "@/components/projects/project-workspace-summary";
+import { ProjectWorkspaceTable } from "@/components/projects/project-workspace-table";
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 
@@ -176,5 +177,19 @@ describe("Project workspace components", () => {
     expect(screen.getByText("Supplier onboarding delay")).toBeInTheDocument();
     expect(screen.getByText("Maria Garcia")).toBeInTheDocument();
     expect(screen.getByText("high")).toBeInTheDocument();
+  });
+
+  it("renders workspace table loading state", () => {
+    render(
+      <ProjectWorkspaceTable
+        columns={[{ header: "Title", render: (item) => item.title }]}
+        emptyMessage="No records yet."
+        isLoading
+        items={[]}
+      />,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
+    expect(screen.queryByText("No records yet.")).not.toBeInTheDocument();
   });
 });

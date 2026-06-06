@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ProjectHealthDto } from '../../health/dto/project-health.dto';
 import { TaskSummaryDto } from './task-summary.dto';
 
 export class DashboardProjectDto {
@@ -13,6 +14,9 @@ export class DashboardProjectDto {
 
   @ApiProperty()
   role: string;
+
+  @ApiProperty({ type: ProjectHealthDto })
+  health: ProjectHealthDto;
 }
 
 export class DashboardTaskDto {
@@ -75,4 +79,7 @@ export class MeDashboardDto {
 
   @ApiProperty({ type: DashboardIssueDto, isArray: true })
   openIssues: DashboardIssueDto[];
+
+  @ApiProperty({ type: ProjectHealthDto })
+  health: ProjectHealthDto;
 }

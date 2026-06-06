@@ -1,6 +1,7 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuditableEntity } from '../../../common/entities/auditable.entity';
+import { ProjectHealthDto } from '../../health/dto/project-health.dto';
 import { Dependency } from '../../raid/entities/dependency.entity';
 import { Issue } from '../../raid/entities/issue.entity';
 import { Risk } from '../../raid/entities/risk.entity';
@@ -56,4 +57,7 @@ export class Project extends AuditableEntity {
 
   @OneToMany(() => Dependency, (dependency) => dependency.project)
   dependencies: Dependency[];
+
+  @ApiPropertyOptional({ type: ProjectHealthDto })
+  health?: ProjectHealthDto;
 }
