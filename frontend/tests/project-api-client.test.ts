@@ -6,6 +6,10 @@ import {
   deleteProject,
   getMyTasks,
   getProject,
+  getProjectAssumptions,
+  getProjectDependencies,
+  getProjectIssues,
+  getProjectRisks,
   getProjects,
   removeProjectMember,
   updateProject,
@@ -62,6 +66,35 @@ describe("project API client", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects/project-1",
+      expect.any(Object),
+    );
+  });
+
+  it("loads project register sections", async () => {
+    const fetchMock = mockFetch([{ id: "risk-1", title: "Delivery risk" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getProjectRisks("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/risks",
+      expect.any(Object),
+    );
+
+    await getProjectIssues("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/issues",
+      expect.any(Object),
+    );
+
+    await getProjectAssumptions("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/assumptions",
+      expect.any(Object),
+    );
+
+    await getProjectDependencies("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/dependencies",
       expect.any(Object),
     );
   });

@@ -7,6 +7,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../common/enums/project-role.enum';
 import { Task } from '../tasks/entities/task.entity';
+import { Assumption } from '../raid/entities/assumption.entity';
+import { Dependency } from '../raid/entities/dependency.entity';
+import { Issue } from '../raid/entities/issue.entity';
+import { Risk } from '../raid/entities/risk.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -193,6 +197,26 @@ export class ProjectsService {
 
     const task = await this.findProjectTask(projectId, taskId);
     await this.tasksRepository.softRemove(task);
+  }
+
+  async findProjectRisks(projectId: string): Promise<Risk[]> {
+    const project = await this.findOne(projectId);
+    return project.risks ?? [];
+  }
+
+  async findProjectIssues(projectId: string): Promise<Issue[]> {
+    const project = await this.findOne(projectId);
+    return project.issues ?? [];
+  }
+
+  async findProjectAssumptions(projectId: string): Promise<Assumption[]> {
+    const project = await this.findOne(projectId);
+    return project.assumptions ?? [];
+  }
+
+  async findProjectDependencies(projectId: string): Promise<Dependency[]> {
+    const project = await this.findOne(projectId);
+    return project.dependencies ?? [];
   }
 
   private async ensureProjectExists(projectId: string): Promise<void> {

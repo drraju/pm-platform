@@ -67,6 +67,7 @@ export type ApiRaidItem = {
   ownerId?: string | null;
   status: string;
   severity?: string;
+  priority?: string;
   probability?: string;
   impact?: string;
   mitigationPlan?: string | null;
@@ -216,6 +217,22 @@ export function getMyDashboard() {
 
 export function getProject(projectId: string) {
   return apiRequest<ApiProjectDetails>(`/projects/${projectId}`);
+}
+
+export function getProjectRisks(projectId: string) {
+  return apiRequest<ApiRaidItem[]>(`/projects/${projectId}/risks`);
+}
+
+export function getProjectIssues(projectId: string) {
+  return apiRequest<ApiRaidItem[]>(`/projects/${projectId}/issues`);
+}
+
+export function getProjectAssumptions(projectId: string) {
+  return apiRequest<ApiRaidItem[]>(`/projects/${projectId}/assumptions`);
+}
+
+export function getProjectDependencies(projectId: string) {
+  return apiRequest<ApiRaidItem[]>(`/projects/${projectId}/dependencies`);
 }
 
 export function createProject(input: {

@@ -5,7 +5,11 @@ export {
   deleteProject,
   deleteProjectTask,
   getProject,
+  getProjectAssumptions,
+  getProjectDependencies,
+  getProjectIssues,
   getProjectMembers,
+  getProjectRisks,
   getProjectTasks,
   getProjects,
   removeProjectMember,
@@ -17,5 +21,6 @@ export type {
   ApiProject,
   ApiProjectDetails,
   ApiProjectMember,
+  ApiRaidItem,
   ApiTask,
 } from "@/lib/api/client";

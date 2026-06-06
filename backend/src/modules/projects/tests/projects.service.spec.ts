@@ -135,6 +135,42 @@ describe('ProjectsService', () => {
     await expect(service.findOne(projectId)).rejects.toThrow(NotFoundException);
   });
 
+  it('lists project RAID collections from project details', async () => {
+    const project = {
+      id: projectId,
+      assumptions: [{ id: 'assumption-id', projectId }],
+      dependencies: [{ id: 'dependency-id', projectId }],
+      issues: [{ id: 'issue-id', projectId }],
+      risks: [{ id: 'risk-id', projectId }],
+    };
+    projectsRepository.findOne?.mockResolvedValue(project);
+
+    await expect(service.findProjectRisks(projectId)).resolves.toEqual(
+      project.risks,
+    );
+    await expect(service.findProjectIssues(projectId)).resolves.toEqual(
+      project.issues,
+    );
+    await expect(service.findProjectAssumptions(projectId)).resolves.toEqual(
+      project.assumptions,
+    );
+    await expect(service.findProjectDependencies(projectId)).resolves.toEqual(
+      project.dependencies,
+    );
+    expect(projectsRepository.findOne).toHaveBeenCalledWith({
+      where: { id: projectId },
+      relations: {
+        assumptions: { owner: true },
+        dependencies: { owner: true },
+        issues: { owner: true },
+        members: { user: true },
+        owner: true,
+        risks: { owner: true },
+        tasks: { assignee: true },
+      },
+    });
+  });
+
   it('updates an existing project', async () => {
     const project = { id: projectId, name: 'Original', status: 'active' };
     projectsRepository.findOne?.mockResolvedValue(project);

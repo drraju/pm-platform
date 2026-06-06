@@ -1,5 +1,7 @@
+"use client";
+
 import React from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ApiProject } from "@/features/projects";
 
 type ProjectTableProps = {
@@ -13,14 +15,21 @@ export function ProjectTable({
   isLoading,
   projects,
 }: ProjectTableProps) {
+  const router = useRouter();
+
+  function openProject(projectId: string) {
+    router.push(`/projects/${projectId}`);
+  }
+
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-      <div className="hidden grid-cols-[1.3fr_0.7fr_1fr_0.7fr_0.8fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+      <div className="hidden grid-cols-[1.3fr_0.7fr_1fr_0.7fr_0.8fr_110px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
         <span>Name</span>
         <span>Status</span>
         <span>Owner</span>
         <span>Team</span>
         <span>Created</span>
+        <span>Action</span>
       </div>
 
       <div className="divide-y divide-slate-100">
@@ -35,10 +44,18 @@ export function ProjectTable({
         ) : null}
 
         {projects.map((project) => (
-          <Link
-            className="grid gap-3 px-4 py-4 text-sm transition hover:bg-slate-50 md:grid-cols-[1.3fr_0.7fr_1fr_0.7fr_0.8fr] md:items-center"
-            href={`/projects/${project.id}`}
+          <article
+            aria-label={`Open ${project.name}`}
+            className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand/30 md:grid-cols-[1.3fr_0.7fr_1fr_0.7fr_0.8fr_110px] md:items-center"
             key={project.id}
+            onClick={() => openProject(project.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                openProject(project.id);
+              }
+            }}
+            role="link"
+            tabIndex={0}
           >
             <div>
               <span className="block font-semibold text-slate-950">
@@ -71,7 +88,17 @@ export function ProjectTable({
             <span className="hidden text-slate-600 md:block">
               {formatDate(project.createdAt)}
             </span>
-          </Link>
+            <button
+              className="w-fit rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand/30"
+              onClick={(event) => {
+                event.stopPropagation();
+                openProject(project.id);
+              }}
+              type="button"
+            >
+              Open
+            </button>
+          </article>
         ))}
       </div>
     </section>

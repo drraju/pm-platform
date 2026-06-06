@@ -25,6 +25,10 @@ import {
 } from '@nestjs/swagger';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Assumption } from '../raid/entities/assumption.entity';
+import { Dependency } from '../raid/entities/dependency.entity';
+import { Issue } from '../raid/entities/issue.entity';
+import { Risk } from '../raid/entities/risk.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
@@ -174,6 +178,42 @@ export class ProjectsController {
     @Param('taskId') taskId: string,
   ): Promise<void> {
     return this.projectsService.removeProjectTask(projectId, taskId);
+  }
+
+  @Get(':id/risks')
+  @ApiOperation({ summary: 'List project risks' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: Risk, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  findProjectRisks(@Param('id') id: string): Promise<Risk[]> {
+    return this.projectsService.findProjectRisks(id);
+  }
+
+  @Get(':id/issues')
+  @ApiOperation({ summary: 'List project issues' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: Issue, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  findProjectIssues(@Param('id') id: string): Promise<Issue[]> {
+    return this.projectsService.findProjectIssues(id);
+  }
+
+  @Get(':id/assumptions')
+  @ApiOperation({ summary: 'List project assumptions' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: Assumption, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  findProjectAssumptions(@Param('id') id: string): Promise<Assumption[]> {
+    return this.projectsService.findProjectAssumptions(id);
+  }
+
+  @Get(':id/dependencies')
+  @ApiOperation({ summary: 'List project dependencies' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: Dependency, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  findProjectDependencies(@Param('id') id: string): Promise<Dependency[]> {
+    return this.projectsService.findProjectDependencies(id);
   }
 
   @Get(':id')

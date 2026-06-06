@@ -1,23 +1,41 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectTable } from "@/components/projects/project-table";
 
-vi.mock("next/link", () => ({
-  default: ({
-    children,
-    href,
-    className,
-  }: {
-    children: React.ReactNode;
-    href: string;
-    className?: string;
-  }) => (
-    <a className={className} href={href}>
-      {children}
-    </a>
-  ),
+const navigationMocks = vi.hoisted(() => ({
+  push: vi.fn(),
 }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: navigationMocks.push,
+  }),
+}));
+
+beforeEach(() => {
+  navigationMocks.push.mockClear();
+});
+
+const projects = [
+  {
+    createdAt: "2026-06-01T10:00:00.000Z",
+    id: "project-1",
+    members: [
+      { id: "member-1", role: "manager", userId: "user-1" },
+      { id: "member-2", role: "contributor", userId: "user-2" },
+    ],
+    name: "Customer Experience Platform Upgrade",
+    owner: {
+      email: "owner@example.com",
+      firstName: "Ava",
+      id: "user-owner",
+      lastName: "Patel",
+      status: "active",
+    },
+    status: "at_risk",
+  },
+];
 
 describe("ProjectTable", () => {
   it("renders project rows with team count and created date", () => {
@@ -25,37 +43,32 @@ describe("ProjectTable", () => {
       <ProjectTable
         emptyMessage="No projects"
         isLoading={false}
-        projects={[
-          {
-            createdAt: "2026-06-01T10:00:00.000Z",
-            id: "project-1",
-            members: [
-              { id: "member-1", role: "manager", userId: "user-1" },
-              { id: "member-2", role: "contributor", userId: "user-2" },
-            ],
-            name: "Customer Experience Platform Upgrade",
-            owner: {
-              email: "owner@example.com",
-              firstName: "Ava",
-              id: "user-owner",
-              lastName: "Patel",
-              status: "active",
-            },
-            status: "at_risk",
-          },
-        ]}
+        projects={projects}
       />,
     );
 
-    expect(
-      screen.getByRole("link", {
-        name: /Customer Experience Platform Upgrade/i,
-      }),
-    ).toHaveAttribute("href", "/projects/project-1");
+    expect(screen.getByRole("link")).toHaveAccessibleName(
+      "Open Customer Experience Platform Upgrade",
+    );
+    expect(screen.getByRole("button", { name: /open/i })).toBeInTheDocument();
     expect(screen.getByText("at risk")).toBeInTheDocument();
     expect(screen.getByText("Ava Patel")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();
+  });
+
+  it("opens a project when Enter is pressed on a row", () => {
+    render(
+      <ProjectTable
+        emptyMessage="No projects"
+        isLoading={false}
+        projects={projects}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("link"), { key: "Enter" });
+
+    expect(navigationMocks.push).toHaveBeenCalledWith("/projects/project-1");
   });
 
   it("renders an empty state", () => {
