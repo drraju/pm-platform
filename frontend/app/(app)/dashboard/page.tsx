@@ -7,9 +7,12 @@ import { SummaryCard } from "@/components/dashboard/summary-card";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   getMyDashboard,
+  type ApiDashboardIssue,
+  type ApiDashboardProject,
+  type ApiDashboardRisk,
+  type ApiDashboardTask,
   type ApiMeDashboard,
 } from "@/features/dashboard";
-import type { ApiProject, ApiRaidItem, ApiTask } from "@/lib/api/client";
 
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<ApiMeDashboard | null>(null);
@@ -54,9 +57,11 @@ export default function DashboardPage() {
 
       {!isLoading && !error && dashboard ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <SummaryCard label="Total" value={dashboard.taskSummary.total} />
-            <SummaryCard label="Todo" value={dashboard.taskSummary.todo} />
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard
+              label="Total Tasks"
+              value={dashboard.taskSummary.total}
+            />
             <SummaryCard
               label="In progress"
               tone="warning"
@@ -68,19 +73,20 @@ export default function DashboardPage() {
               value={dashboard.taskSummary.blocked}
             />
             <SummaryCard
-              label="Completed"
-              tone="success"
-              value={dashboard.taskSummary.completed}
+              label="Overdue"
+              tone="danger"
+              value={dashboard.taskSummary.overdue}
             />
           </section>
 
-          <section className="grid gap-6 xl:grid-cols-2">
-            <DashboardSection
-              emptyMessage="No assigned projects yet."
-              items={dashboard.assignedProjects}
-              renderItem={(project) => <ProjectItem project={project} />}
-              title="Assigned Projects"
-            />
+          <DashboardSection
+            emptyMessage="No assigned projects yet."
+            items={dashboard.assignedProjects}
+            renderItem={(project) => <ProjectItem project={project} />}
+            title="Assigned Projects"
+          />
+
+          <section className="grid gap-6 xl:grid-cols-3">
             <DashboardSection
               emptyMessage="No upcoming tasks due in the next 7 days."
               items={dashboard.upcomingTasks}
@@ -88,21 +94,15 @@ export default function DashboardPage() {
               title="Upcoming Tasks"
             />
             <DashboardSection
-              emptyMessage="No overdue tasks."
-              items={dashboard.overdueTasks}
-              renderItem={(task) => <TaskItem task={task} />}
-              title="Overdue Tasks"
-            />
-            <DashboardSection
               emptyMessage="No open risks owned by you."
               items={dashboard.openRisks}
-              renderItem={(risk) => <RaidItem item={risk} />}
+              renderItem={(risk) => <RiskItem risk={risk} />}
               title="Open Risks"
             />
             <DashboardSection
               emptyMessage="No open issues owned by you."
               items={dashboard.openIssues}
-              renderItem={(issue) => <RaidItem item={issue} />}
+              renderItem={(issue) => <IssueItem issue={issue} />}
               title="Open Issues"
             />
           </section>
@@ -115,16 +115,17 @@ export default function DashboardPage() {
 function DashboardLoadingState() {
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, index) => (
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
           <div
             className="h-32 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
             key={index}
           />
         ))}
       </section>
-      <section className="grid gap-6 xl:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, index) => (
+      <div className="h-72 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
+      <section className="grid gap-6 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
           <div
             className="h-64 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
             key={index}
@@ -135,62 +136,90 @@ function DashboardLoadingState() {
   );
 }
 
-function ProjectItem({ project }: { project: ApiProject }) {
+function ProjectItem({ project }: { project: ApiDashboardProject }) {
   return (
     <Link className="block text-sm" href={`/projects/${project.id}`}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{project.name}</h3>
           <p className="mt-1 text-slate-600">
-            {project.description || "No description"}
+            Role: {formatLabel(project.role)}
           </p>
         </div>
         <span className="shrink-0 capitalize text-slate-500">
-          {project.status.replaceAll("_", " ")}
+          {formatLabel(project.status)}
         </span>
       </div>
     </Link>
   );
 }
 
-function TaskItem({ task }: { task: ApiTask }) {
+function TaskItem({ task }: { task: ApiDashboardTask }) {
   return (
     <article className="text-sm">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{task.title}</h3>
           <p className="mt-1 text-slate-600">
-            {task.project?.name ?? "No project"}
+            {task.projectName || "No project"}
           </p>
         </div>
         <span className="shrink-0 capitalize text-slate-500">
-          {task.status.replaceAll("_", " ")}
+          {formatDate(task.dueDate)}
         </span>
       </div>
-      <p className="mt-2 text-xs text-slate-500">
-        Due {task.dueDate ?? "not set"} · Priority {task.priority}
-      </p>
     </article>
   );
 }
 
-function RaidItem({ item }: { item: ApiRaidItem }) {
+function RiskItem({ risk }: { risk: ApiDashboardRisk }) {
   return (
     <article className="text-sm">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="font-semibold text-slate-950">{item.title}</h3>
+          <h3 className="font-semibold text-slate-950">{risk.title}</h3>
           <p className="mt-1 text-slate-600">
-            {item.project?.name ?? "No project"}
+            {risk.projectName || "No project"}
           </p>
         </div>
         <span className="shrink-0 capitalize text-slate-500">
-          {item.status.replaceAll("_", " ")}
+          {formatLabel(risk.severity)}
         </span>
       </div>
-      <p className="mt-2 text-xs text-slate-500">
-        Owner {item.owner ? `${item.owner.firstName} ${item.owner.lastName}` : "Unassigned"}
-      </p>
     </article>
   );
+}
+
+function IssueItem({ issue }: { issue: ApiDashboardIssue }) {
+  return (
+    <article className="text-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-950">{issue.title}</h3>
+          <p className="mt-1 text-slate-600">
+            {issue.projectName || "No project"}
+          </p>
+        </div>
+        <span className="shrink-0 capitalize text-slate-500">
+          {formatLabel(issue.priority)}
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return "No due date";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatLabel(value: string) {
+  return value.replaceAll("_", " ").toLowerCase();
 }

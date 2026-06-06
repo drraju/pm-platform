@@ -1,9 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
-import { createProject, getProjects, type ApiProject } from "@/features/projects";
+import { ProjectTable } from "@/components/projects/project-table";
+import {
+  createProject,
+  getProject,
+  getProjects,
+  type ApiProject,
+} from "@/features/projects";
 import { getUsers, type ApiUser } from "@/features/users";
 import { getStoredAccessToken } from "@/features/auth";
 
@@ -21,6 +26,9 @@ export default function ProjectsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [createdSort, setCreatedSort] = useState<"asc" | "desc">("desc");
   const hasSession = useMemo(() => Boolean(getStoredAccessToken()), []);
 
   async function loadData() {
@@ -31,7 +39,21 @@ export default function ProjectsPage() {
         getProjects(),
         getUsers(),
       ]);
-      setProjects(projectData);
+      const projectsWithMemberCounts = await Promise.all(
+        projectData.map(async (project) => {
+          try {
+            const details = await getProject(project.id);
+            return {
+              ...project,
+              createdAt: project.createdAt ?? details.createdAt,
+              members: details.members ?? project.members,
+            };
+          } catch {
+            return project;
+          }
+        }),
+      );
+      setProjects(projectsWithMemberCounts);
       setUsers(userData);
     } catch (requestError) {
       setError(
@@ -47,6 +69,30 @@ export default function ProjectsPage() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  const filteredProjects = useMemo(() => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+    return projects
+      .filter((project) =>
+        normalizedSearchTerm
+          ? project.name.toLowerCase().includes(normalizedSearchTerm)
+          : true,
+      )
+      .filter((project) =>
+        statusFilter === "all" ? true : project.status === statusFilter,
+      )
+      .toSorted((left, right) => {
+        const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+        const rightTime = right.createdAt
+          ? new Date(right.createdAt).getTime()
+          : 0;
+
+        return createdSort === "desc"
+          ? rightTime - leftTime
+          : leftTime - rightTime;
+      });
+  }, [createdSort, projects, searchTerm, statusFilter]);
 
   async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,50 +156,62 @@ export default function ProjectsPage() {
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-        <div className="hidden grid-cols-[1.2fr_0.7fr_0.9fr_0.7fr_1fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
-          <span>Name</span>
-          <span>Status</span>
-          <span>Owner</span>
-          <span>Target</span>
-          <span>Description</span>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {isLoading ? (
-            <p className="px-4 py-6 text-sm text-slate-500">Loading projects...</p>
-          ) : null}
-
-          {!isLoading && projects.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">
-              No projects have been created yet.
-            </p>
-          ) : null}
-
-          {projects.map((project) => (
-            <Link
-              className="grid gap-2 px-4 py-4 text-sm transition hover:bg-slate-50 md:grid-cols-[1.2fr_0.7fr_0.9fr_0.7fr_1fr] md:items-center"
-              href={`/projects/${project.id}`}
-              key={project.id}
-            >
-              <h2 className="font-semibold text-slate-950">{project.name}</h2>
-              <span className="capitalize text-slate-700">
-                {project.status.replaceAll("_", " ")}
-              </span>
-              <span className="text-slate-600">
-                {project.owner
-                  ? `${project.owner.firstName} ${project.owner.lastName}`
-                  : "Unassigned"}
-              </span>
-              <span className="text-slate-600">
-                {project.targetEndDate ?? "No target"}
-              </span>
-              <span className="text-slate-600">
-                {project.description || "No description"}
-              </span>
-            </Link>
-          ))}
-        </div>
+      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[1fr_220px_220px]">
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">
+            Search by project name
+          </span>
+          <input
+            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search projects"
+            type="search"
+            value={searchTerm}
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">
+            Filter by status
+          </span>
+          <select
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            onChange={(event) => setStatusFilter(event.target.value)}
+            value={statusFilter}
+          >
+            <option value="all">All statuses</option>
+            {projectStatuses.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">
+            Sort by created date
+          </span>
+          <select
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            onChange={(event) =>
+              setCreatedSort(event.target.value as "asc" | "desc")
+            }
+            value={createdSort}
+          >
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
+          </select>
+        </label>
       </section>
+
+      <ProjectTable
+        emptyMessage={
+          projects.length === 0
+            ? "No projects have been created yet."
+            : "No projects match the current filters."
+        }
+        isLoading={isLoading}
+        projects={filteredProjects}
+      />
 
       {isCreateModalOpen ? (
         <div

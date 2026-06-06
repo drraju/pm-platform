@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  addProjectMember,
+  createProjectTask,
   createProject,
   deleteProject,
+  getMyTasks,
   getProject,
   getProjects,
+  removeProjectMember,
   updateProject,
+  updateProjectTask,
 } from "@/lib/api/client";
 
 function mockFetch(response: unknown, init: { status?: number; ok?: boolean } = {}) {
@@ -116,6 +121,93 @@ describe("project API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects/project-1",
       expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("adds and removes project members", async () => {
+    const fetchMock = mockFetch({ id: "member-1", userId: "user-1" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await addProjectMember("project-1", {
+      userId: "user-1",
+      role: "manager",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/members",
+      expect.objectContaining({
+        body: JSON.stringify({ userId: "user-1", role: "manager" }),
+        method: "POST",
+      }),
+    );
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json: vi.fn(),
+    });
+
+    await expect(
+      removeProjectMember("project-1", "user-1"),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/members/user-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("creates and updates project tasks", async () => {
+    const fetchMock = mockFetch({ id: "task-1", title: "Mobilise team" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createProjectTask("project-1", {
+      title: "Mobilise team",
+      assigneeId: "user-1",
+      status: "todo",
+      priority: "high",
+      dueDate: "2026-06-30",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/tasks",
+      expect.objectContaining({
+        body: JSON.stringify({
+          title: "Mobilise team",
+          assigneeId: "user-1",
+          status: "todo",
+          priority: "high",
+          dueDate: "2026-06-30",
+        }),
+        method: "POST",
+      }),
+    );
+
+    await updateProjectTask("project-1", "task-1", {
+      status: "in_progress",
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/tasks/task-1",
+      expect.objectContaining({
+        body: JSON.stringify({ status: "in_progress" }),
+        method: "PATCH",
+      }),
+    );
+  });
+
+  it("loads authenticated user tasks with query filters", async () => {
+    const fetchMock = mockFetch([{ id: "task-1", title: "Prepare cutover" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getMyTasks({
+      priority: "high",
+      projectId: "project-1",
+      status: "blocked",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/tasks/my?priority=high&projectId=project-1&status=blocked",
+      expect.any(Object),
     );
   });
 });

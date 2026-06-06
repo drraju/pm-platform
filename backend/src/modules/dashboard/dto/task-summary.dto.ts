@@ -15,4 +15,7 @@ export class TaskSummaryDto {
 
   @ApiProperty()
   completed: number;
+
+  @ApiProperty()
+  overdue: number;
 }

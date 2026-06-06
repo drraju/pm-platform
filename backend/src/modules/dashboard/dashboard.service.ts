@@ -7,7 +7,13 @@ import { Project } from '../projects/entities/project.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
-import { MeDashboardDto } from './dto/me-dashboard.dto';
+import {
+  DashboardIssueDto,
+  DashboardProjectDto,
+  DashboardRiskDto,
+  DashboardTaskDto,
+  MeDashboardDto,
+} from './dto/me-dashboard.dto';
 import { TaskSummaryDto } from './dto/task-summary.dto';
 
 @Injectable()
@@ -43,13 +49,6 @@ export class DashboardService {
       }),
     ]);
 
-    const assignedProjects = this.dedupeProjects([
-      ...ownedProjects,
-      ...memberProjects
-        .map((membership) => membership.project)
-        .filter((project): project is Project => Boolean(project)),
-    ]);
-
     const [overdueTasks, upcomingTasks, openRisks, openIssues] =
       await Promise.all([
         this.findOverdueTasks(userId),
@@ -67,12 +66,12 @@ export class DashboardService {
       ]);
 
     return {
-      assignedProjects,
+      assignedProjects: this.mapAssignedProjects(ownedProjects, memberProjects),
       taskSummary: this.summarizeTasks(assignedTasks),
-      overdueTasks,
-      upcomingTasks,
-      openRisks,
-      openIssues,
+      overdueTasks: overdueTasks.map((task) => this.toDashboardTask(task)),
+      upcomingTasks: upcomingTasks.map((task) => this.toDashboardTask(task)),
+      openRisks: openRisks.map((risk) => this.toDashboardRisk(risk)),
+      openIssues: openIssues.map((issue) => this.toDashboardIssue(issue)),
     };
   }
 
@@ -114,15 +113,74 @@ export class DashboardService {
       blocked: tasks.filter((task) => task.status === TaskStatus.Blocked)
         .length,
       completed: tasks.filter((task) => task.status === TaskStatus.Done).length,
+      overdue: tasks.filter((task) => this.isOverdue(task)).length,
     };
   }
 
-  private dedupeProjects(projects: Project[]): Project[] {
-    return Array.from(
-      projects
-        .reduce((projectMap, project) => projectMap.set(project.id, project), new Map<string, Project>())
-        .values(),
-    );
+  private mapAssignedProjects(
+    ownedProjects: Project[],
+    memberProjects: ProjectMember[],
+  ): DashboardProjectDto[] {
+    const projectMap = new Map<string, DashboardProjectDto>();
+
+    for (const project of ownedProjects) {
+      projectMap.set(project.id, {
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        role: 'owner',
+      });
+    }
+
+    for (const membership of memberProjects) {
+      if (!membership.project || projectMap.has(membership.project.id)) {
+        continue;
+      }
+
+      projectMap.set(membership.project.id, {
+        id: membership.project.id,
+        name: membership.project.name,
+        status: membership.project.status,
+        role: membership.role,
+      });
+    }
+
+    return Array.from(projectMap.values());
+  }
+
+  private toDashboardTask(task: Task): DashboardTaskDto {
+    return {
+      id: task.id,
+      title: task.title,
+      dueDate: task.dueDate ?? null,
+      projectName: task.project?.name ?? '',
+    };
+  }
+
+  private toDashboardRisk(risk: Risk): DashboardRiskDto {
+    return {
+      id: risk.id,
+      title: risk.title,
+      severity: risk.impact,
+      projectName: risk.project?.name ?? '',
+    };
+  }
+
+  private toDashboardIssue(issue: Issue): DashboardIssueDto {
+    return {
+      id: issue.id,
+      title: issue.title,
+      priority: issue.severity,
+      projectName: issue.project?.name ?? '',
+    };
+  }
+
+  private isOverdue(task: Task): boolean {
+    if (!task.dueDate || task.status === TaskStatus.Done) {
+      return false;
+    }
+
+    return task.dueDate < this.formatDate(new Date());
   }
 
   private formatDate(date: Date): string {

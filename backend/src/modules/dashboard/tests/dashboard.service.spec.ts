@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Project } from '../../projects/entities/project.entity';
@@ -53,23 +54,64 @@ describe('DashboardService', () => {
 
   it('builds the authenticated user dashboard', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-06T12:00:00Z'));
-    const ownedProject = { id: 'owned-project', ownerId: userId };
-    const memberProject = { id: 'member-project', ownerId: 'other-user' };
-    const duplicateOwnedMembership = { project: ownedProject };
+    const ownedProject = {
+      id: 'owned-project',
+      name: 'Owned Project',
+      ownerId: userId,
+      status: 'active',
+    };
+    const memberProject = {
+      id: 'member-project',
+      name: 'Member Project',
+      ownerId: 'other-user',
+      status: 'at_risk',
+    };
+    const duplicateOwnedMembership = {
+      project: ownedProject,
+      role: ProjectRole.Contributor,
+    };
     const assignedTasks = [
-      { id: 'todo-task', status: TaskStatus.Todo },
+      { id: 'todo-task', dueDate: '2026-06-01', status: TaskStatus.Todo },
       { id: 'in-progress-task', status: TaskStatus.InProgress },
       { id: 'blocked-task', status: TaskStatus.Blocked },
       { id: 'done-task', status: TaskStatus.Done },
     ];
-    const overdueTasks = [{ id: 'overdue-task' }];
-    const upcomingTasks = [{ id: 'upcoming-task' }];
-    const openRisks = [{ id: 'risk' }];
-    const openIssues = [{ id: 'issue' }];
+    const overdueTasks = [
+      {
+        id: 'overdue-task',
+        title: 'Overdue task',
+        dueDate: '2026-06-01',
+        project: { name: 'Owned Project' },
+      },
+    ];
+    const upcomingTasks = [
+      {
+        id: 'upcoming-task',
+        title: 'Upcoming task',
+        dueDate: '2026-06-10',
+        project: { name: 'Member Project' },
+      },
+    ];
+    const openRisks = [
+      {
+        id: 'risk',
+        title: 'Open risk',
+        impact: 'high',
+        project: { name: 'Owned Project' },
+      },
+    ];
+    const openIssues = [
+      {
+        id: 'issue',
+        title: 'Open issue',
+        severity: 'critical',
+        project: { name: 'Member Project' },
+      },
+    ];
 
     projectsRepository.find?.mockResolvedValue([ownedProject]);
     projectMembersRepository.find?.mockResolvedValue([
-      { project: memberProject },
+      { project: memberProject, role: ProjectRole.Manager },
       duplicateOwnedMembership,
     ]);
     tasksRepository.find
@@ -80,18 +122,60 @@ describe('DashboardService', () => {
     issuesRepository.find?.mockResolvedValue(openIssues);
 
     await expect(service.getMyDashboard(userId)).resolves.toEqual({
-      assignedProjects: [ownedProject, memberProject],
+      assignedProjects: [
+        {
+          id: 'owned-project',
+          name: 'Owned Project',
+          role: 'owner',
+          status: 'active',
+        },
+        {
+          id: 'member-project',
+          name: 'Member Project',
+          role: ProjectRole.Manager,
+          status: 'at_risk',
+        },
+      ],
       taskSummary: {
         total: 4,
         todo: 1,
         inProgress: 1,
         blocked: 1,
         completed: 1,
+        overdue: 1,
       },
-      overdueTasks,
-      upcomingTasks,
-      openRisks,
-      openIssues,
+      overdueTasks: [
+        {
+          id: 'overdue-task',
+          title: 'Overdue task',
+          dueDate: '2026-06-01',
+          projectName: 'Owned Project',
+        },
+      ],
+      upcomingTasks: [
+        {
+          id: 'upcoming-task',
+          title: 'Upcoming task',
+          dueDate: '2026-06-10',
+          projectName: 'Member Project',
+        },
+      ],
+      openRisks: [
+        {
+          id: 'risk',
+          title: 'Open risk',
+          severity: 'high',
+          projectName: 'Owned Project',
+        },
+      ],
+      openIssues: [
+        {
+          id: 'issue',
+          title: 'Open issue',
+          priority: 'critical',
+          projectName: 'Member Project',
+        },
+      ],
     });
 
     expect(projectsRepository.find).toHaveBeenCalledWith({

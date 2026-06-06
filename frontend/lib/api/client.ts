@@ -23,10 +23,14 @@ export type ApiProject = {
   targetEndDate?: string | null;
   ownerId?: string | null;
   owner?: ApiUser | null;
+  members?: ApiProjectMember[];
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type ApiProjectMember = {
   id: string;
+  projectId?: string;
   userId: string;
   role: string;
   user?: ApiUser | null;
@@ -81,15 +85,44 @@ export type ApiTaskSummary = {
   inProgress: number;
   blocked: number;
   completed: number;
+  overdue: number;
+};
+
+export type ApiDashboardProject = {
+  id: string;
+  name: string;
+  status: string;
+  role: string;
+};
+
+export type ApiDashboardTask = {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  projectName: string;
+};
+
+export type ApiDashboardRisk = {
+  id: string;
+  title: string;
+  severity: string;
+  projectName: string;
+};
+
+export type ApiDashboardIssue = {
+  id: string;
+  title: string;
+  priority: string;
+  projectName: string;
 };
 
 export type ApiMeDashboard = {
-  assignedProjects: ApiProject[];
+  assignedProjects: ApiDashboardProject[];
   taskSummary: ApiTaskSummary;
-  overdueTasks: ApiTask[];
-  upcomingTasks: ApiTask[];
-  openRisks: ApiRaidItem[];
-  openIssues: ApiRaidItem[];
+  overdueTasks: ApiDashboardTask[];
+  upcomingTasks: ApiDashboardTask[];
+  openRisks: ApiDashboardRisk[];
+  openIssues: ApiDashboardIssue[];
 };
 
 type RequestOptions = RequestInit & {
@@ -222,6 +255,45 @@ export function deleteProject(projectId: string) {
   });
 }
 
+export function getProjectMembers(projectId: string) {
+  return apiRequest<ApiProjectMember[]>(`/projects/${projectId}/members`);
+}
+
+export function addProjectMember(
+  projectId: string,
+  input: {
+    userId: string;
+    role?: string;
+  },
+) {
+  return apiRequest<ApiProjectMember>(`/projects/${projectId}/members`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProjectMember(
+  projectId: string,
+  userId: string,
+  input: {
+    role: string;
+  },
+) {
+  return apiRequest<ApiProjectMember>(
+    `/projects/${projectId}/members/${userId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function removeProjectMember(projectId: string, userId: string) {
+  return apiRequest<void>(`/projects/${projectId}/members/${userId}`, {
+    method: "DELETE",
+  });
+}
+
 export function getUsers() {
   return apiRequest<ApiUser[]>("/users");
 }
@@ -255,6 +327,28 @@ export function getTasks() {
   return apiRequest<ApiTask[]>("/tasks");
 }
 
+export function getMyTasks(input: {
+  priority?: string;
+  projectId?: string;
+  status?: ApiTask["status"];
+} = {}) {
+  const params = new URLSearchParams();
+  if (input.priority) {
+    params.set("priority", input.priority);
+  }
+  if (input.projectId) {
+    params.set("projectId", input.projectId);
+  }
+  if (input.status) {
+    params.set("status", input.status);
+  }
+
+  const queryString = params.toString();
+  return apiRequest<ApiTask[]>(
+    queryString ? `/tasks/my?${queryString}` : "/tasks/my",
+  );
+}
+
 export function createTask(input: {
   projectId: string;
   title: string;
@@ -267,6 +361,53 @@ export function createTask(input: {
   return apiRequest<ApiTask>("/tasks", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function getProjectTasks(projectId: string) {
+  return apiRequest<ApiTask[]>(`/projects/${projectId}/tasks`);
+}
+
+export function createProjectTask(
+  projectId: string,
+  input: {
+    title: string;
+    description?: string;
+    assigneeId?: string;
+    status?: ApiTask["status"];
+    priority?: string;
+    startDate?: string;
+    dueDate?: string;
+  },
+) {
+  return apiRequest<ApiTask>(`/projects/${projectId}/tasks`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProjectTask(
+  projectId: string,
+  taskId: string,
+  input: {
+    title?: string;
+    description?: string;
+    assigneeId?: string;
+    status?: ApiTask["status"];
+    priority?: string;
+    startDate?: string;
+    dueDate?: string;
+  },
+) {
+  return apiRequest<ApiTask>(`/projects/${projectId}/tasks/${taskId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteProjectTask(projectId: string, taskId: string) {
+  return apiRequest<void>(`/projects/${projectId}/tasks/${taskId}`, {
+    method: "DELETE",
   });
 }
 
