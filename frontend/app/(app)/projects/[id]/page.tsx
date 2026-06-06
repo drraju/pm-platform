@@ -33,8 +33,8 @@ const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
 ];
 
 export default function ProjectDetailsPage() {
-  const params = useParams<{ projectId: string }>();
-  const projectId = params.projectId;
+  const params = useParams<{ id: string }>();
+  const projectId = params.id;
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -319,29 +319,48 @@ export default function ProjectDetailsPage() {
             </button>
           </form>
 
-          <div className="mt-5 divide-y divide-slate-100">
+          <div className="mt-5 overflow-x-auto">
+            <div className="hidden grid-cols-[1fr_1.2fr_0.8fr_120px] border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+              <span>Name</span>
+              <span>Email</span>
+              <span>Project Role</span>
+              <span>Action</span>
+            </div>
             {members.length === 0 ? (
               <p className="py-4 text-sm text-slate-500">No members yet.</p>
             ) : null}
             {members.map((member) => (
               <article
-                className="flex flex-col gap-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                className="grid gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 md:grid-cols-[1fr_1.2fr_0.8fr_120px] md:items-center"
                 key={member.id}
               >
                 <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
+                    Name
+                  </p>
                   <h3 className="font-semibold text-slate-950">
                     {member.user
                       ? `${member.user.firstName} ${member.user.lastName}`
                       : "Unknown user"}
                   </h3>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
+                    Email
+                  </p>
                   <p className="mt-1 text-slate-500">
                     {member.user?.email ?? "No email"}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
+                    Project Role
+                  </p>
                   <span className="capitalize text-slate-600">
                     {formatLabel(member.role)}
                   </span>
+                </div>
+                <div>
                   <button
                     className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
                     disabled={removingUserId === member.userId}
@@ -440,7 +459,7 @@ export default function ProjectDetailsPage() {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-3">Task</th>
+                  <th className="px-3 py-3">Title</th>
                   <th className="px-3 py-3">Assignee</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Due Date</th>
