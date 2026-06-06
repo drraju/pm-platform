@@ -1,10 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { createProject, getProjects, type ApiProject } from "@/features/projects";
 import { getUsers, type ApiUser } from "@/features/users";
 import { getStoredAccessToken } from "@/features/auth";
+
+const projectStatuses = [
+  { label: "Active", value: "active" },
+  { label: "At risk", value: "at_risk" },
+  { label: "Blocked", value: "blocked" },
+  { label: "Complete", value: "complete" },
+];
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ApiProject[]>([]);
@@ -12,6 +20,7 @@ export default function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const hasSession = useMemo(() => Boolean(getStoredAccessToken()), []);
 
   async function loadData() {
@@ -53,10 +62,12 @@ export default function ProjectsPage() {
         name: String(formData.get("name") ?? ""),
         description: String(formData.get("description") ?? ""),
         status: String(formData.get("status") ?? "active"),
+        startDate: String(formData.get("startDate") ?? "") || undefined,
         targetEndDate: String(formData.get("targetEndDate") ?? "") || undefined,
         ownerId: ownerId || undefined,
       });
       form.reset();
+      setIsCreateModalOpen(false);
       await loadData();
     } catch (requestError) {
       setError(
@@ -72,6 +83,16 @@ export default function ProjectsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        actions={
+          <button
+            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={!hasSession}
+            onClick={() => setIsCreateModalOpen(true)}
+            type="button"
+          >
+            Create project
+          </button>
+        }
         description="Track delivery ownership, project stage, health, milestones, and integration readiness across the active portfolio."
         eyebrow="Multi-project support"
         title="Projects"
@@ -83,69 +104,6 @@ export default function ProjectsPage() {
         </section>
       ) : null}
 
-      <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-semibold text-slate-950">New project</h2>
-        <form
-          className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_160px_180px_auto]"
-          onSubmit={handleCreateProject}
-        >
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Name</span>
-            <input
-              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-              name="name"
-              required
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">
-              Description
-            </span>
-            <input
-              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-              name="description"
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Status</span>
-            <select
-              className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-              name="status"
-            >
-              <option value="active">Active</option>
-              <option value="at_risk">At risk</option>
-              <option value="blocked">Blocked</option>
-              <option value="complete">Complete</option>
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Owner</span>
-            <select
-              className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-              name="ownerId"
-            >
-              <option value="">Unassigned</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.firstName} {user.lastName}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            className="mt-7 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={isCreating || !hasSession}
-            type="submit"
-          >
-            {isCreating ? "Creating..." : "Create"}
-          </button>
-        </form>
-      </section>
-
       {error ? (
         <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -153,10 +111,11 @@ export default function ProjectsPage() {
       ) : null}
 
       <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-        <div className="hidden grid-cols-[1.2fr_0.7fr_0.9fr_1fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+        <div className="hidden grid-cols-[1.2fr_0.7fr_0.9fr_0.7fr_1fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
           <span>Name</span>
           <span>Status</span>
           <span>Owner</span>
+          <span>Target</span>
           <span>Description</span>
         </div>
         <div className="divide-y divide-slate-100">
@@ -171,8 +130,9 @@ export default function ProjectsPage() {
           ) : null}
 
           {projects.map((project) => (
-            <article
-              className="grid gap-2 px-4 py-4 text-sm md:grid-cols-[1.2fr_0.7fr_0.9fr_1fr] md:items-center"
+            <Link
+              className="grid gap-2 px-4 py-4 text-sm transition hover:bg-slate-50 md:grid-cols-[1.2fr_0.7fr_0.9fr_0.7fr_1fr] md:items-center"
+              href={`/projects/${project.id}`}
               key={project.id}
             >
               <h2 className="font-semibold text-slate-950">{project.name}</h2>
@@ -185,12 +145,132 @@ export default function ProjectsPage() {
                   : "Unassigned"}
               </span>
               <span className="text-slate-600">
+                {project.targetEndDate ?? "No target"}
+              </span>
+              <span className="text-slate-600">
                 {project.description || "No description"}
               </span>
-            </article>
+            </Link>
           ))}
         </div>
       </section>
+
+      {isCreateModalOpen ? (
+        <div
+          aria-labelledby="create-project-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 py-6"
+          role="dialog"
+        >
+          <section className="w-full max-w-2xl rounded-md border border-slate-200 bg-white p-6 shadow-soft">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2
+                  className="text-lg font-semibold text-slate-950"
+                  id="create-project-title"
+                >
+                  Create project
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Set the delivery owner, status, and target dates.
+                </p>
+              </div>
+              <button
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setIsCreateModalOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+
+            <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleCreateProject}>
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Name</span>
+                <input
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  name="name"
+                  required
+                />
+              </label>
+
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700">
+                  Description
+                </span>
+                <textarea
+                  className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  name="description"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Status</span>
+                <select
+                  className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  name="status"
+                >
+                  {projectStatuses.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Owner</span>
+                <select
+                  className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  name="ownerId"
+                >
+                  <option value="">Unassigned</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.firstName} {user.lastName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Start</span>
+                <input
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  name="startDate"
+                  type="date"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Target</span>
+                <input
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  name="targetEndDate"
+                  type="date"
+                />
+              </label>
+
+              <div className="flex justify-end gap-3 sm:col-span-2">
+                <button
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={isCreating}
+                  type="submit"
+                >
+                  {isCreating ? "Creating..." : "Create project"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

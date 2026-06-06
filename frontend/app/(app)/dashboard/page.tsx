@@ -1,139 +1,196 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { DashboardSection } from "@/components/dashboard/dashboard-section";
+import { SummaryCard } from "@/components/dashboard/summary-card";
 import { PageHeader } from "@/components/layout/page-header";
-import { StatCard } from "@/components/dashboard/stat-card";
-import { getProjects, type ApiProject } from "@/features/projects";
-import { getRaidItems, type ApiRaidItem } from "@/features/raid";
-import { getTasks, type ApiTask } from "@/features/tasks";
+import {
+  getMyDashboard,
+  type ApiMeDashboard,
+} from "@/features/dashboard";
+import type { ApiProject, ApiRaidItem, ApiTask } from "@/lib/api/client";
 
 export default function DashboardPage() {
-  const [projects, setProjects] = useState<ApiProject[]>([]);
-  const [tasks, setTasks] = useState<ApiTask[]>([]);
-  const [raidItems, setRaidItems] = useState<ApiRaidItem[]>([]);
+  const [dashboard, setDashboard] = useState<ApiMeDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
+      setError(null);
+      setIsLoading(true);
       try {
-        const [projectData, taskData, raidData] = await Promise.all([
-          getProjects(),
-          getTasks(),
-          getRaidItems(),
-        ]);
-        setProjects(projectData);
-        setTasks(taskData);
-        setRaidItems(raidData);
+        setDashboard(await getMyDashboard());
       } catch (requestError) {
         setError(
           requestError instanceof Error
             ? requestError.message
             : "Unable to load dashboard",
         );
+      } finally {
+        setIsLoading(false);
       }
     }
 
     void loadDashboard();
   }, []);
 
-  const stats = useMemo(() => {
-    const openRisks = raidItems.filter(
-      (item) => item.type === "risk" && item.status !== "closed",
-    ).length;
-    const blockedTasks = tasks.filter((task) => task.status === "blocked").length;
-    const doneTasks = tasks.filter((task) => task.status === "done").length;
-    const deliveryHealth =
-      tasks.length === 0 ? 0 : Math.round((doneTasks / tasks.length) * 100);
-
-    return [
-      {
-        label: "Active projects",
-        value: String(projects.filter((project) => project.status !== "complete").length),
-        trend: `${projects.length} total projects`,
-      },
-      {
-        label: "Open risks",
-        value: String(openRisks),
-        trend: `${raidItems.length} RAID items tracked`,
-      },
-      {
-        label: "Blocked tasks",
-        value: String(blockedTasks),
-        trend: `${tasks.length} total tasks`,
-      },
-      {
-        label: "Delivery health",
-        value: `${deliveryHealth}%`,
-        trend: `${doneTasks} tasks complete`,
-      },
-    ];
-  }, [projects, raidItems, tasks]);
-
-  const statusCounts = ["active", "at_risk", "blocked", "complete"].map((status) => ({
-    status,
-    count: projects.filter((project) => project.status === status).length,
-  }));
-
   return (
     <div className="space-y-6">
       <PageHeader
-        description="A cross-project view of delivery health, executive risks, upcoming milestones, and team workload."
-        eyebrow="Executive dashboard"
-        title="Portfolio command overview"
+        description="A personal operating view of your assigned projects, task commitments, and owned RAID items."
+        eyebrow="User dashboard"
+        title="My dashboard"
       />
 
-      {error ? (
+      {isLoading ? <DashboardLoadingState /> : null}
+
+      {!isLoading && error ? (
         <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </section>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
+      {!isLoading && !error && dashboard ? (
+        <>
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <SummaryCard label="Total" value={dashboard.taskSummary.total} />
+            <SummaryCard label="Todo" value={dashboard.taskSummary.todo} />
+            <SummaryCard
+              label="In progress"
+              tone="warning"
+              value={dashboard.taskSummary.inProgress}
+            />
+            <SummaryCard
+              label="Blocked"
+              tone="danger"
+              value={dashboard.taskSummary.blocked}
+            />
+            <SummaryCard
+              label="Completed"
+              tone="success"
+              value={dashboard.taskSummary.completed}
+            />
+          </section>
+
+          <section className="grid gap-6 xl:grid-cols-2">
+            <DashboardSection
+              emptyMessage="No assigned projects yet."
+              items={dashboard.assignedProjects}
+              renderItem={(project) => <ProjectItem project={project} />}
+              title="Assigned Projects"
+            />
+            <DashboardSection
+              emptyMessage="No upcoming tasks due in the next 7 days."
+              items={dashboard.upcomingTasks}
+              renderItem={(task) => <TaskItem task={task} />}
+              title="Upcoming Tasks"
+            />
+            <DashboardSection
+              emptyMessage="No overdue tasks."
+              items={dashboard.overdueTasks}
+              renderItem={(task) => <TaskItem task={task} />}
+              title="Overdue Tasks"
+            />
+            <DashboardSection
+              emptyMessage="No open risks owned by you."
+              items={dashboard.openRisks}
+              renderItem={(risk) => <RaidItem item={risk} />}
+              title="Open Risks"
+            />
+            <DashboardSection
+              emptyMessage="No open issues owned by you."
+              items={dashboard.openIssues}
+              renderItem={(issue) => <RaidItem item={issue} />}
+              title="Open Issues"
+            />
+          </section>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function DashboardLoadingState() {
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div
+            className="h-32 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
+            key={index}
+          />
         ))}
       </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <div className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-          <h2 className="text-lg font-semibold text-slate-950">Project health</h2>
-          <div className="mt-5 space-y-4">
-            {statusCounts.map(({ status, count }) => {
-              const percent = projects.length === 0 ? 0 : Math.round((count / projects.length) * 100);
-              return (
-                <div key={status}>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium capitalize text-slate-700">
-                      {status.replaceAll("_", " ")}
-                    </span>
-                    <span className="text-slate-500">{percent}%</span>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-slate-100">
-                    <div className="h-2 rounded-full bg-brand" style={{ width: `${percent}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-          <h2 className="text-lg font-semibold text-slate-950">Recent RAID</h2>
-          <ul className="mt-4 space-y-3">
-            {raidItems.slice(0, 5).map((item) => (
-              <li className="rounded-md border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-700" key={`${item.type}-${item.id}`}>
-                <span className="font-semibold capitalize text-slate-950">{item.type}: </span>
-                {item.title}
-              </li>
-            ))}
-            {raidItems.length === 0 ? (
-              <li className="rounded-md border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                No RAID items yet.
-              </li>
-            ) : null}
-          </ul>
-        </div>
+      <section className="grid gap-6 xl:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            className="h-64 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
+            key={index}
+          />
+        ))}
       </section>
     </div>
+  );
+}
+
+function ProjectItem({ project }: { project: ApiProject }) {
+  return (
+    <Link className="block text-sm" href={`/projects/${project.id}`}>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-950">{project.name}</h3>
+          <p className="mt-1 text-slate-600">
+            {project.description || "No description"}
+          </p>
+        </div>
+        <span className="shrink-0 capitalize text-slate-500">
+          {project.status.replaceAll("_", " ")}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function TaskItem({ task }: { task: ApiTask }) {
+  return (
+    <article className="text-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-950">{task.title}</h3>
+          <p className="mt-1 text-slate-600">
+            {task.project?.name ?? "No project"}
+          </p>
+        </div>
+        <span className="shrink-0 capitalize text-slate-500">
+          {task.status.replaceAll("_", " ")}
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        Due {task.dueDate ?? "not set"} · Priority {task.priority}
+      </p>
+    </article>
+  );
+}
+
+function RaidItem({ item }: { item: ApiRaidItem }) {
+  return (
+    <article className="text-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-950">{item.title}</h3>
+          <p className="mt-1 text-slate-600">
+            {item.project?.name ?? "No project"}
+          </p>
+        </div>
+        <span className="shrink-0 capitalize text-slate-500">
+          {item.status.replaceAll("_", " ")}
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        Owner {item.owner ? `${item.owner.firstName} ${item.owner.lastName}` : "Unassigned"}
+      </p>
+    </article>
   );
 }

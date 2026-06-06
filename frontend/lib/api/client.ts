@@ -25,6 +25,13 @@ export type ApiProject = {
   owner?: ApiUser | null;
 };
 
+export type ApiProjectMember = {
+  id: string;
+  userId: string;
+  role: string;
+  user?: ApiUser | null;
+};
+
 export type ApiTask = {
   id: string;
   projectId: string;
@@ -36,6 +43,15 @@ export type ApiTask = {
   dueDate?: string | null;
   project?: ApiProject | null;
   assignee?: ApiUser | null;
+};
+
+export type ApiProjectDetails = ApiProject & {
+  members?: ApiProjectMember[];
+  tasks?: ApiTask[];
+  risks?: ApiRaidItem[];
+  issues?: ApiRaidItem[];
+  assumptions?: ApiRaidItem[];
+  dependencies?: ApiRaidItem[];
 };
 
 export type ApiRaidItem = {
@@ -57,6 +73,23 @@ export type ApiRaidItem = {
   dueDate?: string | null;
   project?: ApiProject | null;
   owner?: ApiUser | null;
+};
+
+export type ApiTaskSummary = {
+  total: number;
+  todo: number;
+  inProgress: number;
+  blocked: number;
+  completed: number;
+};
+
+export type ApiMeDashboard = {
+  assignedProjects: ApiProject[];
+  taskSummary: ApiTaskSummary;
+  overdueTasks: ApiTask[];
+  upcomingTasks: ApiTask[];
+  openRisks: ApiRaidItem[];
+  openIssues: ApiRaidItem[];
 };
 
 type RequestOptions = RequestInit & {
@@ -144,6 +177,14 @@ export function getProjects() {
   return apiRequest<ApiProject[]>("/projects");
 }
 
+export function getMyDashboard() {
+  return apiRequest<ApiMeDashboard>("/dashboard/me");
+}
+
+export function getProject(projectId: string) {
+  return apiRequest<ApiProjectDetails>(`/projects/${projectId}`);
+}
+
 export function createProject(input: {
   name: string;
   description?: string;
@@ -155,6 +196,29 @@ export function createProject(input: {
   return apiRequest<ApiProject>("/projects", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function updateProject(
+  projectId: string,
+  input: {
+    name?: string;
+    description?: string;
+    status?: string;
+    startDate?: string;
+    targetEndDate?: string;
+    ownerId?: string;
+  },
+) {
+  return apiRequest<ApiProjectDetails>(`/projects/${projectId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteProject(projectId: string) {
+  return apiRequest<void>(`/projects/${projectId}`, {
+    method: "DELETE",
   });
 }
 

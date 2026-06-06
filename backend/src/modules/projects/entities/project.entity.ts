@@ -1,4 +1,5 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuditableEntity } from '../../../common/entities/auditable.entity';
 import { Dependency } from '../../raid/entities/dependency.entity';
 import { Issue } from '../../raid/entities/issue.entity';
@@ -10,21 +11,27 @@ import { ProjectMember } from './project-member.entity';
 
 @Entity({ name: 'projects' })
 export class Project extends AuditableEntity {
+  @ApiProperty({ example: 'ERP Modernization' })
   @Column()
   name: string;
 
+  @ApiPropertyOptional({ example: 'Modernize finance and operations systems.' })
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
+  @ApiProperty({ example: 'active', default: 'active' })
   @Column({ default: 'active' })
   status: string;
 
+  @ApiPropertyOptional({ format: 'date', example: '2026-01-15' })
   @Column({ name: 'start_date', type: 'date', nullable: true })
   startDate?: string | null;
 
+  @ApiPropertyOptional({ format: 'date', example: '2026-09-30' })
   @Column({ name: 'target_end_date', type: 'date', nullable: true })
   targetEndDate?: string | null;
 
+  @ApiPropertyOptional({ format: 'uuid' })
   @Column({ name: 'owner_id', type: 'uuid', nullable: true })
   ownerId?: string | null;
 

@@ -1,5 +1,53 @@
-export const typeOrmConfig = {
-  type: 'postgres',
+import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { DataSourceOptions } from 'typeorm';
+import { Notification } from '../modules/notifications/entities/notification.entity';
+import { ProjectMember } from '../modules/projects/entities/project-member.entity';
+import { Project } from '../modules/projects/entities/project.entity';
+import { Assumption } from '../modules/raid/entities/assumption.entity';
+import { Dependency } from '../modules/raid/entities/dependency.entity';
+import { Issue } from '../modules/raid/entities/issue.entity';
+import { Risk } from '../modules/raid/entities/risk.entity';
+import { Task } from '../modules/tasks/entities/task.entity';
+import { Permission } from '../modules/users/entities/permission.entity';
+import { RolePermission } from '../modules/users/entities/role-permission.entity';
+import { Role } from '../modules/users/entities/role.entity';
+import { User } from '../modules/users/entities/user.entity';
+
+export const databaseEntities: Function[] = [
+  User,
+  Role,
+  Permission,
+  RolePermission,
+  Project,
+  ProjectMember,
+  Task,
+  Risk,
+  Issue,
+  Assumption,
+  Dependency,
+  Notification,
+];
+
+const databaseConnectionOptions = {
+  type: 'postgres' as const,
+  host: process.env.POSTGRES_HOST ?? 'localhost',
+  port: Number(process.env.POSTGRES_PORT ?? 5432),
+  username: process.env.POSTGRES_USER ?? 'postgres',
+  password: process.env.POSTGRES_PASSWORD ?? 'postgres',
+  database: process.env.POSTGRES_DB ?? 'pm_platform',
+};
+
+export const createTypeOrmOptions = (): TypeOrmModuleOptions => ({
+  ...databaseConnectionOptions,
+  entities: databaseEntities,
   autoLoadEntities: true,
   synchronize: false,
-};
+});
+
+export const createDataSourceOptions = (): DataSourceOptions => ({
+  ...databaseConnectionOptions,
+  entities: databaseEntities,
+  synchronize: false,
+});
+
+export const typeOrmConfig = createTypeOrmOptions();
