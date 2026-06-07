@@ -3,8 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
-import { HealthCalculationService } from '../../health/health-calculation.service';
 import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
+import { ProjectHealthService } from '../../health/project-health.service';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Project } from '../../projects/entities/project.entity';
 import { Issue } from '../../raid/entities/issue.entity';
@@ -44,7 +44,7 @@ describe('DashboardService', () => {
         { provide: getRepositoryToken(Task), useValue: tasksRepository },
         { provide: getRepositoryToken(Risk), useValue: risksRepository },
         { provide: getRepositoryToken(Issue), useValue: issuesRepository },
-        HealthCalculationService,
+        ProjectHealthService,
       ],
     }).compile();
 
@@ -129,7 +129,7 @@ describe('DashboardService', () => {
         {
           id: 'owned-project',
           health: {
-            factors: [
+            reasons: [
               'No critical issues, high risks, or overdue task threshold breaches',
             ],
             status: ProjectHealthStatus.Green,
@@ -141,7 +141,7 @@ describe('DashboardService', () => {
         {
           id: 'member-project',
           health: {
-            factors: [
+            reasons: [
               'No critical issues, high risks, or overdue task threshold breaches',
             ],
             status: ProjectHealthStatus.Green,
@@ -192,7 +192,7 @@ describe('DashboardService', () => {
         },
       ],
       health: {
-        factors: ['1 critical issue open', '25% tasks overdue (1/4)'],
+        reasons: ['1 critical issue open', '25% tasks overdue (1/4)'],
         status: ProjectHealthStatus.Red,
       },
     });

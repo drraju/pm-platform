@@ -1,12 +1,12 @@
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectHealthStatus } from '../dto/project-health.dto';
-import { HealthCalculationService } from '../health-calculation.service';
+import { ProjectHealthService } from '../project-health.service';
 
-describe('HealthCalculationService', () => {
-  let service: HealthCalculationService;
+describe('ProjectHealthService', () => {
+  let service: ProjectHealthService;
 
   beforeEach(() => {
-    service = new HealthCalculationService();
+    service = new ProjectHealthService();
     jest.useFakeTimers().setSystemTime(new Date('2026-06-06T12:00:00Z'));
   });
 
@@ -21,7 +21,7 @@ describe('HealthCalculationService', () => {
       }),
     ).toEqual({
       status: ProjectHealthStatus.Red,
-      factors: ['1 critical issue open'],
+      reasons: ['1 critical issue open'],
     });
   });
 
@@ -38,7 +38,7 @@ describe('HealthCalculationService', () => {
       }),
     ).toEqual({
       status: ProjectHealthStatus.Red,
-      factors: ['40% tasks overdue (2/5)'],
+      reasons: ['40% tasks overdue (2/5)'],
     });
   });
 
@@ -49,14 +49,14 @@ describe('HealthCalculationService', () => {
       }),
     ).toEqual({
       status: ProjectHealthStatus.Amber,
-      factors: ['1 high risk open'],
+      reasons: ['1 high risk open'],
     });
   });
 
   it('returns green when no rule is breached', () => {
     expect(service.calculate({ tasks: [task()] })).toEqual({
       status: ProjectHealthStatus.Green,
-      factors: [
+      reasons: [
         'No critical issues, high risks, or overdue task threshold breaches',
       ],
     });

@@ -4,8 +4,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
-import { HealthCalculationService } from '../../health/health-calculation.service';
 import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
+import { ProjectHealthService } from '../../health/project-health.service';
 import { Task } from '../../tasks/entities/task.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectMember } from '../entities/project-member.entity';
@@ -72,7 +72,7 @@ describe('ProjectsService', () => {
           provide: getRepositoryToken(User),
           useValue: usersRepository,
         },
-        HealthCalculationService,
+        ProjectHealthService,
       ],
     }).compile();
 
@@ -110,7 +110,7 @@ describe('ProjectsService', () => {
     await expect(service.findAll()).resolves.toEqual([
       {
         health: {
-          factors: [
+          reasons: [
             'No critical issues, high risks, or overdue task threshold breaches',
           ],
           status: ProjectHealthStatus.Green,
@@ -129,7 +129,7 @@ describe('ProjectsService', () => {
 
     await expect(service.findOne(projectId)).resolves.toEqual({
       health: {
-        factors: [
+        reasons: [
           'No critical issues, high risks, or overdue task threshold breaches',
         ],
         status: ProjectHealthStatus.Green,

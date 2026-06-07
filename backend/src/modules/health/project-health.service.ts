@@ -5,15 +5,15 @@ import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { ProjectHealthDto, ProjectHealthStatus } from './dto/project-health.dto';
 
-type HealthInput = {
+type ProjectHealthInput = {
   issues?: Issue[];
   risks?: Risk[];
   tasks?: Task[];
 };
 
 @Injectable()
-export class HealthCalculationService {
-  calculate({ issues = [], risks = [], tasks = [] }: HealthInput): ProjectHealthDto {
+export class ProjectHealthService {
+  calculate({ issues = [], risks = [], tasks = [] }: ProjectHealthInput): ProjectHealthDto {
     const totalTasks = tasks.length;
     const overdueTasks = tasks.filter((task) => this.isOverdue(task)).length;
     const overdueRatio = totalTasks > 0 ? overdueTasks / totalTasks : 0;
@@ -24,7 +24,7 @@ export class HealthCalculationService {
     if (criticalIssues.length > 0 || overdueRatio > 0.2) {
       return {
         status: ProjectHealthStatus.Red,
-        factors: [
+        reasons: [
           ...(criticalIssues.length > 0
             ? [`${criticalIssues.length} critical issue open`]
             : []),
@@ -44,7 +44,7 @@ export class HealthCalculationService {
     if (highRisks.length > 0 || overdueRatio > 0.1) {
       return {
         status: ProjectHealthStatus.Amber,
-        factors: [
+        reasons: [
           ...(highRisks.length > 0 ? [`${highRisks.length} high risk open`] : []),
           ...(overdueRatio > 0.1
             ? [
@@ -57,7 +57,7 @@ export class HealthCalculationService {
 
     return {
       status: ProjectHealthStatus.Green,
-      factors: ['No critical issues, high risks, or overdue task threshold breaches'],
+      reasons: ['No critical issues, high risks, or overdue task threshold breaches'],
     };
   }
 

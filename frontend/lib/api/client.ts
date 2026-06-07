@@ -18,7 +18,7 @@ export type ApiProjectHealthStatus = "GREEN" | "AMBER" | "RED";
 
 export type ApiProjectHealth = {
   status: ApiProjectHealthStatus;
-  factors: string[];
+  reasons: string[];
 };
 
 export type ApiProject = {

@@ -18,7 +18,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
+import { UserResponseDto } from './dto/user-response.dto';
 import { Role } from './entities/role.entity';
 import { UsersService } from './users.service';
 
@@ -30,8 +30,8 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @ApiCreatedResponse({ type: User })
-  create(@Body() createUserDto: CreateUserDto): Promise<User> {
+  @ApiCreatedResponse({ type: UserResponseDto })
+  create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
     return this.usersService.create(createUserDto);
   }
 
@@ -48,23 +48,23 @@ export class UsersController {
   }
 
   @Get()
-  @ApiOkResponse({ type: User, isArray: true })
-  findAll(): Promise<User[]> {
+  @ApiOkResponse({ type: UserResponseDto, isArray: true })
+  findAll(): Promise<UserResponseDto[]> {
     return this.usersService.findAll();
   }
 
   @Get(':id')
-  @ApiOkResponse({ type: User })
-  findOne(@Param('id') id: string): Promise<User> {
+  @ApiOkResponse({ type: UserResponseDto })
+  findOne(@Param('id') id: string): Promise<UserResponseDto> {
     return this.usersService.findOne(id);
   }
 
   @Patch(':id')
-  @ApiOkResponse({ type: User })
+  @ApiOkResponse({ type: UserResponseDto })
   update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
-  ): Promise<User> {
+  ): Promise<UserResponseDto> {
     return this.usersService.update(id, updateUserDto);
   }
 

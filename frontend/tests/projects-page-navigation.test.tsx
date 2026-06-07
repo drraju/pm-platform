@@ -12,18 +12,56 @@ import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
 
 const projectMocks = vi.hoisted(() => ({
   getProject: vi.fn(async (projectId: string) => ({
+    assumptions: [
+      {
+        id: "assumption-1",
+        projectId,
+        status: "active",
+        title: "Vendor API remains available",
+        type: "assumption",
+        validationStatus: "validated",
+      },
+    ],
     createdAt: "2026-06-01T10:00:00.000Z",
+    dependencies: [
+      {
+        dependsOn: "Security review",
+        dueDate: "2026-06-30",
+        id: "dependency-1",
+        projectId,
+        status: "pending",
+        title: "IAM approval",
+        type: "dependency",
+      },
+    ],
     description: "Workspace loaded from selected project id.",
     id: projectId,
+    issues: [
+      {
+        id: "issue-1",
+        projectId,
+        severity: "critical",
+        status: "open",
+        title: "Integration outage",
+        type: "issue",
+      },
+    ],
     members: [],
     name: "Selected Project Workspace",
+    risks: [
+      {
+        id: "risk-1",
+        impact: "high",
+        probability: "medium",
+        projectId,
+        status: "open",
+        title: "Supplier onboarding delay",
+        type: "risk",
+      },
+    ],
     status: "active",
     tasks: [],
   })),
-  getProjectAssumptions: vi.fn(async () => []),
-  getProjectDependencies: vi.fn(async () => []),
-  getProjectIssues: vi.fn(async () => []),
-  getProjectRisks: vi.fn(async () => []),
   getProjects: vi.fn(async () => [
     {
       createdAt: "2026-06-01T10:00:00.000Z",
@@ -86,10 +124,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/features/projects", () => ({
   createProject: vi.fn(),
   getProject: projectMocks.getProject,
-  getProjectAssumptions: projectMocks.getProjectAssumptions,
-  getProjectDependencies: projectMocks.getProjectDependencies,
-  getProjectIssues: projectMocks.getProjectIssues,
-  getProjectRisks: projectMocks.getProjectRisks,
   getProjects: projectMocks.getProjects,
 }));
 
@@ -101,10 +135,6 @@ describe("Projects List navigation", () => {
   beforeEach(() => {
     navigationMocks.push.mockClear();
     projectMocks.getProject.mockClear();
-    projectMocks.getProjectAssumptions.mockClear();
-    projectMocks.getProjectDependencies.mockClear();
-    projectMocks.getProjectIssues.mockClear();
-    projectMocks.getProjectRisks.mockClear();
     projectMocks.getProjects.mockClear();
   });
 
@@ -135,20 +165,16 @@ describe("Projects List navigation", () => {
 
     await waitFor(() => {
       expect(projectMocks.getProject).toHaveBeenCalledWith("project-123");
-      expect(projectMocks.getProjectRisks).toHaveBeenCalledWith("project-123");
-      expect(projectMocks.getProjectIssues).toHaveBeenCalledWith("project-123");
-      expect(projectMocks.getProjectAssumptions).toHaveBeenCalledWith(
-        "project-123",
-      );
-      expect(projectMocks.getProjectDependencies).toHaveBeenCalledWith(
-        "project-123",
-      );
     });
     expect(
       await screen.findByRole("heading", {
         name: /Selected Project Workspace/i,
       }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Supplier onboarding delay")).toBeInTheDocument();
+    expect(screen.getByText("Integration outage")).toBeInTheDocument();
+    expect(screen.getByText("Vendor API remains available")).toBeInTheDocument();
+    expect(screen.getByText("IAM approval")).toBeInTheDocument();
   });
 
   it("navigates to Project Workspace when the Open button is clicked", async () => {

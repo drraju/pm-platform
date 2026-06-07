@@ -14,11 +14,6 @@ export class CreateUserDto {
   @IsString()
   lastName: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  passwordHash?: string;
-
   @ApiProperty({ minLength: 8, required: false })
   @IsOptional()
   @IsString()

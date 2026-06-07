@@ -4,7 +4,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import {
   ProjectHealthBadge,
-  ProjectHealthFactors,
+  ProjectHealthReasons,
 } from "@/components/projects/project-health-badge";
 import type { ApiProject } from "@/features/projects";
 
@@ -80,8 +80,11 @@ export function ProjectTable({
               <span className="mb-1 block font-medium text-slate-500 md:hidden">
                 Health
               </span>
-              <ProjectHealthBadge status={project.health?.status ?? "GREEN"} />
-              <ProjectHealthFactors factors={project.health?.factors} />
+              <ProjectHealthBadge
+                reasons={project.health?.reasons}
+                status={project.health?.status ?? "GREEN"}
+              />
+              <ProjectHealthReasons reasons={project.health?.reasons} />
             </span>
             <span className="text-slate-600">
               <span className="font-medium text-slate-500 md:hidden">

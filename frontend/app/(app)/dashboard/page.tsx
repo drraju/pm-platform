@@ -7,7 +7,7 @@ import { SummaryCard } from "@/components/dashboard/summary-card";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   ProjectHealthBadge,
-  ProjectHealthFactors,
+  ProjectHealthReasons,
 } from "@/components/projects/project-health-badge";
 import {
   getMyDashboard,
@@ -86,8 +86,11 @@ export default function DashboardPage() {
                 Delivery Health
               </p>
               <div className="mt-4">
-                <ProjectHealthBadge status={dashboard.health.status} />
-                <ProjectHealthFactors factors={dashboard.health.factors} />
+                <ProjectHealthBadge
+                  reasons={dashboard.health.reasons}
+                  status={dashboard.health.status}
+                />
+                <ProjectHealthReasons reasons={dashboard.health.reasons} />
               </div>
             </section>
           </section>
@@ -160,10 +163,13 @@ function ProjectItem({ project }: { project: ApiDashboardProject }) {
           </p>
         </div>
         <span className="shrink-0 capitalize text-slate-500">
-          <ProjectHealthBadge status={project.health?.status ?? "GREEN"} />
+          <ProjectHealthBadge
+            reasons={project.health?.reasons}
+            status={project.health?.status ?? "GREEN"}
+          />
         </span>
       </div>
-      <ProjectHealthFactors factors={project.health?.factors} />
+      <ProjectHealthReasons reasons={project.health?.reasons} />
     </Link>
   );
 }

@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { SanitizeResponseInterceptor } from './common/serialization/sanitize-response.interceptor';
 import { createTypeOrmOptions } from './database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
@@ -29,6 +31,12 @@ import { UsersModule } from './modules/users/users.module';
     GoogleDriveModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SanitizeResponseInterceptor,
+    },
+  ],
 })
 export class AppModule {}

@@ -6,8 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../common/enums/project-role.enum';
-import { HealthCalculationService } from '../health/health-calculation.service';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
+import { ProjectHealthService } from '../health/project-health.service';
 import { Task } from '../tasks/entities/task.entity';
 import { Assumption } from '../raid/entities/assumption.entity';
 import { Dependency } from '../raid/entities/dependency.entity';
@@ -38,7 +38,7 @@ export class ProjectsService {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly healthCalculationService: HealthCalculationService,
+    private readonly projectHealthService: ProjectHealthService,
   ) {}
 
   create(createProjectDto: CreateProjectDto): Promise<Project> {
@@ -340,7 +340,7 @@ export class ProjectsService {
 
   private withHealth(project: Project): ProjectWithHealth {
     return Object.assign(project, {
-      health: this.healthCalculationService.calculate({
+      health: this.projectHealthService.calculate({
         issues: project.issues,
         risks: project.risks,
         tasks: project.tasks,

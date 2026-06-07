@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { HealthCalculationService } from './health-calculation.service';
+import { ProjectHealthService } from './project-health.service';
 
 @Module({
-  providers: [HealthCalculationService],
-  exports: [HealthCalculationService],
+  providers: [ProjectHealthService],
+  exports: [ProjectHealthService],
 })
 export class HealthModule {}

@@ -53,14 +53,14 @@ describe('API contract', () => {
     expect(document.paths['/projects/{id}/dependencies']?.get).toBeDefined();
   });
 
-  it('documents project health status and factors', () => {
+  it('documents project health status and reasons', () => {
     expect(document.components?.schemas?.ProjectHealthDto).toEqual(
       expect.objectContaining({
         properties: expect.objectContaining({
           status: expect.objectContaining({
             enum: ['GREEN', 'AMBER', 'RED'],
           }),
-          factors: expect.objectContaining({
+          reasons: expect.objectContaining({
             type: 'array',
           }),
         }),

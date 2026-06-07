@@ -34,7 +34,7 @@ const projects = [
       status: "active",
     },
     health: {
-      factors: ["1 high risk open"],
+      reasons: ["1 high risk open"],
       status: "AMBER" as const,
     },
     status: "at_risk",
@@ -57,6 +57,11 @@ describe("ProjectTable", () => {
     expect(screen.getByRole("button", { name: /open/i })).toBeInTheDocument();
     expect(screen.getByText("at risk")).toBeInTheDocument();
     expect(screen.getByText("Amber")).toBeInTheDocument();
+    expect(screen.getByText("🟡")).toBeInTheDocument();
+    expect(screen.getByText("Amber").closest("span")).toHaveAttribute(
+      "title",
+      "1 high risk open",
+    );
     expect(screen.getByText("Ava Patel")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();

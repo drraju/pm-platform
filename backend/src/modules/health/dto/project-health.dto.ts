@@ -11,5 +11,5 @@ export class ProjectHealthDto {
   status: ProjectHealthStatus;
 
   @ApiProperty({ type: String, isArray: true })
-  factors: string[];
+  reasons: string[];
 }

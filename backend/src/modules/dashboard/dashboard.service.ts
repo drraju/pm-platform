@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThan, Not, Repository } from 'typeorm';
 import { TaskStatus } from '../../common/enums/task-status.enum';
-import { HealthCalculationService } from '../health/health-calculation.service';
+import { ProjectHealthService } from '../health/project-health.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import { Project } from '../projects/entities/project.entity';
 import { Issue } from '../raid/entities/issue.entity';
@@ -30,7 +30,7 @@ export class DashboardService {
     private readonly risksRepository: Repository<Risk>,
     @InjectRepository(Issue)
     private readonly issuesRepository: Repository<Issue>,
-    private readonly healthCalculationService: HealthCalculationService,
+    private readonly projectHealthService: ProjectHealthService,
   ) {}
 
   async getMyDashboard(userId: string): Promise<MeDashboardDto> {
@@ -74,7 +74,7 @@ export class DashboardService {
       upcomingTasks: upcomingTasks.map((task) => this.toDashboardTask(task)),
       openRisks: openRisks.map((risk) => this.toDashboardRisk(risk)),
       openIssues: openIssues.map((issue) => this.toDashboardIssue(issue)),
-      health: this.healthCalculationService.calculate({
+      health: this.projectHealthService.calculate({
         issues: openIssues,
         risks: openRisks,
         tasks: assignedTasks,
@@ -136,7 +136,7 @@ export class DashboardService {
         name: project.name,
         status: project.status,
         role: 'owner',
-        health: this.healthCalculationService.calculate({
+        health: this.projectHealthService.calculate({
           issues: project.issues,
           risks: project.risks,
           tasks: project.tasks,
@@ -154,7 +154,7 @@ export class DashboardService {
         name: membership.project.name,
         status: membership.project.status,
         role: membership.role,
-        health: this.healthCalculationService.calculate({
+        health: this.projectHealthService.calculate({
           issues: membership.project.issues,
           risks: membership.project.risks,
           tasks: membership.project.tasks,

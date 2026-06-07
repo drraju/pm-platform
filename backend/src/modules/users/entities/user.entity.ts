@@ -15,7 +15,7 @@ export class User extends TimestampedEntity {
   @Column({ name: 'last_name' })
   lastName: string;
 
-  @Column({ name: 'password_hash' })
+  @Column({ name: 'password_hash', select: false })
   passwordHash: string;
 
   @Column({ name: 'role_id', type: 'uuid' })

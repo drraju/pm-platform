@@ -12,6 +12,7 @@ import {
 } from "@/features/projects";
 import { getUsers, type ApiUser } from "@/features/users";
 import { getStoredAccessToken } from "@/features/auth";
+import type { ApiProjectHealthStatus } from "@/lib/api/client";
 
 const projectStatuses = [
   { label: "Active", value: "active" },
@@ -29,7 +30,9 @@ export default function ProjectsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [createdSort, setCreatedSort] = useState<"asc" | "desc">("desc");
+  const [sortMode, setSortMode] = useState<
+    "created_asc" | "created_desc" | "health_asc" | "health_desc"
+  >("created_desc");
   const hasSession = useMemo(() => Boolean(getStoredAccessToken()), []);
 
   async function loadData() {
@@ -53,6 +56,8 @@ export default function ProjectsPage() {
               risks: details.risks ?? project.risks,
               tasks: details.tasks ?? project.tasks,
             };
+            console.log("PROJECT DATA", project);
+
           } catch {
             return project;
           }
@@ -88,16 +93,25 @@ export default function ProjectsPage() {
         statusFilter === "all" ? true : project.status === statusFilter,
       )
       .toSorted((left, right) => {
+        if (sortMode === "health_asc" || sortMode === "health_desc") {
+          const leftHealth = healthRank(left.health?.status ?? "GREEN");
+          const rightHealth = healthRank(right.health?.status ?? "GREEN");
+
+          return sortMode === "health_desc"
+            ? rightHealth - leftHealth
+            : leftHealth - rightHealth;
+        }
+
         const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
         const rightTime = right.createdAt
           ? new Date(right.createdAt).getTime()
           : 0;
 
-        return createdSort === "desc"
+        return sortMode === "created_desc"
           ? rightTime - leftTime
           : leftTime - rightTime;
       });
-  }, [createdSort, projects, searchTerm, statusFilter]);
+  }, [projects, searchTerm, sortMode, statusFilter]);
 
   async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -161,7 +175,7 @@ export default function ProjectsPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[1fr_220px_220px]">
+      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[1fr_220px_240px]">
         <label className="block">
           <span className="text-sm font-medium text-slate-700">
             Search by project name
@@ -193,17 +207,25 @@ export default function ProjectsPage() {
         </label>
         <label className="block">
           <span className="text-sm font-medium text-slate-700">
-            Sort by created date
+            Sort projects
           </span>
           <select
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
             onChange={(event) =>
-              setCreatedSort(event.target.value as "asc" | "desc")
+              setSortMode(
+                event.target.value as
+                  | "created_asc"
+                  | "created_desc"
+                  | "health_asc"
+                  | "health_desc",
+              )
             }
-            value={createdSort}
+            value={sortMode}
           >
-            <option value="desc">Newest first</option>
-            <option value="asc">Oldest first</option>
+            <option value="created_desc">Newest first</option>
+            <option value="created_asc">Oldest first</option>
+            <option value="health_desc">Health: Red first</option>
+            <option value="health_asc">Health: Green first</option>
           </select>
         </label>
       </section>
@@ -336,4 +358,15 @@ export default function ProjectsPage() {
       ) : null}
     </div>
   );
+}
+
+function healthRank(status: ApiProjectHealthStatus) {
+  switch (status) {
+    case "RED":
+      return 3;
+    case "AMBER":
+      return 2;
+    case "GREEN":
+      return 1;
+  }
 }

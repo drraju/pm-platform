@@ -5,12 +5,10 @@ import { useParams } from "next/navigation";
 import React from "react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
-import {
-  ProjectHealthBadge,
-  ProjectHealthFactors,
-} from "@/components/projects/project-health-badge";
+import { ProjectHealthCard } from "@/components/projects/project-health-card";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
 import {
+  formatRaidDate,
   formatRaidLabel,
   formatRaidOwner,
   ProjectWorkspaceRegisterSection,
@@ -20,10 +18,6 @@ import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-te
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 import {
   getProject,
-  getProjectAssumptions,
-  getProjectDependencies,
-  getProjectIssues,
-  getProjectRisks,
   type ApiProjectDetails,
 } from "@/features/projects";
 
@@ -39,27 +33,8 @@ export default function ProjectWorkspacePage() {
       setError(null);
       setIsLoading(true);
       try {
-        const [
-          projectDetails,
-          risks,
-          issues,
-          assumptions,
-          dependencies,
-        ] = await Promise.all([
-          getProject(projectId),
-          getProjectRisks(projectId),
-          getProjectIssues(projectId),
-          getProjectAssumptions(projectId),
-          getProjectDependencies(projectId),
-        ]);
-
-        setProject({
-          ...projectDetails,
-          assumptions,
-          dependencies,
-          issues,
-          risks,
-        });
+        const projectDetails = await getProject(projectId);
+        setProject(projectDetails);
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -110,7 +85,7 @@ export default function ProjectWorkspacePage() {
   const assumptions = project.assumptions ?? [];
   const dependencies = project.dependencies ?? [];
   const health = project.health ?? {
-    factors: ['No critical issues, high risks, or overdue task threshold breaches'],
+    reasons: ['No critical issues, high risks, or overdue task threshold breaches'],
     status: "GREEN" as const,
   };
 
@@ -124,24 +99,11 @@ export default function ProjectWorkspacePage() {
 
       {error ? <ErrorMessage message={error} /> : null}
 
-      <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-950">
-              Delivery Health
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Calculated from open critical issues, high risks, and overdue task percentage.
-            </p>
-          </div>
-          <div>
-            <ProjectHealthBadge status={health.status} />
-            <ProjectHealthFactors factors={health.factors} />
-          </div>
-        </div>
+      <section className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
+        <ProjectWorkspaceOverview project={project} />
+        <ProjectHealthCard health={health} />
       </section>
 
-      <ProjectWorkspaceOverview project={project} />
       <ProjectWorkspaceSummary tasks={tasks} />
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -153,12 +115,13 @@ export default function ProjectWorkspacePage() {
         <ProjectWorkspaceRegisterSection
           columns={[
             { header: "Title", render: (risk) => risk.title },
-            {
-              header: "Severity",
-              render: (risk) => formatRaidLabel(risk.severity ?? risk.impact),
-            },
-            { header: "Owner", render: formatRaidOwner },
             { header: "Status", render: (risk) => formatRaidLabel(risk.status) },
+            {
+              header: "Probability",
+              render: (risk) => formatRaidLabel(risk.probability),
+            },
+            { header: "Impact", render: (risk) => formatRaidLabel(risk.impact) },
+            { header: "Owner", render: formatRaidOwner },
           ]}
           description="Project risks with ownership and current status."
           emptyMessage="No risks yet."
@@ -169,14 +132,14 @@ export default function ProjectWorkspacePage() {
           columns={[
             { header: "Title", render: (issue) => issue.title },
             {
-              header: "Priority",
-              render: (issue) => formatRaidLabel(issue.priority ?? issue.severity),
-            },
-            { header: "Owner", render: formatRaidOwner },
-            {
               header: "Status",
               render: (issue) => formatRaidLabel(issue.status),
             },
+            {
+              header: "Severity",
+              render: (issue) => formatRaidLabel(issue.severity),
+            },
+            { header: "Owner", render: formatRaidOwner },
           ]}
           description="Open and tracked issues affecting delivery."
           emptyMessage="No issues yet."
@@ -186,11 +149,15 @@ export default function ProjectWorkspacePage() {
         <ProjectWorkspaceRegisterSection
           columns={[
             { header: "Title", render: (assumption) => assumption.title },
-            { header: "Owner", render: formatRaidOwner },
             {
               header: "Status",
               render: (assumption) => formatRaidLabel(assumption.status),
             },
+            {
+              header: "Validation Status",
+              render: (assumption) => formatRaidLabel(assumption.validationStatus),
+            },
+            { header: "Owner", render: formatRaidOwner },
           ]}
           description="Delivery assumptions and their validation state."
           emptyMessage="No assumptions yet."
@@ -201,14 +168,18 @@ export default function ProjectWorkspacePage() {
           columns={[
             { header: "Title", render: (dependency) => dependency.title },
             {
-              header: "Type",
-              render: (dependency) => formatRaidLabel(dependency.type),
-            },
-            { header: "Owner", render: formatRaidOwner },
-            {
               header: "Status",
               render: (dependency) => formatRaidLabel(dependency.status),
             },
+            {
+              header: "Depends On",
+              render: (dependency) => dependency.dependsOn ?? "Not set",
+            },
+            {
+              header: "Due Date",
+              render: (dependency) => formatRaidDate(dependency.dueDate),
+            },
+            { header: "Owner", render: formatRaidOwner },
           ]}
           description="Internal and external dependencies for the project."
           emptyMessage="No dependencies yet."

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
-import { HealthCalculationService } from '../src/modules/health/health-calculation.service';
+import { ProjectHealthService } from '../src/modules/health/project-health.service';
 import { ProjectMember } from '../src/modules/projects/entities/project-member.entity';
 import { Project } from '../src/modules/projects/entities/project.entity';
 import { ProjectsController } from '../src/modules/projects/projects.controller';
@@ -47,7 +47,7 @@ describe('Projects API integration', () => {
       controllers: [ProjectsController],
       providers: [
         ProjectsService,
-        HealthCalculationService,
+        ProjectHealthService,
         { provide: getRepositoryToken(Project), useValue: projectsRepository },
         { provide: getRepositoryToken(ProjectMember), useValue: {} },
         { provide: getRepositoryToken(Task), useValue: {} },
@@ -70,7 +70,7 @@ describe('Projects API integration', () => {
         id: 'project-1',
         health: {
           status: 'RED',
-          factors: ['1 critical issue open', '50% tasks overdue (1/2)'],
+          reasons: ['1 critical issue open', '50% tasks overdue (1/2)'],
         },
       }),
     ]);
