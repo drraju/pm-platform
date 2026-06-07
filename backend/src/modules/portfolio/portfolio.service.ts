@@ -14,6 +14,7 @@ import {
   OverdueTasksDto,
   PortfolioProjectAttentionDto,
   PortfolioSummaryDto,
+  UpcomingMilestoneDto,
 } from './dto/portfolio-summary.dto';
 
 @Injectable()
@@ -73,12 +74,14 @@ export class PortfolioService {
         openRisksBySeverity: this.emptyOpenRisksBySeverity(),
         openIssuesByPriority: this.emptyOpenIssuesByPriority(),
         overdueTasks: this.emptyOverdueTasks(),
+        upcomingMilestones: [],
       },
     );
 
     summary.openRisksBySeverity = this.countOpenRisksBySeverity(risks);
     summary.openIssuesByPriority = this.countOpenIssuesByPriority(issues);
     summary.overdueTasks = this.countOverdueTasks(tasks);
+    summary.upcomingMilestones = this.findUpcomingMilestones(tasks);
 
     return summary;
   }
@@ -202,6 +205,40 @@ export class PortfolioService {
     return Boolean(
       task.dueDate &&
         task.dueDate < today &&
+        task.status !== TaskStatus.Done,
+    );
+  }
+
+  private findUpcomingMilestones(tasks: Task[]): UpcomingMilestoneDto[] {
+    const today = new Date().toISOString().slice(0, 10);
+
+    return tasks
+      .filter((task) => this.isUpcomingMilestoneCandidate(task, today))
+      .sort((left, right) => {
+        const dueDateComparison = String(left.dueDate).localeCompare(
+          String(right.dueDate),
+        );
+
+        if (dueDateComparison !== 0) {
+          return dueDateComparison;
+        }
+
+        return left.title.localeCompare(right.title);
+      })
+      .slice(0, 10)
+      .map((task) => ({
+        taskId: task.id,
+        title: task.title,
+        projectId: task.projectId,
+        projectName: task.project?.name ?? 'Unassigned project',
+        dueDate: task.dueDate as string,
+      }));
+  }
+
+  private isUpcomingMilestoneCandidate(task: Task, today: string): boolean {
+    return Boolean(
+      task.dueDate &&
+        task.dueDate >= today &&
         task.status !== TaskStatus.Done,
     );
   }

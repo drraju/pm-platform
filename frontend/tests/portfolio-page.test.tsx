@@ -68,6 +68,22 @@ describe("Portfolio page", () => {
           },
         ],
       },
+      upcomingMilestones: [
+        {
+          dueDate: "2026-06-09",
+          projectId: "project-cxp",
+          projectName: "Customer Experience Platform Upgrade",
+          taskId: "task-1",
+          title: "Complete executive readiness review",
+        },
+        {
+          dueDate: "2026-06-12",
+          projectId: "project-observability",
+          projectName: "Observability Transformation Programme",
+          taskId: "task-2",
+          title: "Confirm monitoring cutover",
+        },
+      ],
     });
 
     render(<PortfolioPage />);
@@ -137,6 +153,24 @@ describe("Portfolio page", () => {
       overdueWidget,
     );
     expectSummaryCardValue("Data Centre Exit Programme", "3", overdueWidget);
+    expect(
+      screen.getByRole("heading", { name: "Upcoming Milestones" }),
+    ).toBeInTheDocument();
+    const milestonesWidget = getSectionByHeading("Upcoming Milestones");
+    expect(
+      within(milestonesWidget).getByText("Complete executive readiness review"),
+    ).toBeInTheDocument();
+    expect(
+      within(milestonesWidget).getByRole("link", {
+        name: "Customer Experience Platform Upgrade",
+      }),
+    ).toHaveAttribute("href", "/projects/project-cxp");
+    expect(
+      within(milestonesWidget).getByText(formatExpectedDate("2026-06-09")),
+    ).toBeInTheDocument();
+    expect(
+      within(milestonesWidget).getByText("Confirm monitoring cutover"),
+    ).toBeInTheDocument();
   });
 
   it("renders a loading state while the summary is pending", () => {
@@ -170,6 +204,7 @@ describe("Portfolio page", () => {
         total: 0,
         projects: [],
       },
+      upcomingMilestones: [],
     });
 
     render(<PortfolioPage />);
@@ -202,6 +237,7 @@ describe("Portfolio page", () => {
         total: 0,
         projects: [],
       },
+      upcomingMilestones: [],
     });
 
     render(<PortfolioPage />);
@@ -212,6 +248,7 @@ describe("Portfolio page", () => {
     expect(screen.getByText("No open risks are currently recorded.")).toBeInTheDocument();
     expect(screen.getByText("No open issues are currently recorded.")).toBeInTheDocument();
     expect(screen.getByText("No overdue tasks are currently recorded.")).toBeInTheDocument();
+    expect(screen.getByText("No upcoming milestones are currently recorded.")).toBeInTheDocument();
   });
 
   it("renders an error state when the summary cannot load", async () => {
@@ -243,4 +280,12 @@ function getSectionByHeading(name: string) {
 
   expect(section).not.toBeNull();
   return section as HTMLElement;
+}
+
+function formatExpectedDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }

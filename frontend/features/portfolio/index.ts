@@ -4,5 +4,6 @@ export type {
   ApiPortfolioOverdueTasks,
   ApiPortfolioProjectAttention,
   ApiPortfolioSummary,
+  ApiPortfolioUpcomingMilestone,
   ApiSeverityCounts,
 } from "@/lib/api/client";

@@ -124,10 +124,28 @@ describe('PortfolioService', () => {
         status: TaskStatus.Done,
       },
       {
+        id: 'later-task',
+        title: 'Later milestone',
         dueDate: '2026-06-10',
         project: { name: 'Green Project' },
         projectId: 'green-project',
         status: TaskStatus.Todo,
+      },
+      {
+        id: 'next-task',
+        title: 'Next milestone',
+        dueDate: '2026-06-08',
+        project: { name: 'Red Project' },
+        projectId: 'red-project',
+        status: TaskStatus.InProgress,
+      },
+      {
+        id: 'done-upcoming-task',
+        title: 'Completed upcoming milestone',
+        dueDate: '2026-06-08',
+        project: { name: 'Green Project' },
+        projectId: 'green-project',
+        status: TaskStatus.Done,
       },
     ]);
 
@@ -177,6 +195,22 @@ describe('PortfolioService', () => {
           },
         ],
       },
+      upcomingMilestones: [
+        {
+          taskId: 'next-task',
+          title: 'Next milestone',
+          projectId: 'red-project',
+          projectName: 'Red Project',
+          dueDate: '2026-06-08',
+        },
+        {
+          taskId: 'later-task',
+          title: 'Later milestone',
+          projectId: 'green-project',
+          projectName: 'Green Project',
+          dueDate: '2026-06-10',
+        },
+      ],
     });
     expect(projectsRepository.find).toHaveBeenCalledWith({
       relations: { issues: true, risks: true, tasks: true },
@@ -216,6 +250,7 @@ describe('PortfolioService', () => {
         total: 0,
         projects: [],
       },
+      upcomingMilestones: [],
     });
   });
 });

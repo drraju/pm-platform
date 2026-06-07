@@ -14,6 +14,7 @@ import {
   type ApiPortfolioOverdueTasks,
   type ApiPortfolioProjectAttention,
   type ApiPortfolioSummary,
+  type ApiPortfolioUpcomingMilestone,
   type ApiSeverityCounts,
 } from "@/features/portfolio";
 
@@ -89,6 +90,10 @@ export default function PortfolioPage() {
 
           <OverdueTasksWidget overdueTasks={summary.overdueTasks} />
 
+          <UpcomingMilestonesWidget
+            milestones={summary.upcomingMilestones}
+          />
+
           {summary.totalProjects === 0 ? (
             <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
               No projects are available in the portfolio yet.
@@ -103,6 +108,63 @@ export default function PortfolioPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+function UpcomingMilestonesWidget({
+  milestones,
+}: {
+  milestones: ApiPortfolioUpcomingMilestone[];
+}) {
+  return (
+    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-950">
+          Upcoming Milestones
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Incomplete tasks with the nearest upcoming due dates.
+        </p>
+      </div>
+
+      {milestones.length === 0 ? (
+        <p className="mt-5 text-sm text-slate-500">
+          No upcoming milestones are currently recorded.
+        </p>
+      ) : (
+        <div className="mt-5 overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-3">Task Title</th>
+                <th className="px-3 py-3">Project Name</th>
+                <th className="px-3 py-3">Due Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {milestones.map((milestone) => (
+                <tr key={milestone.taskId}>
+                  <td className="px-3 py-3 font-semibold text-slate-950">
+                    {milestone.title}
+                  </td>
+                  <td className="px-3 py-3">
+                    <Link
+                      className="font-medium text-brand hover:underline"
+                      href={`/projects/${milestone.projectId}`}
+                    >
+                      {milestone.projectName}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">
+                    {formatDate(milestone.dueDate)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -155,6 +217,14 @@ function OverdueTasksWidget({
       </div>
     </section>
   );
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function OpenRisksBySeverityWidget({

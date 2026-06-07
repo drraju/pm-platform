@@ -148,6 +148,7 @@ export type ApiPortfolioSummary = {
   openRisksBySeverity: ApiSeverityCounts;
   openIssuesByPriority: ApiSeverityCounts;
   overdueTasks: ApiPortfolioOverdueTasks;
+  upcomingMilestones: ApiPortfolioUpcomingMilestone[];
 };
 
 export type ApiPortfolioProjectAttention = {
@@ -173,6 +174,14 @@ export type ApiPortfolioOverdueTaskProject = {
   projectId: string;
   projectName: string;
   overdueTaskCount: number;
+};
+
+export type ApiPortfolioUpcomingMilestone = {
+  taskId: string;
+  title: string;
+  projectId: string;
+  projectName: string;
+  dueDate: string;
 };
 
 type RequestOptions = RequestInit & {

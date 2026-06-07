@@ -62,6 +62,23 @@ export class OverdueTasksDto {
   projects: OverdueTaskProjectDto[];
 }
 
+export class UpcomingMilestoneDto {
+  @ApiProperty({ format: 'uuid' })
+  taskId: string;
+
+  @ApiProperty({ example: 'Complete executive readiness review' })
+  title: string;
+
+  @ApiProperty({ format: 'uuid' })
+  projectId: string;
+
+  @ApiProperty({ example: 'Customer Experience Platform Upgrade' })
+  projectName: string;
+
+  @ApiProperty({ format: 'date', example: '2026-06-30' })
+  dueDate: string;
+}
+
 export class PortfolioSummaryDto {
   @ApiProperty({ example: 12 })
   totalProjects: number;
@@ -86,4 +103,7 @@ export class PortfolioSummaryDto {
 
   @ApiProperty({ type: OverdueTasksDto })
   overdueTasks: OverdueTasksDto;
+
+  @ApiProperty({ type: UpcomingMilestoneDto, isArray: true })
+  upcomingMilestones: UpcomingMilestoneDto[];
 }

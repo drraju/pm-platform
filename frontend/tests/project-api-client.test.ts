@@ -92,6 +92,15 @@ describe("project API client", () => {
           },
         ],
       },
+      upcomingMilestones: [
+        {
+          taskId: "task-1",
+          title: "Complete readiness review",
+          projectId: "project-1",
+          projectName: "Customer Experience Platform Upgrade",
+          dueDate: "2026-06-30",
+        },
+      ],
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -130,6 +139,15 @@ describe("project API client", () => {
           },
         ],
       },
+      upcomingMilestones: [
+        {
+          taskId: "task-1",
+          title: "Complete readiness review",
+          projectId: "project-1",
+          projectName: "Customer Experience Platform Upgrade",
+          dueDate: "2026-06-30",
+        },
+      ],
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/portfolio/summary",
