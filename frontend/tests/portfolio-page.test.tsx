@@ -42,6 +42,12 @@ describe("Portfolio page", () => {
         medium: 3,
         low: 4,
       },
+      openIssuesByPriority: {
+        critical: 5,
+        high: 6,
+        medium: 7,
+        low: 8,
+      },
     });
 
     render(<PortfolioPage />);
@@ -74,10 +80,17 @@ describe("Portfolio page", () => {
     expect(
       screen.getByRole("heading", { name: "Open Risks by Severity" }),
     ).toBeInTheDocument();
-    expectSummaryCardValue("Critical", "1");
-    expectSummaryCardValue("High", "2");
-    expectSummaryCardValue("Medium", "3");
-    expectSummaryCardValue("Low", "4");
+    expectSummaryCardValue("Critical Risks", "1");
+    expectSummaryCardValue("High Risks", "2");
+    expectSummaryCardValue("Medium Risks", "3");
+    expectSummaryCardValue("Low Risks", "4");
+    expect(
+      screen.getByRole("heading", { name: "Open Issues by Priority" }),
+    ).toBeInTheDocument();
+    expectSummaryCardValue("Critical Issues", "5");
+    expectSummaryCardValue("High Priority Issues", "6");
+    expectSummaryCardValue("Medium Priority Issues", "7");
+    expectSummaryCardValue("Low Priority Issues", "8");
   });
 
   it("renders a loading state while the summary is pending", () => {
@@ -96,6 +109,12 @@ describe("Portfolio page", () => {
       redProjects: 0,
       projectsRequiringAttention: [],
       openRisksBySeverity: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      },
+      openIssuesByPriority: {
         critical: 0,
         high: 0,
         medium: 0,
@@ -123,6 +142,12 @@ describe("Portfolio page", () => {
         medium: 0,
         low: 0,
       },
+      openIssuesByPriority: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      },
     });
 
     render(<PortfolioPage />);
@@ -131,6 +156,7 @@ describe("Portfolio page", () => {
       await screen.findByText("No amber or red projects require attention."),
     ).toBeInTheDocument();
     expect(screen.getByText("No open risks are currently recorded.")).toBeInTheDocument();
+    expect(screen.getByText("No open issues are currently recorded.")).toBeInTheDocument();
   });
 
   it("renders an error state when the summary cannot load", async () => {

@@ -1,6 +1,6 @@
 export { getPortfolioSummary } from "@/lib/api/client";
 export type {
-  ApiOpenRisksBySeverity,
   ApiPortfolioProjectAttention,
   ApiPortfolioSummary,
+  ApiSeverityCounts,
 } from "@/lib/api/client";

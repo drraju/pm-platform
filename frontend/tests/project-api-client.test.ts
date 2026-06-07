@@ -76,6 +76,12 @@ describe("project API client", () => {
         medium: 3,
         low: 4,
       },
+      openIssuesByPriority: {
+        critical: 2,
+        high: 3,
+        medium: 4,
+        low: 5,
+      },
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -97,6 +103,12 @@ describe("project API client", () => {
         high: 2,
         medium: 3,
         low: 4,
+      },
+      openIssuesByPriority: {
+        critical: 2,
+        high: 3,
+        medium: 4,
+        low: 5,
       },
     });
     expect(fetchMock).toHaveBeenCalledWith(

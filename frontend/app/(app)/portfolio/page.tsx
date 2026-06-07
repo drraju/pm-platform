@@ -11,9 +11,9 @@ import {
 } from "@/components/projects/project-health-badge";
 import {
   getPortfolioSummary,
-  type ApiOpenRisksBySeverity,
   type ApiPortfolioProjectAttention,
   type ApiPortfolioSummary,
+  type ApiSeverityCounts,
 } from "@/features/portfolio";
 
 export default function PortfolioPage() {
@@ -82,6 +82,10 @@ export default function PortfolioPage() {
             openRisksBySeverity={summary.openRisksBySeverity}
           />
 
+          <OpenIssuesByPriorityWidget
+            openIssuesByPriority={summary.openIssuesByPriority}
+          />
+
           {summary.totalProjects === 0 ? (
             <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
               No projects are available in the portfolio yet.
@@ -102,7 +106,7 @@ export default function PortfolioPage() {
 function OpenRisksBySeverityWidget({
   openRisksBySeverity,
 }: {
-  openRisksBySeverity: ApiOpenRisksBySeverity;
+  openRisksBySeverity: ApiSeverityCounts;
 }) {
   const totalOpenRisks =
     openRisksBySeverity.critical +
@@ -123,26 +127,84 @@ function OpenRisksBySeverityWidget({
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
-          label="Critical"
+          label="Critical Risks"
           tone="danger"
           value={openRisksBySeverity.critical}
         />
         <SummaryCard
-          label="High"
+          label="High Risks"
           tone="danger"
           value={openRisksBySeverity.high}
         />
         <SummaryCard
-          label="Medium"
+          label="Medium Risks"
           tone="warning"
           value={openRisksBySeverity.medium}
         />
-        <SummaryCard label="Low" tone="success" value={openRisksBySeverity.low} />
+        <SummaryCard
+          label="Low Risks"
+          tone="success"
+          value={openRisksBySeverity.low}
+        />
       </section>
 
       {totalOpenRisks === 0 ? (
         <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
           No open risks are currently recorded.
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+function OpenIssuesByPriorityWidget({
+  openIssuesByPriority,
+}: {
+  openIssuesByPriority: ApiSeverityCounts;
+}) {
+  const totalOpenIssues =
+    openIssuesByPriority.critical +
+    openIssuesByPriority.high +
+    openIssuesByPriority.medium +
+    openIssuesByPriority.low;
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-950">
+          Open Issues by Priority
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Open issues grouped by delivery priority.
+        </p>
+      </div>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          label="Critical Issues"
+          tone="danger"
+          value={openIssuesByPriority.critical}
+        />
+        <SummaryCard
+          label="High Priority Issues"
+          tone="danger"
+          value={openIssuesByPriority.high}
+        />
+        <SummaryCard
+          label="Medium Priority Issues"
+          tone="warning"
+          value={openIssuesByPriority.medium}
+        />
+        <SummaryCard
+          label="Low Priority Issues"
+          tone="success"
+          value={openIssuesByPriority.low}
+        />
+      </section>
+
+      {totalOpenIssues === 0 ? (
+        <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
+          No open issues are currently recorded.
         </section>
       ) : null}
     </section>

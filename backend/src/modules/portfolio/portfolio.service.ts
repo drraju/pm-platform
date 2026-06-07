@@ -4,8 +4,10 @@ import { Repository } from 'typeorm';
 import { ProjectHealthStatus } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
 import { Project } from '../projects/entities/project.entity';
+import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import {
+  OpenIssuesByPriorityDto,
   OpenRisksBySeverityDto,
   PortfolioProjectAttentionDto,
   PortfolioSummaryDto,
@@ -18,15 +20,18 @@ export class PortfolioService {
     private readonly projectsRepository: Repository<Project>,
     @InjectRepository(Risk)
     private readonly risksRepository: Repository<Risk>,
+    @InjectRepository(Issue)
+    private readonly issuesRepository: Repository<Issue>,
     private readonly projectHealthService: ProjectHealthService,
   ) {}
 
   async getSummary(): Promise<PortfolioSummaryDto> {
-    const [projects, risks] = await Promise.all([
+    const [projects, risks, issues] = await Promise.all([
       this.projectsRepository.find({
         relations: { issues: true, risks: true, tasks: true },
       }),
       this.risksRepository.find(),
+      this.issuesRepository.find(),
     ]);
 
     const summary = projects.reduce<PortfolioSummaryDto>(
@@ -60,10 +65,12 @@ export class PortfolioService {
         redProjects: 0,
         projectsRequiringAttention: [],
         openRisksBySeverity: this.emptyOpenRisksBySeverity(),
+        openIssuesByPriority: this.emptyOpenIssuesByPriority(),
       },
     );
 
     summary.openRisksBySeverity = this.countOpenRisksBySeverity(risks);
+    summary.openIssuesByPriority = this.countOpenIssuesByPriority(issues);
 
     return summary;
   }
@@ -103,6 +110,36 @@ export class PortfolioService {
   }
 
   private emptyOpenRisksBySeverity(): OpenRisksBySeverityDto {
+    return {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+  }
+
+  private countOpenIssuesByPriority(issues: Issue[]): OpenIssuesByPriorityDto {
+    return issues.reduce<OpenIssuesByPriorityDto>((counts, issue) => {
+      if (!this.isOpen(issue.status)) {
+        return counts;
+      }
+
+      const priority = issue.severity?.toLowerCase();
+      if (priority === 'critical') {
+        counts.critical += 1;
+      } else if (priority === 'high') {
+        counts.high += 1;
+      } else if (priority === 'low') {
+        counts.low += 1;
+      } else {
+        counts.medium += 1;
+      }
+
+      return counts;
+    }, this.emptyOpenIssuesByPriority());
+  }
+
+  private emptyOpenIssuesByPriority(): OpenIssuesByPriorityDto {
     return {
       critical: 0,
       high: 0,

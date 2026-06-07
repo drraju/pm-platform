@@ -76,9 +76,20 @@ describe('API contract', () => {
         openRisksBySeverity: expect.objectContaining({
           $ref: '#/components/schemas/OpenRisksBySeverityDto',
         }),
+        openIssuesByPriority: expect.objectContaining({
+          $ref: '#/components/schemas/OpenIssuesByPriorityDto',
+        }),
       }),
     );
     expect(document.components?.schemas?.OpenRisksBySeverityDto?.properties).toEqual(
+      expect.objectContaining({
+        critical: expect.objectContaining({ type: 'number' }),
+        high: expect.objectContaining({ type: 'number' }),
+        medium: expect.objectContaining({ type: 'number' }),
+        low: expect.objectContaining({ type: 'number' }),
+      }),
+    );
+    expect(document.components?.schemas?.OpenIssuesByPriorityDto?.properties).toEqual(
       expect.objectContaining({
         critical: expect.objectContaining({ type: 'number' }),
         high: expect.objectContaining({ type: 'number' }),

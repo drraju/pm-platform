@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectHealthService } from '../../health/project-health.service';
 import { Project } from '../../projects/entities/project.entity';
+import { Issue } from '../../raid/entities/issue.entity';
 import { Risk } from '../../raid/entities/risk.entity';
 import { PortfolioService } from '../portfolio.service';
 
@@ -15,6 +16,7 @@ describe('PortfolioService', () => {
   let service: PortfolioService;
   let projectsRepository: MockRepository<Project>;
   let risksRepository: MockRepository<Risk>;
+  let issuesRepository: MockRepository<Issue>;
 
   beforeEach(async () => {
     projectsRepository = {
@@ -23,12 +25,16 @@ describe('PortfolioService', () => {
     risksRepository = {
       find: jest.fn(),
     };
+    issuesRepository = {
+      find: jest.fn(),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         PortfolioService,
         { provide: getRepositoryToken(Project), useValue: projectsRepository },
         { provide: getRepositoryToken(Risk), useValue: risksRepository },
+        { provide: getRepositoryToken(Issue), useValue: issuesRepository },
         ProjectHealthService,
       ],
     }).compile();
@@ -78,6 +84,14 @@ describe('PortfolioService', () => {
       { impact: 'high', status: 'resolved' },
       { impact: undefined, status: 'open' },
     ]);
+    issuesRepository.find?.mockResolvedValue([
+      { severity: 'critical', status: 'open' },
+      { severity: 'high', status: 'open' },
+      { severity: 'medium', status: 'open' },
+      { severity: 'low', status: 'open' },
+      { severity: 'critical', status: 'resolved' },
+      { severity: undefined, status: 'open' },
+    ]);
 
     await expect(service.getSummary()).resolves.toEqual({
       totalProjects: 3,
@@ -104,16 +118,24 @@ describe('PortfolioService', () => {
         medium: 2,
         low: 1,
       },
+      openIssuesByPriority: {
+        critical: 1,
+        high: 1,
+        medium: 2,
+        low: 1,
+      },
     });
     expect(projectsRepository.find).toHaveBeenCalledWith({
       relations: { issues: true, risks: true, tasks: true },
     });
     expect(risksRepository.find).toHaveBeenCalled();
+    expect(issuesRepository.find).toHaveBeenCalled();
   });
 
   it('returns zero counts when the portfolio has no projects', async () => {
     projectsRepository.find?.mockResolvedValue([]);
     risksRepository.find?.mockResolvedValue([]);
+    issuesRepository.find?.mockResolvedValue([]);
 
     await expect(service.getSummary()).resolves.toEqual({
       totalProjects: 0,
@@ -122,6 +144,12 @@ describe('PortfolioService', () => {
       redProjects: 0,
       projectsRequiringAttention: [],
       openRisksBySeverity: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      },
+      openIssuesByPriority: {
         critical: 0,
         high: 0,
         medium: 0,

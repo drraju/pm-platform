@@ -145,7 +145,8 @@ export type ApiPortfolioSummary = {
   amberProjects: number;
   redProjects: number;
   projectsRequiringAttention: ApiPortfolioProjectAttention[];
-  openRisksBySeverity: ApiOpenRisksBySeverity;
+  openRisksBySeverity: ApiSeverityCounts;
+  openIssuesByPriority: ApiSeverityCounts;
 };
 
 export type ApiPortfolioProjectAttention = {
@@ -155,7 +156,7 @@ export type ApiPortfolioProjectAttention = {
   reasons: string[];
 };
 
-export type ApiOpenRisksBySeverity = {
+export type ApiSeverityCounts = {
   critical: number;
   high: number;
   medium: number;

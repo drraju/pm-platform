@@ -29,6 +29,20 @@ export class OpenRisksBySeverityDto {
   low: number;
 }
 
+export class OpenIssuesByPriorityDto {
+  @ApiProperty({ example: 1 })
+  critical: number;
+
+  @ApiProperty({ example: 3 })
+  high: number;
+
+  @ApiProperty({ example: 5 })
+  medium: number;
+
+  @ApiProperty({ example: 2 })
+  low: number;
+}
+
 export class PortfolioSummaryDto {
   @ApiProperty({ example: 12 })
   totalProjects: number;
@@ -47,4 +61,7 @@ export class PortfolioSummaryDto {
 
   @ApiProperty({ type: OpenRisksBySeverityDto })
   openRisksBySeverity: OpenRisksBySeverityDto;
+
+  @ApiProperty({ type: OpenIssuesByPriorityDto })
+  openIssuesByPriority: OpenIssuesByPriorityDto;
 }
