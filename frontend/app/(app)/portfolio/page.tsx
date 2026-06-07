@@ -11,6 +11,7 @@ import {
 } from "@/components/projects/project-health-badge";
 import {
   getPortfolioSummary,
+  type ApiPortfolioOverdueTasks,
   type ApiPortfolioProjectAttention,
   type ApiPortfolioSummary,
   type ApiSeverityCounts,
@@ -86,6 +87,8 @@ export default function PortfolioPage() {
             openIssuesByPriority={summary.openIssuesByPriority}
           />
 
+          <OverdueTasksWidget overdueTasks={summary.overdueTasks} />
+
           {summary.totalProjects === 0 ? (
             <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
               No projects are available in the portfolio yet.
@@ -100,6 +103,57 @@ export default function PortfolioPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+function OverdueTasksWidget({
+  overdueTasks,
+}: {
+  overdueTasks: ApiPortfolioOverdueTasks;
+}) {
+  return (
+    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">Overdue Tasks</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Portfolio-wide incomplete tasks past their due date.
+          </p>
+        </div>
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          <p className="text-sm font-medium opacity-75">Total Overdue Tasks</p>
+          <p className="mt-2 text-3xl font-semibold">{overdueTasks.total}</p>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <h3 className="text-sm font-semibold text-slate-700">
+          Projects with Overdue Tasks
+        </h3>
+        {overdueTasks.projects.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-500">
+            No overdue tasks are currently recorded.
+          </p>
+        ) : (
+          <div className="mt-3 divide-y divide-slate-100">
+            {overdueTasks.projects.map((project) => (
+              <Link
+                className="flex flex-col gap-2 rounded-md px-3 py-3 text-sm transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+                href={`/projects/${project.projectId}`}
+                key={project.projectId}
+              >
+                <span className="font-semibold text-slate-950">
+                  {project.projectName}
+                </span>
+                <span className="text-slate-600">
+                  {project.overdueTaskCount}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

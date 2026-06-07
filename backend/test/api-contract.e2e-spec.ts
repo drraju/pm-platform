@@ -79,6 +79,9 @@ describe('API contract', () => {
         openIssuesByPriority: expect.objectContaining({
           $ref: '#/components/schemas/OpenIssuesByPriorityDto',
         }),
+        overdueTasks: expect.objectContaining({
+          $ref: '#/components/schemas/OverdueTasksDto',
+        }),
       }),
     );
     expect(document.components?.schemas?.OpenRisksBySeverityDto?.properties).toEqual(
@@ -95,6 +98,24 @@ describe('API contract', () => {
         high: expect.objectContaining({ type: 'number' }),
         medium: expect.objectContaining({ type: 'number' }),
         low: expect.objectContaining({ type: 'number' }),
+      }),
+    );
+    expect(document.components?.schemas?.OverdueTasksDto?.properties).toEqual(
+      expect.objectContaining({
+        total: expect.objectContaining({ type: 'number' }),
+        projects: expect.objectContaining({
+          type: 'array',
+          items: expect.objectContaining({
+            $ref: '#/components/schemas/OverdueTaskProjectDto',
+          }),
+        }),
+      }),
+    );
+    expect(document.components?.schemas?.OverdueTaskProjectDto?.properties).toEqual(
+      expect.objectContaining({
+        projectId: expect.objectContaining({ type: 'string' }),
+        projectName: expect.objectContaining({ type: 'string' }),
+        overdueTaskCount: expect.objectContaining({ type: 'number' }),
       }),
     );
     expect(

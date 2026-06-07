@@ -6,9 +6,12 @@ import { ProjectHealthService } from '../health/project-health.service';
 import { Project } from '../projects/entities/project.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
+import { Task } from '../tasks/entities/task.entity';
+import { TaskStatus } from '../../common/enums/task-status.enum';
 import {
   OpenIssuesByPriorityDto,
   OpenRisksBySeverityDto,
+  OverdueTasksDto,
   PortfolioProjectAttentionDto,
   PortfolioSummaryDto,
 } from './dto/portfolio-summary.dto';
@@ -22,16 +25,19 @@ export class PortfolioService {
     private readonly risksRepository: Repository<Risk>,
     @InjectRepository(Issue)
     private readonly issuesRepository: Repository<Issue>,
+    @InjectRepository(Task)
+    private readonly tasksRepository: Repository<Task>,
     private readonly projectHealthService: ProjectHealthService,
   ) {}
 
   async getSummary(): Promise<PortfolioSummaryDto> {
-    const [projects, risks, issues] = await Promise.all([
+    const [projects, risks, issues, tasks] = await Promise.all([
       this.projectsRepository.find({
         relations: { issues: true, risks: true, tasks: true },
       }),
       this.risksRepository.find(),
       this.issuesRepository.find(),
+      this.tasksRepository.find({ relations: { project: true } }),
     ]);
 
     const summary = projects.reduce<PortfolioSummaryDto>(
@@ -66,11 +72,13 @@ export class PortfolioService {
         projectsRequiringAttention: [],
         openRisksBySeverity: this.emptyOpenRisksBySeverity(),
         openIssuesByPriority: this.emptyOpenIssuesByPriority(),
+        overdueTasks: this.emptyOverdueTasks(),
       },
     );
 
     summary.openRisksBySeverity = this.countOpenRisksBySeverity(risks);
     summary.openIssuesByPriority = this.countOpenIssuesByPriority(issues);
+    summary.overdueTasks = this.countOverdueTasks(tasks);
 
     return summary;
   }
@@ -146,6 +154,56 @@ export class PortfolioService {
       medium: 0,
       low: 0,
     };
+  }
+
+  private countOverdueTasks(tasks: Task[]): OverdueTasksDto {
+    const today = new Date().toISOString().slice(0, 10);
+    const projectCounts = new Map<
+      string,
+      { projectId: string; projectName: string; overdueTaskCount: number }
+    >();
+
+    for (const task of tasks) {
+      if (!this.isOverdueTask(task, today)) {
+        continue;
+      }
+
+      const projectId = task.projectId;
+      const existing = projectCounts.get(projectId);
+      if (existing) {
+        existing.overdueTaskCount += 1;
+      } else {
+        projectCounts.set(projectId, {
+          projectId,
+          projectName: task.project?.name ?? 'Unassigned project',
+          overdueTaskCount: 1,
+        });
+      }
+    }
+
+    const projects = [...projectCounts.values()].sort((left, right) =>
+      left.projectName.localeCompare(right.projectName),
+    );
+
+    return {
+      total: projects.reduce((total, project) => total + project.overdueTaskCount, 0),
+      projects,
+    };
+  }
+
+  private emptyOverdueTasks(): OverdueTasksDto {
+    return {
+      total: 0,
+      projects: [],
+    };
+  }
+
+  private isOverdueTask(task: Task, today: string): boolean {
+    return Boolean(
+      task.dueDate &&
+        task.dueDate < today &&
+        task.status !== TaskStatus.Done,
+    );
   }
 
   private isOpen(status?: string | null): boolean {

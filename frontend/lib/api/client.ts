@@ -147,6 +147,7 @@ export type ApiPortfolioSummary = {
   projectsRequiringAttention: ApiPortfolioProjectAttention[];
   openRisksBySeverity: ApiSeverityCounts;
   openIssuesByPriority: ApiSeverityCounts;
+  overdueTasks: ApiPortfolioOverdueTasks;
 };
 
 export type ApiPortfolioProjectAttention = {
@@ -161,6 +162,17 @@ export type ApiSeverityCounts = {
   high: number;
   medium: number;
   low: number;
+};
+
+export type ApiPortfolioOverdueTasks = {
+  total: number;
+  projects: ApiPortfolioOverdueTaskProject[];
+};
+
+export type ApiPortfolioOverdueTaskProject = {
+  projectId: string;
+  projectName: string;
+  overdueTaskCount: number;
 };
 
 type RequestOptions = RequestInit & {

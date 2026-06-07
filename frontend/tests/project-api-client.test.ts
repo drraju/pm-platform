@@ -82,6 +82,16 @@ describe("project API client", () => {
         medium: 4,
         low: 5,
       },
+      overdueTasks: {
+        total: 3,
+        projects: [
+          {
+            projectId: "project-1",
+            projectName: "Customer Experience Platform Upgrade",
+            overdueTaskCount: 3,
+          },
+        ],
+      },
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -109,6 +119,16 @@ describe("project API client", () => {
         high: 3,
         medium: 4,
         low: 5,
+      },
+      overdueTasks: {
+        total: 3,
+        projects: [
+          {
+            projectId: "project-1",
+            projectName: "Customer Experience Platform Upgrade",
+            overdueTaskCount: 3,
+          },
+        ],
       },
     });
     expect(fetchMock).toHaveBeenCalledWith(

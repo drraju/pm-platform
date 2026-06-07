@@ -43,6 +43,25 @@ export class OpenIssuesByPriorityDto {
   low: number;
 }
 
+export class OverdueTaskProjectDto {
+  @ApiProperty({ format: 'uuid' })
+  projectId: string;
+
+  @ApiProperty({ example: 'Customer Experience Platform Upgrade' })
+  projectName: string;
+
+  @ApiProperty({ example: 4 })
+  overdueTaskCount: number;
+}
+
+export class OverdueTasksDto {
+  @ApiProperty({ example: 12 })
+  total: number;
+
+  @ApiProperty({ type: OverdueTaskProjectDto, isArray: true })
+  projects: OverdueTaskProjectDto[];
+}
+
 export class PortfolioSummaryDto {
   @ApiProperty({ example: 12 })
   totalProjects: number;
@@ -64,4 +83,7 @@ export class PortfolioSummaryDto {
 
   @ApiProperty({ type: OpenIssuesByPriorityDto })
   openIssuesByPriority: OpenIssuesByPriorityDto;
+
+  @ApiProperty({ type: OverdueTasksDto })
+  overdueTasks: OverdueTasksDto;
 }

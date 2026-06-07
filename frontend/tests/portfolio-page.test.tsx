@@ -48,6 +48,26 @@ describe("Portfolio page", () => {
         medium: 7,
         low: 8,
       },
+      overdueTasks: {
+        total: 12,
+        projects: [
+          {
+            projectId: "project-cxp",
+            projectName: "Customer Experience Platform Upgrade",
+            overdueTaskCount: 4,
+          },
+          {
+            projectId: "project-observability",
+            projectName: "Observability Transformation Programme",
+            overdueTaskCount: 5,
+          },
+          {
+            projectId: "project-data-centre",
+            projectName: "Data Centre Exit Programme",
+            overdueTaskCount: 3,
+          },
+        ],
+      },
     });
 
     render(<PortfolioPage />);
@@ -65,13 +85,14 @@ describe("Portfolio page", () => {
     expect(
       screen.getByRole("heading", { name: "Projects Requiring Attention" }),
     ).toBeInTheDocument();
+    const attentionWidget = getSectionByHeading("Projects Requiring Attention");
     expect(
-      screen.getByRole("link", {
+      within(attentionWidget).getByRole("link", {
         name: /Observability Transformation Programme/i,
       }),
     ).toHaveAttribute("href", "/projects/project-amber");
     expect(
-      screen.getByRole("link", { name: /Data Centre Exit Programme/i }),
+      within(attentionWidget).getByRole("link", { name: /Data Centre Exit Programme/i }),
     ).toHaveAttribute("href", "/projects/project-red");
     expect(screen.getByText("Amber")).toBeInTheDocument();
     expect(screen.getByText("Red")).toBeInTheDocument();
@@ -91,6 +112,31 @@ describe("Portfolio page", () => {
     expectSummaryCardValue("High Priority Issues", "6");
     expectSummaryCardValue("Medium Priority Issues", "7");
     expectSummaryCardValue("Low Priority Issues", "8");
+    expect(screen.getByRole("heading", { name: "Overdue Tasks" })).toBeInTheDocument();
+    const overdueWidget = getSectionByHeading("Overdue Tasks");
+    expectSummaryCardValue("Total Overdue Tasks", "12", overdueWidget);
+    expect(
+      within(overdueWidget).getByRole("link", {
+        name: /Customer Experience Platform Upgrade/i,
+      }),
+    ).toHaveAttribute("href", "/projects/project-cxp");
+    expect(
+      within(overdueWidget).getByRole("link", {
+        name: /Observability Transformation Programme/i,
+      }),
+    ).toHaveAttribute("href", "/projects/project-observability");
+    expect(
+      within(overdueWidget).getByRole("link", {
+        name: /Data Centre Exit Programme/i,
+      }),
+    ).toHaveAttribute("href", "/projects/project-data-centre");
+    expectSummaryCardValue("Customer Experience Platform Upgrade", "4", overdueWidget);
+    expectSummaryCardValue(
+      "Observability Transformation Programme",
+      "5",
+      overdueWidget,
+    );
+    expectSummaryCardValue("Data Centre Exit Programme", "3", overdueWidget);
   });
 
   it("renders a loading state while the summary is pending", () => {
@@ -120,6 +166,10 @@ describe("Portfolio page", () => {
         medium: 0,
         low: 0,
       },
+      overdueTasks: {
+        total: 0,
+        projects: [],
+      },
     });
 
     render(<PortfolioPage />);
@@ -148,6 +198,10 @@ describe("Portfolio page", () => {
         medium: 0,
         low: 0,
       },
+      overdueTasks: {
+        total: 0,
+        projects: [],
+      },
     });
 
     render(<PortfolioPage />);
@@ -157,6 +211,7 @@ describe("Portfolio page", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("No open risks are currently recorded.")).toBeInTheDocument();
     expect(screen.getByText("No open issues are currently recorded.")).toBeInTheDocument();
+    expect(screen.getByText("No overdue tasks are currently recorded.")).toBeInTheDocument();
   });
 
   it("renders an error state when the summary cannot load", async () => {
@@ -172,9 +227,20 @@ describe("Portfolio page", () => {
   });
 });
 
-function expectSummaryCardValue(label: string, value: string) {
-  const card = screen.getByText(label).closest("section");
+function expectSummaryCardValue(
+  label: string,
+  value: string,
+  container: HTMLElement = document.body,
+) {
+  const card = within(container).getByText(label).closest("section, a, div");
 
   expect(card).not.toBeNull();
   expect(within(card as HTMLElement).getByText(value)).toBeInTheDocument();
+}
+
+function getSectionByHeading(name: string) {
+  const section = screen.getByRole("heading", { name }).closest("section");
+
+  expect(section).not.toBeNull();
+  return section as HTMLElement;
 }
