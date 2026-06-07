@@ -7,6 +7,7 @@ import { clearSession } from "@/features/auth";
 
 const navigation = [
   { label: "Dashboard", href: "/dashboard" },
+  { label: "Portfolio", href: "/portfolio" },
   { label: "Projects", href: "/projects" },
   { label: "My Tasks", href: "/tasks" },
   { label: "Risks", href: "/risks" },

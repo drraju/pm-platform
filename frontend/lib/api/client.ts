@@ -139,6 +139,29 @@ export type ApiMeDashboard = {
   health: ApiProjectHealth;
 };
 
+export type ApiPortfolioSummary = {
+  totalProjects: number;
+  greenProjects: number;
+  amberProjects: number;
+  redProjects: number;
+  projectsRequiringAttention: ApiPortfolioProjectAttention[];
+  openRisksBySeverity: ApiOpenRisksBySeverity;
+};
+
+export type ApiPortfolioProjectAttention = {
+  id: string;
+  name: string;
+  healthStatus: ApiProjectHealthStatus;
+  reasons: string[];
+};
+
+export type ApiOpenRisksBySeverity = {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+};
+
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
@@ -226,6 +249,10 @@ export function getProjects() {
 
 export function getMyDashboard() {
   return apiRequest<ApiMeDashboard>("/dashboard/me");
+}
+
+export function getPortfolioSummary() {
+  return apiRequest<ApiPortfolioSummary>("/portfolio/summary");
 }
 
 export function getProject(projectId: string) {

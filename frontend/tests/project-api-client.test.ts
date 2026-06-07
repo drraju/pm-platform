@@ -5,6 +5,7 @@ import {
   createProject,
   deleteProject,
   getMyTasks,
+  getPortfolioSummary,
   getProject,
   getProjectAssumptions,
   getProjectDependencies,
@@ -49,6 +50,57 @@ describe("project API client", () => {
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects",
+      expect.objectContaining({
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+
+  it("loads portfolio summary", async () => {
+    const fetchMock = mockFetch({
+      totalProjects: 4,
+      greenProjects: 2,
+      amberProjects: 1,
+      redProjects: 1,
+      projectsRequiringAttention: [
+        {
+          id: "project-1",
+          name: "Customer Experience Platform Upgrade",
+          healthStatus: "AMBER",
+          reasons: ["1 high risk open"],
+        },
+      ],
+      openRisksBySeverity: {
+        critical: 1,
+        high: 2,
+        medium: 3,
+        low: 4,
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getPortfolioSummary()).resolves.toEqual({
+      totalProjects: 4,
+      greenProjects: 2,
+      amberProjects: 1,
+      redProjects: 1,
+      projectsRequiringAttention: [
+        {
+          id: "project-1",
+          name: "Customer Experience Platform Upgrade",
+          healthStatus: "AMBER",
+          reasons: ["1 high risk open"],
+        },
+      ],
+      openRisksBySeverity: {
+        critical: 1,
+        high: 2,
+        medium: 3,
+        low: 4,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/portfolio/summary",
       expect.objectContaining({
         headers: { "Content-Type": "application/json" },
       }),

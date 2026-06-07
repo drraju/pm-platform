@@ -1,0 +1,50 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
+
+export class PortfolioProjectAttentionDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({ example: 'Customer Experience Platform Upgrade' })
+  name: string;
+
+  @ApiProperty({ enum: ProjectHealthStatus })
+  healthStatus: ProjectHealthStatus;
+
+  @ApiProperty({ type: String, isArray: true })
+  reasons: string[];
+}
+
+export class OpenRisksBySeverityDto {
+  @ApiProperty({ example: 1 })
+  critical: number;
+
+  @ApiProperty({ example: 3 })
+  high: number;
+
+  @ApiProperty({ example: 5 })
+  medium: number;
+
+  @ApiProperty({ example: 2 })
+  low: number;
+}
+
+export class PortfolioSummaryDto {
+  @ApiProperty({ example: 12 })
+  totalProjects: number;
+
+  @ApiProperty({ example: 7 })
+  greenProjects: number;
+
+  @ApiProperty({ example: 3 })
+  amberProjects: number;
+
+  @ApiProperty({ example: 2 })
+  redProjects: number;
+
+  @ApiProperty({ type: PortfolioProjectAttentionDto, isArray: true })
+  projectsRequiringAttention: PortfolioProjectAttentionDto[];
+
+  @ApiProperty({ type: OpenRisksBySeverityDto })
+  openRisksBySeverity: OpenRisksBySeverityDto;
+}

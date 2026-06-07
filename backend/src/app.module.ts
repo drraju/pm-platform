@@ -10,6 +10,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { GoogleDriveModule } from './modules/integrations/google-drive/google-drive.module';
 import { SlackModule } from './modules/integrations/slack/slack.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { RaidModule } from './modules/raid/raid.module';
 import { RisksModule } from './modules/risks/risks.module';
@@ -26,6 +27,7 @@ import { UsersModule } from './modules/users/users.module';
     RisksModule,
     RaidModule,
     DashboardModule,
+    PortfolioModule,
     NotificationsModule,
     SlackModule,
     GoogleDriveModule,
