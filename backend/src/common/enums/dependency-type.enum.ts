@@ -4,4 +4,3 @@ export enum DependencyType {
   FinishToFinish = 'finish_to_finish',
   StartToFinish = 'start_to_finish',
 }
-

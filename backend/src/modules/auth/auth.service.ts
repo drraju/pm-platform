@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -39,7 +43,7 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto): Promise<SessionDto> {
-    const user = await this.usersService.findByEmail(loginDto.email);
+    const user = await this.usersService.findByLoginIdentifier(loginDto.email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }

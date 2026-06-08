@@ -49,9 +49,9 @@ describe('Authorization integration', () => {
       .spyOn(reflector, 'getAllAndOverride')
       .mockReturnValueOnce([PermissionKey.ExecutiveSummaryRead]);
 
-    await expect(
-      permissionsGuard.canActivate(createContext({})),
-    ).resolves.toBe(true);
+    await expect(permissionsGuard.canActivate(createContext({}))).resolves.toBe(
+      true,
+    );
 
     expect(authorizationService.assertHasAnyPermission).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user-1' }),
@@ -111,11 +111,7 @@ describe('Authorization integration', () => {
   });
 });
 
-function createContext({
-  params = {},
-}: {
-  params?: Record<string, string>;
-}) {
+function createContext({ params = {} }: { params?: Record<string, string> }) {
   return {
     getClass: jest.fn(),
     getHandler: jest.fn(),

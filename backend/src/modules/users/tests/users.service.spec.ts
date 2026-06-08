@@ -49,6 +49,7 @@ describe('UsersService', () => {
       role: null,
       roleId: 'role-1',
       status: 'active',
+      username: null,
     });
     expect(JSON.stringify(result)).not.toContain('passwordHash');
   });
@@ -77,6 +78,7 @@ describe('UsersService', () => {
         role: null,
         roleId: 'role-1',
         status: 'active',
+        username: null,
       },
     ]);
     expect(JSON.stringify(result)).not.toContain('passwordHash');

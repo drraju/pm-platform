@@ -14,4 +14,3 @@ import { ProjectAccessGuard } from './guards/project-access.guard';
   exports: [AuthorizationService, PermissionsGuard, ProjectAccessGuard],
 })
 export class AuthorizationModule {}
-

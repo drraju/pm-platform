@@ -41,7 +41,9 @@ export class DashboardService {
         where: { ownerId: userId },
       }),
       this.projectMembersRepository.find({
-        relations: { project: { issues: true, owner: true, risks: true, tasks: true } },
+        relations: {
+          project: { issues: true, owner: true, risks: true, tasks: true },
+        },
         where: { userId },
       }),
       this.tasksRepository.find({
@@ -104,7 +106,10 @@ export class DashboardService {
       relations: { assignee: true, project: true },
       where: {
         assigneeId: userId,
-        dueDate: Between(this.formatDate(today), this.formatDate(nextSevenDays)),
+        dueDate: Between(
+          this.formatDate(today),
+          this.formatDate(nextSevenDays),
+        ),
         status: Not(TaskStatus.Done),
       },
     });
@@ -114,9 +119,8 @@ export class DashboardService {
     return {
       total: tasks.length,
       todo: tasks.filter((task) => task.status === TaskStatus.Todo).length,
-      inProgress: tasks.filter(
-        (task) => task.status === TaskStatus.InProgress,
-      ).length,
+      inProgress: tasks.filter((task) => task.status === TaskStatus.InProgress)
+        .length,
       blocked: tasks.filter((task) => task.status === TaskStatus.Blocked)
         .length,
       completed: tasks.filter((task) => task.status === TaskStatus.Done).length,

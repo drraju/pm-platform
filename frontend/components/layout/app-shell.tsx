@@ -43,22 +43,28 @@ const navigationItems = [
     permissions: ["dashboard:read:self"],
   },
   {
-    label: "Admin",
+    label: "Administration",
     href: "/admin",
-    permissions: ["users:manage", "roles:manage"],
+    permissions: [],
+    roleNames: ["SUPER_ADMIN"],
   },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { hasAnyPermission, isLoading: isLoadingAuthorization } =
+  const { hasAnyPermission, isLoading: isLoadingAuthorization, profile } =
     useAuthorization();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const visibleNavigation = isLoadingAuthorization
     ? navigationItems.filter((item) => item.href === "/dashboard")
-    : navigationItems.filter((item) => hasAnyPermission(item.permissions));
+    : navigationItems.filter((item) => {
+        if ("roleNames" in item && item.roleNames) {
+          return item.roleNames.includes(profile?.roleName ?? "");
+        }
+        return hasAnyPermission(item.permissions);
+      });
 
   function handleLogout() {
     clearSession();

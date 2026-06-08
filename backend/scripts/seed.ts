@@ -7,7 +7,10 @@ import { ProjectRole } from '../src/common/enums/project-role.enum';
 import { ProjectVisibilityLevel } from '../src/common/enums/project-visibility-level.enum';
 import { RaidType } from '../src/common/enums/raid-type.enum';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
-import { defaultPermissionsByRole } from '../src/modules/authorization/authorization.service';
+import {
+  defaultPermissionsByRole,
+  SUPER_ADMIN_ROLE,
+} from '../src/modules/authorization/authorization.service';
 import { PermissionKey } from '../src/modules/authorization/permissions';
 import { ProjectMember } from '../src/modules/projects/entities/project-member.entity';
 import { Project } from '../src/modules/projects/entities/project.entity';
@@ -24,6 +27,7 @@ import { User } from '../src/modules/users/entities/user.entity';
 const seedNamespace = 'pm-platform-dev-seed-v2';
 export const defaultPassword = 'Password123!';
 export const defaultAdminPassword = 'Admin123!';
+export const defaultSuperAdminPassword = 'Admin123!';
 
 export function seedUuid(key: string): string {
   const hash = createHash('sha1')
@@ -39,10 +43,28 @@ export function seedUuid(key: string): string {
   ].join('-');
 }
 
-const users = [
+type SeedUser = {
+  email: string;
+  firstName: string;
+  id: string;
+  lastName: string;
+  roleName: string;
+  username?: string | null;
+};
+
+const users: SeedUser[] = [
+  {
+    id: seedUuid('user-super-admin'),
+    email: 'admin@example.com',
+    username: 'admin',
+    firstName: 'Super',
+    lastName: 'Admin',
+    roleName: SUPER_ADMIN_ROLE,
+  },
   {
     id: seedUuid('user-admin'),
-    email: 'admin@example.com',
+    email: 'platform.admin@example.com',
+    username: 'platform-admin',
     firstName: 'Platform',
     lastName: 'Administrator',
     roleName: 'Admin',
@@ -352,6 +374,7 @@ const requiredEntityNames = [
 
 export const developmentSeedData = {
   defaultAdminPassword,
+  defaultSuperAdminPassword,
   assumptionTitles,
   defaultPassword,
   dependencyTitles,
@@ -472,17 +495,22 @@ async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
   const savedUsers: User[] = [];
   for (const user of users) {
     const existingUser = await userRepository.findOne({
-      where: { email: user.email },
+      where: user.username
+        ? [{ email: user.email }, { username: user.username }]
+        : { email: user.email },
     });
     savedUsers.push(
       await userRepository.save(
         userRepository.create({
           id: existingUser?.id ?? user.id,
           email: user.email,
+          username: user.username ?? null,
           firstName: user.firstName,
           lastName: user.lastName,
           passwordHash:
-            user.roleName === 'Admin' ? adminPasswordHash : passwordHash,
+            user.roleName === 'Admin' || user.roleName === SUPER_ADMIN_ROLE
+              ? adminPasswordHash
+              : passwordHash,
           roleId: rolesByName.get(user.roleName)?.id,
           status: 'active',
         }) as unknown as User,
@@ -755,7 +783,11 @@ async function main() {
     console.log('- 5 assumptions');
     console.log('- 5 dependencies');
     console.log(`Default development password: ${defaultPassword}`);
-    console.log(`Default admin user: admin@example.com`);
+    console.log(`Default super admin username: admin`);
+    console.log(
+      `Default super admin temporary password: ${defaultSuperAdminPassword}`,
+    );
+    console.log(`Default admin user: platform.admin@example.com`);
     console.log(`Default admin temporary password: ${defaultAdminPassword}`);
   } finally {
     await appDataSource.destroy();

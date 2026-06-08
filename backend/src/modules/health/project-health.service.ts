@@ -3,7 +3,10 @@ import { TaskStatus } from '../../common/enums/task-status.enum';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
-import { ProjectHealthDto, ProjectHealthStatus } from './dto/project-health.dto';
+import {
+  ProjectHealthDto,
+  ProjectHealthStatus,
+} from './dto/project-health.dto';
 
 type ProjectHealthInput = {
   issues?: Issue[];
@@ -13,7 +16,11 @@ type ProjectHealthInput = {
 
 @Injectable()
 export class ProjectHealthService {
-  calculate({ issues = [], risks = [], tasks = [] }: ProjectHealthInput): ProjectHealthDto {
+  calculate({
+    issues = [],
+    risks = [],
+    tasks = [],
+  }: ProjectHealthInput): ProjectHealthDto {
     const totalTasks = tasks.length;
     const overdueTasks = tasks.filter((task) => this.isOverdue(task)).length;
     const overdueRatio = totalTasks > 0 ? overdueTasks / totalTasks : 0;
@@ -45,7 +52,9 @@ export class ProjectHealthService {
       return {
         status: ProjectHealthStatus.Amber,
         reasons: [
-          ...(highRisks.length > 0 ? [`${highRisks.length} high risk open`] : []),
+          ...(highRisks.length > 0
+            ? [`${highRisks.length} high risk open`]
+            : []),
           ...(overdueRatio > 0.1
             ? [
                 `${this.formatPercentage(overdueRatio)} tasks overdue (${overdueTasks}/${totalTasks})`,
@@ -57,7 +66,9 @@ export class ProjectHealthService {
 
     return {
       status: ProjectHealthStatus.Green,
-      reasons: ['No critical issues, high risks, or overdue task threshold breaches'],
+      reasons: [
+        'No critical issues, high risks, or overdue task threshold breaches',
+      ],
     };
   }
 
@@ -74,9 +85,14 @@ export class ProjectHealthService {
       return true;
     }
 
-    return !['cancelled', 'closed', 'complete', 'completed', 'done', 'resolved'].includes(
-      status.toLowerCase(),
-    );
+    return ![
+      'cancelled',
+      'closed',
+      'complete',
+      'completed',
+      'done',
+      'resolved',
+    ].includes(status.toLowerCase());
   }
 
   private isCritical(value?: string | null): boolean {

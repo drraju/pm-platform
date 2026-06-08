@@ -14,7 +14,7 @@ export const adminLinks = [
 ];
 
 export function AdminGate({ children }: { children: React.ReactNode }) {
-  const authorization = useAuthorization(["users:manage", "roles:manage"]);
+  const authorization = useAuthorization();
 
   if (authorization.isLoading) {
     return (
@@ -22,7 +22,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!authorization.isAuthorized) {
+  if (authorization.profile?.roleName !== "SUPER_ADMIN") {
     return (
       <AdminPanel title="Access denied">
         Administration is available only to platform administrators.

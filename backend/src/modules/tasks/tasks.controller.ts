@@ -76,7 +76,9 @@ export class TasksController {
   }
 
   @Get('my/summary')
-  @ApiOperation({ summary: 'Summarize tasks assigned to the authenticated user' })
+  @ApiOperation({
+    summary: 'Summarize tasks assigned to the authenticated user',
+  })
   @ApiOkResponse({ type: MyTasksSummaryDto })
   getMyTasksSummary(
     @Req() request: AuthenticatedRequest,

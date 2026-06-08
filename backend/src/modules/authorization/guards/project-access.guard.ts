@@ -6,7 +6,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AuthorizationService, AuthenticatedPrincipal } from '../authorization.service';
+import {
+  AuthorizationService,
+  AuthenticatedPrincipal,
+} from '../authorization.service';
 import {
   PROJECT_ACCESS_KEY,
   ProjectAccessPolicy,
@@ -58,12 +61,17 @@ export class ProjectAccessGuard implements CanActivate {
     }
 
     if (policy.mode === 'manage') {
-      await this.authorizationService.assertCanManageProjectTasks(user, projectId);
+      await this.authorizationService.assertCanManageProjectTasks(
+        user,
+        projectId,
+      );
       return true;
     }
 
-    await this.authorizationService.assertCanManageProjectMembers(user, projectId);
+    await this.authorizationService.assertCanManageProjectMembers(
+      user,
+      projectId,
+    );
     return true;
   }
 }
-

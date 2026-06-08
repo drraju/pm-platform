@@ -10,7 +10,7 @@ import {
 
 describe('Seed data verification', () => {
   it('defines the expected enterprise seed volumes', () => {
-    expect(developmentSeedData.users).toHaveLength(11);
+    expect(developmentSeedData.users).toHaveLength(12);
     expect(developmentSeedData.projects).toHaveLength(3);
     expect(developmentSeedData.memberships).toHaveLength(16);
     expect(
@@ -24,6 +24,7 @@ describe('Seed data verification', () => {
 
   it('contains realistic named users, projects, and project teams', () => {
     expect(developmentSeedData.users.map((user) => user.roleName)).toEqual([
+      'SUPER_ADMIN',
       'Admin',
       'Executive',
       'Portfolio Manager',

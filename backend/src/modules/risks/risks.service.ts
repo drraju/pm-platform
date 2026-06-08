@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import {
@@ -19,7 +23,9 @@ export class RisksService {
   ) {}
 
   create(createRiskDto: CreateRiskDto): Promise<Risk> {
-    return this.risksRepository.save(this.risksRepository.create(createRiskDto));
+    return this.risksRepository.save(
+      this.risksRepository.create(createRiskDto),
+    );
   }
 
   findAll(): Promise<Risk[]> {
@@ -105,13 +111,18 @@ export class RisksService {
       principal.userId,
     );
 
-    if (this.authorizationService.hasPermission(user, PermissionKey.RaidUpdateAny)) {
+    if (
+      this.authorizationService.hasPermission(user, PermissionKey.RaidUpdateAny)
+    ) {
       await this.authorizationService.assertCanManageProjectTasks(
         user,
         risk.projectId,
       );
     } else if (
-      !this.authorizationService.hasPermission(user, PermissionKey.RaidUpdateOwn) ||
+      !this.authorizationService.hasPermission(
+        user,
+        PermissionKey.RaidUpdateOwn,
+      ) ||
       risk.ownerId !== user.userId
     ) {
       throw new ForbiddenException('Risk update access denied');
@@ -134,7 +145,9 @@ export class RisksService {
     const user = await this.authorizationService.getEffectiveUser(
       principal.userId,
     );
-    this.authorizationService.assertHasAnyPermission(user, [PermissionKey.RaidDelete]);
+    this.authorizationService.assertHasAnyPermission(user, [
+      PermissionKey.RaidDelete,
+    ]);
     await this.authorizationService.assertCanManageProjectTasks(
       user,
       risk.projectId,

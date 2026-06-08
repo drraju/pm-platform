@@ -8,6 +8,7 @@ import {
 import {
   AuthenticatedPrincipal,
   AuthorizationService,
+  SUPER_ADMIN_ROLE,
 } from '../../authorization/authorization.service';
 
 @Injectable()
@@ -25,8 +26,8 @@ export class AdminGuard implements CanActivate {
     const user = await this.authorizationService.getEffectiveUser(
       request.user.userId,
     );
-    if (user.roleName !== 'Admin') {
-      throw new ForbiddenException('Admin access required');
+    if (user.roleName !== SUPER_ADMIN_ROLE) {
+      throw new ForbiddenException('Super Admin access required');
     }
 
     return true;

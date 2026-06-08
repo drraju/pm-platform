@@ -16,6 +16,11 @@ export class AdminCreateUserDto {
   @IsEmail()
   email: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  username?: string | null;
+
   @ApiProperty()
   @IsString()
   firstName: string;

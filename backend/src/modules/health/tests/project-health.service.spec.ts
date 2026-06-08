@@ -28,13 +28,7 @@ describe('ProjectHealthService', () => {
   it('returns red when more than 20 percent of tasks are overdue', () => {
     expect(
       service.calculate({
-        tasks: [
-          task('2026-06-01'),
-          task('2026-06-01'),
-          task(),
-          task(),
-          task(),
-        ],
+        tasks: [task('2026-06-01'), task('2026-06-01'), task(), task(), task()],
       }),
     ).toEqual({
       status: ProjectHealthStatus.Red,

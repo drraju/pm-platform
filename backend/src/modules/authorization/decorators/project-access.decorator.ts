@@ -16,4 +16,3 @@ export const PROJECT_ACCESS_KEY = 'projectAccessPolicy';
 export function ProjectAccess(policy: ProjectAccessPolicy) {
   return SetMetadata(PROJECT_ACCESS_KEY, policy);
 }
-

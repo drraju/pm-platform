@@ -79,7 +79,9 @@ describe('API contract', () => {
   });
 
   it('documents executive summary response', () => {
-    expect(document.components?.schemas?.ExecutiveSummaryDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.ExecutiveSummaryDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         portfolioHealth: expect.objectContaining({
           $ref: '#/components/schemas/ExecutivePortfolioHealthDto',
@@ -108,13 +110,17 @@ describe('API contract', () => {
         redProjects: expect.objectContaining({ type: 'number' }),
       }),
     );
-    expect(document.components?.schemas?.ExecutiveDeliveryDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.ExecutiveDeliveryDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         overdueTasks: expect.objectContaining({ type: 'number' }),
         upcomingMilestones: expect.objectContaining({ type: 'number' }),
       }),
     );
-    expect(document.components?.schemas?.ExecutiveGovernanceDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.ExecutiveGovernanceDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         openRisks: expect.objectContaining({ type: 'number' }),
         openIssues: expect.objectContaining({ type: 'number' }),
@@ -123,7 +129,9 @@ describe('API contract', () => {
   });
 
   it('documents portfolio summary response', () => {
-    expect(document.components?.schemas?.PortfolioSummaryDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.PortfolioSummaryDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         totalProjects: expect.objectContaining({ type: 'number' }),
         greenProjects: expect.objectContaining({ type: 'number' }),
@@ -152,7 +160,9 @@ describe('API contract', () => {
         }),
       }),
     );
-    expect(document.components?.schemas?.OpenRisksBySeverityDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.OpenRisksBySeverityDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         critical: expect.objectContaining({ type: 'number' }),
         high: expect.objectContaining({ type: 'number' }),
@@ -160,7 +170,9 @@ describe('API contract', () => {
         low: expect.objectContaining({ type: 'number' }),
       }),
     );
-    expect(document.components?.schemas?.OpenIssuesByPriorityDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.OpenIssuesByPriorityDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         critical: expect.objectContaining({ type: 'number' }),
         high: expect.objectContaining({ type: 'number' }),
@@ -179,14 +191,18 @@ describe('API contract', () => {
         }),
       }),
     );
-    expect(document.components?.schemas?.OverdueTaskProjectDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.OverdueTaskProjectDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         projectId: expect.objectContaining({ type: 'string' }),
         projectName: expect.objectContaining({ type: 'string' }),
         overdueTaskCount: expect.objectContaining({ type: 'number' }),
       }),
     );
-    expect(document.components?.schemas?.UpcomingMilestoneDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.UpcomingMilestoneDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         taskId: expect.objectContaining({ type: 'string' }),
         title: expect.objectContaining({ type: 'string' }),
@@ -225,7 +241,9 @@ describe('API contract', () => {
   });
 
   it('documents project timeline foundation response', () => {
-    expect(document.components?.schemas?.ProjectTimelineDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.ProjectTimelineDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         projectId: expect.objectContaining({ type: 'string' }),
         projectName: expect.objectContaining({ type: 'string' }),
@@ -261,14 +279,18 @@ describe('API contract', () => {
         assignee: expect.objectContaining({ type: 'string' }),
       }),
     );
-    expect(document.components?.schemas?.TimelineMilestoneDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.TimelineMilestoneDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         id: expect.objectContaining({ type: 'string' }),
         title: expect.objectContaining({ type: 'string' }),
         targetDate: expect.objectContaining({ type: 'string' }),
       }),
     );
-    expect(document.components?.schemas?.TimelineDependencyDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.TimelineDependencyDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         sourceTaskId: expect.objectContaining({ type: 'string' }),
         targetTaskId: expect.objectContaining({ type: 'string' }),
@@ -292,7 +314,9 @@ describe('API contract', () => {
         }),
       }),
     );
-    expect(document.components?.schemas?.DashboardProjectDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.DashboardProjectDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         health: expect.objectContaining({
           $ref: '#/components/schemas/ProjectHealthDto',

@@ -12,6 +12,7 @@ import { Permission } from '../users/entities/permission.entity';
 import { RolePermission } from '../users/entities/role-permission.entity';
 import { Role } from '../users/entities/role.entity';
 import { User } from '../users/entities/user.entity';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import {
   AdminCreateUserDto,
   AdminPermissionDto,
@@ -61,19 +62,22 @@ export class AdminService {
   }
 
   async findUsers() {
-    return this.usersRepository.find({
+    const users = await this.usersRepository.find({
       order: { email: 'ASC' },
       relations: { role: true },
     });
+
+    return users.map((user) => this.toUserResponse(user));
   }
 
   async createUser(dto: AdminCreateUserDto) {
     await this.ensureRoleExists(dto.roleId);
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    return this.usersRepository.save(
+    const user = await this.usersRepository.save(
       this.usersRepository.create({
         email: dto.email,
+        username: dto.username ?? null,
         firstName: dto.firstName,
         lastName: dto.lastName,
         passwordHash,
@@ -81,6 +85,8 @@ export class AdminService {
         status: dto.status ?? 'active',
       }),
     );
+
+    return this.toUserResponse(user);
   }
 
   async updateUser(id: string, dto: AdminUpdateUserDto) {
@@ -90,7 +96,7 @@ export class AdminService {
     }
 
     Object.assign(user, dto);
-    return this.usersRepository.save(user);
+    return this.toUserResponse(await this.usersRepository.save(user));
   }
 
   async disableUser(id: string) {
@@ -100,7 +106,7 @@ export class AdminService {
   async resetPassword(id: string, dto: AdminResetPasswordDto) {
     const user = await this.findUserEntity(id);
     user.passwordHash = await bcrypt.hash(dto.temporaryPassword, 10);
-    return this.usersRepository.save(user);
+    return this.toUserResponse(await this.usersRepository.save(user));
   }
 
   findRoles() {
@@ -289,5 +295,18 @@ export class AdminService {
     if (!project) {
       throw new NotFoundException(`Project ${id} not found`);
     }
+  }
+
+  private toUserResponse(user: User): UserResponseDto {
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username ?? null,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      roleId: user.roleId,
+      status: user.status,
+      role: user.role ?? null,
+    };
   }
 }

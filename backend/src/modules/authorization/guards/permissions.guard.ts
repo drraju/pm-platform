@@ -5,7 +5,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AuthorizationService, AuthenticatedPrincipal } from '../authorization.service';
+import {
+  AuthorizationService,
+  AuthenticatedPrincipal,
+} from '../authorization.service';
 import { REQUIRED_PERMISSIONS_KEY } from '../decorators/require-permissions.decorator';
 import { PermissionKey } from '../permissions';
 
@@ -41,4 +44,3 @@ export class PermissionsGuard implements CanActivate {
     return true;
   }
 }
-

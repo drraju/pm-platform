@@ -18,6 +18,7 @@ export type ApiPermission = {
 export type ApiUser = {
   id: string;
   email: string;
+  username?: string | null;
   firstName: string;
   lastName: string;
   status: string;
@@ -340,6 +341,7 @@ export function login(email: string, password: string) {
 
 export function register(input: {
   email: string;
+  username?: string;
   firstName: string;
   lastName: string;
   password: string;
@@ -492,6 +494,7 @@ export function getAdminUsers() {
 
 export function createAdminUser(input: {
   email: string;
+  username?: string;
   firstName: string;
   lastName: string;
   password: string;

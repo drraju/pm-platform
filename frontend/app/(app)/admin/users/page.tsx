@@ -13,6 +13,7 @@ import {
   getAdminRoles,
   getAdminUsers,
   resetAdminUserPassword,
+  updateAdminUser,
   type ApiRole,
   type ApiUser,
 } from "@/lib/api/client";
@@ -60,8 +61,10 @@ export default function AdminUsersPage() {
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
+            const username = String(form.get("username") || "").trim();
             void createAdminUser({
               email: String(form.get("email")),
+              username: username || undefined,
               firstName: String(form.get("firstName")),
               lastName: String(form.get("lastName")),
               password: String(form.get("password")),
@@ -88,6 +91,11 @@ export default function AdminUsersPage() {
             placeholder="Email"
             required
             type="email"
+          />
+          <input
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            name="username"
+            placeholder="Username"
           />
           <input
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -143,7 +151,24 @@ export default function AdminUsersPage() {
                       {user.firstName} {user.lastName}
                     </td>
                     <td>{user.email}</td>
-                    <td>{user.role?.name ?? "Unassigned"}</td>
+                    <td>
+                      <select
+                        className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                        onChange={(event) =>
+                          void updateAdminUser(user.id, {
+                            roleId: event.currentTarget.value,
+                          }).then(loadUsers)
+                        }
+                        value={user.role?.id ?? ""}
+                      >
+                        <option value="">Unassigned</option>
+                        {roles.map((role) => (
+                          <option key={role.id} value={role.id}>
+                            {role.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td>{user.status}</td>
                     <td>Not tracked</td>
                     <td className="space-x-2">

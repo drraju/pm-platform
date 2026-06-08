@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { TaskStatus } from '../../common/enums/task-status.enum';
@@ -22,7 +26,9 @@ export class TasksService {
   ) {}
 
   create(createTaskDto: CreateTaskDto): Promise<Task> {
-    return this.tasksRepository.save(this.tasksRepository.create(createTaskDto));
+    return this.tasksRepository.save(
+      this.tasksRepository.create(createTaskDto),
+    );
   }
 
   findAll(): Promise<Task[]> {
@@ -147,7 +153,12 @@ export class TasksService {
       principal.userId,
     );
 
-    if (this.authorizationService.hasPermission(user, PermissionKey.ProjectTasksUpdateAny)) {
+    if (
+      this.authorizationService.hasPermission(
+        user,
+        PermissionKey.ProjectTasksUpdateAny,
+      )
+    ) {
       await this.authorizationService.assertCanManageProjectTasks(
         user,
         task.projectId,

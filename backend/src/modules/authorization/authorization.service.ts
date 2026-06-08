@@ -27,6 +27,8 @@ export type EffectiveUser = {
   permissions: PermissionKey[];
 };
 
+export const SUPER_ADMIN_ROLE = 'SUPER_ADMIN';
+
 export const ExternalRoleName = {
   Partner: 'Partner',
   Customer: 'Customer',
@@ -215,7 +217,7 @@ export class AuthorizationService {
       (permission) => permission.key,
     ) as PermissionKey[];
     const fallbackPermissions =
-      role.name === 'Admin'
+      role.name === 'Admin' || role.name === SUPER_ADMIN_ROLE
         ? Object.values(PermissionKey)
         : ((defaultPermissionsByRole[role.name] ?? []) as PermissionKey[]);
     const permissionKeys = new Set<PermissionKey>(
@@ -234,6 +236,9 @@ export class AuthorizationService {
   }
 
   hasPermission(user: EffectiveUser, permission: PermissionKey): boolean {
+    if (this.isSuperAdmin(user)) {
+      return true;
+    }
     return user.permissions.includes(permission);
   }
 
@@ -244,12 +249,18 @@ export class AuthorizationService {
   }
 
   assertHasAnyPermission(user: EffectiveUser, permissions: PermissionKey[]) {
+    if (this.isSuperAdmin(user)) {
+      return;
+    }
     if (!this.hasAnyPermission(user, permissions)) {
       throw new ForbiddenException('Insufficient permissions');
     }
   }
 
   async assertCanReadProject(user: EffectiveUser, projectId: string) {
+    if (this.isSuperAdmin(user)) {
+      return;
+    }
     if (this.hasPermission(user, PermissionKey.ProjectsReadAll)) {
       return;
     }
@@ -258,6 +269,9 @@ export class AuthorizationService {
   }
 
   async assertCanReadProjectRaid(user: EffectiveUser, projectId: string) {
+    if (this.isSuperAdmin(user)) {
+      return;
+    }
     this.assertHasAnyPermission(user, [
       PermissionKey.RaidReadAll,
       PermissionKey.RaidReadAssigned,
@@ -266,6 +280,9 @@ export class AuthorizationService {
   }
 
   async assertCanManageProjectMembers(user: EffectiveUser, projectId: string) {
+    if (this.isSuperAdmin(user)) {
+      return;
+    }
     this.assertHasAnyPermission(user, [PermissionKey.ProjectMembersManage]);
     if (this.hasPermission(user, PermissionKey.ProjectsReadAll)) {
       return;
@@ -278,6 +295,9 @@ export class AuthorizationService {
   }
 
   async assertCanManageProjectTasks(user: EffectiveUser, projectId: string) {
+    if (this.isSuperAdmin(user)) {
+      return;
+    }
     this.assertHasAnyPermission(user, [
       PermissionKey.ProjectTasksCreate,
       PermissionKey.ProjectTasksUpdateAny,
@@ -294,6 +314,9 @@ export class AuthorizationService {
   }
 
   async getAccessibleProjectIds(user: EffectiveUser): Promise<string[] | null> {
+    if (this.isSuperAdmin(user)) {
+      return null;
+    }
     if (this.hasPermission(user, PermissionKey.ProjectsReadAll)) {
       return null;
     }
@@ -319,6 +342,10 @@ export class AuthorizationService {
 
   isExternalUser(user: EffectiveUser): boolean {
     return this.isPartnerUser(user) || this.isCustomerUser(user);
+  }
+
+  isSuperAdmin(user: EffectiveUser): boolean {
+    return user.roleName === SUPER_ADMIN_ROLE;
   }
 
   isPartnerUser(user: EffectiveUser): boolean {

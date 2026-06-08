@@ -52,6 +52,7 @@ describe("AppShell", () => {
           ].includes(permission),
         ),
       isLoading: false,
+      profile: { roleName: "SUPER_ADMIN" },
     });
   });
 
@@ -94,7 +95,7 @@ describe("AppShell", () => {
       "href",
       "/notifications",
     );
-    expect(screen.getByRole("link", { name: /admin/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /administration/i })).toHaveAttribute(
       "href",
       "/admin",
     );
@@ -110,6 +111,7 @@ describe("AppShell", () => {
       hasAnyPermission: (permissions: string[]) =>
         permissions.includes("dashboard:read:self"),
       isLoading: false,
+      profile: { roleName: "Project Manager" },
     });
 
     render(
@@ -121,6 +123,8 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /executive/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /portfolio/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /admin/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /administration/i }),
+    ).not.toBeInTheDocument();
   });
 });

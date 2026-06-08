@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
@@ -35,6 +39,7 @@ export class UsersService {
 
     const user = this.usersRepository.create({
       email: createUserDto.email,
+      username: createUserDto.username ?? null,
       firstName: createUserDto.firstName,
       lastName: createUserDto.lastName,
       passwordHash,
@@ -46,7 +51,9 @@ export class UsersService {
   }
 
   async findAll(): Promise<UserResponseDto[]> {
-    const users = await this.usersRepository.find({ relations: { role: true } });
+    const users = await this.usersRepository.find({
+      relations: { role: true },
+    });
     return users.map((user) => this.toUserResponse(user));
   }
 
@@ -70,15 +77,29 @@ export class UsersService {
       .getOne();
   }
 
+  findByLoginIdentifier(identifier: string): Promise<User | null> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.email = :identifier', { identifier })
+      .orWhere('user.username = :identifier', { identifier })
+      .getOne();
+  }
+
   findRoles(): Promise<Role[]> {
     return this.rolesRepository.find({ order: { name: 'ASC' } });
   }
 
   createRole(createRoleDto: CreateRoleDto): Promise<Role> {
-    return this.rolesRepository.save(this.rolesRepository.create(createRoleDto));
+    return this.rolesRepository.save(
+      this.rolesRepository.create(createRoleDto),
+    );
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
     const user = await this.findUserEntity(id);
     Object.assign(user, updateUserDto);
     return this.toUserResponse(await this.usersRepository.save(user));
@@ -105,6 +126,7 @@ export class UsersService {
     return {
       id: user.id,
       email: user.email,
+      username: user.username ?? null,
       firstName: user.firstName,
       lastName: user.lastName,
       roleId: user.roleId,

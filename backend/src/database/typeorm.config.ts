@@ -3,6 +3,7 @@ import { DataSourceOptions } from 'typeorm';
 import { AddDependencyTimelineColumns1780848001000 } from './migrations/1780848001000-AddDependencyTimelineColumns';
 import { AddProjectMemberVisibilityLevel1780848002000 } from './migrations/1780848002000-AddProjectMemberVisibilityLevel';
 import { AddAdministrationMetadata1780848003000 } from './migrations/1780848003000-AddAdministrationMetadata';
+import { AddUserUsernameForSuperAdmin1780848004000 } from './migrations/1780848004000-AddUserUsernameForSuperAdmin';
 import { AddTaskTypeColumn1780848000000 } from './migrations/1780848000000-AddTaskTypeColumn';
 import { Notification } from '../modules/notifications/entities/notification.entity';
 import { ProjectMember } from '../modules/projects/entities/project-member.entity';
@@ -37,6 +38,7 @@ export const databaseMigrations: Function[] = [
   AddDependencyTimelineColumns1780848001000,
   AddProjectMemberVisibilityLevel1780848002000,
   AddAdministrationMetadata1780848003000,
+  AddUserUsernameForSuperAdmin1780848004000,
 ];
 
 const databaseConnectionOptions = {

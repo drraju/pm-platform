@@ -80,7 +80,9 @@ describe('TasksService', () => {
   });
 
   it('lists authenticated user tasks with filters and required sorting', async () => {
-    tasksRepository.find?.mockResolvedValue([{ id: taskId, assigneeId: userId }]);
+    tasksRepository.find?.mockResolvedValue([
+      { id: taskId, assigneeId: userId },
+    ]);
 
     await expect(
       service.findMyTasks(userId, {

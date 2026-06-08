@@ -9,7 +9,9 @@ describe('AdminGuard', () => {
 
   beforeEach(async () => {
     authorizationService = {
-      getEffectiveUser: jest.fn().mockResolvedValue({ roleName: 'Admin' }),
+      getEffectiveUser: jest
+        .fn()
+        .mockResolvedValue({ roleName: 'SUPER_ADMIN' }),
     };
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -21,13 +23,13 @@ describe('AdminGuard', () => {
     guard = moduleRef.get(AdminGuard);
   });
 
-  it('allows Admin users', async () => {
+  it('allows Super Admin users', async () => {
     await expect(guard.canActivate(createContext())).resolves.toBe(true);
   });
 
-  it('blocks non-Admin users', async () => {
+  it('blocks non-Super Admin users', async () => {
     authorizationService.getEffectiveUser.mockResolvedValueOnce({
-      roleName: 'Project Manager',
+      roleName: 'Admin',
     });
 
     await expect(guard.canActivate(createContext())).rejects.toBeInstanceOf(

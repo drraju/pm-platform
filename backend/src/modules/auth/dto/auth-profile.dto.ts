@@ -16,4 +16,3 @@ export class AuthProfileDto {
   @ApiProperty({ type: [String], example: ['dashboard:read:self'] })
   permissions: string[];
 }
-

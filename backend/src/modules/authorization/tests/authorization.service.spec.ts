@@ -252,4 +252,34 @@ describe('AuthorizationService', () => {
     expect(user.permissions).not.toContain(PermissionKey.PortfolioSummaryRead);
     expect(user.permissions).not.toContain(PermissionKey.ExecutiveSummaryRead);
   });
+
+  it('allows super admins to bypass permission and project restrictions', async () => {
+    usersRepository.findOne.mockResolvedValueOnce({
+      id: userId,
+      email: 'admin@example.com',
+      roleId,
+      status: 'active',
+      role: {
+        id: roleId,
+        name: 'SUPER_ADMIN',
+        permissions: [],
+      },
+    });
+    projectsRepository.findOne.mockResolvedValueOnce({
+      id: projectId,
+      ownerId: 'different-user',
+    });
+    projectMembersRepository.findOne.mockResolvedValueOnce(null);
+
+    const user = await service.getEffectiveUser(userId);
+
+    expect(
+      service.hasPermission(user, PermissionKey.ExecutiveSummaryRead),
+    ).toBe(true);
+    expect(service.hasPermission(user, PermissionKey.UsersManage)).toBe(true);
+    await expect(
+      service.assertCanReadProject(user, projectId),
+    ).resolves.toBeUndefined();
+    await expect(service.getAccessibleProjectIds(user)).resolves.toBeNull();
+  });
 });

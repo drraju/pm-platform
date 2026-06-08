@@ -9,6 +9,9 @@ export class User extends TimestampedEntity {
   @Column({ unique: true })
   email: string;
 
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  username?: string | null;
+
   @Column({ name: 'first_name' })
   firstName: string;
 

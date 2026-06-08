@@ -1,5 +1,10 @@
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedPrincipal } from '../authorization/authorization.service';
@@ -24,7 +29,9 @@ export class DashboardController {
   @RequirePermissions(PermissionKey.DashboardReadSelf)
   @ApiOperation({ summary: 'Get dashboard for the authenticated user' })
   @ApiOkResponse({ type: MeDashboardDto })
-  getMyDashboard(@Req() request: AuthenticatedRequest): Promise<MeDashboardDto> {
+  getMyDashboard(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<MeDashboardDto> {
     return this.dashboardService.getMyDashboard(request.user.userId);
   }
 }

@@ -189,7 +189,10 @@ export class PortfolioService {
     );
 
     return {
-      total: projects.reduce((total, project) => total + project.overdueTaskCount, 0),
+      total: projects.reduce(
+        (total, project) => total + project.overdueTaskCount,
+        0,
+      ),
       projects,
     };
   }
@@ -203,9 +206,7 @@ export class PortfolioService {
 
   private isOverdueTask(task: Task, today: string): boolean {
     return Boolean(
-      task.dueDate &&
-        task.dueDate < today &&
-        task.status !== TaskStatus.Done,
+      task.dueDate && task.dueDate < today && task.status !== TaskStatus.Done,
     );
   }
 
@@ -237,9 +238,7 @@ export class PortfolioService {
 
   private isUpcomingMilestoneCandidate(task: Task, today: string): boolean {
     return Boolean(
-      task.dueDate &&
-        task.dueDate >= today &&
-        task.status !== TaskStatus.Done,
+      task.dueDate && task.dueDate >= today && task.status !== TaskStatus.Done,
     );
   }
 
@@ -248,8 +247,13 @@ export class PortfolioService {
       return true;
     }
 
-    return !['cancelled', 'closed', 'complete', 'completed', 'done', 'resolved'].includes(
-      status.toLowerCase(),
-    );
+    return ![
+      'cancelled',
+      'closed',
+      'complete',
+      'completed',
+      'done',
+      'resolved',
+    ].includes(status.toLowerCase());
   }
 }

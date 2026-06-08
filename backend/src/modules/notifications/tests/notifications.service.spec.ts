@@ -7,10 +7,13 @@ describe('NotificationsService', () => {
   it.todo('defines notification delivery behavior');
 
   it('registers the notification entity with TypeORM', () => {
-    const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, NotificationsModule) as
-      | Array<{ providers?: Array<{ provide?: unknown }> }>
-      | undefined;
-    const providers = imports?.flatMap((moduleImport) => moduleImport.providers ?? []);
+    const imports = Reflect.getMetadata(
+      MODULE_METADATA.IMPORTS,
+      NotificationsModule,
+    ) as Array<{ providers?: Array<{ provide?: unknown }> }> | undefined;
+    const providers = imports?.flatMap(
+      (moduleImport) => moduleImport.providers ?? [],
+    );
 
     expect(providers).toEqual(
       expect.arrayContaining([
