@@ -24,6 +24,9 @@ export class Task extends AuditableEntity {
   @Column({ default: 'medium' })
   priority: string;
 
+  @Column({ default: 'task' })
+  type: string;
+
   @Column({ name: 'start_date', type: 'date', nullable: true })
   startDate?: string | null;
 

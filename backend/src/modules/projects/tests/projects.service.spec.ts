@@ -3,7 +3,9 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
+import { ProjectVisibilityLevel } from '../../../common/enums/project-visibility-level.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { AuthorizationService } from '../../authorization/authorization.service';
 import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
 import { ProjectHealthService } from '../../health/project-health.service';
 import { Task } from '../../tasks/entities/task.entity';
@@ -26,6 +28,10 @@ describe('ProjectsService', () => {
   let projectMembersRepository: MockRepository<ProjectMember>;
   let tasksRepository: MockRepository<Task>;
   let usersRepository: MockRepository<User>;
+  let authorizationService: {
+    getEffectiveUser: jest.Mock;
+    isExternalUser: jest.Mock;
+  };
 
   beforeEach(async () => {
     projectsRepository = {
@@ -73,6 +79,13 @@ describe('ProjectsService', () => {
           useValue: usersRepository,
         },
         ProjectHealthService,
+        {
+          provide: AuthorizationService,
+          useValue: (authorizationService = {
+            getEffectiveUser: jest.fn(),
+            isExternalUser: jest.fn().mockReturnValue(false),
+          }),
+        },
       ],
     }).compile();
 
@@ -156,6 +169,166 @@ describe('ProjectsService', () => {
     await expect(service.findOne(projectId)).rejects.toThrow(NotFoundException);
   });
 
+  it('filters project details for external users', async () => {
+    const externalUserId = 'external-user';
+    authorizationService.getEffectiveUser.mockResolvedValue({
+      roleName: 'Customer',
+      userId: externalUserId,
+    });
+    authorizationService.isExternalUser.mockReturnValue(true);
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      assumptions: [{ id: 'assumption-1' }],
+      dependencies: [{ id: 'dependency-1' }],
+      issues: [{ id: 'issue-1' }],
+      members: [
+        {
+          userId: externalUserId,
+          visibilityLevel: ProjectVisibilityLevel.Customer,
+        },
+      ],
+      owner: { id: 'owner-1' },
+      risks: [{ id: 'risk-1' }],
+      tasks: [
+        { id: 'assigned-task', assigneeId: externalUserId, type: 'task' },
+        { id: 'milestone-task', assigneeId: null, type: 'milestone' },
+        { id: 'internal-task', assigneeId: 'internal-user', type: 'task' },
+      ],
+    });
+    projectMembersRepository.findOne?.mockResolvedValue({
+      visibilityLevel: ProjectVisibilityLevel.Customer,
+    });
+
+    const result = await service.findOneForUser(
+      {
+        email: 'customer@example.com',
+        roleId: 'role-1',
+        userId: externalUserId,
+      },
+      projectId,
+    );
+
+    expect(result.assumptions).toEqual([]);
+    expect(result.dependencies).toEqual([]);
+    expect(result.issues).toEqual([]);
+    expect(result.members).toEqual([]);
+    expect(result.owner).toBeNull();
+    expect(result.risks).toEqual([]);
+    expect(result.tasks).toEqual([
+      expect.objectContaining({ id: 'assigned-task' }),
+      expect.objectContaining({ id: 'milestone-task' }),
+    ]);
+  });
+
+  it('filters project tasks for external users', async () => {
+    const externalUserId = 'external-user';
+    authorizationService.getEffectiveUser.mockResolvedValue({
+      roleName: 'Partner',
+      userId: externalUserId,
+    });
+    authorizationService.isExternalUser.mockReturnValue(true);
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.find?.mockResolvedValue([
+      { id: 'assigned-task', assigneeId: externalUserId, type: 'task' },
+      { id: 'milestone-task', assigneeId: null, type: 'milestone' },
+      { id: 'internal-task', assigneeId: 'internal-user', type: 'task' },
+    ]);
+
+    await expect(
+      service.findProjectTasksForUser(
+        {
+          email: 'partner@example.com',
+          roleId: 'role-1',
+          userId: externalUserId,
+        },
+        projectId,
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'assigned-task' }),
+      expect.objectContaining({ id: 'milestone-task' }),
+    ]);
+  });
+
+  it('returns timeline foundation data for tasks, milestones, and dependencies', async () => {
+    const sourceTaskId = 'a6cfbdff-31ef-4b58-830a-5c7562b432a6';
+    const targetTaskId = 'fef07ef2-93df-4b57-9845-92034b8f8c11';
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      name: 'Customer Experience Platform Upgrade',
+      tasks: [
+        {
+          id: sourceTaskId,
+          title: 'Complete design',
+          status: TaskStatus.InProgress,
+          startDate: '2026-06-10',
+          dueDate: '2026-06-20',
+          type: 'task',
+          assignee: {
+            firstName: 'Marcus',
+            lastName: 'Shah',
+          },
+        },
+        {
+          id: targetTaskId,
+          title: 'Readiness checkpoint',
+          status: TaskStatus.Todo,
+          startDate: null,
+          dueDate: '2026-06-30',
+          type: 'milestone',
+          assignee: null,
+        },
+      ],
+      dependencies: [
+        {
+          sourceTaskId,
+          targetTaskId,
+          dependencyType: 'finish_to_start',
+        },
+        {
+          sourceTaskId,
+          targetTaskId: null,
+          dependencyType: 'finish_to_start',
+        },
+      ],
+    });
+
+    await expect(service.findTimeline(projectId)).resolves.toEqual({
+      projectId,
+      projectName: 'Customer Experience Platform Upgrade',
+      tasks: [
+        {
+          id: sourceTaskId,
+          title: 'Complete design',
+          status: TaskStatus.InProgress,
+          startDate: '2026-06-10',
+          dueDate: '2026-06-20',
+          assignee: 'Marcus Shah',
+        },
+      ],
+      milestones: [
+        {
+          id: targetTaskId,
+          title: 'Readiness checkpoint',
+          targetDate: '2026-06-30',
+        },
+      ],
+      dependencies: [
+        {
+          sourceTaskId,
+          targetTaskId,
+          type: 'finish_to_start',
+        },
+      ],
+    });
+    expect(projectsRepository.findOne).toHaveBeenCalledWith({
+      where: { id: projectId },
+      relations: {
+        dependencies: { sourceTask: true, targetTask: true },
+        tasks: { assignee: true },
+      },
+    });
+  });
+
   it('lists project RAID collections from project details', async () => {
     const project = {
       id: projectId,
@@ -236,6 +409,7 @@ describe('ProjectsService', () => {
       projectId,
       userId,
       role: ProjectRole.Manager,
+      visibilityLevel: ProjectVisibilityLevel.Internal,
     });
     expect(result).toEqual(
       expect.objectContaining({
@@ -243,6 +417,7 @@ describe('ProjectsService', () => {
         projectId,
         userId,
         role: ProjectRole.Manager,
+        visibilityLevel: ProjectVisibilityLevel.Internal,
       }),
     );
   });
@@ -258,6 +433,7 @@ describe('ProjectsService', () => {
       projectId,
       userId,
       role: ProjectRole.Contributor,
+      visibilityLevel: ProjectVisibilityLevel.Internal,
     });
   });
 
@@ -301,6 +477,7 @@ describe('ProjectsService', () => {
         projectId,
         userId,
         role: ProjectRole.Manager,
+        visibilityLevel: ProjectVisibilityLevel.Internal,
         user: {
           id: userId,
           email: 'jane.doe@example.com',
@@ -317,6 +494,7 @@ describe('ProjectsService', () => {
         projectId,
         userId,
         role: ProjectRole.Manager,
+        visibilityLevel: ProjectVisibilityLevel.Internal,
         user: {
           id: userId,
           email: 'jane.doe@example.com',
@@ -333,7 +511,12 @@ describe('ProjectsService', () => {
   });
 
   it('updates a project member role', async () => {
-    const member = { id: 'member-id', projectId, userId, role: ProjectRole.Viewer };
+    const member = {
+      id: 'member-id',
+      projectId,
+      userId,
+      role: ProjectRole.Viewer,
+    };
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
     projectMembersRepository.findOne?.mockResolvedValue(member);
@@ -361,7 +544,12 @@ describe('ProjectsService', () => {
   });
 
   it('removes a project member with soft delete', async () => {
-    const member = { id: 'member-id', projectId, userId, role: ProjectRole.Viewer };
+    const member = {
+      id: 'member-id',
+      projectId,
+      userId,
+      role: ProjectRole.Viewer,
+    };
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
     projectMembersRepository.findOne?.mockResolvedValue(member);

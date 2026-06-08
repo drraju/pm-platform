@@ -31,6 +31,11 @@ export class CreateTaskDto {
   @IsString()
   priority?: string;
 
+  @ApiProperty({ default: 'task', required: false })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
   @ApiProperty({ format: 'date', required: false })
   @IsOptional()
   @IsDateString()

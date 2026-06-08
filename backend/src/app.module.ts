@@ -6,7 +6,9 @@ import { AppService } from './app.service';
 import { SanitizeResponseInterceptor } from './common/serialization/sanitize-response.interceptor';
 import { createTypeOrmOptions } from './database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ExecutiveModule } from './modules/executive/executive.module';
 import { GoogleDriveModule } from './modules/integrations/google-drive/google-drive.module';
 import { SlackModule } from './modules/integrations/slack/slack.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -20,6 +22,7 @@ import { UsersModule } from './modules/users/users.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot(createTypeOrmOptions()),
+    AdminModule,
     AuthModule,
     UsersModule,
     ProjectsModule,
@@ -27,6 +30,7 @@ import { UsersModule } from './modules/users/users.module';
     RisksModule,
     RaidModule,
     DashboardModule,
+    ExecutiveModule,
     PortfolioModule,
     NotificationsModule,
     SlackModule,

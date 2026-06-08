@@ -21,6 +21,10 @@ import {
 import { Request } from 'express';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthenticatedPrincipal } from '../authorization/authorization.service';
+import { RequirePermissions } from '../authorization/decorators/require-permissions.decorator';
+import { PermissionsGuard } from '../authorization/guards/permissions.guard';
+import { PermissionKey } from '../authorization/permissions';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
 import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
@@ -29,11 +33,7 @@ import { Task } from './entities/task.entity';
 import { TasksService } from './tasks.service';
 
 type AuthenticatedRequest = Request & {
-  user: {
-    userId: string;
-    email: string;
-    roleId: string;
-  };
+  user: AuthenticatedPrincipal;
 };
 
 @ApiTags('tasks')
@@ -44,15 +44,22 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(PermissionKey.ProjectTasksCreate)
   @ApiCreatedResponse({ type: Task })
-  create(@Body() createTaskDto: CreateTaskDto): Promise<Task> {
-    return this.tasksService.create(createTaskDto);
+  create(
+    @Req() request: AuthenticatedRequest,
+    @Body() createTaskDto: CreateTaskDto,
+  ): Promise<Task> {
+    return this.tasksService.createForUser(request.user, createTaskDto);
   }
 
   @Get()
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(PermissionKey.ProjectTasksRead)
   @ApiOkResponse({ type: Task, isArray: true })
-  findAll(): Promise<Task[]> {
-    return this.tasksService.findAll();
+  findAll(@Req() request: AuthenticatedRequest): Promise<Task[]> {
+    return this.tasksService.findAllForUser(request.user);
   }
 
   @Get('my')
@@ -79,22 +86,36 @@ export class TasksController {
 
   @Get(':id')
   @ApiOkResponse({ type: Task })
-  findOne(@Param('id') id: string): Promise<Task> {
-    return this.tasksService.findOne(id);
+  findOne(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Task> {
+    return this.tasksService.findOneForUser(request.user, id);
   }
 
   @Patch(':id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(
+    PermissionKey.ProjectTasksUpdateAny,
+    PermissionKey.ProjectTasksUpdateOwn,
+  )
   @ApiOkResponse({ type: Task })
   update(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() updateTaskDto: UpdateTaskDto,
   ): Promise<Task> {
-    return this.tasksService.update(id, updateTaskDto);
+    return this.tasksService.updateForUser(request.user, id, updateTaskDto);
   }
 
   @Delete(':id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(PermissionKey.ProjectTasksDelete)
   @ApiOkResponse()
-  remove(@Param('id') id: string): Promise<void> {
-    return this.tasksService.remove(id);
+  remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.tasksService.removeForUser(request.user, id);
   }
 }

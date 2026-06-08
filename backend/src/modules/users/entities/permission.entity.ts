@@ -10,6 +10,9 @@ export class Permission extends AuditableEntity {
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
+  @Column({ default: 'Administration' })
+  category: string;
+
   @ManyToMany(() => Role, (role) => role.permissions)
   roles: Role[];
 }

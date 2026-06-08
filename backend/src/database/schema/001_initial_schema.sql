@@ -1,8 +1,10 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TYPE project_role AS ENUM ('owner', 'manager', 'contributor', 'viewer');
+CREATE TYPE project_visibility_level AS ENUM ('INTERNAL', 'PARTNER', 'CUSTOMER');
 CREATE TYPE task_status AS ENUM ('backlog', 'todo', 'in_progress', 'blocked', 'done');
 CREATE TYPE raid_type AS ENUM ('risk', 'assumption', 'issue', 'dependency');
+CREATE TYPE dependency_type AS ENUM ('finish_to_start', 'start_to_start', 'finish_to_finish', 'start_to_finish');
 
 CREATE TABLE roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,6 +76,7 @@ CREATE TABLE project_members (
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role project_role NOT NULL DEFAULT 'contributor',
+  visibility_level project_visibility_level NOT NULL DEFAULT 'INTERNAL',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
@@ -91,6 +94,7 @@ CREATE TABLE tasks (
   assignee_id UUID REFERENCES users(id),
   status task_status NOT NULL DEFAULT 'backlog',
   priority VARCHAR(50) NOT NULL DEFAULT 'medium',
+  type VARCHAR(50) NOT NULL DEFAULT 'task',
   start_date DATE,
   due_date DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -166,6 +170,9 @@ CREATE TABLE dependencies (
   status VARCHAR(50) NOT NULL DEFAULT 'open',
   depends_on TEXT,
   due_date DATE,
+  source_task_id UUID REFERENCES tasks(id),
+  target_task_id UUID REFERENCES tasks(id),
+  dependency_type dependency_type NOT NULL DEFAULT 'finish_to_start',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,

@@ -6,6 +6,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../common/enums/project-role.enum';
+import { ProjectVisibilityLevel } from '../../common/enums/project-visibility-level.enum';
+import {
+  AuthenticatedPrincipal,
+  AuthorizationService,
+} from '../authorization/authorization.service';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
 import { Task } from '../tasks/entities/task.entity';
@@ -19,6 +24,12 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
 import { ProjectMemberResponseDto } from './dto/project-member-response.dto';
 import { ProjectTaskQueryDto } from './dto/project-task-query.dto';
+import {
+  ProjectTimelineDto,
+  TimelineDependencyDto,
+  TimelineMilestoneDto,
+  TimelineTaskDto,
+} from './dto/project-timeline.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
@@ -39,6 +50,7 @@ export class ProjectsService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly projectHealthService: ProjectHealthService,
+    private readonly authorizationService: AuthorizationService,
   ) {}
 
   create(createProjectDto: CreateProjectDto): Promise<Project> {
@@ -51,6 +63,31 @@ export class ProjectsService {
     const projects = await this.projectsRepository.find({
       order: { createdAt: 'DESC' },
       relations: { issues: true, owner: true, risks: true, tasks: true },
+    });
+
+    return projects.map((project) => this.withHealth(project));
+  }
+
+  async findAllForUser(
+    principal: AuthenticatedPrincipal,
+  ): Promise<ProjectWithHealth[]> {
+    const user = await this.authorizationService.getEffectiveUser(
+      principal.userId,
+    );
+    const accessibleProjectIds =
+      await this.authorizationService.getAccessibleProjectIds(user);
+
+    if (accessibleProjectIds === null) {
+      return this.findAll();
+    }
+    if (accessibleProjectIds.length === 0) {
+      return [];
+    }
+
+    const projects = await this.projectsRepository.find({
+      order: { createdAt: 'DESC' },
+      relations: { issues: true, owner: true, risks: true, tasks: true },
+      where: accessibleProjectIds.map((id) => ({ id })),
     });
 
     return projects.map((project) => this.withHealth(project));
@@ -74,6 +111,27 @@ export class ProjectsService {
     }
 
     return this.withHealth(project);
+  }
+
+  async findOneForUser(
+    principal: AuthenticatedPrincipal,
+    id: string,
+  ): Promise<ProjectWithHealth> {
+    const project = await this.findOne(id);
+    const user = await this.authorizationService.getEffectiveUser(
+      principal.userId,
+    );
+
+    if (!this.authorizationService.isExternalUser(user)) {
+      return project;
+    }
+
+    const membership = await this.projectMembersRepository.findOne({
+      select: { id: true, visibilityLevel: true },
+      where: { projectId: id, userId: user.userId },
+    });
+
+    return this.toExternalProjectView(project, user.userId, membership);
   }
 
   async update(
@@ -111,6 +169,9 @@ export class ProjectsService {
       projectId,
       userId: createProjectMemberDto.userId,
       role: createProjectMemberDto.role ?? ProjectRole.Contributor,
+      visibilityLevel:
+        createProjectMemberDto.visibilityLevel ??
+        ProjectVisibilityLevel.Internal,
     });
 
     const savedMember = await this.projectMembersRepository.save(member);
@@ -138,7 +199,12 @@ export class ProjectsService {
     await this.ensureUserExists(userId);
 
     const member = await this.findMember(projectId, userId);
-    member.role = updateProjectMemberDto.role;
+    if (updateProjectMemberDto.role) {
+      member.role = updateProjectMemberDto.role;
+    }
+    if (updateProjectMemberDto.visibilityLevel) {
+      member.visibilityLevel = updateProjectMemberDto.visibilityLevel;
+    }
 
     const savedMember = await this.projectMembersRepository.save(member);
     return this.toProjectMemberResponse(savedMember);
@@ -170,12 +236,34 @@ export class ProjectsService {
     });
   }
 
+  async findProjectTasksForUser(
+    principal: AuthenticatedPrincipal,
+    projectId: string,
+    query: ProjectTaskQueryDto = {},
+  ): Promise<Task[]> {
+    const tasks = await this.findProjectTasks(projectId, query);
+    const user = await this.authorizationService.getEffectiveUser(
+      principal.userId,
+    );
+
+    if (!this.authorizationService.isExternalUser(user)) {
+      return tasks;
+    }
+
+    return tasks.filter((task) =>
+      this.isExternalVisibleTask(task, user.userId),
+    );
+  }
+
   async createProjectTask(
     projectId: string,
     createProjectTaskDto: CreateProjectTaskDto,
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
-    await this.validateAssigneeMembership(projectId, createProjectTaskDto.assigneeId);
+    await this.validateAssigneeMembership(
+      projectId,
+      createProjectTaskDto.assigneeId,
+    );
 
     const task = this.tasksRepository.create({
       ...createProjectTaskDto,
@@ -191,7 +279,10 @@ export class ProjectsService {
     updateProjectTaskDto: UpdateProjectTaskDto,
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
-    await this.validateAssigneeMembership(projectId, updateProjectTaskDto.assigneeId);
+    await this.validateAssigneeMembership(
+      projectId,
+      updateProjectTaskDto.assigneeId,
+    );
 
     const task = await this.findProjectTask(projectId, taskId);
     Object.assign(task, updateProjectTaskDto, { projectId });
@@ -224,6 +315,70 @@ export class ProjectsService {
   async findProjectDependencies(projectId: string): Promise<Dependency[]> {
     const project = await this.findOne(projectId);
     return project.dependencies ?? [];
+  }
+
+  async findTimeline(projectId: string): Promise<ProjectTimelineDto> {
+    const project = await this.projectsRepository.findOne({
+      where: { id: projectId },
+      relations: {
+        dependencies: { sourceTask: true, targetTask: true },
+        tasks: { assignee: true },
+      },
+    });
+    if (!project) {
+      throw new NotFoundException(`Project ${projectId} not found`);
+    }
+
+    const tasks = project.tasks ?? [];
+    const regularTasks = tasks.filter((task) => !this.isMilestoneTask(task));
+    const milestones = tasks.filter((task) => this.isMilestoneTask(task));
+
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      tasks: regularTasks.map((task) => this.toTimelineTask(task)),
+      milestones: milestones.map((task) => this.toTimelineMilestone(task)),
+      dependencies: (project.dependencies ?? [])
+        .filter(
+          (dependency) => dependency.sourceTaskId && dependency.targetTaskId,
+        )
+        .map((dependency) => this.toTimelineDependency(dependency)),
+    };
+  }
+
+  async findTimelineForUser(
+    principal: AuthenticatedPrincipal,
+    projectId: string,
+  ): Promise<ProjectTimelineDto> {
+    const user = await this.authorizationService.getEffectiveUser(
+      principal.userId,
+    );
+
+    if (!this.authorizationService.isExternalUser(user)) {
+      return this.findTimeline(projectId);
+    }
+
+    const project = await this.projectsRepository.findOne({
+      where: { id: projectId },
+      relations: { tasks: { assignee: true } },
+    });
+    if (!project) {
+      throw new NotFoundException(`Project ${projectId} not found`);
+    }
+
+    const tasks = (project.tasks ?? []).filter((task) =>
+      this.isExternalVisibleTask(task, user.userId),
+    );
+    const regularTasks = tasks.filter((task) => !this.isMilestoneTask(task));
+    const milestones = tasks.filter((task) => this.isMilestoneTask(task));
+
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      dependencies: [],
+      milestones: milestones.map((task) => this.toTimelineMilestone(task)),
+      tasks: regularTasks.map((task) => this.toTimelineTask(task)),
+    };
   }
 
   private async ensureProjectExists(projectId: string): Promise<void> {
@@ -327,6 +482,8 @@ export class ProjectsService {
       projectId: member.projectId,
       userId: member.userId,
       role: member.role,
+      visibilityLevel:
+        member.visibilityLevel ?? ProjectVisibilityLevel.Internal,
       user: member.user
         ? {
             id: member.user.id,
@@ -346,5 +503,67 @@ export class ProjectsService {
         tasks: project.tasks,
       }),
     });
+  }
+
+  private toExternalProjectView(
+    project: ProjectWithHealth,
+    userId: string,
+    membership?: Pick<ProjectMember, 'visibilityLevel'> | null,
+  ): ProjectWithHealth {
+    const visibilityLevel =
+      membership?.visibilityLevel ?? ProjectVisibilityLevel.Customer;
+
+    return Object.assign(new Project(), {
+      ...project,
+      assumptions: [],
+      dependencies: [],
+      issues: [],
+      members:
+        visibilityLevel === ProjectVisibilityLevel.Partner
+          ? (project.members ?? []).filter((member) => member.userId === userId)
+          : [],
+      owner: null,
+      risks: [],
+      tasks: (project.tasks ?? []).filter((task) =>
+        this.isExternalVisibleTask(task, userId),
+      ),
+    }) as ProjectWithHealth;
+  }
+
+  private isExternalVisibleTask(task: Task, userId: string): boolean {
+    return task.assigneeId === userId || this.isMilestoneTask(task);
+  }
+
+  private isMilestoneTask(task: Task): boolean {
+    return task.type?.toLowerCase() === 'milestone';
+  }
+
+  private toTimelineTask(task: Task): TimelineTaskDto {
+    return {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      startDate: task.startDate ?? null,
+      dueDate: task.dueDate ?? null,
+      assignee: task.assignee
+        ? `${task.assignee.firstName} ${task.assignee.lastName}`
+        : null,
+    };
+  }
+
+  private toTimelineMilestone(task: Task): TimelineMilestoneDto {
+    return {
+      id: task.id,
+      title: task.title,
+      targetDate: task.dueDate ?? task.startDate ?? null,
+    };
+  }
+
+  private toTimelineDependency(dependency: Dependency): TimelineDependencyDto {
+    return {
+      sourceTaskId: dependency.sourceTaskId as string,
+      targetTaskId: dependency.targetTaskId as string,
+      type: dependency.dependencyType,
+    };
   }
 }

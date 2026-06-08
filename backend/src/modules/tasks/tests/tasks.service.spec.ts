@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { AuthorizationService } from '../../authorization/authorization.service';
 import { Task } from '../entities/task.entity';
 import { TasksService } from '../tasks.service';
 
@@ -33,6 +34,10 @@ describe('TasksService', () => {
         {
           provide: getRepositoryToken(Task),
           useValue: tasksRepository,
+        },
+        {
+          provide: AuthorizationService,
+          useValue: {},
         },
       ],
     }).compile();

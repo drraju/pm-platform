@@ -4,8 +4,11 @@ import { createHash } from 'crypto';
 import { DataSource, In, Repository } from 'typeorm';
 import { createDataSourceOptions } from '../src/database/typeorm.config';
 import { ProjectRole } from '../src/common/enums/project-role.enum';
+import { ProjectVisibilityLevel } from '../src/common/enums/project-visibility-level.enum';
 import { RaidType } from '../src/common/enums/raid-type.enum';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
+import { defaultPermissionsByRole } from '../src/modules/authorization/authorization.service';
+import { PermissionKey } from '../src/modules/authorization/permissions';
 import { ProjectMember } from '../src/modules/projects/entities/project-member.entity';
 import { Project } from '../src/modules/projects/entities/project.entity';
 import { Assumption } from '../src/modules/raid/entities/assumption.entity';
@@ -13,15 +16,19 @@ import { Dependency } from '../src/modules/raid/entities/dependency.entity';
 import { Issue } from '../src/modules/raid/entities/issue.entity';
 import { Risk } from '../src/modules/raid/entities/risk.entity';
 import { Task } from '../src/modules/tasks/entities/task.entity';
+import { Permission } from '../src/modules/users/entities/permission.entity';
 import { Role } from '../src/modules/users/entities/role.entity';
 import { RolePermission } from '../src/modules/users/entities/role-permission.entity';
 import { User } from '../src/modules/users/entities/user.entity';
 
 const seedNamespace = 'pm-platform-dev-seed-v2';
 export const defaultPassword = 'Password123!';
+export const defaultAdminPassword = 'Admin123!';
 
 export function seedUuid(key: string): string {
-  const hash = createHash('sha1').update(`${seedNamespace}:${key}`).digest('hex');
+  const hash = createHash('sha1')
+    .update(`${seedNamespace}:${key}`)
+    .digest('hex');
   return [
     hash.slice(0, 8),
     hash.slice(8, 12),
@@ -33,6 +40,27 @@ export function seedUuid(key: string): string {
 }
 
 const users = [
+  {
+    id: seedUuid('user-admin'),
+    email: 'admin@example.com',
+    firstName: 'Platform',
+    lastName: 'Administrator',
+    roleName: 'Admin',
+  },
+  {
+    id: seedUuid('user-executive'),
+    email: 'executive@example.com',
+    firstName: 'Evelyn',
+    lastName: 'Hart',
+    roleName: 'Executive',
+  },
+  {
+    id: seedUuid('user-portfolio-manager'),
+    email: 'portfolio.manager@example.com',
+    firstName: 'Miles',
+    lastName: 'Chen',
+    roleName: 'Portfolio Manager',
+  },
   {
     id: seedUuid('user-program-manager'),
     email: 'program.manager@example.com',
@@ -59,21 +87,35 @@ const users = [
     email: 'technical.lead@example.com',
     firstName: 'Theo',
     lastName: 'Ivers',
-    roleName: 'Technical Lead',
+    roleName: 'Team Member',
   },
   {
     id: seedUuid('user-engineer'),
     email: 'engineer@example.com',
     firstName: 'Priya',
     lastName: 'Kapoor',
-    roleName: 'Engineer',
+    roleName: 'Team Member',
   },
   {
     id: seedUuid('user-qa-engineer'),
     email: 'qa.engineer@example.com',
     firstName: 'Elliot',
     lastName: 'Reed',
-    roleName: 'QA Engineer',
+    roleName: 'Team Member',
+  },
+  {
+    id: seedUuid('user-partner'),
+    email: 'partner@example.com',
+    firstName: 'Sofia',
+    lastName: 'Marin',
+    roleName: 'Partner',
+  },
+  {
+    id: seedUuid('user-customer'),
+    email: 'customer@example.com',
+    firstName: 'Noah',
+    lastName: 'Cole',
+    roleName: 'Customer',
   },
 ];
 
@@ -111,20 +153,102 @@ const projects = [
 ];
 
 const memberships = [
-  ['Customer Experience Platform Upgrade', 'project.manager@example.com', ProjectRole.Owner],
-  ['Customer Experience Platform Upgrade', 'delivery.lead@example.com', ProjectRole.Manager],
-  ['Customer Experience Platform Upgrade', 'technical.lead@example.com', ProjectRole.Contributor],
-  ['Customer Experience Platform Upgrade', 'engineer@example.com', ProjectRole.Contributor],
-  ['Customer Experience Platform Upgrade', 'qa.engineer@example.com', ProjectRole.Contributor],
-  ['Observability Transformation Programme', 'program.manager@example.com', ProjectRole.Owner],
-  ['Observability Transformation Programme', 'technical.lead@example.com', ProjectRole.Manager],
-  ['Observability Transformation Programme', 'engineer@example.com', ProjectRole.Contributor],
-  ['Observability Transformation Programme', 'qa.engineer@example.com', ProjectRole.Contributor],
-  ['Data Centre Exit Programme', 'delivery.lead@example.com', ProjectRole.Owner],
-  ['Data Centre Exit Programme', 'project.manager@example.com', ProjectRole.Manager],
-  ['Data Centre Exit Programme', 'technical.lead@example.com', ProjectRole.Contributor],
-  ['Data Centre Exit Programme', 'engineer@example.com', ProjectRole.Contributor],
-  ['Data Centre Exit Programme', 'qa.engineer@example.com', ProjectRole.Contributor],
+  [
+    'Customer Experience Platform Upgrade',
+    'project.manager@example.com',
+    ProjectRole.Owner,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Customer Experience Platform Upgrade',
+    'delivery.lead@example.com',
+    ProjectRole.Manager,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Customer Experience Platform Upgrade',
+    'technical.lead@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Customer Experience Platform Upgrade',
+    'engineer@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Customer Experience Platform Upgrade',
+    'qa.engineer@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Customer Experience Platform Upgrade',
+    'partner@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Partner,
+  ],
+  [
+    'Customer Experience Platform Upgrade',
+    'customer@example.com',
+    ProjectRole.Viewer,
+    ProjectVisibilityLevel.Customer,
+  ],
+  [
+    'Observability Transformation Programme',
+    'program.manager@example.com',
+    ProjectRole.Owner,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Observability Transformation Programme',
+    'technical.lead@example.com',
+    ProjectRole.Manager,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Observability Transformation Programme',
+    'engineer@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Observability Transformation Programme',
+    'qa.engineer@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Data Centre Exit Programme',
+    'delivery.lead@example.com',
+    ProjectRole.Owner,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Data Centre Exit Programme',
+    'project.manager@example.com',
+    ProjectRole.Manager,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Data Centre Exit Programme',
+    'technical.lead@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Data Centre Exit Programme',
+    'engineer@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
+  [
+    'Data Centre Exit Programme',
+    'qa.engineer@example.com',
+    ProjectRole.Contributor,
+    ProjectVisibilityLevel.Internal,
+  ],
 ] as const;
 
 const taskTitlesByProject: Record<string, string[]> = {
@@ -209,6 +333,8 @@ type SeedContext = {
   projectsByName: Map<string, Project>;
 };
 
+const seededRoleNames = [...new Set(users.map((user) => user.roleName))];
+
 const requiredEntityNames = [
   'User',
   'Role',
@@ -225,6 +351,7 @@ const requiredEntityNames = [
 ];
 
 export const developmentSeedData = {
+  defaultAdminPassword,
   assumptionTitles,
   defaultPassword,
   dependencyTitles,
@@ -238,6 +365,20 @@ export const developmentSeedData = {
 };
 
 const appDataSource = new DataSource(createDataSourceOptions());
+
+function permissionCategory(key: string): string {
+  if (key.startsWith('dashboard:')) return 'Dashboard';
+  if (key.startsWith('portfolio:')) return 'Portfolio';
+  if (key.startsWith('executive:')) return 'Executive';
+  if (key.startsWith('projects:')) return 'Projects';
+  if (key.startsWith('project-tasks:')) return 'Tasks';
+  if (key.startsWith('project-members:')) return 'Projects';
+  if (key.startsWith('raid:')) return 'RAID';
+  if (key.startsWith('users:')) return 'Users';
+  if (key.startsWith('roles:')) return 'Roles';
+  if (key.startsWith('notifications:')) return 'Notifications';
+  return 'Administration';
+}
 
 async function saveEntities<T extends object>(
   repository: Repository<T>,
@@ -253,39 +394,80 @@ async function resetSeedData(dataSource: DataSource) {
     await manager.getRepository(Issue).delete({ id: In(issueIds()) });
     await manager.getRepository(Risk).delete({ id: In(riskIds()) });
     await manager.getRepository(Task).delete({ id: In(taskIds()) });
-    await manager.getRepository(ProjectMember).delete({ id: In(membershipIds()) });
-    await manager.getRepository(Project).delete({ id: In(projects.map((project) => project.id)) });
     await manager
-      .getRepository(RolePermission)
-      .delete({ roleId: In(users.map((user) => seedUuid(`role-${user.roleName}`))) });
-    await manager.getRepository(User).delete({ id: In(users.map((user) => user.id)) });
+      .getRepository(ProjectMember)
+      .delete({ id: In(membershipIds()) });
     await manager
-      .getRepository(Role)
-      .delete({ id: In(users.map((user) => seedUuid(`role-${user.roleName}`))) });
+      .getRepository(Project)
+      .delete({ id: In(projects.map((project) => project.id)) });
+    await manager.getRepository(RolePermission).delete({
+      roleId: In(
+        seededRoleNames.map((roleName) => seedUuid(`role-${roleName}`)),
+      ),
+    });
+    await manager
+      .getRepository(User)
+      .delete({ id: In(users.map((user) => user.id)) });
+    await manager.getRepository(Role).delete({
+      id: In(seededRoleNames.map((roleName) => seedUuid(`role-${roleName}`))),
+    });
   });
 }
 
 async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
   const roleRepository = dataSource.getRepository(Role);
+  const permissionRepository = dataSource.getRepository(Permission);
+  const rolePermissionRepository = dataSource.getRepository(RolePermission);
   const userRepository = dataSource.getRepository(User);
   const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const adminPasswordHash = await bcrypt.hash(defaultAdminPassword, 10);
 
   const roles: Role[] = [];
-  for (const user of users) {
+  for (const roleName of seededRoleNames) {
     const existingRole = await roleRepository.findOne({
-      where: { name: user.roleName },
+      where: { name: roleName },
     });
     roles.push(
       await roleRepository.save(
         roleRepository.create({
-          ...(existingRole ?? { id: seedUuid(`role-${user.roleName}`) }),
-          name: user.roleName,
-          description: `Development seed role for ${user.roleName}`,
+          ...(existingRole ?? { id: seedUuid(`role-${roleName}`) }),
+          name: roleName,
+          description: `Development seed role for ${roleName}`,
         }),
       ),
     );
   }
   const rolesByName = new Map(roles.map((role) => [role.name, role]));
+
+  const permissionKeys = Object.values(PermissionKey);
+  const savedPermissions = await saveEntities(
+    permissionRepository,
+    permissionKeys.map((key) =>
+      permissionRepository.create({
+        id: seedUuid(`permission-${key}`),
+        key,
+        category: permissionCategory(key),
+        description: `Allows ${key}`,
+        deletedAt: null,
+      }),
+    ),
+  );
+  const permissionsByKey = new Map(
+    savedPermissions.map((permission) => [permission.key, permission]),
+  );
+
+  await saveEntities(
+    rolePermissionRepository,
+    seededRoleNames.flatMap((roleName) =>
+      (defaultPermissionsByRole[roleName] ?? []).map((permissionKey) =>
+        rolePermissionRepository.create({
+          roleId: rolesByName.get(roleName)?.id,
+          permissionId: permissionsByKey.get(permissionKey)?.id,
+          createdAt: new Date(),
+        }),
+      ),
+    ),
+  );
 
   const savedUsers: User[] = [];
   for (const user of users) {
@@ -299,7 +481,8 @@ async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          passwordHash,
+          passwordHash:
+            user.roleName === 'Admin' ? adminPasswordHash : passwordHash,
           roleId: rolesByName.get(user.roleName)?.id,
           status: 'active',
         }) as unknown as User,
@@ -314,7 +497,10 @@ async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
   };
 }
 
-async function seedProjectsAndMemberships(dataSource: DataSource, context: SeedContext) {
+async function seedProjectsAndMemberships(
+  dataSource: DataSource,
+  context: SeedContext,
+) {
   const projectRepository = dataSource.getRepository(Project);
   const memberRepository = dataSource.getRepository(ProjectMember);
 
@@ -333,16 +519,19 @@ async function seedProjectsAndMemberships(dataSource: DataSource, context: SeedC
       }),
     ),
   );
-  context.projectsByName = new Map(savedProjects.map((project) => [project.name, project]));
+  context.projectsByName = new Map(
+    savedProjects.map((project) => [project.name, project]),
+  );
 
   await saveEntities(
     memberRepository,
-    memberships.map(([projectName, email, role]) =>
+    memberships.map(([projectName, email, role, visibilityLevel]) =>
       memberRepository.create({
         id: seedUuid(`membership-${projectName}-${email}`),
         projectId: context.projectsByName.get(projectName)?.id,
         userId: context.usersByEmail.get(email)?.id,
         role,
+        visibilityLevel,
         deletedAt: null,
       }),
     ),
@@ -366,6 +555,8 @@ async function seedTasks(dataSource: DataSource, context: SeedContext) {
     'engineer@example.com',
     'qa.engineer@example.com',
     'project.manager@example.com',
+    'partner@example.com',
+    'customer@example.com',
   ];
 
   let index = 0;
@@ -376,7 +567,9 @@ async function seedTasks(dataSource: DataSource, context: SeedContext) {
       const month = 6 + Math.floor(index / 8);
       const day = 8 + (index % 18);
       const dueDay = Math.min(day + 10, 28);
-      const assignee = context.usersByEmail.get(assignees[index % assignees.length]);
+      const assignee = context.usersByEmail.get(
+        assignees[index % assignees.length],
+      );
       tasks.push(
         taskRepository.create({
           id: seedUuid(`task-${index + 1}`),
@@ -403,7 +596,9 @@ async function seedRaid(dataSource: DataSource, context: SeedContext) {
   const issueRepository = dataSource.getRepository(Issue);
   const assumptionRepository = dataSource.getRepository(Assumption);
   const dependencyRepository = dataSource.getRepository(Dependency);
-  const projectCycle = projects.map((project) => context.projectsByName.get(project.name));
+  const projectCycle = projects.map((project) =>
+    context.projectsByName.get(project.name),
+  );
   const ownerCycle = users.map((user) => context.usersByEmail.get(user.email));
 
   await saveEntities(
@@ -482,7 +677,13 @@ async function seedRaid(dataSource: DataSource, context: SeedContext) {
         }.`,
         ownerId: ownerCycle[(index + 4) % ownerCycle.length]?.id,
         status: index % 2 === 0 ? 'open' : 'in_progress',
-        dependsOn: ['Identity Platform', 'Procurement', 'Network Engineering', 'Security Architecture', 'Data Governance'][index],
+        dependsOn: [
+          'Identity Platform',
+          'Procurement',
+          'Network Engineering',
+          'Security Architecture',
+          'Data Governance',
+        ][index],
         dueDate: `2026-${String(7 + index).padStart(2, '0')}-15`,
         deletedAt: null,
       }),
@@ -491,27 +692,39 @@ async function seedRaid(dataSource: DataSource, context: SeedContext) {
 }
 
 function membershipIds() {
-  return memberships.map(([projectName, email]) => seedUuid(`membership-${projectName}-${email}`));
+  return memberships.map(([projectName, email]) =>
+    seedUuid(`membership-${projectName}-${email}`),
+  );
 }
 
 function taskIds() {
-  return Array.from({ length: 30 }, (_, index) => seedUuid(`task-${index + 1}`));
+  return Array.from({ length: 30 }, (_, index) =>
+    seedUuid(`task-${index + 1}`),
+  );
 }
 
 function riskIds() {
-  return Array.from({ length: 10 }, (_, index) => seedUuid(`risk-${index + 1}`));
+  return Array.from({ length: 10 }, (_, index) =>
+    seedUuid(`risk-${index + 1}`),
+  );
 }
 
 function issueIds() {
-  return Array.from({ length: 5 }, (_, index) => seedUuid(`issue-${index + 1}`));
+  return Array.from({ length: 5 }, (_, index) =>
+    seedUuid(`issue-${index + 1}`),
+  );
 }
 
 function assumptionIds() {
-  return Array.from({ length: 5 }, (_, index) => seedUuid(`assumption-${index + 1}`));
+  return Array.from({ length: 5 }, (_, index) =>
+    seedUuid(`assumption-${index + 1}`),
+  );
 }
 
 function dependencyIds() {
-  return Array.from({ length: 5 }, (_, index) => seedUuid(`dependency-${index + 1}`));
+  return Array.from({ length: 5 }, (_, index) =>
+    seedUuid(`dependency-${index + 1}`),
+  );
 }
 
 async function main() {
@@ -532,7 +745,8 @@ async function main() {
     });
 
     console.log(`${shouldReset ? 'Seed reset and reload' : 'Seed'} complete:`);
-    console.log('- 6 users');
+    console.log(`- ${users.length} users`);
+    console.log(`- ${seededRoleNames.length} roles`);
     console.log('- 3 projects');
     console.log(`- ${memberships.length} project memberships`);
     console.log('- 30 tasks');
@@ -541,6 +755,8 @@ async function main() {
     console.log('- 5 assumptions');
     console.log('- 5 dependencies');
     console.log(`Default development password: ${defaultPassword}`);
+    console.log(`Default admin user: admin@example.com`);
+    console.log(`Default admin temporary password: ${defaultAdminPassword}`);
   } finally {
     await appDataSource.destroy();
   }

@@ -11,6 +11,7 @@ export {
   getProjectMembers,
   getProjectRisks,
   getProjectTasks,
+  getProjectTimeline,
   getProjects,
   removeProjectMember,
   updateProject,
@@ -23,6 +24,10 @@ export type {
   ApiProjectHealth,
   ApiProjectHealthStatus,
   ApiProjectMember,
+  ApiProjectTimeline,
+  ApiTimelineDependency,
+  ApiTimelineMilestone,
+  ApiTimelineTask,
   ApiRaidItem,
   ApiTask,
 } from "@/lib/api/client";

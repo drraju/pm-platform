@@ -5,15 +5,25 @@ import PortfolioPage from "@/app/(app)/portfolio/page";
 
 const portfolioMocks = vi.hoisted(() => ({
   getPortfolioSummary: vi.fn(),
+  useAuthorization: vi.fn(),
 }));
 
 vi.mock("@/features/portfolio", () => ({
   getPortfolioSummary: portfolioMocks.getPortfolioSummary,
 }));
 
+vi.mock("@/features/auth", () => ({
+  useAuthorization: portfolioMocks.useAuthorization,
+}));
+
 describe("Portfolio page", () => {
   beforeEach(() => {
     portfolioMocks.getPortfolioSummary.mockReset();
+    portfolioMocks.useAuthorization.mockReturnValue({
+      error: null,
+      isAuthorized: true,
+      isLoading: false,
+    });
   });
 
   it("renders portfolio summary cards", async () => {
@@ -261,6 +271,22 @@ describe("Portfolio page", () => {
     expect(
       await screen.findByText("Cannot GET /portfolio/summary"),
     ).toBeInTheDocument();
+  });
+
+  it("renders an authorization error and does not request summary data", async () => {
+    portfolioMocks.useAuthorization.mockReturnValue({
+      error: null,
+      isAuthorized: false,
+      isLoading: false,
+    });
+
+    render(<PortfolioPage />);
+
+    expect(await screen.findByText("Access denied")).toBeInTheDocument();
+    expect(
+      screen.getByText("You do not have permission to view the Portfolio Dashboard."),
+    ).toBeInTheDocument();
+    expect(portfolioMocks.getPortfolioSummary).not.toHaveBeenCalled();
   });
 });
 

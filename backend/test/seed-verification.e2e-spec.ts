@@ -1,5 +1,6 @@
 import { DataSource } from 'typeorm';
 import { ProjectRole } from '../src/common/enums/project-role.enum';
+import { ProjectVisibilityLevel } from '../src/common/enums/project-visibility-level.enum';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
 import {
   developmentSeedData,
@@ -9,9 +10,9 @@ import {
 
 describe('Seed data verification', () => {
   it('defines the expected enterprise seed volumes', () => {
-    expect(developmentSeedData.users).toHaveLength(6);
+    expect(developmentSeedData.users).toHaveLength(11);
     expect(developmentSeedData.projects).toHaveLength(3);
-    expect(developmentSeedData.memberships).toHaveLength(14);
+    expect(developmentSeedData.memberships).toHaveLength(16);
     expect(
       Object.values(developmentSeedData.taskTitlesByProject).flat(),
     ).toHaveLength(30);
@@ -23,34 +24,58 @@ describe('Seed data verification', () => {
 
   it('contains realistic named users, projects, and project teams', () => {
     expect(developmentSeedData.users.map((user) => user.roleName)).toEqual([
+      'Admin',
+      'Executive',
+      'Portfolio Manager',
       'Program Manager',
       'Project Manager',
       'Delivery Lead',
-      'Technical Lead',
-      'Engineer',
-      'QA Engineer',
+      'Team Member',
+      'Team Member',
+      'Team Member',
+      'Partner',
+      'Customer',
     ]);
-    expect(developmentSeedData.projects.map((project) => project.name)).toEqual([
-      'Customer Experience Platform Upgrade',
-      'Observability Transformation Programme',
-      'Data Centre Exit Programme',
-    ]);
+    expect(developmentSeedData.projects.map((project) => project.name)).toEqual(
+      [
+        'Customer Experience Platform Upgrade',
+        'Observability Transformation Programme',
+        'Data Centre Exit Programme',
+      ],
+    );
     expect(developmentSeedData.memberships).toContainEqual([
       'Customer Experience Platform Upgrade',
       'project.manager@example.com',
       ProjectRole.Owner,
+      ProjectVisibilityLevel.Internal,
+    ]);
+    expect(developmentSeedData.memberships).toContainEqual([
+      'Customer Experience Platform Upgrade',
+      'partner@example.com',
+      ProjectRole.Contributor,
+      ProjectVisibilityLevel.Partner,
+    ]);
+    expect(developmentSeedData.memberships).toContainEqual([
+      'Customer Experience Platform Upgrade',
+      'customer@example.com',
+      ProjectRole.Viewer,
+      ProjectVisibilityLevel.Customer,
     ]);
   });
 
   it('uses deterministic UUIDs and valid project references', () => {
     expect(seedUuid('user-project-manager')).toBe(
-      developmentSeedData.users[1].id,
+      developmentSeedData.users.find(
+        (user) => user.email === 'project.manager@example.com',
+      )?.id,
     );
 
     const projectNames = new Set(
       developmentSeedData.projects.map((project) => project.name),
     );
-    const userEmails = new Set(developmentSeedData.users.map((user) => user.email));
+    const userEmails = new Set(
+      developmentSeedData.users.map((user) => user.email),
+    );
 
     for (const [projectName, email] of developmentSeedData.memberships) {
       expect(projectNames.has(projectName)).toBe(true);
@@ -80,9 +105,11 @@ describe('Seed data verification', () => {
 
   it('verifies required entity metadata is present', () => {
     const dataSource = {
-      entityMetadatas: developmentSeedData.requiredEntityNames.map((targetName) => ({
-        targetName,
-      })),
+      entityMetadatas: developmentSeedData.requiredEntityNames.map(
+        (targetName) => ({
+          targetName,
+        }),
+      ),
     } as DataSource;
 
     expect(() => verifyRequiredEntities(dataSource)).not.toThrow();

@@ -3,6 +3,16 @@ import { apiBaseUrl } from "@/lib/config/env";
 export type ApiRole = {
   id: string;
   name: string;
+  description?: string | null;
+  status?: string;
+  permissions?: ApiPermission[];
+};
+
+export type ApiPermission = {
+  id: string;
+  key: string;
+  description?: string | null;
+  category: string;
 };
 
 export type ApiUser = {
@@ -12,6 +22,14 @@ export type ApiUser = {
   lastName: string;
   status: string;
   role?: ApiRole | null;
+};
+
+export type ApiAuthProfile = {
+  userId: string;
+  email: string;
+  roleId: string;
+  roleName: string;
+  permissions: string[];
 };
 
 export type ApiProjectHealthStatus = "GREEN" | "AMBER" | "RED";
@@ -44,7 +62,9 @@ export type ApiProjectMember = {
   projectId?: string;
   userId: string;
   role: string;
+  visibilityLevel?: "INTERNAL" | "PARTNER" | "CUSTOMER";
   user?: ApiUser | null;
+  project?: ApiProject | null;
 };
 
 export type ApiTask = {
@@ -55,6 +75,8 @@ export type ApiTask = {
   assigneeId?: string | null;
   status: "backlog" | "todo" | "in_progress" | "blocked" | "done";
   priority: string;
+  type?: string;
+  startDate?: string | null;
   dueDate?: string | null;
   project?: ApiProject | null;
   assignee?: ApiUser | null;
@@ -87,8 +109,48 @@ export type ApiRaidItem = {
   validationNotes?: string | null;
   dependsOn?: string | null;
   dueDate?: string | null;
+  sourceTaskId?: string | null;
+  targetTaskId?: string | null;
+  dependencyType?:
+    | "finish_to_start"
+    | "start_to_start"
+    | "finish_to_finish"
+    | "start_to_finish";
   project?: ApiProject | null;
   owner?: ApiUser | null;
+};
+
+export type ApiTimelineTask = {
+  id: string;
+  title: string;
+  status: ApiTask["status"];
+  startDate: string | null;
+  dueDate: string | null;
+  assignee: string | null;
+};
+
+export type ApiTimelineMilestone = {
+  id: string;
+  title: string;
+  targetDate: string | null;
+};
+
+export type ApiTimelineDependency = {
+  sourceTaskId: string;
+  targetTaskId: string;
+  type:
+    | "finish_to_start"
+    | "start_to_start"
+    | "finish_to_finish"
+    | "start_to_finish";
+};
+
+export type ApiProjectTimeline = {
+  projectId: string;
+  projectName: string;
+  tasks: ApiTimelineTask[];
+  milestones: ApiTimelineMilestone[];
+  dependencies: ApiTimelineDependency[];
 };
 
 export type ApiTaskSummary = {
@@ -184,6 +246,30 @@ export type ApiPortfolioUpcomingMilestone = {
   dueDate: string;
 };
 
+export type ApiExecutivePortfolioHealth = {
+  totalProjects: number;
+  greenProjects: number;
+  amberProjects: number;
+  redProjects: number;
+};
+
+export type ApiExecutiveDelivery = {
+  overdueTasks: number;
+  upcomingMilestones: number;
+};
+
+export type ApiExecutiveGovernance = {
+  openRisks: number;
+  openIssues: number;
+};
+
+export type ApiExecutiveSummary = {
+  portfolioHealth: ApiExecutivePortfolioHealth;
+  delivery: ApiExecutiveDelivery;
+  governance: ApiExecutiveGovernance;
+  projectsRequiringAttention: ApiPortfolioProjectAttention[];
+};
+
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
@@ -242,11 +328,14 @@ export async function apiRequest<T>(
 }
 
 export function login(email: string, password: string) {
-  return apiRequest<{ accessToken: string; refreshToken: string }>("/auth/login", {
-    method: "POST",
-    token: null,
-    body: JSON.stringify({ email, password }),
-  });
+  return apiRequest<{ accessToken: string; refreshToken: string }>(
+    "/auth/login",
+    {
+      method: "POST",
+      token: null,
+      body: JSON.stringify({ email, password }),
+    },
+  );
 }
 
 export function register(input: {
@@ -265,6 +354,10 @@ export function register(input: {
   );
 }
 
+export function getAuthProfile() {
+  return apiRequest<ApiAuthProfile>("/auth/me");
+}
+
 export function getProjects() {
   return apiRequest<ApiProject[]>("/projects");
 }
@@ -275,6 +368,10 @@ export function getMyDashboard() {
 
 export function getPortfolioSummary() {
   return apiRequest<ApiPortfolioSummary>("/portfolio/summary");
+}
+
+export function getExecutiveSummary() {
+  return apiRequest<ApiExecutiveSummary>("/executive/summary");
 }
 
 export function getProject(projectId: string) {
@@ -295,6 +392,10 @@ export function getProjectAssumptions(projectId: string) {
 
 export function getProjectDependencies(projectId: string) {
   return apiRequest<ApiRaidItem[]>(`/projects/${projectId}/dependencies`);
+}
+
+export function getProjectTimeline(projectId: string) {
+  return apiRequest<ApiProjectTimeline>(`/projects/${projectId}/timeline`);
 }
 
 export function createProject(input: {
@@ -373,6 +474,147 @@ export function removeProjectMember(projectId: string, userId: string) {
   });
 }
 
+export function getAdminDashboard() {
+  return apiRequest<{
+    sections: string[];
+    totals: {
+      memberships: number;
+      permissions: number;
+      roles: number;
+      users: number;
+    };
+  }>("/admin");
+}
+
+export function getAdminUsers() {
+  return apiRequest<ApiUser[]>("/admin/users");
+}
+
+export function createAdminUser(input: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  roleId: string;
+  status?: string;
+}) {
+  return apiRequest<ApiUser>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminUser(
+  userId: string,
+  input: {
+    firstName?: string;
+    lastName?: string;
+    roleId?: string;
+    status?: string;
+  },
+) {
+  return apiRequest<ApiUser>(`/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function disableAdminUser(userId: string) {
+  return apiRequest<ApiUser>(`/admin/users/${userId}/disable`, {
+    method: "PATCH",
+  });
+}
+
+export function resetAdminUserPassword(
+  userId: string,
+  temporaryPassword: string,
+) {
+  return apiRequest<ApiUser>(`/admin/users/${userId}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ temporaryPassword }),
+  });
+}
+
+export function getAdminRoles() {
+  return apiRequest<ApiRole[]>("/admin/roles");
+}
+
+export function createAdminRole(input: {
+  name: string;
+  description?: string;
+  status?: string;
+}) {
+  return apiRequest<ApiRole>("/admin/roles", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminRole(
+  roleId: string,
+  input: { name?: string; description?: string; status?: string },
+) {
+  return apiRequest<ApiRole>(`/admin/roles/${roleId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function cloneAdminRole(roleId: string) {
+  return apiRequest<ApiRole>(`/admin/roles/${roleId}/clone`, {
+    method: "POST",
+  });
+}
+
+export function getAdminPermissions() {
+  return apiRequest<ApiPermission[]>("/admin/permissions");
+}
+
+export function createAdminPermission(input: {
+  key: string;
+  description?: string;
+  category?: string;
+}) {
+  return apiRequest<ApiPermission>("/admin/permissions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getAdminRoleMatrix() {
+  return apiRequest<{ permissions: ApiPermission[]; roles: ApiRole[] }>(
+    "/admin/role-matrix",
+  );
+}
+
+export function updateAdminRoleMatrix(input: {
+  assignments: { roleId: string; permissionIds: string[] }[];
+}) {
+  return apiRequest<{ permissions: ApiPermission[]; roles: ApiRole[] }>(
+    "/admin/role-matrix",
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getAdminProjectMemberships() {
+  return apiRequest<ApiProjectMember[]>("/admin/project-memberships");
+}
+
+export function upsertAdminProjectMembership(input: {
+  projectId: string;
+  userId: string;
+  role: string;
+  visibilityLevel: "INTERNAL" | "PARTNER" | "CUSTOMER";
+}) {
+  return apiRequest<ApiProjectMember>("/admin/project-memberships", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function getUsers() {
   return apiRequest<ApiUser[]>("/users");
 }
@@ -406,11 +648,13 @@ export function getTasks() {
   return apiRequest<ApiTask[]>("/tasks");
 }
 
-export function getMyTasks(input: {
-  priority?: string;
-  projectId?: string;
-  status?: ApiTask["status"];
-} = {}) {
+export function getMyTasks(
+  input: {
+    priority?: string;
+    projectId?: string;
+    status?: ApiTask["status"];
+  } = {},
+) {
   const params = new URLSearchParams();
   if (input.priority) {
     params.set("priority", input.priority);
@@ -435,6 +679,7 @@ export function createTask(input: {
   assigneeId?: string;
   status?: ApiTask["status"];
   priority?: string;
+  type?: string;
   dueDate?: string;
 }) {
   return apiRequest<ApiTask>("/tasks", {
@@ -455,6 +700,7 @@ export function createProjectTask(
     assigneeId?: string;
     status?: ApiTask["status"];
     priority?: string;
+    type?: string;
     startDate?: string;
     dueDate?: string;
   },
@@ -474,6 +720,7 @@ export function updateProjectTask(
     assigneeId?: string;
     status?: ApiTask["status"];
     priority?: string;
+    type?: string;
     startDate?: string;
     dueDate?: string;
   },
@@ -510,6 +757,13 @@ export function createRaidItem(input: {
   validationNotes?: string;
   dependsOn?: string;
   dueDate?: string;
+  sourceTaskId?: string;
+  targetTaskId?: string;
+  dependencyType?:
+    | "finish_to_start"
+    | "start_to_start"
+    | "finish_to_finish"
+    | "start_to_finish";
 }) {
   return apiRequest<ApiRaidItem>("/raid", {
     method: "POST",

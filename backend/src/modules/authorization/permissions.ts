@@ -1,0 +1,29 @@
+export const PermissionKey = {
+  DashboardReadSelf: 'dashboard:read:self',
+  ExecutiveSummaryRead: 'executive:summary:read',
+  PortfolioSummaryRead: 'portfolio:summary:read',
+  ProjectsReadAll: 'projects:read:all',
+  ProjectsReadAssigned: 'projects:read:assigned',
+  ProjectsCreate: 'projects:create',
+  ProjectsUpdate: 'projects:update',
+  ProjectsDelete: 'projects:delete',
+  ProjectMembersRead: 'project-members:read',
+  ProjectMembersManage: 'project-members:manage',
+  ProjectTasksRead: 'project-tasks:read',
+  ProjectTasksCreate: 'project-tasks:create',
+  ProjectTasksUpdateAny: 'project-tasks:update:any',
+  ProjectTasksUpdateOwn: 'project-tasks:update:own',
+  ProjectTasksDelete: 'project-tasks:delete',
+  RaidReadAll: 'raid:read:all',
+  RaidReadAssigned: 'raid:read:assigned',
+  RaidCreate: 'raid:create',
+  RaidUpdateAny: 'raid:update:any',
+  RaidUpdateOwn: 'raid:update:own',
+  RaidDelete: 'raid:delete',
+  UsersRead: 'users:read',
+  UsersManage: 'users:manage',
+  RolesManage: 'roles:manage',
+} as const;
+
+export type PermissionKey = (typeof PermissionKey)[keyof typeof PermissionKey];
+

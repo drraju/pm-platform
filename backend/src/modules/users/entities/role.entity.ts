@@ -11,6 +11,9 @@ export class Role extends AuditableEntity {
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
+  @Column({ default: 'active' })
+  status: string;
+
   @OneToMany(() => User, (user) => user.role)
   users: User[];
 

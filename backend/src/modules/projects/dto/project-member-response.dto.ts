@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
+import { ProjectVisibilityLevel } from '../../../common/enums/project-visibility-level.enum';
 
 class ProjectMemberUserDto {
   @ApiProperty({ format: 'uuid' })
@@ -27,6 +28,9 @@ export class ProjectMemberResponseDto {
 
   @ApiProperty({ enum: ProjectRole })
   role: ProjectRole;
+
+  @ApiProperty({ enum: ProjectVisibilityLevel })
+  visibilityLevel: ProjectVisibilityLevel;
 
   @ApiPropertyOptional({ type: ProjectMemberUserDto })
   user?: ProjectMemberUserDto | null;

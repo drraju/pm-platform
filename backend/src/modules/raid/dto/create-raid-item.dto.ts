@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { DependencyType } from '../../../common/enums/dependency-type.enum';
 import { RaidType } from '../../../common/enums/raid-type.enum';
 
 export class CreateRaidItemDto {
@@ -74,4 +75,23 @@ export class CreateRaidItemDto {
   @IsOptional()
   @IsDateString()
   dueDate?: string | null;
+
+  @ApiProperty({ format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
+  sourceTaskId?: string | null;
+
+  @ApiProperty({ format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
+  targetTaskId?: string | null;
+
+  @ApiProperty({
+    enum: DependencyType,
+    default: DependencyType.FinishToStart,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(DependencyType)
+  dependencyType?: DependencyType;
 }

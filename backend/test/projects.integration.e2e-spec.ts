@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
+import { AuthorizationService } from '../src/modules/authorization/authorization.service';
 import { ProjectHealthService } from '../src/modules/health/project-health.service';
 import { ProjectMember } from '../src/modules/projects/entities/project-member.entity';
 import { Project } from '../src/modules/projects/entities/project.entity';
@@ -42,6 +43,14 @@ describe('Projects API integration', () => {
       find: jest.fn().mockResolvedValue([project]),
       findOne: jest.fn().mockResolvedValue(project),
     };
+    const authorizationService = {
+      getAccessibleProjectIds: jest.fn().mockResolvedValue(null),
+      getEffectiveUser: jest.fn().mockResolvedValue({
+        permissions: ['projects:read:all'],
+        userId: 'user-1',
+      }),
+      isExternalUser: jest.fn().mockReturnValue(false),
+    };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [ProjectsController],
@@ -52,6 +61,7 @@ describe('Projects API integration', () => {
         { provide: getRepositoryToken(ProjectMember), useValue: {} },
         { provide: getRepositoryToken(Task), useValue: {} },
         { provide: getRepositoryToken(User), useValue: {} },
+        { provide: AuthorizationService, useValue: authorizationService },
       ],
     }).compile();
 
@@ -63,7 +73,13 @@ describe('Projects API integration', () => {
   });
 
   it('returns project list items with calculated health', async () => {
-    const response = await controller.findAll();
+    const response = await controller.findAll({
+      user: {
+        email: 'program.manager@example.com',
+        roleId: 'role-1',
+        userId: 'user-1',
+      },
+    } as never);
 
     expect(response).toEqual([
       expect.objectContaining({
@@ -77,7 +93,16 @@ describe('Projects API integration', () => {
   });
 
   it('returns project workspace details with health and existing RAID records', async () => {
-    const response = await controller.findOne('project-1');
+    const response = await controller.findOne(
+      {
+        user: {
+          email: 'program.manager@example.com',
+          roleId: 'role-1',
+          userId: 'user-1',
+        },
+      } as never,
+      'project-1',
+    );
 
     expect(response).toEqual(
       expect.objectContaining({

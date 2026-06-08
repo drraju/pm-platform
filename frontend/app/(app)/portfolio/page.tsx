@@ -9,6 +9,7 @@ import {
   ProjectHealthBadge,
   ProjectHealthReasons,
 } from "@/components/projects/project-health-badge";
+import { useAuthorization } from "@/features/auth";
 import {
   getPortfolioSummary,
   type ApiPortfolioOverdueTasks,
@@ -19,12 +20,21 @@ import {
 } from "@/features/portfolio";
 
 export default function PortfolioPage() {
+  const authorization = useAuthorization(["portfolio:summary:read"]);
   const [summary, setSummary] = useState<ApiPortfolioSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadPortfolioSummary() {
+      if (authorization.isLoading) {
+        return;
+      }
+      if (!authorization.isAuthorized) {
+        setIsLoading(false);
+        return;
+      }
+
       setError(null);
       setIsLoading(true);
       try {
@@ -41,7 +51,7 @@ export default function PortfolioPage() {
     }
 
     void loadPortfolioSummary();
-  }, []);
+  }, [authorization.isAuthorized, authorization.isLoading]);
 
   return (
     <div className="space-y-6">
@@ -51,15 +61,24 @@ export default function PortfolioPage() {
         title="Portfolio"
       />
 
-      {isLoading ? <PortfolioLoadingState /> : null}
+      {authorization.isLoading || isLoading ? <PortfolioLoadingState /> : null}
 
-      {!isLoading && error ? (
+      {!authorization.isLoading && !authorization.isAuthorized ? (
+        <AuthorizationError
+          message={
+            authorization.error ??
+            "You do not have permission to view the Portfolio Dashboard."
+          }
+        />
+      ) : null}
+
+      {!authorization.isLoading && authorization.isAuthorized && !isLoading && error ? (
         <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </section>
       ) : null}
 
-      {!isLoading && !error && summary ? (
+      {!authorization.isLoading && authorization.isAuthorized && !isLoading && !error && summary ? (
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard label="Total Projects" value={summary.totalProjects} />
@@ -108,6 +127,15 @@ export default function PortfolioPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+function AuthorizationError({ message }: { message: string }) {
+  return (
+    <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+      <h2 className="font-semibold">Access denied</h2>
+      <p className="mt-1">{message}</p>
+    </section>
   );
 }
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthorizationModule } from '../authorization/authorization.module';
 import { HealthModule } from '../health/health.module';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import { Project } from '../projects/entities/project.entity';
@@ -11,6 +12,7 @@ import { DashboardService } from './dashboard.service';
 
 @Module({
   imports: [
+    AuthorizationModule,
     HealthModule,
     TypeOrmModule.forFeature([Project, ProjectMember, Task, Risk, Issue]),
   ],

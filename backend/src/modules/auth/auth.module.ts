@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthorizationModule } from '../authorization/authorization.module';
 import { UsersModule } from '../users/users.module';
 import { Role } from '../users/entities/role.entity';
 import { AuthController } from './auth.controller';
@@ -15,6 +16,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       secret: process.env.JWT_SECRET ?? 'development-jwt-secret',
       signOptions: { expiresIn: '1h' },
     }),
+    AuthorizationModule,
     TypeOrmModule.forFeature([Role]),
     UsersModule,
   ],

@@ -1,5 +1,9 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
+import { AddDependencyTimelineColumns1780848001000 } from './migrations/1780848001000-AddDependencyTimelineColumns';
+import { AddProjectMemberVisibilityLevel1780848002000 } from './migrations/1780848002000-AddProjectMemberVisibilityLevel';
+import { AddAdministrationMetadata1780848003000 } from './migrations/1780848003000-AddAdministrationMetadata';
+import { AddTaskTypeColumn1780848000000 } from './migrations/1780848000000-AddTaskTypeColumn';
 import { Notification } from '../modules/notifications/entities/notification.entity';
 import { ProjectMember } from '../modules/projects/entities/project-member.entity';
 import { Project } from '../modules/projects/entities/project.entity';
@@ -28,6 +32,13 @@ export const databaseEntities: Function[] = [
   Notification,
 ];
 
+export const databaseMigrations: Function[] = [
+  AddTaskTypeColumn1780848000000,
+  AddDependencyTimelineColumns1780848001000,
+  AddProjectMemberVisibilityLevel1780848002000,
+  AddAdministrationMetadata1780848003000,
+];
+
 const databaseConnectionOptions = {
   type: 'postgres' as const,
   host: process.env.POSTGRES_HOST ?? 'localhost',
@@ -40,6 +51,7 @@ const databaseConnectionOptions = {
 export const createTypeOrmOptions = (): TypeOrmModuleOptions => ({
   ...databaseConnectionOptions,
   entities: databaseEntities,
+  migrations: databaseMigrations,
   autoLoadEntities: true,
   synchronize: false,
 });
@@ -47,6 +59,7 @@ export const createTypeOrmOptions = (): TypeOrmModuleOptions => ({
 export const createDataSourceOptions = (): DataSourceOptions => ({
   ...databaseConnectionOptions,
   entities: databaseEntities,
+  migrations: databaseMigrations,
   synchronize: false,
 });
 

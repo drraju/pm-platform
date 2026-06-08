@@ -4,6 +4,8 @@ import {
   createProjectTask,
   createProject,
   deleteProject,
+  getAuthProfile,
+  getExecutiveSummary,
   getMyTasks,
   getPortfolioSummary,
   getProject,
@@ -11,6 +13,7 @@ import {
   getProjectDependencies,
   getProjectIssues,
   getProjectRisks,
+  getProjectTimeline,
   getProjects,
   removeProjectMember,
   updateProject,
@@ -50,6 +53,31 @@ describe("project API client", () => {
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects",
+      expect.objectContaining({
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+
+  it("loads the authenticated authorization profile", async () => {
+    const fetchMock = mockFetch({
+      userId: "user-1",
+      email: "project.manager@example.com",
+      roleId: "role-1",
+      roleName: "Project Manager",
+      permissions: ["dashboard:read:self", "projects:read:assigned"],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getAuthProfile()).resolves.toEqual({
+      userId: "user-1",
+      email: "project.manager@example.com",
+      roleId: "role-1",
+      roleName: "Project Manager",
+      permissions: ["dashboard:read:self", "projects:read:assigned"],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/me",
       expect.objectContaining({
         headers: { "Content-Type": "application/json" },
       }),
@@ -157,6 +185,65 @@ describe("project API client", () => {
     );
   });
 
+  it("loads executive summary", async () => {
+    const fetchMock = mockFetch({
+      portfolioHealth: {
+        totalProjects: 4,
+        greenProjects: 2,
+        amberProjects: 1,
+        redProjects: 1,
+      },
+      delivery: {
+        overdueTasks: 7,
+        upcomingMilestones: 3,
+      },
+      governance: {
+        openRisks: 5,
+        openIssues: 2,
+      },
+      projectsRequiringAttention: [
+        {
+          id: "project-1",
+          name: "Customer Experience Platform Upgrade",
+          healthStatus: "RED",
+          reasons: ["1 critical issue open"],
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getExecutiveSummary()).resolves.toEqual({
+      portfolioHealth: {
+        totalProjects: 4,
+        greenProjects: 2,
+        amberProjects: 1,
+        redProjects: 1,
+      },
+      delivery: {
+        overdueTasks: 7,
+        upcomingMilestones: 3,
+      },
+      governance: {
+        openRisks: 5,
+        openIssues: 2,
+      },
+      projectsRequiringAttention: [
+        {
+          id: "project-1",
+          name: "Customer Experience Platform Upgrade",
+          healthStatus: "RED",
+          reasons: ["1 critical issue open"],
+        },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/executive/summary",
+      expect.objectContaining({
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+
   it("loads project details", async () => {
     const fetchMock = mockFetch({ id: "project-1", name: "ERP", tasks: [] });
     vi.stubGlobal("fetch", fetchMock);
@@ -197,6 +284,45 @@ describe("project API client", () => {
     await getProjectDependencies("project-1");
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://localhost:3001/projects/project-1/dependencies",
+      expect.any(Object),
+    );
+  });
+
+  it("loads project timeline foundation data", async () => {
+    const timeline = {
+      projectId: "project-1",
+      projectName: "Customer Experience Platform Upgrade",
+      tasks: [
+        {
+          id: "task-1",
+          title: "Complete design",
+          status: "in_progress",
+          startDate: "2026-06-10",
+          dueDate: "2026-06-20",
+          assignee: "Marcus Shah",
+        },
+      ],
+      milestones: [
+        {
+          id: "task-2",
+          title: "Readiness checkpoint",
+          targetDate: "2026-06-30",
+        },
+      ],
+      dependencies: [
+        {
+          sourceTaskId: "task-1",
+          targetTaskId: "task-2",
+          type: "finish_to_start",
+        },
+      ],
+    };
+    const fetchMock = mockFetch(timeline);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getProjectTimeline("project-1")).resolves.toEqual(timeline);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/timeline",
       expect.any(Object),
     );
   });

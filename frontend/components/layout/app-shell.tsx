@@ -3,23 +3,62 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearSession } from "@/features/auth";
+import { clearSession, useAuthorization } from "@/features/auth";
 
-const navigation = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Portfolio", href: "/portfolio" },
-  { label: "Projects", href: "/projects" },
-  { label: "My Tasks", href: "/tasks" },
-  { label: "Risks", href: "/risks" },
-  { label: "Issues", href: "/issues" },
-  { label: "Notifications", href: "/notifications" },
+const navigationItems = [
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+    permissions: ["dashboard:read:self"],
+  },
+  {
+    label: "Executive",
+    href: "/executive",
+    permissions: ["executive:summary:read"],
+  },
+  {
+    label: "Portfolio",
+    href: "/portfolio",
+    permissions: ["portfolio:summary:read"],
+  },
+  {
+    label: "Projects",
+    href: "/projects",
+    permissions: ["projects:read:all", "projects:read:assigned"],
+  },
+  { label: "My Tasks", href: "/tasks", permissions: ["dashboard:read:self"] },
+  {
+    label: "Risks",
+    href: "/risks",
+    permissions: ["raid:read:all", "raid:read:assigned"],
+  },
+  {
+    label: "Issues",
+    href: "/issues",
+    permissions: ["raid:read:all", "raid:read:assigned"],
+  },
+  {
+    label: "Notifications",
+    href: "/notifications",
+    permissions: ["dashboard:read:self"],
+  },
+  {
+    label: "Admin",
+    href: "/admin",
+    permissions: ["users:manage", "roles:manage"],
+  },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { hasAnyPermission, isLoading: isLoadingAuthorization } =
+    useAuthorization();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const visibleNavigation = isLoadingAuthorization
+    ? navigationItems.filter((item) => item.href === "/dashboard")
+    : navigationItems.filter((item) => hasAnyPermission(item.permissions));
 
   function handleLogout() {
     clearSession();
@@ -30,6 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-surface text-ink">
       <DesktopSidebar
         isCollapsed={isSidebarCollapsed}
+        navigation={visibleNavigation}
         onToggle={() => setIsSidebarCollapsed((value) => !value)}
         pathname={pathname}
       />
@@ -43,6 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
           />
           <MobileSidebar
+            navigation={visibleNavigation}
             onNavigate={() => setIsMobileDrawerOpen(false)}
             pathname={pathname}
           />
@@ -104,10 +145,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function DesktopSidebar({
   isCollapsed,
+  navigation,
   onToggle,
   pathname,
 }: {
   isCollapsed: boolean;
+  navigation: typeof navigationItems;
   onToggle: () => void;
   pathname: string;
 }) {
@@ -142,15 +185,21 @@ function DesktopSidebar({
         </button>
       </div>
 
-      <NavigationLinks isCollapsed={isCollapsed} pathname={pathname} />
+      <NavigationLinks
+        isCollapsed={isCollapsed}
+        navigation={navigation}
+        pathname={pathname}
+      />
     </aside>
   );
 }
 
 function MobileSidebar({
+  navigation,
   onNavigate,
   pathname,
 }: {
+  navigation: typeof navigationItems;
   onNavigate: () => void;
   pathname: string;
 }) {
@@ -175,17 +224,23 @@ function MobileSidebar({
         </button>
       </div>
 
-      <NavigationLinks onNavigate={onNavigate} pathname={pathname} />
+      <NavigationLinks
+        navigation={navigation}
+        onNavigate={onNavigate}
+        pathname={pathname}
+      />
     </aside>
   );
 }
 
 function NavigationLinks({
   isCollapsed = false,
+  navigation,
   onNavigate,
   pathname,
 }: {
   isCollapsed?: boolean;
+  navigation: typeof navigationItems;
   onNavigate?: () => void;
   pathname: string;
 }) {
