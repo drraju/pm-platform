@@ -32,3 +32,4 @@ yarn-error.log*
 *.pid
 *.seed
 *.pid.lock
+backups/
