@@ -15,6 +15,7 @@ import { RaidModule } from './modules/raid/raid.module';
 import { RisksModule } from './modules/risks/risks.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
+import { PortfolioModule } from './modules/portfolio/portfolio.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UsersModule } from './modules/users/users.module';
     RisksModule,
     RaidModule,
     DashboardModule,
+    PortfolioModule,
     NotificationsModule,
     SlackModule,
     GoogleDriveModule,
