@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { TaskTable } from "@/components/tasks/task-table";
-import { getProjects, type ApiProject } from "@/features/projects";
-import { getMyTasks, type ApiTask } from "@/features/tasks";
+import {
+  getProjectMembers,
+  getProjects,
+  type ApiProject,
+  type ApiProjectMember,
+} from "@/features/projects";
+import { getMyTasks, updateTask, type ApiTask } from "@/features/tasks";
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
   { label: "Backlog", value: "backlog" },
@@ -17,8 +22,12 @@ const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
 export default function TasksPage() {
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [projects, setProjects] = useState<ApiProject[]>([]);
+  const [membersByProjectId, setMembersByProjectId] = useState<
+    Record<string, ApiProjectMember[]>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingTaskId, setIsSavingTaskId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | ApiTask["status"]>(
     "all",
@@ -33,8 +42,18 @@ export default function TasksPage() {
         getMyTasks(),
         getProjects(),
       ]);
+      const uniqueProjectIds = Array.from(
+        new Set(taskData.map((task) => task.projectId)),
+      );
+      const memberEntries = await Promise.all(
+        uniqueProjectIds.map(async (projectId) => [
+          projectId,
+          await getProjectMembers(projectId),
+        ] as const),
+      );
       setTasks(taskData);
       setProjects(projectData);
+      setMembersByProjectId(Object.fromEntries(memberEntries));
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -49,6 +68,41 @@ export default function TasksPage() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  async function handleUpdateTask(
+    taskId: string,
+    input: {
+      assigneeId?: string;
+      percentComplete?: number;
+      remarks?: string;
+      status?: ApiTask["status"];
+    },
+  ) {
+    setError(null);
+    setIsSavingTaskId(taskId);
+    try {
+      const updatedTask = await updateTask(taskId, input);
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                ...updatedTask,
+                project: updatedTask.project ?? task.project,
+              }
+            : task,
+        ),
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update task",
+      );
+    } finally {
+      setIsSavingTaskId(null);
+    }
+  }
 
   const visibleTasks = useMemo(() => {
     return tasks
@@ -149,6 +203,9 @@ export default function TasksPage() {
             : "No tasks match the current filters."
         }
         isLoading={isLoading}
+        isSavingTaskId={isSavingTaskId}
+        membersByProjectId={membersByProjectId}
+        onUpdateTask={handleUpdateTask}
         tasks={visibleTasks}
       />
     </div>

@@ -12,6 +12,7 @@ export {
   getProjectRisks,
   getProjectTasks,
   getProjects,
+  getUsers,
   removeProjectMember,
   updateProject,
   updateProjectMember,

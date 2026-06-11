@@ -11,6 +11,7 @@ import ProjectsPage from "@/app/(app)/projects/page";
 import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
 
 const projectMocks = vi.hoisted(() => ({
+  addProjectMember: vi.fn(),
   getProject: vi.fn(async (projectId: string) => ({
     assumptions: [
       {
@@ -77,6 +78,9 @@ const projectMocks = vi.hoisted(() => ({
       status: "active",
     },
   ]),
+  getUsers: vi.fn(async () => []),
+  removeProjectMember: vi.fn(),
+  updateProjectMember: vi.fn(),
 }));
 
 const navigationMocks = vi.hoisted(() => ({
@@ -122,9 +126,13 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/features/projects", () => ({
+  addProjectMember: projectMocks.addProjectMember,
   createProject: vi.fn(),
   getProject: projectMocks.getProject,
   getProjects: projectMocks.getProjects,
+  getUsers: projectMocks.getUsers,
+  removeProjectMember: projectMocks.removeProjectMember,
+  updateProjectMember: projectMocks.updateProjectMember,
 }));
 
 vi.mock("@/features/users", () => ({

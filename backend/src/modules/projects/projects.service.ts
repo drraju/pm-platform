@@ -1,9 +1,11 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { FindOptionsWhere } from 'typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../common/enums/project-role.enum';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
@@ -26,6 +28,20 @@ import { ProjectMember } from './entities/project-member.entity';
 import { Project } from './entities/project.entity';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
+type AuthenticatedActor = {
+  userId: string;
+  email: string;
+  roleId: string;
+};
+
+const managerRoleNames = new Set(['Program Manager', 'Project Manager']);
+const projectManagerRoles = new Set([ProjectRole.Owner, ProjectRole.Manager]);
+const teamMemberEditableTaskFields = new Set([
+  'assigneeId',
+  'remarks',
+  'percentComplete',
+  'status',
+]);
 
 @Injectable()
 export class ProjectsService {
@@ -93,8 +109,10 @@ export class ProjectsService {
   async addMember(
     projectId: string,
     createProjectMemberDto: CreateProjectMemberDto,
+    actor?: AuthenticatedActor,
   ): Promise<ProjectMemberResponseDto> {
     await this.ensureProjectExists(projectId);
+    await this.ensureCanManageProject(projectId, actor);
     await this.ensureUserExists(createProjectMemberDto.userId);
 
     const existingMember = await this.projectMembersRepository.findOne({
@@ -131,24 +149,29 @@ export class ProjectsService {
 
   async updateMember(
     projectId: string,
-    userId: string,
+    memberId: string,
     updateProjectMemberDto: UpdateProjectMemberDto,
+    actor?: AuthenticatedActor,
   ): Promise<ProjectMemberResponseDto> {
     await this.ensureProjectExists(projectId);
-    await this.ensureUserExists(userId);
+    await this.ensureCanManageProject(projectId, actor);
 
-    const member = await this.findMember(projectId, userId);
+    const member = await this.findMember(projectId, memberId);
     member.role = updateProjectMemberDto.role;
 
     const savedMember = await this.projectMembersRepository.save(member);
     return this.toProjectMemberResponse(savedMember);
   }
 
-  async removeMember(projectId: string, userId: string): Promise<void> {
+  async removeMember(
+    projectId: string,
+    memberId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
     await this.ensureProjectExists(projectId);
-    await this.ensureUserExists(userId);
+    await this.ensureCanManageProject(projectId, actor);
 
-    const member = await this.findMember(projectId, userId);
+    const member = await this.findMember(projectId, memberId);
     await this.projectMembersRepository.softRemove(member);
   }
 
@@ -173,8 +196,10 @@ export class ProjectsService {
   async createProjectTask(
     projectId: string,
     createProjectTaskDto: CreateProjectTaskDto,
+    actor?: AuthenticatedActor,
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
+    await this.ensureCanManageProject(projectId, actor);
     await this.validateAssigneeMembership(projectId, createProjectTaskDto.assigneeId);
 
     const task = this.tasksRepository.create({
@@ -189,18 +214,24 @@ export class ProjectsService {
     projectId: string,
     taskId: string,
     updateProjectTaskDto: UpdateProjectTaskDto,
+    actor?: AuthenticatedActor,
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
-    await this.validateAssigneeMembership(projectId, updateProjectTaskDto.assigneeId);
-
     const task = await this.findProjectTask(projectId, taskId);
+    await this.ensureCanUpdateTask(task, updateProjectTaskDto, actor);
+    await this.validateAssigneeMembership(projectId, updateProjectTaskDto.assigneeId);
     Object.assign(task, updateProjectTaskDto, { projectId });
 
     return this.tasksRepository.save(task);
   }
 
-  async removeProjectTask(projectId: string, taskId: string): Promise<void> {
+  async removeProjectTask(
+    projectId: string,
+    taskId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
     await this.ensureProjectExists(projectId);
+    await this.ensureCanManageProject(projectId, actor);
 
     const task = await this.findProjectTask(projectId, taskId);
     await this.tasksRepository.softRemove(task);
@@ -268,15 +299,18 @@ export class ProjectsService {
 
   private async findMember(
     projectId: string,
-    userId: string,
+    memberIdOrUserId: string,
   ): Promise<ProjectMember> {
     const member = await this.projectMembersRepository.findOne({
       relations: { user: true },
-      where: { projectId, userId },
+      where: [
+        { id: memberIdOrUserId, projectId },
+        { projectId, userId: memberIdOrUserId },
+      ],
     });
     if (!member) {
       throw new NotFoundException(
-        `Project member ${userId} not found for project ${projectId}`,
+        `Project member ${memberIdOrUserId} not found for project ${projectId}`,
       );
     }
 
@@ -317,6 +351,79 @@ export class ProjectsService {
     if (!membership) {
       throw new ConflictException('Assignee must be a project member');
     }
+  }
+
+  private async ensureCanManageProject(
+    projectId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
+    if (!actor) {
+      return;
+    }
+
+    if (await this.isProgramOrProjectManager(actor.roleId)) {
+      return;
+    }
+
+    const membership = await this.projectMembersRepository.findOne({
+      select: { id: true, role: true },
+      where: { projectId, userId: actor.userId },
+    });
+    if (membership && projectManagerRoles.has(membership.role)) {
+      return;
+    }
+
+    throw new ForbiddenException('Project manager access is required');
+  }
+
+  private async ensureCanUpdateTask(
+    task: Task,
+    updateProjectTaskDto: UpdateProjectTaskDto,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
+    if (!actor) {
+      return;
+    }
+
+    if (await this.canManageTask(task.projectId, actor)) {
+      return;
+    }
+
+    if (task.assigneeId !== actor.userId) {
+      throw new ForbiddenException('Only assigned team members can update this task');
+    }
+
+    const disallowedFields = Object.keys(updateProjectTaskDto).filter(
+      (field) => !teamMemberEditableTaskFields.has(field),
+    );
+    if (disallowedFields.length > 0) {
+      throw new ForbiddenException(
+        'Team members can only update status, remarks, percent complete, or assignee',
+      );
+    }
+  }
+
+  private async canManageTask(
+    projectId: string,
+    actor: AuthenticatedActor,
+  ): Promise<boolean> {
+    try {
+      await this.ensureCanManageProject(projectId, actor);
+      return true;
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private async isProgramOrProjectManager(roleId: string): Promise<boolean> {
+    const user = await this.usersRepository.findOne({
+      relations: { role: true },
+      where: { roleId } as FindOptionsWhere<User>,
+    });
+    return user?.role?.name ? managerRoleNames.has(user.role.name) : false;
   }
 
   private toProjectMemberResponse(

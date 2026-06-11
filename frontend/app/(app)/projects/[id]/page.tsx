@@ -17,24 +17,36 @@ import { ProjectWorkspaceSummary } from "@/components/projects/project-workspace
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 import {
+  addProjectMember,
   getProject,
+  getUsers,
+  removeProjectMember,
+  updateProjectMember,
   type ApiProjectDetails,
+  type ApiProjectMember,
 } from "@/features/projects";
+import type { ApiUser } from "@/lib/api/client";
 
 export default function ProjectWorkspacePage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
+  const [users, setUsers] = useState<ApiUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingTeam, setIsSavingTeam] = useState(false);
 
   useEffect(() => {
     async function loadProject() {
       setError(null);
       setIsLoading(true);
       try {
-        const projectDetails = await getProject(projectId);
+        const [projectDetails, userData] = await Promise.all([
+          getProject(projectId),
+          getUsers(),
+        ]);
         setProject(projectDetails);
+        setUsers(userData);
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -48,6 +60,78 @@ export default function ProjectWorkspacePage() {
 
     void loadProject();
   }, [projectId]);
+
+  async function handleAddMember(input: { role: string; userId: string }) {
+    setError(null);
+    setIsSavingTeam(true);
+    try {
+      const member = await addProjectMember(projectId, input);
+      setProject((currentProject) =>
+        currentProject
+          ? {
+              ...currentProject,
+              members: [...(currentProject.members ?? []), member],
+            }
+          : currentProject,
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to add member",
+      );
+    } finally {
+      setIsSavingTeam(false);
+    }
+  }
+
+  async function handleUpdateMember(
+    memberId: string,
+    input: { role: string },
+  ) {
+    setError(null);
+    setIsSavingTeam(true);
+    try {
+      const updatedMember = await updateProjectMember(projectId, memberId, input);
+      setProject((currentProject) =>
+        replaceMember(currentProject, updatedMember),
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update member",
+      );
+    } finally {
+      setIsSavingTeam(false);
+    }
+  }
+
+  async function handleRemoveMember(memberId: string) {
+    setError(null);
+    setIsSavingTeam(true);
+    try {
+      await removeProjectMember(projectId, memberId);
+      setProject((currentProject) =>
+        currentProject
+          ? {
+              ...currentProject,
+              members: (currentProject.members ?? []).filter(
+                (member) => member.id !== memberId,
+              ),
+            }
+          : currentProject,
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to remove member",
+      );
+    } finally {
+      setIsSavingTeam(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -107,7 +191,14 @@ export default function ProjectWorkspacePage() {
       <ProjectWorkspaceSummary tasks={tasks} />
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <ProjectWorkspaceTeam members={members} />
+        <ProjectWorkspaceTeam
+          availableUsers={users}
+          isSaving={isSavingTeam}
+          members={members}
+          onAddMember={handleAddMember}
+          onRemoveMember={handleRemoveMember}
+          onUpdateMember={handleUpdateMember}
+        />
         <ProjectWorkspaceTasks tasks={tasks} />
       </section>
 
@@ -189,6 +280,22 @@ export default function ProjectWorkspacePage() {
       </section>
     </div>
   );
+}
+
+function replaceMember(
+  project: ApiProjectDetails | null,
+  updatedMember: ApiProjectMember,
+) {
+  if (!project) {
+    return project;
+  }
+
+  return {
+    ...project,
+    members: (project.members ?? []).map((member) =>
+      member.id === updatedMember.id ? updatedMember : member,
+    ),
+  };
 }
 
 function ProjectWorkspaceLoadingState() {

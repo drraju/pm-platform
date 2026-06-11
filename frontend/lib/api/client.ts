@@ -55,7 +55,14 @@ export type ApiTask = {
   assigneeId?: string | null;
   status: "backlog" | "todo" | "in_progress" | "blocked" | "done";
   priority: string;
+  remarks?: string | null;
+  percentComplete?: number;
+  startDate?: string | null;
   dueDate?: string | null;
+  plannedStartDate?: string | null;
+  plannedEndDate?: string | null;
+  actualStartDate?: string | null;
+  actualEndDate?: string | null;
   project?: ApiProject | null;
   assignee?: ApiUser | null;
 };
@@ -435,10 +442,42 @@ export function createTask(input: {
   assigneeId?: string;
   status?: ApiTask["status"];
   priority?: string;
+  remarks?: string;
+  percentComplete?: number;
+  startDate?: string;
   dueDate?: string;
+  plannedStartDate?: string;
+  plannedEndDate?: string;
+  actualStartDate?: string;
+  actualEndDate?: string;
 }) {
   return apiRequest<ApiTask>("/tasks", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateTask(
+  taskId: string,
+  input: {
+    projectId?: string;
+    title?: string;
+    description?: string;
+    assigneeId?: string;
+    status?: ApiTask["status"];
+    priority?: string;
+    remarks?: string;
+    percentComplete?: number;
+    startDate?: string;
+    dueDate?: string;
+    plannedStartDate?: string;
+    plannedEndDate?: string;
+    actualStartDate?: string;
+    actualEndDate?: string;
+  },
+) {
+  return apiRequest<ApiTask>(`/tasks/${taskId}`, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }
@@ -455,8 +494,14 @@ export function createProjectTask(
     assigneeId?: string;
     status?: ApiTask["status"];
     priority?: string;
+    remarks?: string;
+    percentComplete?: number;
     startDate?: string;
     dueDate?: string;
+    plannedStartDate?: string;
+    plannedEndDate?: string;
+    actualStartDate?: string;
+    actualEndDate?: string;
   },
 ) {
   return apiRequest<ApiTask>(`/projects/${projectId}/tasks`, {
@@ -474,8 +519,14 @@ export function updateProjectTask(
     assigneeId?: string;
     status?: ApiTask["status"];
     priority?: string;
+    remarks?: string;
+    percentComplete?: number;
     startDate?: string;
     dueDate?: string;
+    plannedStartDate?: string;
+    plannedEndDate?: string;
+    actualStartDate?: string;
+    actualEndDate?: string;
   },
 ) {
   return apiRequest<ApiTask>(`/projects/${projectId}/tasks/${taskId}`, {

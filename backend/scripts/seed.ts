@@ -13,9 +13,11 @@ import { Dependency } from '../src/modules/raid/entities/dependency.entity';
 import { Issue } from '../src/modules/raid/entities/issue.entity';
 import { Risk } from '../src/modules/raid/entities/risk.entity';
 import { Task } from '../src/modules/tasks/entities/task.entity';
+import { Permission } from '../src/modules/users/entities/permission.entity';
 import { Role } from '../src/modules/users/entities/role.entity';
 import { RolePermission } from '../src/modules/users/entities/role-permission.entity';
 import { User } from '../src/modules/users/entities/user.entity';
+import { PermissionKey } from '../src/common/authz/permissions';
 
 const seedNamespace = 'pm-platform-dev-seed-v2';
 export const defaultPassword = 'Password123!';
@@ -76,6 +78,75 @@ const users = [
     roleName: 'QA Engineer',
   },
 ];
+
+const permissions = [
+  {
+    key: PermissionKey.ProjectTeamManage,
+    description: 'Manage project team membership',
+  },
+  {
+    key: PermissionKey.TaskCreate,
+    description: 'Create project tasks',
+  },
+  {
+    key: PermissionKey.TaskUpdate,
+    description: 'Update project tasks',
+  },
+  {
+    key: PermissionKey.TaskDelete,
+    description: 'Delete project tasks',
+  },
+  {
+    key: PermissionKey.TaskReassign,
+    description: 'Reassign project tasks',
+  },
+  {
+    key: PermissionKey.TaskComment,
+    description: 'Update task remarks',
+  },
+] as const;
+
+const permissionsByRoleName: Record<string, PermissionKey[]> = {
+  'Program Manager': [
+    PermissionKey.ProjectTeamManage,
+    PermissionKey.TaskCreate,
+    PermissionKey.TaskUpdate,
+    PermissionKey.TaskDelete,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskComment,
+  ],
+  'Project Manager': [
+    PermissionKey.ProjectTeamManage,
+    PermissionKey.TaskCreate,
+    PermissionKey.TaskUpdate,
+    PermissionKey.TaskDelete,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskComment,
+  ],
+  'Delivery Lead': [
+    PermissionKey.ProjectTeamManage,
+    PermissionKey.TaskCreate,
+    PermissionKey.TaskUpdate,
+    PermissionKey.TaskDelete,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskComment,
+  ],
+  'Technical Lead': [
+    PermissionKey.TaskUpdate,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskComment,
+  ],
+  Engineer: [
+    PermissionKey.TaskUpdate,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskComment,
+  ],
+  'QA Engineer': [
+    PermissionKey.TaskUpdate,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskComment,
+  ],
+};
 
 const projects = [
   {
@@ -230,6 +301,8 @@ export const developmentSeedData = {
   dependencyTitles,
   issueTitles,
   memberships,
+  permissions,
+  permissionsByRoleName,
   projects,
   requiredEntityNames,
   riskTitles,
@@ -258,6 +331,9 @@ async function resetSeedData(dataSource: DataSource) {
     await manager
       .getRepository(RolePermission)
       .delete({ roleId: In(users.map((user) => seedUuid(`role-${user.roleName}`))) });
+    await manager
+      .getRepository(Permission)
+      .delete({ id: In(permissions.map((permission) => seedUuid(`permission-${permission.key}`))) });
     await manager.getRepository(User).delete({ id: In(users.map((user) => user.id)) });
     await manager
       .getRepository(Role)
@@ -267,6 +343,8 @@ async function resetSeedData(dataSource: DataSource) {
 
 async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
   const roleRepository = dataSource.getRepository(Role);
+  const permissionRepository = dataSource.getRepository(Permission);
+  const rolePermissionRepository = dataSource.getRepository(RolePermission);
   const userRepository = dataSource.getRepository(User);
   const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
@@ -286,6 +364,38 @@ async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
     );
   }
   const rolesByName = new Map(roles.map((role) => [role.name, role]));
+
+  const savedPermissions = await saveEntities(
+    permissionRepository,
+    permissions.map((permission) =>
+      permissionRepository.create({
+        id: seedUuid(`permission-${permission.key}`),
+        key: permission.key,
+        description: permission.description,
+        deletedAt: null,
+      }),
+    ),
+  );
+  const permissionsByKey = new Map(
+    savedPermissions.map((permission) => [permission.key, permission]),
+  );
+
+  await saveEntities(
+    rolePermissionRepository,
+    Object.entries(permissionsByRoleName).flatMap(([roleName, permissionKeys]) => {
+      const role = rolesByName.get(roleName);
+      if (!role) {
+        return [];
+      }
+
+      return permissionKeys.map((permissionKey) =>
+        rolePermissionRepository.create({
+          roleId: role.id,
+          permissionId: permissionsByKey.get(permissionKey)?.id,
+        }),
+      );
+    }),
+  );
 
   const savedUsers: User[] = [];
   for (const user of users) {

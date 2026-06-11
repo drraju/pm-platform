@@ -1,6 +1,6 @@
 import React from "react";
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { ProjectHealthCard } from "@/components/projects/project-health-card";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
 import {
@@ -135,6 +135,68 @@ describe("Project workspace components", () => {
     expect(screen.getByText("manager")).toBeInTheDocument();
     expect(screen.getByText("Prepare release plan")).toBeInTheDocument();
     expect(screen.getByText("Li Chen")).toBeInTheDocument();
+  });
+
+  it("supports project team add, role update, and remove controls", () => {
+    const onAddMember = vi.fn();
+    const onRemoveMember = vi.fn();
+    const onUpdateMember = vi.fn();
+
+    render(
+      <ProjectWorkspaceTeam
+        availableUsers={[
+          {
+            email: "nora.bennett@example.com",
+            firstName: "Nora",
+            id: "user-2",
+            lastName: "Bennett",
+            status: "active",
+          },
+        ]}
+        members={[
+          {
+            id: "member-1",
+            role: "contributor",
+            user: {
+              email: "ava.patel@example.com",
+              firstName: "Ava",
+              id: "user-1",
+              lastName: "Patel",
+              status: "active",
+            },
+            userId: "user-1",
+          },
+        ]}
+        onAddMember={onAddMember}
+        onRemoveMember={onRemoveMember}
+        onUpdateMember={onUpdateMember}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/add member/i), {
+      target: { value: "user-2" },
+    });
+    fireEvent.change(screen.getByLabelText(/role in project/i), {
+      target: { value: "manager" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+
+    expect(onAddMember).toHaveBeenCalledWith({
+      role: "manager",
+      userId: "user-2",
+    });
+
+    const memberRow = screen.getByText("ava.patel@example.com").closest("article");
+    expect(memberRow).not.toBeNull();
+    fireEvent.change(within(memberRow as HTMLElement).getByDisplayValue("Contributor"), {
+      target: { value: "viewer" },
+    });
+    expect(onUpdateMember).toHaveBeenCalledWith("member-1", {
+      role: "viewer",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    expect(onRemoveMember).toHaveBeenCalledWith("member-1");
   });
 
   it("renders empty states", () => {

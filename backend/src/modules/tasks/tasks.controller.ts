@@ -19,6 +19,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { PermissionKey } from '../../common/authz/permissions';
+import { PermissionsGuard } from '../../common/authz/permissions.guard';
+import { RequirePermissions } from '../../common/authz/require-permissions.decorator';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -38,15 +41,19 @@ type AuthenticatedRequest = Request & {
 
 @ApiTags('tasks')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiCreatedResponse({ type: Task })
-  create(@Body() createTaskDto: CreateTaskDto): Promise<Task> {
-    return this.tasksService.create(createTaskDto);
+  create(
+    @Req() request: AuthenticatedRequest,
+    @Body() createTaskDto: CreateTaskDto,
+  ): Promise<Task> {
+    return this.tasksService.create(createTaskDto, request.user);
   }
 
   @Get()
@@ -84,17 +91,23 @@ export class TasksController {
   }
 
   @Patch(':id')
+  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOkResponse({ type: Task })
   update(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() updateTaskDto: UpdateTaskDto,
   ): Promise<Task> {
-    return this.tasksService.update(id, updateTaskDto);
+    return this.tasksService.update(id, updateTaskDto, request.user);
   }
 
   @Delete(':id')
+  @RequirePermissions(PermissionKey.TaskDelete)
   @ApiOkResponse()
-  remove(@Param('id') id: string): Promise<void> {
-    return this.tasksService.remove(id);
+  remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.tasksService.remove(id, request.user);
   }
 }

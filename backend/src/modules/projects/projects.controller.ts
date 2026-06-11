@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -24,6 +25,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { PermissionKey } from '../../common/authz/permissions';
+import { PermissionsGuard } from '../../common/authz/permissions.guard';
+import { RequirePermissions } from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Assumption } from '../raid/entities/assumption.entity';
 import { Dependency } from '../raid/entities/dependency.entity';
@@ -40,10 +44,19 @@ import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
 import { Task } from '../tasks/entities/task.entity';
 import { Project } from './entities/project.entity';
 import { ProjectsService } from './projects.service';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & {
+  user: {
+    userId: string;
+    email: string;
+    roleId: string;
+  };
+};
 
 @ApiTags('projects')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
@@ -63,16 +76,22 @@ export class ProjectsController {
   }
 
   @Post(':id/members')
+  @RequirePermissions(PermissionKey.ProjectTeamManage)
   @ApiOperation({ summary: 'Add a project member' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiCreatedResponse({ type: ProjectMemberResponseDto })
   @ApiNotFoundResponse({ description: 'Project or user not found' })
   @ApiConflictResponse({ description: 'User is already a project member' })
   addMember(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() createProjectMemberDto: CreateProjectMemberDto,
   ): Promise<ProjectMemberResponseDto> {
-    return this.projectsService.addMember(id, createProjectMemberDto);
+    return this.projectsService.addMember(
+      id,
+      createProjectMemberDto,
+      request.user,
+    );
   }
 
   @Get(':id/members')
@@ -84,36 +103,41 @@ export class ProjectsController {
     return this.projectsService.findMembers(id);
   }
 
-  @Patch(':id/members/:userId')
+  @Patch(':id/members/:memberId')
+  @RequirePermissions(PermissionKey.ProjectTeamManage)
   @ApiOperation({ summary: 'Update a project member role' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiParam({ name: 'userId', format: 'uuid' })
+  @ApiParam({ name: 'memberId', format: 'uuid' })
   @ApiOkResponse({ type: ProjectMemberResponseDto })
   @ApiNotFoundResponse({ description: 'Project, user, or membership not found' })
   updateMember(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
-    @Param('userId') userId: string,
+    @Param('memberId') memberId: string,
     @Body() updateProjectMemberDto: UpdateProjectMemberDto,
   ): Promise<ProjectMemberResponseDto> {
     return this.projectsService.updateMember(
       id,
-      userId,
+      memberId,
       updateProjectMemberDto,
+      request.user,
     );
   }
 
-  @Delete(':id/members/:userId')
+  @Delete(':id/members/:memberId')
+  @RequirePermissions(PermissionKey.ProjectTeamManage)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove a project member' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiParam({ name: 'userId', format: 'uuid' })
+  @ApiParam({ name: 'memberId', format: 'uuid' })
   @ApiNoContentResponse({ description: 'Project member removed' })
   @ApiNotFoundResponse({ description: 'Project, user, or membership not found' })
   removeMember(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
-    @Param('userId') userId: string,
+    @Param('memberId') memberId: string,
   ): Promise<void> {
-    return this.projectsService.removeMember(id, userId);
+    return this.projectsService.removeMember(id, memberId, request.user);
   }
 
   @Get(':projectId/tasks')
@@ -132,22 +156,26 @@ export class ProjectsController {
   }
 
   @Post(':projectId/tasks')
+  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiOperation({ summary: 'Create a project task' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
   @ApiCreatedResponse({ type: Task })
   @ApiNotFoundResponse({ description: 'Project or assignee not found' })
   @ApiConflictResponse({ description: 'Assignee must be a project member' })
   createProjectTask(
+    @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
     @Body() createProjectTaskDto: CreateProjectTaskDto,
   ): Promise<Task> {
     return this.projectsService.createProjectTask(
       projectId,
       createProjectTaskDto,
+      request.user,
     );
   }
 
   @Patch(':projectId/tasks/:taskId')
+  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Update a project task' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
   @ApiParam({ name: 'taskId', format: 'uuid' })
@@ -155,6 +183,7 @@ export class ProjectsController {
   @ApiNotFoundResponse({ description: 'Project, task, or assignee not found' })
   @ApiConflictResponse({ description: 'Assignee must be a project member' })
   updateProjectTask(
+    @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
     @Param('taskId') taskId: string,
     @Body() updateProjectTaskDto: UpdateProjectTaskDto,
@@ -163,10 +192,12 @@ export class ProjectsController {
       projectId,
       taskId,
       updateProjectTaskDto,
+      request.user,
     );
   }
 
   @Delete(':projectId/tasks/:taskId')
+  @RequirePermissions(PermissionKey.TaskDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a project task' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
@@ -174,10 +205,15 @@ export class ProjectsController {
   @ApiNoContentResponse({ description: 'Project task deleted' })
   @ApiNotFoundResponse({ description: 'Project or task not found' })
   removeProjectTask(
+    @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
     @Param('taskId') taskId: string,
   ): Promise<void> {
-    return this.projectsService.removeProjectTask(projectId, taskId);
+    return this.projectsService.removeProjectTask(
+      projectId,
+      taskId,
+      request.user,
+    );
   }
 
   @Get(':id/risks')
