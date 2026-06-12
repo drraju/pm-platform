@@ -76,7 +76,9 @@ describe('API contract', () => {
         }),
       }),
     );
-    expect(document.components?.schemas?.DashboardProjectDto?.properties).toEqual(
+    expect(
+      document.components?.schemas?.DashboardProjectDto?.properties,
+    ).toEqual(
       expect.objectContaining({
         health: expect.objectContaining({
           $ref: '#/components/schemas/ProjectHealthDto',

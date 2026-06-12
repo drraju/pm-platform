@@ -203,7 +203,9 @@ describe('DashboardService', () => {
       where: { ownerId: userId },
     });
     expect(projectMembersRepository.find).toHaveBeenCalledWith({
-      relations: { project: { issues: true, owner: true, risks: true, tasks: true } },
+      relations: {
+        project: { issues: true, owner: true, risks: true, tasks: true },
+      },
       where: { userId },
     });
     expect(tasksRepository.find).toHaveBeenNthCalledWith(1, {

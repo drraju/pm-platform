@@ -4,6 +4,7 @@ export {
   createProjectTask,
   deleteProject,
   deleteProjectTask,
+  getAssignableUsers,
   getProject,
   getProjectAssumptions,
   getProjectDependencies,
@@ -12,7 +13,6 @@ export {
   getProjectRisks,
   getProjectTasks,
   getProjects,
-  getUsers,
   removeProjectMember,
   updateProject,
   updateProjectMember,
@@ -26,4 +26,5 @@ export type {
   ApiProjectMember,
   ApiRaidItem,
   ApiTask,
+  ApiAssignableUser,
 } from "@/lib/api/client";

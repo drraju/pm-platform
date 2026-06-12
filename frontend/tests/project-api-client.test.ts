@@ -3,7 +3,11 @@ import {
   addProjectMember,
   createProjectTask,
   createProject,
+  getAssignableUsers,
+  getAuthMe,
+  getPermissions,
   deleteProject,
+  deleteProjectTask,
   getMyTasks,
   getProject,
   getProjectAssumptions,
@@ -12,7 +16,9 @@ import {
   getProjectRisks,
   getProjects,
   removeProjectMember,
+  updateRolePermissions,
   updateProject,
+  updateProjectMember,
   updateProjectTask,
 } from "@/lib/api/client";
 
@@ -157,7 +163,7 @@ describe("project API client", () => {
     );
   });
 
-  it("adds and removes project members", async () => {
+  it("adds, updates, and removes project members", async () => {
     const fetchMock = mockFetch({ id: "member-1", userId: "user-1" });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -174,6 +180,18 @@ describe("project API client", () => {
       }),
     );
 
+    await updateProjectMember("project-1", "member-1", {
+      role: "manager",
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/members/member-1",
+      expect.objectContaining({
+        body: JSON.stringify({ role: "manager" }),
+        method: "PATCH",
+      }),
+    );
+
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 204,
@@ -186,6 +204,35 @@ describe("project API client", () => {
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://localhost:3001/projects/project-1/members/user-1",
       expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("loads assignable users without calling the admin users endpoint", async () => {
+    const fetchMock = mockFetch([
+      {
+        displayName: "Ava Patel",
+        email: "ava@example.com",
+        firstName: "Ava",
+        id: "user-1",
+        lastName: "Patel",
+        role: "Project Manager",
+      },
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getAssignableUsers()).resolves.toEqual([
+      {
+        displayName: "Ava Patel",
+        email: "ava@example.com",
+        firstName: "Ava",
+        id: "user-1",
+        lastName: "Patel",
+        role: "Project Manager",
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/users/assignable",
+      expect.any(Object),
     );
   });
 
@@ -226,6 +273,20 @@ describe("project API client", () => {
         method: "PATCH",
       }),
     );
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json: vi.fn(),
+    });
+
+    await expect(
+      deleteProjectTask("project-1", "task-1"),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/tasks/task-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 
   it("loads authenticated user tasks with query filters", async () => {
@@ -241,6 +302,47 @@ describe("project API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/tasks/my?priority=high&projectId=project-1&status=blocked",
       expect.any(Object),
+    );
+  });
+
+  it("loads the authenticated permission profile", async () => {
+    const fetchMock = mockFetch({
+      permissions: [{ id: "permission-1", key: "task.create" }],
+      roles: [{ id: "role-1", name: "Project Manager" }],
+      user: { id: "user-1", email: "pm@example.com" },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getAuthMe()).resolves.toEqual({
+      permissions: [{ id: "permission-1", key: "task.create" }],
+      roles: [{ id: "role-1", name: "Project Manager" }],
+      user: { id: "user-1", email: "pm@example.com" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/me",
+      expect.any(Object),
+    );
+  });
+
+  it("loads permissions and updates role permission assignments", async () => {
+    const fetchMock = mockFetch([{ id: "permission-1", key: "task.create" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getPermissions();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/users/permissions",
+      expect.any(Object),
+    );
+
+    await updateRolePermissions("role-1", ["task.create", "task.update"]);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/users/roles/role-1/permissions",
+      expect.objectContaining({
+        body: JSON.stringify({
+          permissionKeys: ["task.create", "task.update"],
+        }),
+        method: "PATCH",
+      }),
     );
   });
 });

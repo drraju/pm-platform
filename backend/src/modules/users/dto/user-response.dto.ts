@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Role } from '../entities/role.entity';
+import { RoleResponseDto } from './role-response.dto';
 
 export class UserResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -20,6 +20,6 @@ export class UserResponseDto {
   @ApiProperty()
   status: string;
 
-  @ApiPropertyOptional({ type: Role })
-  role?: Role | null;
+  @ApiPropertyOptional({ type: RoleResponseDto })
+  role?: RoleResponseDto | null;
 }

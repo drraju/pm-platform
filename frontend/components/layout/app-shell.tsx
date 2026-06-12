@@ -1,17 +1,25 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearSession } from "@/features/auth";
+import {
+  clearSession,
+  getAuthMe,
+  getStoredPermissionKeys,
+  hasAnyPermission,
+  storeAuthMe,
+} from "@/features/auth";
 
 const navigation = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Projects", href: "/projects" },
-  { label: "My Tasks", href: "/tasks" },
-  { label: "Risks", href: "/risks" },
-  { label: "Issues", href: "/issues" },
-  { label: "Notifications", href: "/notifications" },
+  { label: "Dashboard", href: "/dashboard", permissions: ["dashboard.view"] },
+  { label: "Projects", href: "/projects", permissions: ["project.read"] },
+  { label: "My Tasks", href: "/tasks", permissions: ["task.update", "task.comment"] },
+  { label: "Risks", href: "/risks", permissions: ["raid.read"] },
+  { label: "Issues", href: "/issues", permissions: ["raid.read"] },
+  { label: "Portfolio", href: "/portfolio", permissions: ["portfolio.view"] },
+  { label: "Users", href: "/users", permissions: ["user.manage", "role.manage"] },
+  { label: "Notifications", href: "/notifications", permissions: ["notification.read"] },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -19,6 +27,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
+    getStoredPermissionKeys(),
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSessionProfile() {
+      try {
+        const authMe = await getAuthMe();
+        if (!isMounted) {
+          return;
+        }
+        storeAuthMe(authMe);
+        setPermissionKeys(authMe.permissions.map((permission) => permission.key));
+      } catch {
+        if (isMounted) {
+          setPermissionKeys(getStoredPermissionKeys());
+        }
+      }
+    }
+
+    void loadSessionProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   function handleLogout() {
     clearSession();
@@ -30,6 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <DesktopSidebar
         isCollapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed((value) => !value)}
+        permissionKeys={permissionKeys}
         pathname={pathname}
       />
 
@@ -43,6 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <MobileSidebar
             onNavigate={() => setIsMobileDrawerOpen(false)}
+            permissionKeys={permissionKeys}
             pathname={pathname}
           />
         </div>
@@ -104,10 +142,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function DesktopSidebar({
   isCollapsed,
   onToggle,
+  permissionKeys,
   pathname,
 }: {
   isCollapsed: boolean;
   onToggle: () => void;
+  permissionKeys: string[];
   pathname: string;
 }) {
   return (
@@ -141,16 +181,22 @@ function DesktopSidebar({
         </button>
       </div>
 
-      <NavigationLinks isCollapsed={isCollapsed} pathname={pathname} />
+      <NavigationLinks
+        isCollapsed={isCollapsed}
+        permissionKeys={permissionKeys}
+        pathname={pathname}
+      />
     </aside>
   );
 }
 
 function MobileSidebar({
   onNavigate,
+  permissionKeys,
   pathname,
 }: {
   onNavigate: () => void;
+  permissionKeys: string[];
   pathname: string;
 }) {
   return (
@@ -174,7 +220,11 @@ function MobileSidebar({
         </button>
       </div>
 
-      <NavigationLinks onNavigate={onNavigate} pathname={pathname} />
+      <NavigationLinks
+        onNavigate={onNavigate}
+        permissionKeys={permissionKeys}
+        pathname={pathname}
+      />
     </aside>
   );
 }
@@ -182,15 +232,21 @@ function MobileSidebar({
 function NavigationLinks({
   isCollapsed = false,
   onNavigate,
+  permissionKeys,
   pathname,
 }: {
   isCollapsed?: boolean;
   onNavigate?: () => void;
+  permissionKeys: string[];
   pathname: string;
 }) {
+  const visibleNavigation = navigation.filter((item) =>
+    hasAnyPermission(permissionKeys, item.permissions),
+  );
+
   return (
     <nav aria-label="Primary navigation" className="mt-10 space-y-1">
-      {navigation.map((item) => {
+      {visibleNavigation.map((item) => {
         const isActive =
           pathname === item.href || pathname.startsWith(`${item.href}/`);
 

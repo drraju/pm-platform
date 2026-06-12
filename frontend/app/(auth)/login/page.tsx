@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { login, register, storeSession } from "@/features/auth";
+import { getAuthMe, login, register, storeAuthMe, storeSession } from "@/features/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,6 +31,7 @@ export default function LoginPage() {
             });
 
       storeSession(session.accessToken, session.refreshToken);
+      storeAuthMe(await getAuthMe());
       router.push("/dashboard");
     } catch (requestError) {
       setError(
@@ -119,9 +120,13 @@ export default function LoginPage() {
               <span className="text-sm font-medium text-slate-700">Password</span>
               <input
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                minLength={8}
+                minLength={mode === "register" ? 8 : undefined}
                 name="password"
-                placeholder="Enter at least 8 characters"
+                placeholder={
+                  mode === "register"
+                    ? "Enter at least 8 characters"
+                    : "Enter your password"
+                }
                 required
                 type="password"
               />

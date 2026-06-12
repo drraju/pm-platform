@@ -13,6 +13,12 @@ class ProjectMemberUserDto {
 
   @ApiProperty({ example: 'Doe' })
   lastName: string;
+
+  @ApiProperty({ example: 'Jane Doe' })
+  displayName: string;
+
+  @ApiPropertyOptional({ example: 'Project Manager' })
+  role?: string | null;
 }
 
 export class ProjectMemberResponseDto {

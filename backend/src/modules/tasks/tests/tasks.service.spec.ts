@@ -95,7 +95,9 @@ describe('TasksService', () => {
   });
 
   it('lists authenticated user tasks with filters and required sorting', async () => {
-    tasksRepository.find?.mockResolvedValue([{ id: taskId, assigneeId: userId }]);
+    tasksRepository.find?.mockResolvedValue([
+      { id: taskId, assigneeId: userId },
+    ]);
 
     await expect(
       service.findMyTasks(userId, {
@@ -234,7 +236,10 @@ describe('TasksService', () => {
       role: { name: 'Engineer' },
     });
     projectMembersRepository.findOne
-      ?.mockResolvedValueOnce({ id: 'member-id', role: ProjectRole.Contributor })
+      ?.mockResolvedValueOnce({
+        id: 'member-id',
+        role: ProjectRole.Contributor,
+      })
       ?.mockResolvedValueOnce({ id: 'assignee-member-id' });
 
     await service.update(

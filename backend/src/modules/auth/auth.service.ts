@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -53,6 +57,10 @@ export class AuthService {
     }
 
     return this.issueSession(user.id, user.email, user.roleId);
+  }
+
+  getMe(userId: string) {
+    return this.usersService.getSessionProfile(userId);
   }
 
   private issueSession(

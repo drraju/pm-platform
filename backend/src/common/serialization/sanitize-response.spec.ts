@@ -3,7 +3,9 @@ import { sanitizeResponse } from './sanitize-response';
 describe('sanitizeResponse', () => {
   it('removes passwordHash from nested API response objects', () => {
     const response = sanitizeResponse({
-      users: [{ id: 'user-1', email: 'user@example.com', passwordHash: 'hash' }],
+      users: [
+        { id: 'user-1', email: 'user@example.com', passwordHash: 'hash' },
+      ],
       projects: [
         {
           id: 'project-1',
@@ -19,12 +21,24 @@ describe('sanitizeResponse', () => {
             },
           ],
           risks: [{ owner: { id: 'risk-owner', passwordHash: 'risk-hash' } }],
-          issues: [{ owner: { id: 'issue-owner', passwordHash: 'issue-hash' } }],
+          issues: [
+            { owner: { id: 'issue-owner', passwordHash: 'issue-hash' } },
+          ],
           assumptions: [
-            { owner: { id: 'assumption-owner', passwordHash: 'assumption-hash' } },
+            {
+              owner: {
+                id: 'assumption-owner',
+                passwordHash: 'assumption-hash',
+              },
+            },
           ],
           dependencies: [
-            { owner: { id: 'dependency-owner', passwordHash: 'dependency-hash' } },
+            {
+              owner: {
+                id: 'dependency-owner',
+                passwordHash: 'dependency-hash',
+              },
+            },
           ],
         },
       ],

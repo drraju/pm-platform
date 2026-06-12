@@ -12,6 +12,8 @@ import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
 
 const projectMocks = vi.hoisted(() => ({
   addProjectMember: vi.fn(),
+  createProjectTask: vi.fn(),
+  deleteProjectTask: vi.fn(),
   getProject: vi.fn(async (projectId: string) => ({
     assumptions: [
       {
@@ -78,8 +80,9 @@ const projectMocks = vi.hoisted(() => ({
       status: "active",
     },
   ]),
-  getUsers: vi.fn(async () => []),
+  getAssignableUsers: vi.fn(async () => []),
   removeProjectMember: vi.fn(),
+  updateProjectTask: vi.fn(),
   updateProjectMember: vi.fn(),
 }));
 
@@ -113,7 +116,30 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/features/auth", () => ({
+  getAuthMe: vi.fn(async () => ({
+    permissions: [
+      { id: "permission-task-create", key: "task.create" },
+      { id: "permission-task-update", key: "task.update" },
+      { id: "permission-task-delete", key: "task.delete" },
+      { id: "permission-task-reassign", key: "task.reassign" },
+      { id: "permission-team-manage", key: "project.team.manage" },
+    ],
+    roles: [],
+    user: {
+      email: "project.manager@example.com",
+      firstName: "Project",
+      id: "user-1",
+      lastName: "Manager",
+      roleId: "role-1",
+      status: "active",
+    },
+  })),
   getStoredAccessToken: () => "test-token",
+  getStoredPermissionKeys: () => [],
+  getStoredSessionUser: () => null,
+  hasPermission: (permissionKeys: string[], requiredPermission: string) =>
+    permissionKeys.includes(requiredPermission),
+  storeAuthMe: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -127,16 +153,19 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/features/projects", () => ({
   addProjectMember: projectMocks.addProjectMember,
+  createProjectTask: projectMocks.createProjectTask,
   createProject: vi.fn(),
+  deleteProjectTask: projectMocks.deleteProjectTask,
+  getAssignableUsers: projectMocks.getAssignableUsers,
   getProject: projectMocks.getProject,
   getProjects: projectMocks.getProjects,
-  getUsers: projectMocks.getUsers,
   removeProjectMember: projectMocks.removeProjectMember,
+  updateProjectTask: projectMocks.updateProjectTask,
   updateProjectMember: projectMocks.updateProjectMember,
 }));
 
 vi.mock("@/features/users", () => ({
-  getUsers: vi.fn(async () => []),
+  getAssignableUsers: vi.fn(async () => []),
 }));
 
 describe("Projects List navigation", () => {

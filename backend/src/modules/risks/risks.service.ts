@@ -13,7 +13,9 @@ export class RisksService {
   ) {}
 
   create(createRiskDto: CreateRiskDto): Promise<Risk> {
-    return this.risksRepository.save(this.risksRepository.create(createRiskDto));
+    return this.risksRepository.save(
+      this.risksRepository.create(createRiskDto),
+    );
   }
 
   findAll(): Promise<Risk[]> {

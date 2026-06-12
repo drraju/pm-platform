@@ -142,7 +142,7 @@ describe('ProjectsService', () => {
         assumptions: { owner: true },
         dependencies: { owner: true },
         issues: { owner: true },
-        members: { user: true },
+        members: { user: { role: true } },
         owner: true,
         risks: { owner: true },
         tasks: { assignee: true },
@@ -184,7 +184,7 @@ describe('ProjectsService', () => {
         assumptions: { owner: true },
         dependencies: { owner: true },
         issues: { owner: true },
-        members: { user: true },
+        members: { user: { role: true } },
         owner: true,
         risks: { owner: true },
         tasks: { assignee: true },
@@ -217,7 +217,14 @@ describe('ProjectsService', () => {
   it('adds a project member when the project and user exist', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
-    projectMembersRepository.findOne?.mockResolvedValue(null);
+    projectMembersRepository.findOne
+      ?.mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'member-id',
+        projectId,
+        userId,
+        role: ProjectRole.Manager,
+      });
 
     const result = await service.addMember(projectId, {
       userId,
@@ -250,7 +257,14 @@ describe('ProjectsService', () => {
   it('defaults new project members to contributor', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
-    projectMembersRepository.findOne?.mockResolvedValue(null);
+    projectMembersRepository.findOne
+      ?.mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'member-id',
+        projectId,
+        userId,
+        role: ProjectRole.Contributor,
+      });
 
     await service.addMember(projectId, { userId });
 
@@ -307,6 +321,9 @@ describe('ProjectsService', () => {
           firstName: 'Jane',
           lastName: 'Doe',
           passwordHash: 'hashed-password',
+          role: {
+            name: 'Project Manager',
+          },
         },
       },
     ]);
@@ -322,21 +339,30 @@ describe('ProjectsService', () => {
           email: 'jane.doe@example.com',
           firstName: 'Jane',
           lastName: 'Doe',
+          displayName: 'Jane Doe',
+          role: 'Project Manager',
         },
       },
     ]);
     expect(projectMembersRepository.find).toHaveBeenCalledWith({
       order: { createdAt: 'ASC' },
-      relations: { user: true },
+      relations: { user: { role: true } },
       where: { projectId },
     });
   });
 
   it('updates a project member role', async () => {
-    const member = { id: 'member-id', projectId, userId, role: ProjectRole.Viewer };
+    const member = {
+      id: 'member-id',
+      projectId,
+      userId,
+      role: ProjectRole.Viewer,
+    };
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
-    projectMembersRepository.findOne?.mockResolvedValue(member);
+    projectMembersRepository.findOne
+      ?.mockResolvedValueOnce(member)
+      .mockResolvedValueOnce({ ...member, role: ProjectRole.Owner });
 
     await service.updateMember(projectId, userId, {
       role: ProjectRole.Owner,
@@ -361,7 +387,12 @@ describe('ProjectsService', () => {
   });
 
   it('removes a project member with soft delete', async () => {
-    const member = { id: 'member-id', projectId, userId, role: ProjectRole.Viewer };
+    const member = {
+      id: 'member-id',
+      projectId,
+      userId,
+      role: ProjectRole.Viewer,
+    };
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
     projectMembersRepository.findOne?.mockResolvedValue(member);

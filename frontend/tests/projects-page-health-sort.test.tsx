@@ -44,12 +44,13 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/features/projects", () => ({
   createProject: vi.fn(),
+  getAssignableUsers: vi.fn(async () => []),
   getProject: projectMocks.getProject,
   getProjects: projectMocks.getProjects,
 }));
 
 vi.mock("@/features/users", () => ({
-  getUsers: vi.fn(async () => []),
+  getAssignableUsers: vi.fn(async () => []),
 }));
 
 describe("Projects page health sorting", () => {

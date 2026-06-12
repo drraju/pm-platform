@@ -79,7 +79,7 @@ export class ProjectsService {
         assumptions: { owner: true },
         dependencies: { owner: true },
         issues: { owner: true },
-        members: { user: true },
+        members: { user: { role: true } },
         owner: true,
         risks: { owner: true },
         tasks: { assignee: true },
@@ -132,7 +132,9 @@ export class ProjectsService {
     });
 
     const savedMember = await this.projectMembersRepository.save(member);
-    return this.toProjectMemberResponse(savedMember);
+    return this.toProjectMemberResponse(
+      await this.findMember(projectId, savedMember.id),
+    );
   }
 
   async findMembers(projectId: string): Promise<ProjectMemberResponseDto[]> {
@@ -140,7 +142,7 @@ export class ProjectsService {
 
     const members = await this.projectMembersRepository.find({
       order: { createdAt: 'ASC' },
-      relations: { user: true },
+      relations: { user: { role: true } },
       where: { projectId },
     });
 
@@ -160,7 +162,9 @@ export class ProjectsService {
     member.role = updateProjectMemberDto.role;
 
     const savedMember = await this.projectMembersRepository.save(member);
-    return this.toProjectMemberResponse(savedMember);
+    return this.toProjectMemberResponse(
+      await this.findMember(projectId, savedMember.id),
+    );
   }
 
   async removeMember(
@@ -200,7 +204,10 @@ export class ProjectsService {
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
     await this.ensureCanManageProject(projectId, actor);
-    await this.validateAssigneeMembership(projectId, createProjectTaskDto.assigneeId);
+    await this.validateAssigneeMembership(
+      projectId,
+      createProjectTaskDto.assigneeId,
+    );
 
     const task = this.tasksRepository.create({
       ...createProjectTaskDto,
@@ -219,7 +226,10 @@ export class ProjectsService {
     await this.ensureProjectExists(projectId);
     const task = await this.findProjectTask(projectId, taskId);
     await this.ensureCanUpdateTask(task, updateProjectTaskDto, actor);
-    await this.validateAssigneeMembership(projectId, updateProjectTaskDto.assigneeId);
+    await this.validateAssigneeMembership(
+      projectId,
+      updateProjectTaskDto.assigneeId,
+    );
     Object.assign(task, updateProjectTaskDto, { projectId });
 
     return this.tasksRepository.save(task);
@@ -274,7 +284,7 @@ export class ProjectsService {
         assumptions: { owner: true },
         dependencies: { owner: true },
         issues: { owner: true },
-        members: { user: true },
+        members: { user: { role: true } },
         owner: true,
         risks: { owner: true },
         tasks: { assignee: true },
@@ -302,7 +312,7 @@ export class ProjectsService {
     memberIdOrUserId: string,
   ): Promise<ProjectMember> {
     const member = await this.projectMembersRepository.findOne({
-      relations: { user: true },
+      relations: { user: { role: true } },
       where: [
         { id: memberIdOrUserId, projectId },
         { projectId, userId: memberIdOrUserId },
@@ -390,7 +400,9 @@ export class ProjectsService {
     }
 
     if (task.assigneeId !== actor.userId) {
-      throw new ForbiddenException('Only assigned team members can update this task');
+      throw new ForbiddenException(
+        'Only assigned team members can update this task',
+      );
     }
 
     const disallowedFields = Object.keys(updateProjectTaskDto).filter(
@@ -429,6 +441,13 @@ export class ProjectsService {
   private toProjectMemberResponse(
     member: ProjectMember,
   ): ProjectMemberResponseDto {
+    const displayName = member.user
+      ? [member.user.firstName, member.user.lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim() || member.user.email
+      : undefined;
+
     return {
       id: member.id,
       projectId: member.projectId,
@@ -440,6 +459,8 @@ export class ProjectsService {
             email: member.user.email,
             firstName: member.user.firstName,
             lastName: member.user.lastName,
+            displayName: displayName ?? member.user.email,
+            role: member.user.role?.name ?? null,
           }
         : null,
     };

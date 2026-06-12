@@ -3,6 +3,14 @@ import { apiBaseUrl } from "@/lib/config/env";
 export type ApiRole = {
   id: string;
   name: string;
+  description?: string | null;
+  permissions?: ApiPermission[];
+};
+
+export type ApiPermission = {
+  id: string;
+  key: string;
+  description?: string | null;
 };
 
 export type ApiUser = {
@@ -12,6 +20,28 @@ export type ApiUser = {
   lastName: string;
   status: string;
   role?: ApiRole | null;
+};
+
+export type ApiAssignableUser = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  displayName?: string;
+  role?: string | null;
+  status?: string;
+};
+
+export type ApiSessionUser = {
+  email: string;
+  roleId: string;
+  userId: string;
+};
+
+export type ApiAuthMe = {
+  user: ApiUser;
+  roles: ApiRole[];
+  permissions: ApiPermission[];
 };
 
 export type ApiProjectHealthStatus = "GREEN" | "AMBER" | "RED";
@@ -44,7 +74,15 @@ export type ApiProjectMember = {
   projectId?: string;
   userId: string;
   role: string;
-  user?: ApiUser | null;
+  user?: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    displayName?: string;
+    role?: string | null;
+    status?: string;
+  } | null;
 };
 
 export type ApiTask = {
@@ -64,7 +102,15 @@ export type ApiTask = {
   actualStartDate?: string | null;
   actualEndDate?: string | null;
   project?: ApiProject | null;
-  assignee?: ApiUser | null;
+  assignee?: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    displayName?: string;
+    role?: ApiRole | string | null;
+    status?: string;
+  } | null;
 };
 
 export type ApiProjectDetails = ApiProject & {
@@ -203,6 +249,43 @@ export function getStoredAccessToken() {
   return window.localStorage.getItem("pm_platform_access_token");
 }
 
+export function getStoredSessionUser(): ApiSessionUser | null {
+  const token = getStoredAccessToken();
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) {
+      return null;
+    }
+
+    const normalizedPayload = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      "=",
+    );
+    const decodedPayload = JSON.parse(window.atob(paddedPayload)) as {
+      email?: string;
+      roleId?: string;
+      sub?: string;
+    };
+
+    if (!decodedPayload.sub || !decodedPayload.email || !decodedPayload.roleId) {
+      return null;
+    }
+
+    return {
+      email: decodedPayload.email,
+      roleId: decodedPayload.roleId,
+      userId: decodedPayload.sub,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function storeSession(accessToken: string, refreshToken: string) {
   window.localStorage.setItem("pm_platform_access_token", accessToken);
   window.localStorage.setItem("pm_platform_refresh_token", refreshToken);
@@ -211,6 +294,29 @@ export function storeSession(accessToken: string, refreshToken: string) {
 export function clearSession() {
   window.localStorage.removeItem("pm_platform_access_token");
   window.localStorage.removeItem("pm_platform_refresh_token");
+  window.localStorage.removeItem("pm_platform_permissions");
+  window.localStorage.removeItem("pm_platform_session_user");
+}
+
+export function getStoredPermissionKeys() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const storedPermissions = window.localStorage.getItem("pm_platform_permissions");
+    return storedPermissions ? (JSON.parse(storedPermissions) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function storeAuthMe(authMe: ApiAuthMe) {
+  window.localStorage.setItem(
+    "pm_platform_permissions",
+    JSON.stringify(authMe.permissions.map((permission) => permission.key)),
+  );
+  window.localStorage.setItem("pm_platform_session_user", JSON.stringify(authMe.user));
 }
 
 export async function apiRequest<T>(
@@ -254,6 +360,10 @@ export function login(email: string, password: string) {
     token: null,
     body: JSON.stringify({ email, password }),
   });
+}
+
+export function getAuthMe() {
+  return apiRequest<ApiAuthMe>("/auth/me");
 }
 
 export function register(input: {
@@ -384,14 +494,29 @@ export function getUsers() {
   return apiRequest<ApiUser[]>("/users");
 }
 
+export function getAssignableUsers() {
+  return apiRequest<ApiAssignableUser[]>("/users/assignable");
+}
+
 export function getRoles() {
   return apiRequest<ApiRole[]>("/users/roles");
+}
+
+export function getPermissions() {
+  return apiRequest<ApiPermission[]>("/users/permissions");
 }
 
 export function createRole(input: { name: string; description?: string }) {
   return apiRequest<ApiRole>("/users/roles", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function updateRolePermissions(roleId: string, permissionKeys: string[]) {
+  return apiRequest<ApiRole>(`/users/roles/${roleId}/permissions`, {
+    method: "PATCH",
+    body: JSON.stringify({ permissionKeys }),
   });
 }
 

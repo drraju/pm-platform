@@ -27,7 +27,10 @@ import {
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { PermissionKey } from '../../common/authz/permissions';
 import { PermissionsGuard } from '../../common/authz/permissions.guard';
-import { RequirePermissions } from '../../common/authz/require-permissions.decorator';
+import {
+  RequireAnyPermissions,
+  RequirePermissions,
+} from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Assumption } from '../raid/entities/assumption.entity';
 import { Dependency } from '../raid/entities/dependency.entity';
@@ -95,6 +98,10 @@ export class ProjectsController {
   }
 
   @Get(':id/members')
+  @RequireAnyPermissions(
+    PermissionKey.ProjectRead,
+    PermissionKey.ProjectTeamManage,
+  )
   @ApiOperation({ summary: 'List project members' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: ProjectMemberResponseDto, isArray: true })
@@ -109,7 +116,9 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiParam({ name: 'memberId', format: 'uuid' })
   @ApiOkResponse({ type: ProjectMemberResponseDto })
-  @ApiNotFoundResponse({ description: 'Project, user, or membership not found' })
+  @ApiNotFoundResponse({
+    description: 'Project, user, or membership not found',
+  })
   updateMember(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
@@ -131,7 +140,9 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiParam({ name: 'memberId', format: 'uuid' })
   @ApiNoContentResponse({ description: 'Project member removed' })
-  @ApiNotFoundResponse({ description: 'Project, user, or membership not found' })
+  @ApiNotFoundResponse({
+    description: 'Project, user, or membership not found',
+  })
   removeMember(
     @Req() request: AuthenticatedRequest,
     @Param('id') id: string,

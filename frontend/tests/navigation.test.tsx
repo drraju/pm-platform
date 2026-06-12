@@ -28,6 +28,21 @@ vi.mock("next/navigation", () => ({
 
 describe("AppShell", () => {
   it("renders primary navigation and page content", () => {
+    const cachedPermissions = JSON.stringify([
+      "dashboard.view",
+      "project.read",
+      "task.update",
+      "raid.read",
+      "notification.read",
+    ]);
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn((key: string) =>
+        key === "pm_platform_permissions" ? cachedPermissions : null,
+      ),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    });
+
     render(
       <AppShell>
         <h1>Workspace content</h1>

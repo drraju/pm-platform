@@ -51,7 +51,9 @@ export class TasksService {
       createTaskDto.projectId,
       createTaskDto.assigneeId,
     );
-    return this.tasksRepository.save(this.tasksRepository.create(createTaskDto));
+    return this.tasksRepository.save(
+      this.tasksRepository.create(createTaskDto),
+    );
   }
 
   findAll(): Promise<Task[]> {
@@ -179,7 +181,9 @@ export class TasksService {
     }
 
     if (task.assigneeId !== actor.userId) {
-      throw new ForbiddenException('Only assigned team members can update this task');
+      throw new ForbiddenException(
+        'Only assigned team members can update this task',
+      );
     }
 
     const disallowedFields = Object.keys(updateTaskDto).filter(

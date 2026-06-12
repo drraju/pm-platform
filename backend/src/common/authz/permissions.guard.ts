@@ -9,7 +9,11 @@ import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from '../../modules/users/entities/role.entity';
-import { PERMISSIONS_KEY, PermissionKey } from './permissions';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+  PermissionKey,
+} from './permissions';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -24,8 +28,12 @@ export class PermissionsGuard implements CanActivate {
     const requiredPermissions = this.reflector.getAllAndOverride<
       PermissionKey[]
     >(PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
+    const anyPermissions = this.reflector.getAllAndOverride<PermissionKey[]>(
+      ANY_PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
-    if (!requiredPermissions?.length) {
+    if (!requiredPermissions?.length && !anyPermissions?.length) {
       return true;
     }
 
@@ -44,14 +52,27 @@ export class PermissionsGuard implements CanActivate {
       relations: { permissions: true },
       where: { id: roleId },
     });
+    if (role?.name === 'SUPER_ADMIN') {
+      return true;
+    }
+
     const grantedPermissions = new Set(
       role?.permissions?.map((permission) => permission.key) ?? [],
     );
 
-    const hasPermissions = requiredPermissions.every((permission) =>
-      grantedPermissions.has(permission),
-    );
+    const hasPermissions =
+      !requiredPermissions?.length ||
+      requiredPermissions.every((permission) =>
+        grantedPermissions.has(permission),
+      );
     if (!hasPermissions) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    const hasAnyPermission =
+      !anyPermissions?.length ||
+      anyPermissions.some((permission) => grantedPermissions.has(permission));
+    if (!hasAnyPermission) {
       throw new ForbiddenException('Insufficient permissions');
     }
 

@@ -9,7 +9,10 @@ import { PortfolioController } from './portfolio.controller';
 import { PortfolioService } from './portfolio.service';
 
 @Module({
-  imports: [HealthModule, TypeOrmModule.forFeature([Project, Risk, Issue, Task])],
+  imports: [
+    HealthModule,
+    TypeOrmModule.forFeature([Project, Risk, Issue, Task]),
+  ],
   controllers: [PortfolioController],
   providers: [PortfolioService],
 })

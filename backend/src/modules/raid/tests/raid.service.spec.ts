@@ -13,7 +13,9 @@ describe('RaidService', () => {
     const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, RaidModule) as
       | Array<{ providers?: Array<{ provide?: unknown }> }>
       | undefined;
-    const providers = imports?.flatMap((moduleImport) => moduleImport.providers ?? []);
+    const providers = imports?.flatMap(
+      (moduleImport) => moduleImport.providers ?? [],
+    );
 
     expect(providers).toEqual(
       expect.arrayContaining([

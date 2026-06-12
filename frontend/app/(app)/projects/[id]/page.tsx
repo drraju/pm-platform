@@ -17,36 +17,58 @@ import { ProjectWorkspaceSummary } from "@/components/projects/project-workspace
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 import {
+  getAuthMe,
+  getStoredPermissionKeys,
+  getStoredSessionUser,
+  hasPermission,
+  storeAuthMe,
+} from "@/features/auth";
+import {
   addProjectMember,
+  createProjectTask,
+  deleteProjectTask,
+  getAssignableUsers,
   getProject,
-  getUsers,
   removeProjectMember,
+  updateProjectTask,
   updateProjectMember,
   type ApiProjectDetails,
   type ApiProjectMember,
 } from "@/features/projects";
-import type { ApiUser } from "@/lib/api/client";
+import type { ApiAssignableUser, ApiTask } from "@/lib/api/client";
+
+type WorkspaceTab = "tasks" | "team";
 
 export default function ProjectWorkspacePage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
-  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [users, setUsers] = useState<ApiAssignableUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
+  const [isSavingTask, setIsSavingTask] = useState(false);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] =
+    useState<WorkspaceTab>("tasks");
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
+    getStoredPermissionKeys(),
+  );
 
   useEffect(() => {
     async function loadProject() {
       setError(null);
       setIsLoading(true);
       try {
-        const [projectDetails, userData] = await Promise.all([
+        const [projectDetails, userData, authMe] = await Promise.all([
           getProject(projectId),
-          getUsers(),
+          getAssignableUsers(),
+          getAuthMe(),
         ]);
+        storeAuthMe(authMe);
         setProject(projectDetails);
         setUsers(userData);
+        setPermissionKeys(authMe.permissions.map((permission) => permission.key));
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -74,7 +96,9 @@ export default function ProjectWorkspacePage() {
             }
           : currentProject,
       );
+      showToast(setToast, "success", "Team member added.");
     } catch (requestError) {
+      showToast(setToast, "error", "Unable to add member.");
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -96,7 +120,9 @@ export default function ProjectWorkspacePage() {
       setProject((currentProject) =>
         replaceMember(currentProject, updatedMember),
       );
+      showToast(setToast, "success", "Team member role updated.");
     } catch (requestError) {
+      showToast(setToast, "error", "Unable to update member.");
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -122,7 +148,9 @@ export default function ProjectWorkspacePage() {
             }
           : currentProject,
       );
+      showToast(setToast, "success", "Team member removed.");
     } catch (requestError) {
+      showToast(setToast, "error", "Unable to remove member.");
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -130,6 +158,118 @@ export default function ProjectWorkspacePage() {
       );
     } finally {
       setIsSavingTeam(false);
+    }
+  }
+
+  async function handleCreateTask(input: {
+    assigneeId?: string;
+    description?: string;
+    dueDate?: string;
+    percentComplete?: number;
+    plannedEndDate?: string;
+    plannedStartDate?: string;
+    priority?: string;
+    remarks?: string;
+    status?: ApiTask["status"];
+    title: string;
+  }) {
+    setError(null);
+    setIsSavingTask(true);
+    try {
+      const task = await createProjectTask(projectId, input);
+      setProject((currentProject) =>
+        currentProject
+          ? {
+              ...currentProject,
+              tasks: [
+                ...(currentProject.tasks ?? []),
+                hydrateTask(task, currentProject, users),
+              ],
+            }
+          : currentProject,
+      );
+      showToast(setToast, "success", "Task created.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to create task.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create task",
+      );
+    } finally {
+      setIsSavingTask(false);
+    }
+  }
+
+  async function handleUpdateTask(
+    taskId: string,
+    input: {
+      assigneeId?: string;
+      description?: string;
+      dueDate?: string;
+      percentComplete?: number;
+      plannedEndDate?: string;
+      plannedStartDate?: string;
+      priority?: string;
+      remarks?: string;
+      status?: ApiTask["status"];
+      title?: string;
+    },
+  ) {
+    setError(null);
+    setIsSavingTask(true);
+    try {
+      const task = await updateProjectTask(projectId, taskId, input);
+      setProject((currentProject) =>
+        currentProject
+          ? {
+              ...currentProject,
+              tasks: (currentProject.tasks ?? []).map((currentTask) =>
+                currentTask.id === taskId
+                  ? hydrateTask({ ...currentTask, ...task }, currentProject, users)
+                  : currentTask,
+              ),
+            }
+          : currentProject,
+      );
+      showToast(setToast, "success", "Task updated.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to update task.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update task",
+      );
+    } finally {
+      setIsSavingTask(false);
+    }
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    setError(null);
+    setIsSavingTask(true);
+    try {
+      await deleteProjectTask(projectId, taskId);
+      setProject((currentProject) =>
+        currentProject
+          ? {
+              ...currentProject,
+              tasks: (currentProject.tasks ?? []).filter(
+                (task) => task.id !== taskId,
+              ),
+            }
+          : currentProject,
+      );
+      showToast(setToast, "success", "Task deleted.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to delete task.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to delete task",
+      );
+    } finally {
+      setIsSavingTask(false);
     }
   }
 
@@ -168,6 +308,10 @@ export default function ProjectWorkspacePage() {
   const issues = project.issues ?? [];
   const assumptions = project.assumptions ?? [];
   const dependencies = project.dependencies ?? [];
+  const sessionUser = getStoredSessionUser();
+  const permissions = getProjectWorkspacePermissions({
+    permissionKeys,
+  });
   const health = project.health ?? {
     reasons: ['No critical issues, high risks, or overdue task threshold breaches'],
     status: "GREEN" as const,
@@ -182,6 +326,7 @@ export default function ProjectWorkspacePage() {
       />
 
       {error ? <ErrorMessage message={error} /> : null}
+      {toast ? <ToastMessage toast={toast} /> : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
         <ProjectWorkspaceOverview project={project} />
@@ -190,16 +335,63 @@ export default function ProjectWorkspacePage() {
 
       <ProjectWorkspaceSummary tasks={tasks} />
 
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <ProjectWorkspaceTeam
-          availableUsers={users}
-          isSaving={isSavingTeam}
-          members={members}
-          onAddMember={handleAddMember}
-          onRemoveMember={handleRemoveMember}
-          onUpdateMember={handleUpdateMember}
-        />
-        <ProjectWorkspaceTasks tasks={tasks} />
+      <section className="rounded-md border border-slate-200 bg-white p-2 shadow-soft">
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 p-2">
+          <WorkspaceTabButton
+            active={activeWorkspaceTab === "tasks"}
+            count={tasks.length}
+            label="Tasks"
+            onClick={() => setActiveWorkspaceTab("tasks")}
+          />
+          <WorkspaceTabButton
+            active={activeWorkspaceTab === "team"}
+            count={members.length}
+            label="Project Team"
+            onClick={() => setActiveWorkspaceTab("team")}
+          />
+        </div>
+        <div className="p-3">
+          {activeWorkspaceTab === "tasks" ? (
+            <ProjectWorkspaceTasks
+              canCreateTasks={permissions.canCreateTasks}
+              canDeleteTasks={permissions.canDeleteTasks}
+              canEditTasks={permissions.canEditTasks}
+              canReassignTasks={permissions.canReassignTasks}
+              currentUserId={sessionUser?.userId}
+              isSaving={isSavingTask}
+              members={members}
+              onCreateTask={
+                permissions.canCreateTasks ? handleCreateTask : undefined
+              }
+              onDeleteTask={
+                permissions.canDeleteTasks ? handleDeleteTask : undefined
+              }
+              onUpdateTask={
+                permissions.canEditTasks ||
+                permissions.canReassignTasks ||
+                permissions.canUpdateAssignedTasks
+                  ? handleUpdateTask
+                  : undefined
+              }
+              tasks={tasks}
+            />
+          ) : (
+            <ProjectWorkspaceTeam
+              availableUsers={users}
+              isSaving={isSavingTeam}
+              members={members}
+              onAddMember={
+                permissions.canManageTeam ? handleAddMember : undefined
+              }
+              onRemoveMember={
+                permissions.canManageTeam ? handleRemoveMember : undefined
+              }
+              onUpdateMember={
+                permissions.canManageTeam ? handleUpdateMember : undefined
+              }
+            />
+          )}
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
@@ -282,6 +474,71 @@ export default function ProjectWorkspacePage() {
   );
 }
 
+function WorkspaceTabButton({
+  active,
+  count,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+        active
+          ? "bg-brand text-white"
+          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label} <span className="ml-1 opacity-80">{count}</span>
+    </button>
+  );
+}
+
+function getProjectWorkspacePermissions({
+  permissionKeys,
+}: {
+  permissionKeys: string[];
+}) {
+  const canCreateTasks = hasPermission(permissionKeys, "task.create");
+  const canDeleteTasks = hasPermission(permissionKeys, "task.delete");
+  const canEditTasks = hasPermission(permissionKeys, "task.update");
+  const canReassignTasks = hasPermission(permissionKeys, "task.reassign");
+  const canManageTeam = hasPermission(permissionKeys, "project.team.manage");
+
+  return {
+    canCreateTasks,
+    canDeleteTasks,
+    canEditTasks,
+    canReassignTasks,
+    canManageTeam,
+    canUpdateAssignedTasks:
+      hasPermission(permissionKeys, "task.update") ||
+      hasPermission(permissionKeys, "task.comment"),
+  };
+}
+
+function hydrateTask(
+  task: ApiTask,
+  project: ApiProjectDetails,
+  users: ApiAssignableUser[],
+): ApiTask {
+  const assignee = task.assigneeId
+    ? users.find((user) => user.id === task.assigneeId) ?? task.assignee
+    : null;
+
+  return {
+    ...task,
+    assignee,
+    project,
+  };
+}
+
 function replaceMember(
   project: ApiProjectDetails | null,
   updatedMember: ApiProjectMember,
@@ -330,6 +587,39 @@ function ErrorMessage({ message }: { message: string }) {
   return (
     <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
       {message}
+    </section>
+  );
+}
+
+type ToastState = {
+  id: number;
+  message: string;
+  tone: "error" | "success";
+};
+
+function showToast(
+  setToast: React.Dispatch<React.SetStateAction<ToastState | null>>,
+  tone: ToastState["tone"],
+  message: string,
+) {
+  const id = Date.now();
+  setToast({ id, message, tone });
+  window.setTimeout(() => {
+    setToast((currentToast) => (currentToast?.id === id ? null : currentToast));
+  }, 3000);
+}
+
+function ToastMessage({ toast }: { toast: ToastState }) {
+  return (
+    <section
+      className={`fixed right-4 top-4 z-50 rounded-md border px-4 py-3 text-sm font-semibold shadow-lg ${
+        toast.tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-red-200 bg-red-50 text-red-700"
+      }`}
+      role="status"
+    >
+      {toast.message}
     </section>
   );
 }

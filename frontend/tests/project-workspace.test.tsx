@@ -199,6 +199,192 @@ describe("Project workspace components", () => {
     expect(onRemoveMember).toHaveBeenCalledWith("member-1");
   });
 
+  it("supports project task create, edit, reassign, and delete controls", () => {
+    const onCreateTask = vi.fn();
+    const onDeleteTask = vi.fn();
+    const onUpdateTask = vi.fn();
+    const members = [
+      {
+        id: "member-1",
+        role: "manager",
+        user: {
+          email: "ava.patel@example.com",
+          firstName: "Ava",
+          id: "user-1",
+          lastName: "Patel",
+          status: "active",
+        },
+        userId: "user-1",
+      },
+      {
+        id: "member-2",
+        role: "contributor",
+        user: {
+          email: "li.chen@example.com",
+          firstName: "Li",
+          id: "user-2",
+          lastName: "Chen",
+          status: "active",
+        },
+        userId: "user-2",
+      },
+    ];
+
+    render(
+      <ProjectWorkspaceTasks
+        canManageTasks
+        members={members}
+        onCreateTask={onCreateTask}
+        onDeleteTask={onDeleteTask}
+        onUpdateTask={onUpdateTask}
+        tasks={[
+          {
+            assigneeId: "user-1",
+            assignee: members[0].user,
+            description: "Initial release plan.",
+            dueDate: "2026-06-30",
+            id: "task-1",
+            percentComplete: 25,
+            plannedEndDate: "2026-06-28",
+            plannedStartDate: "2026-06-10",
+            priority: "high",
+            projectId: "project-1",
+            remarks: "Draft is ready.",
+            status: "todo",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /create task/i }));
+    let dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/title/i), {
+      target: { value: "Mobilise team" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/description/i), {
+      target: { value: "Create the launch working group." },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/assignee/i), {
+      target: { value: "user-2" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/priority/i), {
+      target: { value: "critical" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/status/i), {
+      target: { value: "in_progress" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/due date/i), {
+      target: { value: "2026-07-15" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/planned start/i), {
+      target: { value: "2026-07-01" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/planned end/i), {
+      target: { value: "2026-07-14" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/percent complete/i), {
+      target: { value: "10" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/remarks/i), {
+      target: { value: "Kickoff scheduled." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    expect(onCreateTask).toHaveBeenCalledWith({
+      assigneeId: "user-2",
+      description: "Create the launch working group.",
+      dueDate: "2026-07-15",
+      percentComplete: 10,
+      plannedEndDate: "2026-07-14",
+      plannedStartDate: "2026-07-01",
+      priority: "critical",
+      remarks: "Kickoff scheduled.",
+      status: "in_progress",
+      title: "Mobilise team",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/title/i), {
+      target: { value: "Prepare updated release plan" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/assignee/i), {
+      target: { value: "user-2" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/status/i), {
+      target: { value: "blocked" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/priority/i), {
+      target: { value: "medium" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/percent complete/i), {
+      target: { value: "60" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/remarks/i), {
+      target: { value: "Plan is under review." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      assigneeId: "user-2",
+      description: "Initial release plan.",
+      dueDate: "2026-06-30",
+      percentComplete: 60,
+      plannedEndDate: "2026-06-28",
+      plannedStartDate: "2026-06-10",
+      priority: "medium",
+      remarks: "Plan is under review.",
+      status: "blocked",
+      title: "Prepare updated release plan",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /reassign/i }));
+    dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/assignee/i), {
+      target: { value: "user-2" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    expect(onUpdateTask).toHaveBeenLastCalledWith("task-1", {
+      assigneeId: "user-2",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    expect(onDeleteTask).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+    expect(onDeleteTask).toHaveBeenCalledWith("task-1");
+  });
+
+  it("renders project task actions as view-only without permissions", () => {
+    render(
+      <ProjectWorkspaceTasks
+        canManageTasks={false}
+        currentUserId="user-3"
+        tasks={[
+          {
+            assigneeId: "user-1",
+            dueDate: "2026-06-30",
+            id: "task-1",
+            priority: "high",
+            projectId: "project-1",
+            status: "todo",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /create task/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /delete/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("View only")).toBeInTheDocument();
+  });
+
   it("renders empty states", () => {
     render(
       <>

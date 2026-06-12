@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Permission } from '../entities/permission.entity';
 import { Role } from '../entities/role.entity';
 import { User } from '../entities/user.entity';
 import { UsersService } from '../users.service';
@@ -26,6 +27,7 @@ describe('UsersService', () => {
         UsersService,
         { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: getRepositoryToken(Role), useValue: {} },
+        { provide: getRepositoryToken(Permission), useValue: {} },
       ],
     }).compile();
 
@@ -77,6 +79,40 @@ describe('UsersService', () => {
         role: null,
         roleId: 'role-1',
         status: 'active',
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('passwordHash');
+  });
+
+  it('returns active assignable users with organisation role names', async () => {
+    usersRepository.find?.mockResolvedValue([
+      {
+        id: 'user-1',
+        email: 'ava@example.com',
+        firstName: 'Ava',
+        lastName: 'Patel',
+        passwordHash: 'hashed-password',
+        role: { id: 'role-1', name: 'Project Manager' },
+        roleId: 'role-1',
+        status: 'active',
+      },
+    ]);
+
+    const result = await service.findAssignableUsers();
+
+    expect(usersRepository.find).toHaveBeenCalledWith({
+      order: { firstName: 'ASC', lastName: 'ASC', email: 'ASC' },
+      relations: { role: true },
+      where: { status: 'active' },
+    });
+    expect(result).toEqual([
+      {
+        id: 'user-1',
+        email: 'ava@example.com',
+        firstName: 'Ava',
+        lastName: 'Patel',
+        displayName: 'Ava Patel',
+        role: 'Project Manager',
       },
     ]);
     expect(JSON.stringify(result)).not.toContain('passwordHash');

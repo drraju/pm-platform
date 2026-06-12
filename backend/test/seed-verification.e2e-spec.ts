@@ -30,11 +30,13 @@ describe('Seed data verification', () => {
       'Engineer',
       'QA Engineer',
     ]);
-    expect(developmentSeedData.projects.map((project) => project.name)).toEqual([
-      'Customer Experience Platform Upgrade',
-      'Observability Transformation Programme',
-      'Data Centre Exit Programme',
-    ]);
+    expect(developmentSeedData.projects.map((project) => project.name)).toEqual(
+      [
+        'Customer Experience Platform Upgrade',
+        'Observability Transformation Programme',
+        'Data Centre Exit Programme',
+      ],
+    );
     expect(developmentSeedData.memberships).toContainEqual([
       'Customer Experience Platform Upgrade',
       'project.manager@example.com',
@@ -50,7 +52,9 @@ describe('Seed data verification', () => {
     const projectNames = new Set(
       developmentSeedData.projects.map((project) => project.name),
     );
-    const userEmails = new Set(developmentSeedData.users.map((user) => user.email));
+    const userEmails = new Set(
+      developmentSeedData.users.map((user) => user.email),
+    );
 
     for (const [projectName, email] of developmentSeedData.memberships) {
       expect(projectNames.has(projectName)).toBe(true);
@@ -80,9 +84,11 @@ describe('Seed data verification', () => {
 
   it('verifies required entity metadata is present', () => {
     const dataSource = {
-      entityMetadatas: developmentSeedData.requiredEntityNames.map((targetName) => ({
-        targetName,
-      })),
+      entityMetadatas: developmentSeedData.requiredEntityNames.map(
+        (targetName) => ({
+          targetName,
+        }),
+      ),
     } as DataSource;
 
     expect(() => verifyRequiredEntities(dataSource)).not.toThrow();

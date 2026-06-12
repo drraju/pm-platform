@@ -9,6 +9,12 @@ import {
   type ApiProject,
   type ApiProjectMember,
 } from "@/features/projects";
+import {
+  getAuthMe,
+  getStoredPermissionKeys,
+  hasPermission,
+  storeAuthMe,
+} from "@/features/auth";
 import { getMyTasks, updateTask, type ApiTask } from "@/features/tasks";
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
@@ -25,7 +31,11 @@ export default function TasksPage() {
   const [membersByProjectId, setMembersByProjectId] = useState<
     Record<string, ApiProjectMember[]>
   >({});
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
+    getStoredPermissionKeys(),
+  );
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingTaskId, setIsSavingTaskId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState("all");
@@ -38,10 +48,12 @@ export default function TasksPage() {
     setError(null);
     setIsLoading(true);
     try {
-      const [taskData, projectData] = await Promise.all([
+      const [taskData, projectData, authMe] = await Promise.all([
         getMyTasks(),
         getProjects(),
+        getAuthMe(),
       ]);
+      storeAuthMe(authMe);
       const uniqueProjectIds = Array.from(
         new Set(taskData.map((task) => task.projectId)),
       );
@@ -54,6 +66,7 @@ export default function TasksPage() {
       setTasks(taskData);
       setProjects(projectData);
       setMembersByProjectId(Object.fromEntries(memberEntries));
+      setPermissionKeys(authMe.permissions.map((permission) => permission.key));
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -93,7 +106,9 @@ export default function TasksPage() {
             : task,
         ),
       );
+      showToast(setToast, "success", "Task changes saved.");
     } catch (requestError) {
+      showToast(setToast, "error", "Unable to update task.");
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -125,6 +140,10 @@ export default function TasksPage() {
           : rightTime - leftTime;
       });
   }, [dueDateSort, projectFilter, statusFilter, tasks]);
+  const canUpdateMyTasks =
+    hasPermission(permissionKeys, "task.update") ||
+    hasPermission(permissionKeys, "task.comment") ||
+    hasPermission(permissionKeys, "task.reassign");
 
   return (
     <div className="space-y-6">
@@ -139,6 +158,7 @@ export default function TasksPage() {
           {error}
         </section>
       ) : null}
+      {toast ? <ToastMessage toast={toast} /> : null}
 
       <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-3">
         <label className="block">
@@ -205,9 +225,42 @@ export default function TasksPage() {
         isLoading={isLoading}
         isSavingTaskId={isSavingTaskId}
         membersByProjectId={membersByProjectId}
-        onUpdateTask={handleUpdateTask}
+        onUpdateTask={canUpdateMyTasks ? handleUpdateTask : undefined}
         tasks={visibleTasks}
       />
     </div>
+  );
+}
+
+type ToastState = {
+  id: number;
+  message: string;
+  tone: "error" | "success";
+};
+
+function showToast(
+  setToast: React.Dispatch<React.SetStateAction<ToastState | null>>,
+  tone: ToastState["tone"],
+  message: string,
+) {
+  const id = Date.now();
+  setToast({ id, message, tone });
+  window.setTimeout(() => {
+    setToast((currentToast) => (currentToast?.id === id ? null : currentToast));
+  }, 3000);
+}
+
+function ToastMessage({ toast }: { toast: ToastState }) {
+  return (
+    <section
+      className={`fixed right-4 top-4 z-50 rounded-md border px-4 py-3 text-sm font-semibold shadow-lg ${
+        toast.tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-red-200 bg-red-50 text-red-700"
+      }`}
+      role="status"
+    >
+      {toast.message}
+    </section>
   );
 }

@@ -6,13 +6,13 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ProjectTable } from "@/components/projects/project-table";
 import {
   createProject,
+  getAssignableUsers,
   getProject,
   getProjects,
   type ApiProject,
 } from "@/features/projects";
-import { getUsers, type ApiUser } from "@/features/users";
 import { getStoredAccessToken } from "@/features/auth";
-import type { ApiProjectHealthStatus } from "@/lib/api/client";
+import type { ApiAssignableUser, ApiProjectHealthStatus } from "@/lib/api/client";
 
 const projectStatuses = [
   { label: "Active", value: "active" },
@@ -23,7 +23,7 @@ const projectStatuses = [
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ApiProject[]>([]);
-  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [users, setUsers] = useState<ApiAssignableUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -41,7 +41,7 @@ export default function ProjectsPage() {
     try {
       const [projectData, userData] = await Promise.all([
         getProjects(),
-        getUsers(),
+        getAssignableUsers(),
       ]);
       const projectsWithMemberCounts = await Promise.all(
         projectData.map(async (project) => {
@@ -56,8 +56,6 @@ export default function ProjectsPage() {
               risks: details.risks ?? project.risks,
               tasks: details.tasks ?? project.tasks,
             };
-            console.log("PROJECT DATA", project);
-
           } catch {
             return project;
           }

@@ -1,8 +1,8 @@
 import React from "react";
-import type { ApiProjectMember, ApiUser } from "@/lib/api/client";
+import type { ApiAssignableUser, ApiProjectMember } from "@/lib/api/client";
 
 type ProjectWorkspaceTeamProps = {
-  availableUsers?: ApiUser[];
+  availableUsers?: ApiAssignableUser[];
   isSaving?: boolean;
   onAddMember?: (input: { role: string; userId: string }) => void;
   onRemoveMember?: (memberId: string) => void;

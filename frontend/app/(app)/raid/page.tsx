@@ -4,14 +4,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { getProjects, type ApiProject } from "@/features/projects";
 import { createRaidItem, getRaidItems, type ApiRaidItem } from "@/features/raid";
-import { getUsers, type ApiUser } from "@/features/users";
+import { getAssignableUsers, type ApiAssignableUser } from "@/features/users";
 
 const raidTypes: Array<ApiRaidItem["type"]> = ["risk", "assumption", "issue", "dependency"];
 
 export default function RaidPage() {
   const [items, setItems] = useState<ApiRaidItem[]>([]);
   const [projects, setProjects] = useState<ApiProject[]>([]);
-  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [users, setUsers] = useState<ApiAssignableUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -23,7 +23,7 @@ export default function RaidPage() {
       const [raidData, projectData, userData] = await Promise.all([
         getRaidItems(),
         getProjects(),
-        getUsers(),
+        getAssignableUsers(),
       ]);
       setItems(raidData);
       setProjects(projectData);

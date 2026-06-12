@@ -79,10 +79,85 @@ const users = [
   },
 ];
 
+const superAdminUser = {
+  id: seedUuid('user-super-admin'),
+  email: process.env.SEED_SUPER_ADMIN_EMAIL ?? 'admin@example.com',
+  firstName: 'Super',
+  lastName: 'Admin',
+  password: process.env.SEED_SUPER_ADMIN_PASSWORD ?? 'admin',
+  roleName: 'SUPER_ADMIN',
+};
+
+const allSeedUsers = [superAdminUser, ...users];
+
 const permissions = [
+  {
+    key: PermissionKey.DashboardView,
+    description: 'View personal dashboard',
+  },
+  {
+    key: PermissionKey.ExecutiveView,
+    description: 'View executive dashboard and reports',
+  },
+  {
+    key: PermissionKey.IntegrationManage,
+    description: 'Manage external integrations',
+  },
+  {
+    key: PermissionKey.NotificationManage,
+    description: 'Manage notifications',
+  },
+  {
+    key: PermissionKey.NotificationRead,
+    description: 'Read notifications',
+  },
+  {
+    key: PermissionKey.PermissionManage,
+    description: 'Manage role permissions',
+  },
+  {
+    key: PermissionKey.PortfolioView,
+    description: 'View portfolio reporting',
+  },
+  {
+    key: PermissionKey.ProjectCreate,
+    description: 'Create projects',
+  },
+  {
+    key: PermissionKey.ProjectDelete,
+    description: 'Delete projects',
+  },
+  {
+    key: PermissionKey.ProjectRead,
+    description: 'Read projects',
+  },
   {
     key: PermissionKey.ProjectTeamManage,
     description: 'Manage project team membership',
+  },
+  {
+    key: PermissionKey.ProjectUpdate,
+    description: 'Update projects',
+  },
+  {
+    key: PermissionKey.RaidCreate,
+    description: 'Create RAID items',
+  },
+  {
+    key: PermissionKey.RaidDelete,
+    description: 'Delete RAID items',
+  },
+  {
+    key: PermissionKey.RaidRead,
+    description: 'Read RAID items',
+  },
+  {
+    key: PermissionKey.RaidUpdate,
+    description: 'Update RAID items',
+  },
+  {
+    key: PermissionKey.RoleManage,
+    description: 'Manage roles',
   },
   {
     key: PermissionKey.TaskCreate,
@@ -104,47 +179,97 @@ const permissions = [
     key: PermissionKey.TaskComment,
     description: 'Update task remarks',
   },
+  {
+    key: PermissionKey.UserManage,
+    description: 'Manage users',
+  },
 ] as const;
 
 const permissionsByRoleName: Record<string, PermissionKey[]> = {
+  SUPER_ADMIN: permissions.map((permission) => permission.key),
   'Program Manager': [
+    PermissionKey.DashboardView,
+    PermissionKey.ExecutiveView,
+    PermissionKey.PortfolioView,
+    PermissionKey.ProjectCreate,
+    PermissionKey.ProjectRead,
     PermissionKey.ProjectTeamManage,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
     PermissionKey.TaskCreate,
     PermissionKey.TaskUpdate,
     PermissionKey.TaskDelete,
     PermissionKey.TaskReassign,
     PermissionKey.TaskComment,
+    PermissionKey.NotificationRead,
   ],
   'Project Manager': [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectCreate,
+    PermissionKey.ProjectDelete,
+    PermissionKey.ProjectRead,
     PermissionKey.ProjectTeamManage,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidDelete,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
     PermissionKey.TaskCreate,
     PermissionKey.TaskUpdate,
     PermissionKey.TaskDelete,
     PermissionKey.TaskReassign,
     PermissionKey.TaskComment,
+    PermissionKey.NotificationRead,
   ],
   'Delivery Lead': [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
     PermissionKey.ProjectTeamManage,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
     PermissionKey.TaskCreate,
     PermissionKey.TaskUpdate,
     PermissionKey.TaskDelete,
     PermissionKey.TaskReassign,
     PermissionKey.TaskComment,
+    PermissionKey.NotificationRead,
   ],
   'Technical Lead': [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
     PermissionKey.TaskUpdate,
     PermissionKey.TaskReassign,
     PermissionKey.TaskComment,
+    PermissionKey.NotificationRead,
   ],
   Engineer: [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
     PermissionKey.TaskUpdate,
     PermissionKey.TaskReassign,
     PermissionKey.TaskComment,
+    PermissionKey.NotificationRead,
   ],
   'QA Engineer': [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
     PermissionKey.TaskUpdate,
     PermissionKey.TaskReassign,
     PermissionKey.TaskComment,
+    PermissionKey.NotificationRead,
   ],
 };
 
@@ -330,14 +455,14 @@ async function resetSeedData(dataSource: DataSource) {
     await manager.getRepository(Project).delete({ id: In(projects.map((project) => project.id)) });
     await manager
       .getRepository(RolePermission)
-      .delete({ roleId: In(users.map((user) => seedUuid(`role-${user.roleName}`))) });
+      .delete({ roleId: In(allSeedUsers.map((user) => seedUuid(`role-${user.roleName}`))) });
     await manager
       .getRepository(Permission)
       .delete({ id: In(permissions.map((permission) => seedUuid(`permission-${permission.key}`))) });
-    await manager.getRepository(User).delete({ id: In(users.map((user) => user.id)) });
+    await manager.getRepository(User).delete({ id: In(allSeedUsers.map((user) => user.id)) });
     await manager
       .getRepository(Role)
-      .delete({ id: In(users.map((user) => seedUuid(`role-${user.roleName}`))) });
+      .delete({ id: In(allSeedUsers.map((user) => seedUuid(`role-${user.roleName}`))) });
   });
 }
 
@@ -347,9 +472,10 @@ async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
   const rolePermissionRepository = dataSource.getRepository(RolePermission);
   const userRepository = dataSource.getRepository(User);
   const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const superAdminPasswordHash = await bcrypt.hash(superAdminUser.password, 10);
 
   const roles: Role[] = [];
-  for (const user of users) {
+  for (const user of allSeedUsers) {
     const existingRole = await roleRepository.findOne({
       where: { name: user.roleName },
     });
@@ -398,7 +524,7 @@ async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
   );
 
   const savedUsers: User[] = [];
-  for (const user of users) {
+  for (const user of allSeedUsers) {
     const existingUser = await userRepository.findOne({
       where: { email: user.email },
     });
@@ -409,7 +535,8 @@ async function seedRolesAndUsers(dataSource: DataSource): Promise<SeedContext> {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          passwordHash,
+          passwordHash:
+            user.email === superAdminUser.email ? superAdminPasswordHash : passwordHash,
           roleId: rolesByName.get(user.roleName)?.id,
           status: 'active',
         }) as unknown as User,
