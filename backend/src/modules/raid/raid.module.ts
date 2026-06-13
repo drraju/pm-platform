@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectsModule } from '../projects/projects.module';
-import { Role } from '../users/entities/role.entity';
 import { Assumption } from './entities/assumption.entity';
 import { Dependency } from './entities/dependency.entity';
 import { Issue } from './entities/issue.entity';
@@ -11,7 +10,7 @@ import { RaidService } from './raid.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Assumption, Dependency, Issue, Risk, Role]),
+    TypeOrmModule.forFeature([Assumption, Dependency, Issue, Risk]),
     ProjectsModule,
   ],
   controllers: [RaidController],

@@ -1,33 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { Role } from '../users/entities/role.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { PermissionKey } from '../../common/authz/permissions';
+import {
+  AuthorizationActor,
+  AuthorizationPolicyService,
+} from '../../common/authz/authorization-policy.service';
 import { ProjectMember } from './entities/project-member.entity';
 import { Project } from './entities/project.entity';
 
-export type ProjectVisibilityActor = {
-  userId: string;
-  email?: string;
-  roleId: string;
-};
-
-const allProjectRoleNames = new Set([
-  'SUPER_ADMIN',
-  'Admin',
-  'Program Manager',
-  'Portfolio Manager',
-  'Executive',
-]);
-
-const taskAssignmentProjectRoleNames = new Set([
-  'Project Manager',
-  'Delivery Lead',
-  'Team Member',
-  'Technical Lead',
-  'Engineer',
-  'QA Engineer',
-]);
+export type ProjectVisibilityActor = AuthorizationActor;
 
 @Injectable()
 export class ProjectVisibilityService {
@@ -38,8 +21,7 @@ export class ProjectVisibilityService {
     private readonly projectMembersRepository: Repository<ProjectMember>,
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
-    @InjectRepository(Role)
-    private readonly rolesRepository: Repository<Role>,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
   ) {}
 
   async getVisibleProjects(actor?: ProjectVisibilityActor): Promise<Project[]> {
@@ -69,13 +51,16 @@ export class ProjectVisibilityService {
       return 'all';
     }
 
-    const roleName = await this.getRoleName(actor.roleId);
-    if (roleName && allProjectRoleNames.has(roleName)) {
+    if (await this.hasPlatformWideVisibility(actor)) {
       return 'all';
     }
 
     const shouldIncludeTaskAssignedProjects =
-      roleName !== null && taskAssignmentProjectRoleNames.has(roleName);
+      await this.authorizationPolicyService.hasAnyPermission(actor, [
+        PermissionKey.TaskUpdate,
+        PermissionKey.TaskComment,
+        PermissionKey.TaskReassign,
+      ]);
 
     const [ownedProjects, memberships, assignedTasks] = await Promise.all([
       this.projectsRepository.find({
@@ -107,16 +92,18 @@ export class ProjectVisibilityService {
     projectId: string,
     actor?: ProjectVisibilityActor,
   ): Promise<boolean> {
-    const visibleProjectIds = await this.getVisibleProjectIds(actor);
-    return visibleProjectIds === 'all' || visibleProjectIds.includes(projectId);
+    return this.authorizationPolicyService.canViewProject(projectId, actor);
   }
 
-  async getRoleName(roleId: string): Promise<string | null> {
-    const role = await this.rolesRepository.findOne({
-      select: { id: true, name: true },
-      where: { id: roleId },
-    });
-
-    return role?.name ?? null;
+  private async hasPlatformWideVisibility(actor: ProjectVisibilityActor) {
+    return (
+      (await this.authorizationPolicyService.canViewPortfolio(actor)) ||
+      (await this.authorizationPolicyService.canViewExecutive(actor)) ||
+      (await this.authorizationPolicyService.hasAnyPermission(actor, [
+        PermissionKey.UserManage,
+        PermissionKey.RoleManage,
+        PermissionKey.PermissionManage,
+      ]))
+    );
   }
 }

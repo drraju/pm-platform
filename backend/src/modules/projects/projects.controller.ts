@@ -65,10 +65,14 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Post()
+  @RequirePermissions(PermissionKey.ProjectCreate)
   @ApiOperation({ summary: 'Create a project' })
   @ApiCreatedResponse({ type: Project })
-  create(@Body() createProjectDto: CreateProjectDto): Promise<Project> {
-    return this.projectsService.create(createProjectDto);
+  create(
+    @Req() request: AuthenticatedRequest,
+    @Body() createProjectDto: CreateProjectDto,
+  ): Promise<Project> {
+    return this.projectsService.create(createProjectDto, request.user);
   }
 
   @Get()
@@ -296,24 +300,30 @@ export class ProjectsController {
   }
 
   @Patch(':id')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
   @ApiOperation({ summary: 'Update a project' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: Project })
   @ApiNotFoundResponse({ description: 'Project not found' })
   update(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() updateProjectDto: UpdateProjectDto,
   ): Promise<Project> {
-    return this.projectsService.update(id, updateProjectDto);
+    return this.projectsService.update(id, updateProjectDto, request.user);
   }
 
   @Delete(':id')
+  @RequirePermissions(PermissionKey.ProjectDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a project' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNoContentResponse({ description: 'Project deleted' })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  remove(@Param('id') id: string): Promise<void> {
-    return this.projectsService.remove(id);
+  remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.projectsService.remove(id, request.user);
   }
 }

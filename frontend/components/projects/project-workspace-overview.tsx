@@ -29,6 +29,18 @@ export function ProjectWorkspaceOverview({
           }
         />
         <OverviewItem
+          label="Business Owner"
+          value={formatUser(project.businessOwner)}
+        />
+        <OverviewItem
+          label="Executive Sponsor"
+          value={formatUser(project.executiveSponsor)}
+        />
+        <OverviewItem
+          label="Delivery Lead"
+          value={formatUser(project.deliveryLead)}
+        />
+        <OverviewItem
           label="Team Size"
           value={String(project.members?.length ?? 0)}
         />
@@ -50,4 +62,13 @@ function OverviewItem({ label, value }: { label: string; value: string }) {
 
 function formatLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function formatUser(
+  user?: {
+    firstName: string;
+    lastName: string;
+  } | null,
+) {
+  return user ? `${user.firstName} ${user.lastName}` : 'Unassigned';
 }

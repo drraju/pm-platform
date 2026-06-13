@@ -59,7 +59,13 @@ export type ApiProject = {
   startDate?: string | null;
   targetEndDate?: string | null;
   ownerId?: string | null;
+  businessOwnerId?: string | null;
+  executiveSponsorId?: string | null;
+  deliveryLeadId?: string | null;
   owner?: ApiUser | null;
+  businessOwner?: ApiUser | null;
+  executiveSponsor?: ApiUser | null;
+  deliveryLead?: ApiUser | null;
   members?: ApiProjectMember[];
   tasks?: ApiTask[];
   risks?: ApiRaidItem[];
@@ -422,6 +428,9 @@ export function createProject(input: {
   startDate?: string;
   targetEndDate?: string;
   ownerId?: string;
+  businessOwnerId?: string;
+  executiveSponsorId?: string;
+  deliveryLeadId?: string;
 }) {
   return apiRequest<ApiProject>("/projects", {
     method: "POST",
@@ -438,6 +447,9 @@ export function updateProject(
     startDate?: string;
     targetEndDate?: string;
     ownerId?: string;
+    businessOwnerId?: string;
+    executiveSponsorId?: string;
+    deliveryLeadId?: string;
   },
 ) {
   return apiRequest<ApiProjectDetails>(`/projects/${projectId}`, {

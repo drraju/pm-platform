@@ -5,8 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere } from 'typeorm';
 import { Repository } from 'typeorm';
+import {
+  AuthorizationActor,
+  AuthorizationPolicyService,
+} from '../../common/authz/authorization-policy.service';
+import { PermissionKey } from '../../common/authz/permissions';
 import { ProjectRole } from '../../common/enums/project-role.enum';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
@@ -32,14 +36,7 @@ import {
 } from './project-visibility.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
-type AuthenticatedActor = {
-  userId: string;
-  email: string;
-  roleId: string;
-};
-
-const managerRoleNames = new Set(['Program Manager', 'Project Manager']);
-const projectManagerRoles = new Set([ProjectRole.Owner, ProjectRole.Manager]);
+type AuthenticatedActor = AuthorizationActor;
 const teamMemberEditableTaskFields = new Set([
   'assigneeId',
   'remarks',
@@ -59,10 +56,17 @@ export class ProjectsService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly projectHealthService: ProjectHealthService,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
   ) {}
 
-  create(createProjectDto: CreateProjectDto): Promise<Project> {
+  async create(
+    createProjectDto: CreateProjectDto,
+    actor?: AuthenticatedActor,
+  ): Promise<Project> {
+    await this.ensureCanCreateProject(actor);
+    await this.validateGovernanceUsers(createProjectDto);
+
     return this.projectsRepository.save(
       this.projectsRepository.create(createProjectDto),
     );
@@ -83,7 +87,10 @@ export class ProjectsService {
       where: { id },
       relations: {
         assumptions: { owner: true },
+        businessOwner: true,
         dependencies: { owner: true },
+        deliveryLead: true,
+        executiveSponsor: true,
         issues: { owner: true },
         members: { user: { role: true } },
         owner: true,
@@ -101,13 +108,17 @@ export class ProjectsService {
   async update(
     id: string,
     updateProjectDto: UpdateProjectDto,
+    actor?: AuthenticatedActor,
   ): Promise<Project> {
+    await this.ensureCanManageProject(id, actor);
+    await this.validateGovernanceUsers(updateProjectDto);
     const project = await this.findProjectEntity(id);
     Object.assign(project, updateProjectDto);
     return this.projectsRepository.save(project);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
+    await this.ensureCanDeleteProject(id, actor);
     const project = await this.findProjectEntity(id);
     await this.projectsRepository.softRemove(project);
   }
@@ -317,7 +328,10 @@ export class ProjectsService {
       where: { id },
       relations: {
         assumptions: { owner: true },
+        businessOwner: true,
         dependencies: { owner: true },
+        deliveryLead: true,
+        executiveSponsor: true,
         issues: { owner: true },
         members: { user: { role: true } },
         owner: true,
@@ -340,6 +354,26 @@ export class ProjectsService {
     if (!user) {
       throw new NotFoundException(`User ${userId} not found`);
     }
+  }
+
+  private async validateGovernanceUsers(
+    input: Pick<
+      CreateProjectDto,
+      'ownerId' | 'businessOwnerId' | 'executiveSponsorId' | 'deliveryLeadId'
+    >,
+  ): Promise<void> {
+    const uniqueUserIds = Array.from(
+      new Set(
+        [
+          input.ownerId,
+          input.businessOwnerId,
+          input.executiveSponsorId,
+          input.deliveryLeadId,
+        ].filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    await Promise.all(uniqueUserIds.map((userId) => this.ensureUserExists(userId)));
   }
 
   private async findMember(
@@ -402,23 +436,35 @@ export class ProjectsService {
     projectId: string,
     actor?: AuthenticatedActor,
   ): Promise<void> {
-    if (!actor) {
-      return;
-    }
-
-    if (await this.isProgramOrProjectManager(actor.roleId)) {
-      return;
-    }
-
-    const membership = await this.projectMembersRepository.findOne({
-      select: { id: true, role: true },
-      where: { projectId, userId: actor.userId },
-    });
-    if (membership && projectManagerRoles.has(membership.role)) {
+    if (await this.authorizationPolicyService.canManageProject(projectId, actor)) {
       return;
     }
 
     throw new ForbiddenException('Project manager access is required');
+  }
+
+  private async ensureCanCreateProject(actor?: AuthenticatedActor) {
+    if (
+      await this.authorizationPolicyService.hasPermission(
+        actor,
+        PermissionKey.ProjectCreate,
+      )
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException('Project create access is required');
+  }
+
+  private async ensureCanDeleteProject(
+    projectId: string,
+    actor?: AuthenticatedActor,
+  ) {
+    if (await this.authorizationPolicyService.canDeleteProject(projectId, actor)) {
+      return;
+    }
+
+    throw new ForbiddenException('Project delete access is required');
   }
 
   private async ensureCanUpdateTask(
@@ -454,23 +500,7 @@ export class ProjectsService {
     projectId: string,
     actor: AuthenticatedActor,
   ): Promise<boolean> {
-    try {
-      await this.ensureCanManageProject(projectId, actor);
-      return true;
-    } catch (error) {
-      if (error instanceof ForbiddenException) {
-        return false;
-      }
-      throw error;
-    }
-  }
-
-  private async isProgramOrProjectManager(roleId: string): Promise<boolean> {
-    const user = await this.usersRepository.findOne({
-      relations: { role: true },
-      where: { roleId } as FindOptionsWhere<User>,
-    });
-    return user?.role?.name ? managerRoleNames.has(user.role.name) : false;
+    return this.authorizationPolicyService.canManageTask(projectId, actor);
   }
 
   private toProjectMemberResponse(

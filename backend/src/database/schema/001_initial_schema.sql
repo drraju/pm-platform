@@ -61,6 +61,9 @@ CREATE TABLE projects (
   start_date DATE,
   target_end_date DATE,
   owner_id UUID REFERENCES users(id),
+  business_owner_id UUID REFERENCES users(id),
+  executive_sponsor_id UUID REFERENCES users(id),
+  delivery_lead_id UUID REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
@@ -196,6 +199,9 @@ CREATE TABLE notifications (
 );
 
 CREATE INDEX idx_projects_owner_id ON projects(owner_id);
+CREATE INDEX idx_projects_business_owner_id ON projects(business_owner_id);
+CREATE INDEX idx_projects_executive_sponsor_id ON projects(executive_sponsor_id);
+CREATE INDEX idx_projects_delivery_lead_id ON projects(delivery_lead_id);
 CREATE INDEX idx_users_role_id ON users(role_id);
 CREATE INDEX idx_project_members_project_id ON project_members(project_id);
 CREATE INDEX idx_project_members_user_id ON project_members(user_id);

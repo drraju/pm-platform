@@ -1,0 +1,302 @@
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ProjectRole } from '../enums/project-role.enum';
+import { ProjectMember } from '../../modules/projects/entities/project-member.entity';
+import { Project } from '../../modules/projects/entities/project.entity';
+import { Task } from '../../modules/tasks/entities/task.entity';
+import { Role } from '../../modules/users/entities/role.entity';
+import {
+  AuthorizationActor,
+  AuthorizationPolicyService,
+} from './authorization-policy.service';
+import { PermissionKey } from './permissions';
+
+type MockRepository<T extends object = object> = Partial<
+  Record<keyof Repository<T>, jest.Mock>
+>;
+
+const projectId = 'project-1';
+
+const permissionsByRoleName: Record<string, PermissionKey[]> = {
+  SUPER_ADMIN: Object.values(PermissionKey),
+  Admin: Object.values(PermissionKey),
+  'Program Manager': [
+    PermissionKey.DashboardView,
+    PermissionKey.ExecutiveView,
+    PermissionKey.PortfolioView,
+    PermissionKey.ProjectCreate,
+    PermissionKey.ProjectRead,
+    PermissionKey.ProjectTeamManage,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidDelete,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
+    PermissionKey.TaskComment,
+    PermissionKey.TaskCreate,
+    PermissionKey.TaskDelete,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskUpdate,
+  ],
+  'Portfolio Manager': [
+    PermissionKey.DashboardView,
+    PermissionKey.ExecutiveView,
+    PermissionKey.PortfolioView,
+    PermissionKey.ProjectRead,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidRead,
+    PermissionKey.TaskUpdate,
+  ],
+  Executive: [
+    PermissionKey.DashboardView,
+    PermissionKey.ExecutiveView,
+    PermissionKey.PortfolioView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidRead,
+  ],
+  'Project Manager': [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectCreate,
+    PermissionKey.ProjectDelete,
+    PermissionKey.ProjectRead,
+    PermissionKey.ProjectTeamManage,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidDelete,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
+    PermissionKey.TaskComment,
+    PermissionKey.TaskCreate,
+    PermissionKey.TaskDelete,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskUpdate,
+  ],
+  'Delivery Lead': [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.ProjectTeamManage,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
+    PermissionKey.TaskComment,
+    PermissionKey.TaskCreate,
+    PermissionKey.TaskDelete,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskUpdate,
+  ],
+  'Team Member': [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
+    PermissionKey.TaskComment,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskUpdate,
+  ],
+  Partner: [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidRead,
+    PermissionKey.TaskComment,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskUpdate,
+  ],
+  Customer: [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidRead,
+  ],
+};
+
+describe('AuthorizationPolicyService', () => {
+  let service: AuthorizationPolicyService;
+  let projectsRepository: MockRepository<Project>;
+  let projectMembersRepository: MockRepository<ProjectMember>;
+  let tasksRepository: MockRepository<Task>;
+  let rolesRepository: MockRepository<Role>;
+  let ownedProjectIds: Set<string>;
+  let membershipsByKey: Map<string, ProjectRole>;
+  let assignedTaskKeys: Set<string>;
+
+  beforeEach(async () => {
+    ownedProjectIds = new Set();
+    membershipsByKey = new Map();
+    assignedTaskKeys = new Set();
+
+    projectsRepository = {
+      findOne: jest.fn(({ where }) => {
+        if (
+          where?.id &&
+          where?.ownerId &&
+          ownedProjectIds.has(`${where.id}:${where.ownerId}`)
+        ) {
+          return Promise.resolve({ id: where.id });
+        }
+
+        return Promise.resolve(null);
+      }),
+    };
+    projectMembersRepository = {
+      findOne: jest.fn(({ where }) => {
+        const role = membershipsByKey.get(`${where.projectId}:${where.userId}`);
+        return Promise.resolve(
+          role ? { id: `${where.projectId}-${where.userId}`, role } : null,
+        );
+      }),
+    };
+    tasksRepository = {
+      findOne: jest.fn(({ where }) => {
+        const key = `${where.projectId}:${where.assigneeId}`;
+        return Promise.resolve(assignedTaskKeys.has(key) ? { id: 'task-1' } : null);
+      }),
+    };
+    rolesRepository = {
+      findOne: jest.fn(({ where }) => {
+        const roleName = String(where.id).replace('role-', '');
+        const permissionKeys = permissionsByRoleName[roleName] ?? [];
+        return Promise.resolve({
+          id: where.id,
+          permissions: permissionKeys.map((key) => ({ key })),
+        });
+      }),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthorizationPolicyService,
+        { provide: getRepositoryToken(Project), useValue: projectsRepository },
+        {
+          provide: getRepositoryToken(ProjectMember),
+          useValue: projectMembersRepository,
+        },
+        { provide: getRepositoryToken(Task), useValue: tasksRepository },
+        { provide: getRepositoryToken(Role), useValue: rolesRepository },
+      ],
+    }).compile();
+
+    service = moduleRef.get(AuthorizationPolicyService);
+  });
+
+  it.each([
+    ['SUPER_ADMIN', true],
+    ['Admin', true],
+    ['Program Manager', true],
+    ['Portfolio Manager', true],
+    ['Executive', true],
+    ['Project Manager', false],
+    ['Delivery Lead', false],
+    ['Team Member', false],
+    ['Partner', false],
+    ['Customer', false],
+  ])('evaluates portfolio access for %s', async (roleName, expected) => {
+    await expect(service.canViewPortfolio(actor(roleName))).resolves.toBe(expected);
+  });
+
+  it.each([
+    ['SUPER_ADMIN', true],
+    ['Admin', true],
+    ['Program Manager', true],
+    ['Portfolio Manager', true],
+    ['Executive', true],
+    ['Project Manager', false],
+    ['Delivery Lead', false],
+    ['Team Member', false],
+    ['Partner', false],
+    ['Customer', false],
+  ])('evaluates executive access for %s', async (roleName, expected) => {
+    await expect(service.canViewExecutive(actor(roleName))).resolves.toBe(expected);
+  });
+
+  it.each([
+    'SUPER_ADMIN',
+    'Admin',
+    'Program Manager',
+    'Portfolio Manager',
+    'Executive',
+  ])('grants all-project visibility to %s through centralized policy', async (roleName) => {
+    await expect(service.canViewProject(projectId, actor(roleName))).resolves.toBe(
+      true,
+    );
+  });
+
+  it('grants project visibility from membership without role-name logic', async () => {
+    membershipsByKey.set(`${projectId}:user-team-member`, ProjectRole.Contributor);
+
+    await expect(
+      service.canViewProject(projectId, actor('Team Member', 'user-team-member')),
+    ).resolves.toBe(true);
+  });
+
+  it('grants project visibility from assigned tasks for task-capable roles', async () => {
+    assignedTaskKeys.add(`${projectId}:user-partner`);
+
+    await expect(
+      service.canViewProject(projectId, actor('Partner', 'user-partner')),
+    ).resolves.toBe(true);
+  });
+
+  it('does not grant customer project visibility from task assignment alone', async () => {
+    assignedTaskKeys.add(`${projectId}:user-customer`);
+
+    await expect(
+      service.canViewProject(projectId, actor('Customer', 'user-customer')),
+    ).resolves.toBe(false);
+  });
+
+  it('allows project management for project managers, delivery leads, and owners via policy checks', async () => {
+    membershipsByKey.set(`${projectId}:user-pm`, ProjectRole.Manager);
+    membershipsByKey.set(`${projectId}:user-dl`, ProjectRole.Manager);
+    ownedProjectIds.add(`${projectId}:user-owner`);
+
+    await expect(
+      service.canManageProject(projectId, actor('Project Manager', 'user-pm')),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageProject(projectId, actor('Delivery Lead', 'user-dl')),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageProject(projectId, actor('Project Manager', 'user-owner')),
+    ).resolves.toBe(true);
+  });
+
+  it('restricts project deletion to roles that have explicit delete permission', async () => {
+    membershipsByKey.set(`${projectId}:user-pm`, ProjectRole.Manager);
+    membershipsByKey.set(`${projectId}:user-dl`, ProjectRole.Manager);
+
+    await expect(
+      service.canDeleteProject(projectId, actor('Project Manager', 'user-pm')),
+    ).resolves.toBe(true);
+    await expect(
+      service.canDeleteProject(projectId, actor('Delivery Lead', 'user-dl')),
+    ).resolves.toBe(false);
+  });
+
+  it('grants broad task and RAID management only to project governors', async () => {
+    membershipsByKey.set(`${projectId}:user-dl`, ProjectRole.Manager);
+    membershipsByKey.set(`${projectId}:user-team`, ProjectRole.Contributor);
+
+    await expect(
+      service.canManageTask(projectId, actor('Delivery Lead', 'user-dl')),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageRaid(projectId, actor('Delivery Lead', 'user-dl')),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageTask(projectId, actor('Team Member', 'user-team')),
+    ).resolves.toBe(false);
+    await expect(
+      service.canManageRaid(projectId, actor('Team Member', 'user-team')),
+    ).resolves.toBe(false);
+  });
+});
+
+function actor(roleName: string, userId = `user-${roleName.toLowerCase()}`): AuthorizationActor {
+  return {
+    email: `${userId}@example.com`,
+    roleId: `role-${roleName}`,
+    userId,
+  };
+}

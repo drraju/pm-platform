@@ -2,11 +2,10 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ProjectRole } from '../../../common/enums/project-role.enum';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
-import { User } from '../../users/entities/user.entity';
 import { Task } from '../entities/task.entity';
 import { TasksService } from '../tasks.service';
 
@@ -22,7 +21,10 @@ describe('TasksService', () => {
   let service: TasksService;
   let tasksRepository: MockRepository<Task>;
   let projectMembersRepository: MockRepository<ProjectMember>;
-  let usersRepository: MockRepository<User>;
+  let authorizationPolicyService: {
+    canManageProject: jest.Mock;
+    canManageTask: jest.Mock;
+  };
   let projectVisibilityService: {
     canViewProject: jest.Mock;
     getVisibleProjectIds: jest.Mock;
@@ -40,8 +42,9 @@ describe('TasksService', () => {
     projectMembersRepository = {
       findOne: jest.fn(),
     };
-    usersRepository = {
-      findOne: jest.fn(),
+    authorizationPolicyService = {
+      canManageProject: jest.fn().mockResolvedValue(true),
+      canManageTask: jest.fn().mockResolvedValue(false),
     };
     projectVisibilityService = {
       canViewProject: jest.fn().mockResolvedValue(true),
@@ -60,8 +63,8 @@ describe('TasksService', () => {
           useValue: projectMembersRepository,
         },
         {
-          provide: getRepositoryToken(User),
-          useValue: usersRepository,
+          provide: AuthorizationPolicyService,
+          useValue: authorizationPolicyService,
         },
         {
           provide: ProjectVisibilityService,
@@ -245,15 +248,7 @@ describe('TasksService', () => {
       status: TaskStatus.Todo,
     };
     tasksRepository.findOne?.mockResolvedValue(task);
-    usersRepository.findOne?.mockResolvedValue({
-      id: userId,
-      role: { name: 'Engineer' },
-    });
     projectMembersRepository.findOne
-      ?.mockResolvedValueOnce({
-        id: 'member-id',
-        role: ProjectRole.Contributor,
-      })
       ?.mockResolvedValueOnce({ id: 'assignee-member-id' });
 
     await service.update(
@@ -287,14 +282,6 @@ describe('TasksService', () => {
       assigneeId: userId,
       projectId,
       title: 'Original',
-    });
-    usersRepository.findOne?.mockResolvedValue({
-      id: userId,
-      role: { name: 'Engineer' },
-    });
-    projectMembersRepository.findOne?.mockResolvedValue({
-      id: 'member-id',
-      role: ProjectRole.Contributor,
     });
 
     await expect(

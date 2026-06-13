@@ -6,28 +6,23 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import {
+  AuthorizationActor,
+  AuthorizationPolicyService,
+} from '../../common/authz/authorization-policy.service';
 import { TaskStatus } from '../../common/enums/task-status.enum';
-import { ProjectRole } from '../../common/enums/project-role.enum';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import {
   ProjectVisibilityActor,
   ProjectVisibilityService,
 } from '../projects/project-visibility.service';
-import { User } from '../users/entities/user.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
 import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
 
-type AuthenticatedActor = {
-  userId: string;
-  email: string;
-  roleId: string;
-};
-
-const managerRoleNames = new Set(['Program Manager', 'Project Manager']);
-const projectManagerRoles = new Set([ProjectRole.Owner, ProjectRole.Manager]);
+type AuthenticatedActor = AuthorizationActor;
 const teamMemberEditableTaskFields = new Set([
   'assigneeId',
   'remarks',
@@ -42,8 +37,7 @@ export class TasksService {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(ProjectMember)
     private readonly projectMembersRepository: Repository<ProjectMember>,
-    @InjectRepository(User)
-    private readonly usersRepository: Repository<User>,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
   ) {}
 
@@ -172,19 +166,7 @@ export class TasksService {
     projectId: string,
     actor?: AuthenticatedActor,
   ): Promise<void> {
-    if (!actor) {
-      return;
-    }
-
-    if (await this.isProgramOrProjectManager(actor.roleId)) {
-      return;
-    }
-
-    const membership = await this.projectMembersRepository.findOne({
-      select: { id: true, role: true },
-      where: { projectId, userId: actor.userId },
-    });
-    if (membership && projectManagerRoles.has(membership.role)) {
+    if (await this.authorizationPolicyService.canManageProject(projectId, actor)) {
       return;
     }
 
@@ -224,15 +206,7 @@ export class TasksService {
     projectId: string,
     actor: AuthenticatedActor,
   ): Promise<boolean> {
-    try {
-      await this.ensureCanManageProject(projectId, actor);
-      return true;
-    } catch (error) {
-      if (error instanceof ForbiddenException) {
-        return false;
-      }
-      throw error;
-    }
+    return this.authorizationPolicyService.canManageTask(projectId, actor);
   }
 
   private async validateAssigneeMembership(
@@ -252,11 +226,4 @@ export class TasksService {
     }
   }
 
-  private async isProgramOrProjectManager(roleId: string): Promise<boolean> {
-    const user = await this.usersRepository.findOne({
-      relations: { role: true },
-      where: { roleId },
-    });
-    return user?.role?.name ? managerRoleNames.has(user.role.name) : false;
-  }
 }

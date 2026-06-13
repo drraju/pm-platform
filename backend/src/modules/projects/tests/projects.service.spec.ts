@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
@@ -27,6 +28,12 @@ describe('ProjectsService', () => {
   let projectMembersRepository: MockRepository<ProjectMember>;
   let tasksRepository: MockRepository<Task>;
   let usersRepository: MockRepository<User>;
+  let authorizationPolicyService: {
+    canDeleteProject: jest.Mock;
+    canManageProject: jest.Mock;
+    canManageTask: jest.Mock;
+    hasPermission: jest.Mock;
+  };
   let projectVisibilityService: {
     canViewProject: jest.Mock;
     getVisibleProjects: jest.Mock;
@@ -57,6 +64,12 @@ describe('ProjectsService', () => {
     usersRepository = {
       findOne: jest.fn(),
     };
+    authorizationPolicyService = {
+      canDeleteProject: jest.fn().mockResolvedValue(true),
+      canManageProject: jest.fn().mockResolvedValue(true),
+      canManageTask: jest.fn().mockResolvedValue(true),
+      hasPermission: jest.fn().mockResolvedValue(true),
+    };
     projectVisibilityService = {
       canViewProject: jest.fn().mockResolvedValue(true),
       getVisibleProjects: jest.fn().mockResolvedValue([{ id: projectId }]),
@@ -82,6 +95,10 @@ describe('ProjectsService', () => {
           useValue: usersRepository,
         },
         ProjectHealthService,
+        {
+          provide: AuthorizationPolicyService,
+          useValue: authorizationPolicyService,
+        },
         {
           provide: ProjectVisibilityService,
           useValue: projectVisibilityService,
@@ -154,7 +171,10 @@ describe('ProjectsService', () => {
       where: { id: projectId },
       relations: {
         assumptions: { owner: true },
+        businessOwner: true,
         dependencies: { owner: true },
+        deliveryLead: true,
+        executiveSponsor: true,
         issues: { owner: true },
         members: { user: { role: true } },
         owner: true,
@@ -196,7 +216,10 @@ describe('ProjectsService', () => {
       where: { id: projectId },
       relations: {
         assumptions: { owner: true },
+        businessOwner: true,
         dependencies: { owner: true },
+        deliveryLead: true,
+        executiveSponsor: true,
         issues: { owner: true },
         members: { user: { role: true } },
         owner: true,

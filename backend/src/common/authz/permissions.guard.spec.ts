@@ -61,14 +61,17 @@ describe('PermissionsGuard', () => {
     );
   });
 
-  it('keeps super admin bypass for all and any permission metadata', async () => {
+  it('allows access when a role has all required permissions', async () => {
     mockMetadata({
       all: [PermissionKey.UserManage],
       any: [PermissionKey.ProjectRead],
     });
     rolesRepository.findOne.mockResolvedValue({
-      name: 'SUPER_ADMIN',
-      permissions: [],
+      name: 'Admin',
+      permissions: [
+        { key: PermissionKey.UserManage },
+        { key: PermissionKey.ProjectRead },
+      ],
     });
 
     await expect(guard.canActivate(createContext())).resolves.toBe(true);

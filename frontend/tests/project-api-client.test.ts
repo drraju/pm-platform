@@ -115,7 +115,10 @@ describe("project API client", () => {
 
     await createProject({
       name: "ERP",
+      businessOwnerId: "user-2",
       description: "Finance delivery",
+      deliveryLeadId: "user-3",
+      executiveSponsorId: "user-4",
       status: "active",
       startDate: "2026-01-01",
       targetEndDate: "2026-09-30",
@@ -127,7 +130,10 @@ describe("project API client", () => {
       expect.objectContaining({
         body: JSON.stringify({
           name: "ERP",
+          businessOwnerId: "user-2",
           description: "Finance delivery",
+          deliveryLeadId: "user-3",
+          executiveSponsorId: "user-4",
           status: "active",
           startDate: "2026-01-01",
           targetEndDate: "2026-09-30",
@@ -143,6 +149,7 @@ describe("project API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await updateProject("project-1", {
+      businessOwnerId: "user-2",
       name: "Updated ERP",
       status: "at_risk",
     });
@@ -150,7 +157,11 @@ describe("project API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects/project-1",
       expect.objectContaining({
-        body: JSON.stringify({ name: "Updated ERP", status: "at_risk" }),
+        body: JSON.stringify({
+          businessOwnerId: "user-2",
+          name: "Updated ERP",
+          status: "at_risk",
+        }),
         method: "PATCH",
       }),
     );

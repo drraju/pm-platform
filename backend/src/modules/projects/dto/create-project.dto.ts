@@ -30,4 +30,19 @@ export class CreateProjectDto {
   @IsOptional()
   @IsUUID()
   ownerId?: string | null;
+
+  @ApiProperty({ format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
+  businessOwnerId?: string | null;
+
+  @ApiProperty({ format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
+  executiveSponsorId?: string | null;
+
+  @ApiProperty({ format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
+  deliveryLeadId?: string | null;
 }

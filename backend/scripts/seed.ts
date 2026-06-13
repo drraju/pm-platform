@@ -284,6 +284,9 @@ const projects = [
     startDate: '2026-06-10',
     targetEndDate: '2026-11-20',
     ownerEmail: 'project.manager@example.com',
+    businessOwnerEmail: 'program.manager@example.com',
+    executiveSponsorEmail: 'program.manager@example.com',
+    deliveryLeadEmail: 'delivery.lead@example.com',
   },
   {
     id: seedUuid('project-observability'),
@@ -294,6 +297,9 @@ const projects = [
     startDate: '2026-06-17',
     targetEndDate: '2026-12-11',
     ownerEmail: 'program.manager@example.com',
+    businessOwnerEmail: 'project.manager@example.com',
+    executiveSponsorEmail: 'program.manager@example.com',
+    deliveryLeadEmail: 'delivery.lead@example.com',
   },
   {
     id: seedUuid('project-dc-exit'),
@@ -304,6 +310,9 @@ const projects = [
     startDate: '2026-07-01',
     targetEndDate: '2027-02-27',
     ownerEmail: 'delivery.lead@example.com',
+    businessOwnerEmail: 'project.manager@example.com',
+    executiveSponsorEmail: 'program.manager@example.com',
+    deliveryLeadEmail: 'delivery.lead@example.com',
   },
 ];
 
@@ -567,6 +576,9 @@ async function seedProjectsAndMemberships(dataSource: DataSource, context: SeedC
         startDate: project.startDate,
         targetEndDate: project.targetEndDate,
         ownerId: context.usersByEmail.get(project.ownerEmail)?.id,
+        businessOwnerId: context.usersByEmail.get(project.businessOwnerEmail)?.id,
+        executiveSponsorId: context.usersByEmail.get(project.executiveSponsorEmail)?.id,
+        deliveryLeadId: context.usersByEmail.get(project.deliveryLeadEmail)?.id,
         deletedAt: null,
       }),
     ),

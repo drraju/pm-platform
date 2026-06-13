@@ -40,6 +40,30 @@ export class Project extends AuditableEntity {
   @JoinColumn({ name: 'owner_id' })
   owner?: User | null;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @Column({ name: 'business_owner_id', type: 'uuid', nullable: true })
+  businessOwnerId?: string | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'business_owner_id' })
+  businessOwner?: User | null;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @Column({ name: 'executive_sponsor_id', type: 'uuid', nullable: true })
+  executiveSponsorId?: string | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'executive_sponsor_id' })
+  executiveSponsor?: User | null;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @Column({ name: 'delivery_lead_id', type: 'uuid', nullable: true })
+  deliveryLeadId?: string | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'delivery_lead_id' })
+  deliveryLead?: User | null;
+
   @OneToMany(() => ProjectMember, (member) => member.project)
   members: ProjectMember[];
 

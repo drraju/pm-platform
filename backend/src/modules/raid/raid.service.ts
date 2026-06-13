@@ -1,12 +1,13 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, In, Repository } from 'typeorm';
+import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
+import { PermissionKey } from '../../common/authz/permissions';
 import { RaidType } from '../../common/enums/raid-type.enum';
 import {
   ProjectVisibilityActor,
   ProjectVisibilityService,
 } from '../projects/project-visibility.service';
-import { Role } from '../users/entities/role.entity';
 import { CreateRaidItemDto } from './dto/create-raid-item.dto';
 import { UpdateRaidItemDto } from './dto/update-raid-item.dto';
 import { Assumption } from './entities/assumption.entity';
@@ -26,8 +27,7 @@ export class RaidService {
     private readonly assumptionsRepository: Repository<Assumption>,
     @InjectRepository(Dependency)
     private readonly dependenciesRepository: Repository<Dependency>,
-    @InjectRepository(Role)
-    private readonly rolesRepository: Repository<Role>,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
   ) {}
 
@@ -143,16 +143,16 @@ export class RaidService {
   private async removeItem(item: Risk | Issue | Assumption | Dependency) {
     switch (item.type) {
       case RaidType.Risk:
-        await this.risksRepository.remove(item as Risk);
+        await this.risksRepository.softRemove(item as Risk);
         return;
       case RaidType.Issue:
-        await this.issuesRepository.remove(item as Issue);
+        await this.issuesRepository.softRemove(item as Issue);
         return;
       case RaidType.Assumption:
-        await this.assumptionsRepository.remove(item as Assumption);
+        await this.assumptionsRepository.softRemove(item as Assumption);
         return;
       case RaidType.Dependency:
-        await this.dependenciesRepository.remove(item as Dependency);
+        await this.dependenciesRepository.softRemove(item as Dependency);
         return;
     }
   }
@@ -172,14 +172,17 @@ export class RaidService {
     item: RaidItem,
     actor?: ProjectVisibilityActor,
   ) {
-    const permissions = await this.getActorPermissionKeys(actor);
-    if (permissions.has('raid:update:any') || permissions.has('raid.delete')) {
+    if (await this.authorizationPolicyService.canManageRaid(item.projectId, actor)) {
       return;
     }
-    if (permissions.has('raid:update:own') && item.ownerId === actor?.userId) {
-      return;
-    }
-    if (permissions.has('raid.update') && item.ownerId === actor?.userId) {
+
+    if (
+      item.ownerId === actor?.userId &&
+      (await this.authorizationPolicyService.hasPermission(
+        actor,
+        PermissionKey.RaidUpdate,
+      ))
+    ) {
       return;
     }
 
@@ -190,28 +193,17 @@ export class RaidService {
     item: RaidItem,
     actor?: ProjectVisibilityActor,
   ) {
-    const permissions = await this.getActorPermissionKeys(actor);
-    if (permissions.has('raid:delete') || permissions.has('raid.delete')) {
+    if (
+      (await this.authorizationPolicyService.canManageRaid(item.projectId, actor)) &&
+      (await this.authorizationPolicyService.hasPermission(
+        actor,
+        PermissionKey.RaidDelete,
+      ))
+    ) {
       return;
     }
 
     throw new ForbiddenException('Insufficient RAID delete permissions');
-  }
-
-  private async getActorPermissionKeys(actor?: ProjectVisibilityActor) {
-    if (!actor?.roleId) {
-      return new Set<string>();
-    }
-
-    const role = await this.rolesRepository.findOne({
-      relations: { permissions: true },
-      where: { id: actor.roleId },
-    });
-    if (role?.name === 'SUPER_ADMIN') {
-      return new Set(['raid:update:any', 'raid:delete', 'raid.delete']);
-    }
-
-    return new Set(role?.permissions?.map((permission) => permission.key) ?? []);
   }
 
   private withoutImmutableFields(updateRaidItemDto: UpdateRaidItemDto) {

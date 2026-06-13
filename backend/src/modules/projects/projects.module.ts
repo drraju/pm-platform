@@ -6,6 +6,7 @@ import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { Role } from '../users/entities/role.entity';
 import { User } from '../users/entities/user.entity';
+import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import { ProjectMember } from './entities/project-member.entity';
 import { Project } from './entities/project.entity';
 import { ProjectVisibilityService } from './project-visibility.service';
@@ -26,7 +27,11 @@ import { ProjectsService } from './projects.service';
     ]),
   ],
   controllers: [ProjectsController],
-  providers: [ProjectsService, ProjectVisibilityService],
-  exports: [ProjectsService, ProjectVisibilityService],
+  providers: [
+    ProjectsService,
+    ProjectVisibilityService,
+    AuthorizationPolicyService,
+  ],
+  exports: [ProjectsService, ProjectVisibilityService, AuthorizationPolicyService],
 })
 export class ProjectsModule {}

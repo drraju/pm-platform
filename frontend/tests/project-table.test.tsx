@@ -47,7 +47,11 @@ describe("ProjectTable", () => {
       <ProjectTable
         emptyMessage="No projects"
         isLoading={false}
+        onDeleteProject={vi.fn()}
+        onEditProject={vi.fn()}
         projects={projects}
+        canDeleteProjects
+        canEditProjects
       />,
     );
 
@@ -65,6 +69,8 @@ describe("ProjectTable", () => {
     expect(screen.getByText("Ava Patel")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
   });
 
   it("opens a project when Enter is pressed on a row", () => {
@@ -79,6 +85,31 @@ describe("ProjectTable", () => {
     fireEvent.keyDown(screen.getByRole("link"), { key: "Enter" });
 
     expect(navigationMocks.push).toHaveBeenCalledWith("/projects/project-1");
+  });
+
+  it("triggers edit and delete callbacks without opening the project row", () => {
+    const onEditProject = vi.fn();
+    const onDeleteProject = vi.fn();
+
+    render(
+      <ProjectTable
+        canDeleteProjects
+        canEditProjects
+        emptyMessage="No projects"
+        isLoading={false}
+        onDeleteProject={onDeleteProject}
+        onEditProject={onEditProject}
+        projects={projects}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect(onEditProject).toHaveBeenCalledWith(projects[0]);
+    expect(navigationMocks.push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    expect(onDeleteProject).toHaveBeenCalledWith(projects[0]);
+    expect(navigationMocks.push).not.toHaveBeenCalled();
   });
 
   it("renders an empty state", () => {

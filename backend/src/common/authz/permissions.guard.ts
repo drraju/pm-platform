@@ -52,10 +52,6 @@ export class PermissionsGuard implements CanActivate {
       relations: { permissions: true },
       where: { id: roleId },
     });
-    if (role?.name === 'SUPER_ADMIN') {
-      return true;
-    }
-
     const grantedPermissions = new Set(
       role?.permissions?.map((permission) => permission.key) ?? [],
     );

@@ -2,8 +2,8 @@ import { MODULE_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
-import { Role } from '../../users/entities/role.entity';
 import { Assumption } from '../entities/assumption.entity';
 import { Dependency } from '../entities/dependency.entity';
 import { Issue } from '../entities/issue.entity';
@@ -23,7 +23,10 @@ describe('RaidService', () => {
   let issuesRepository: MockRepository<Issue>;
   let assumptionsRepository: MockRepository<Assumption>;
   let dependenciesRepository: MockRepository<Dependency>;
-  let rolesRepository: MockRepository<Role>;
+  let authorizationPolicyService: {
+    canManageRaid: jest.Mock;
+    hasPermission: jest.Mock;
+  };
   let projectVisibilityService: Pick<
     ProjectVisibilityService,
     'canViewProject' | 'getVisibleProjectIds'
@@ -34,33 +37,34 @@ describe('RaidService', () => {
       find: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
-      remove: jest.fn(),
+      softRemove: jest.fn(),
     };
     issuesRepository = {
       find: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
-      remove: jest.fn(),
+      softRemove: jest.fn(),
     };
     assumptionsRepository = {
       find: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
-      remove: jest.fn(),
+      softRemove: jest.fn(),
     };
     dependenciesRepository = {
       find: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
-      remove: jest.fn(),
+      softRemove: jest.fn(),
     };
     risksRepository.findOne = jest.fn();
     issuesRepository.findOne = jest.fn();
     assumptionsRepository.findOne = jest.fn();
     dependenciesRepository.findOne = jest.fn();
-    rolesRepository = {
-      findOne: jest.fn(),
+    authorizationPolicyService = {
+      canManageRaid: jest.fn().mockResolvedValue(false),
+      hasPermission: jest.fn().mockResolvedValue(false),
     };
     projectVisibilityService = {
       canViewProject: jest.fn(),
@@ -80,7 +84,10 @@ describe('RaidService', () => {
           provide: getRepositoryToken(Dependency),
           useValue: dependenciesRepository,
         },
-        { provide: getRepositoryToken(Role), useValue: rolesRepository },
+        {
+          provide: AuthorizationPolicyService,
+          useValue: authorizationPolicyService,
+        },
         {
           provide: ProjectVisibilityService,
           useValue: projectVisibilityService,
@@ -157,7 +164,7 @@ describe('RaidService', () => {
     expect(issuesRepository.find).not.toHaveBeenCalled();
   });
 
-  it('updates an owned RAID item when the actor has own-update permission', async () => {
+  it('updates an owned RAID item when the actor has item-level update permission', async () => {
     risksRepository.findOne?.mockResolvedValue({
       id: 'risk-1',
       ownerId: 'user-1',
@@ -166,9 +173,7 @@ describe('RaidService', () => {
     });
     risksRepository.save?.mockImplementation(async (item) => item);
     jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
-    rolesRepository.findOne?.mockResolvedValue({
-      permissions: [{ key: 'raid:update:own' }],
-    });
+    authorizationPolicyService.hasPermission.mockResolvedValue(true);
 
     await expect(
       service.update(
@@ -189,9 +194,6 @@ describe('RaidService', () => {
       type: 'risk',
     });
     jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
-    rolesRepository.findOne?.mockResolvedValue({
-      permissions: [{ key: 'raid:update:own' }],
-    });
 
     await expect(
       service.update(
@@ -210,13 +212,12 @@ describe('RaidService', () => {
       type: 'issue',
     });
     jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
-    rolesRepository.findOne?.mockResolvedValue({
-      permissions: [{ key: 'raid.delete' }],
-    });
+    authorizationPolicyService.canManageRaid.mockResolvedValue(true);
+    authorizationPolicyService.hasPermission.mockResolvedValue(true);
 
     await service.remove('issue-1', { roleId: 'role-1', userId: 'user-1' });
 
-    expect(issuesRepository.remove).toHaveBeenCalledWith(
+    expect(issuesRepository.softRemove).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'issue-1' }),
     );
   });

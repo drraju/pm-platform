@@ -13,6 +13,7 @@ import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
 const projectMocks = vi.hoisted(() => ({
   addProjectMember: vi.fn(),
   createProjectTask: vi.fn(),
+  deleteProject: vi.fn(),
   deleteProjectTask: vi.fn(),
   getProject: vi.fn(async (projectId: string) => ({
     assumptions: [
@@ -82,6 +83,7 @@ const projectMocks = vi.hoisted(() => ({
   ]),
   getAssignableUsers: vi.fn(async () => []),
   removeProjectMember: vi.fn(),
+  updateProject: vi.fn(),
   updateProjectTask: vi.fn(),
   updateProjectMember: vi.fn(),
 }));
@@ -155,11 +157,13 @@ vi.mock("@/features/projects", () => ({
   addProjectMember: projectMocks.addProjectMember,
   createProjectTask: projectMocks.createProjectTask,
   createProject: vi.fn(),
+  deleteProject: projectMocks.deleteProject,
   deleteProjectTask: projectMocks.deleteProjectTask,
   getAssignableUsers: projectMocks.getAssignableUsers,
   getProject: projectMocks.getProject,
   getProjects: projectMocks.getProjects,
   removeProjectMember: projectMocks.removeProjectMember,
+  updateProject: projectMocks.updateProject,
   updateProjectTask: projectMocks.updateProjectTask,
   updateProjectMember: projectMocks.updateProjectMember,
 }));

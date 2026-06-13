@@ -9,14 +9,22 @@ import {
 import type { ApiProject } from "@/features/projects";
 
 type ProjectTableProps = {
+  canDeleteProjects?: boolean;
+  canEditProjects?: boolean;
   emptyMessage: string;
   isLoading: boolean;
+  onDeleteProject?: (project: ApiProject) => void;
+  onEditProject?: (project: ApiProject) => void;
   projects: ApiProject[];
 };
 
 export function ProjectTable({
+  canDeleteProjects = false,
+  canEditProjects = false,
   emptyMessage,
   isLoading,
+  onDeleteProject,
+  onEditProject,
   projects,
 }: ProjectTableProps) {
   const router = useRouter();
@@ -27,7 +35,7 @@ export function ProjectTable({
 
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-      <div className="hidden grid-cols-[1.3fr_0.7fr_0.7fr_1fr_0.7fr_0.8fr_110px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+      <div className="hidden grid-cols-[1.3fr_0.7fr_0.7fr_1fr_0.7fr_0.8fr_180px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
         <span>Name</span>
         <span>Status</span>
         <span>Health</span>
@@ -51,7 +59,7 @@ export function ProjectTable({
         {projects.map((project) => (
           <article
             aria-label={`Open ${project.name}`}
-            className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand/30 md:grid-cols-[1.3fr_0.7fr_0.7fr_1fr_0.7fr_0.8fr_110px] md:items-center"
+            className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand/30 md:grid-cols-[1.3fr_0.7fr_0.7fr_1fr_0.7fr_0.8fr_180px] md:items-center"
             key={project.id}
             onClick={() => openProject(project.id)}
             onKeyDown={(event) => {
@@ -103,16 +111,42 @@ export function ProjectTable({
             <span className="hidden text-slate-600 md:block">
               {formatDate(project.createdAt)}
             </span>
-            <button
-              className="w-fit rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand/30"
-              onClick={(event) => {
-                event.stopPropagation();
-                openProject(project.id);
-              }}
-              type="button"
-            >
-              Open
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="w-fit rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openProject(project.id);
+                }}
+                type="button"
+              >
+                Open
+              </button>
+              {canEditProjects && onEditProject ? (
+                <button
+                  className="w-fit rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEditProject(project);
+                  }}
+                  type="button"
+                >
+                  Edit
+                </button>
+              ) : null}
+              {canDeleteProjects && onDeleteProject ? (
+                <button
+                  className="w-fit rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300/40"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDeleteProject(project);
+                  }}
+                  type="button"
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
           </article>
         ))}
       </div>
