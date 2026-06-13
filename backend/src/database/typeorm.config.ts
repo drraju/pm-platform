@@ -6,6 +6,8 @@ import { Project } from '../modules/projects/entities/project.entity';
 import { Assumption } from '../modules/raid/entities/assumption.entity';
 import { Dependency } from '../modules/raid/entities/dependency.entity';
 import { Issue } from '../modules/raid/entities/issue.entity';
+import { RaidComment } from '../modules/raid/entities/raid-comment.entity';
+import { RaidHistoryEntry } from '../modules/raid/entities/raid-history-entry.entity';
 import { Risk } from '../modules/raid/entities/risk.entity';
 import { Task } from '../modules/tasks/entities/task.entity';
 import { Permission } from '../modules/users/entities/permission.entity';
@@ -25,6 +27,8 @@ export const databaseEntities: Function[] = [
   Issue,
   Assumption,
   Dependency,
+  RaidComment,
+  RaidHistoryEntry,
   Notification,
 ];
 

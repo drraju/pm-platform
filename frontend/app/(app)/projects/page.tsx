@@ -6,6 +6,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ProjectTable } from "@/components/projects/project-table";
 import { AppModal } from "@/components/ui/app-modal";
 import {
+  ModalForm,
+  ModalFormGrid,
+  ModalFormSection,
+} from "@/components/ui/modal-form";
+import {
   createProject,
   deleteProject,
   getAssignableUsers,
@@ -418,11 +423,12 @@ function ProjectForm({
   users: ApiAssignableUser[];
 }) {
   return (
-    <form
-      className="grid gap-4 sm:grid-cols-2"
-      id="project-form"
-      onSubmit={onSubmit}
-    >
+    <ModalForm id="project-form" onSubmit={onSubmit}>
+      <ModalFormSection
+        description="Keep core project metadata and ownership together so long forms stay easy to navigate on smaller screens."
+        title="Project Detail"
+      >
+        <ModalFormGrid>
       <label className="block sm:col-span-2">
         <span className="text-sm font-medium text-slate-700">Name</span>
         <input
@@ -501,7 +507,9 @@ function ProjectForm({
           type="date"
         />
       </label>
-    </form>
+        </ModalFormGrid>
+      </ModalFormSection>
+    </ModalForm>
   );
 }
 

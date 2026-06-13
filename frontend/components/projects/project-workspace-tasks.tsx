@@ -1,5 +1,10 @@
 import React from "react";
 import { AppModal } from "@/components/ui/app-modal";
+import {
+  ModalForm,
+  ModalFormGrid,
+  ModalFormSection,
+} from "@/components/ui/modal-form";
 import type { ApiProjectMember, ApiTask } from "@/features/projects";
 
 type TaskOperationInput = {
@@ -259,11 +264,16 @@ export function ProjectWorkspaceTasks({
           }
           widthClassName="max-w-2xl"
         >
-          <form
-            className="grid gap-3 md:grid-cols-2"
-            id="project-task-form"
-            onSubmit={handleSubmit}
-          >
+          <ModalForm id="project-task-form" onSubmit={handleSubmit}>
+            <ModalFormSection
+              description={
+                dialogMode === "reassign"
+                  ? "Update the assignee while keeping ownership controls visible."
+                  : "Capture the task summary, scheduling, and execution fields in one place."
+              }
+              title="Task Detail"
+            >
+              <ModalFormGrid className="md:grid-cols-2">
               <label className="block text-sm font-medium text-slate-700 md:col-span-2">
                 Title
                 <input
@@ -407,7 +417,9 @@ export function ProjectWorkspaceTasks({
                   value={form.remarks}
                 />
               </label>
-          </form>
+              </ModalFormGrid>
+            </ModalFormSection>
+          </ModalForm>
         </AppModal>
       ) : null}
 

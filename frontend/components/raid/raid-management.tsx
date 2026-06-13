@@ -3,6 +3,11 @@
 import React from "react";
 import { FormEvent, useMemo, useState } from "react";
 import { AppModal } from "@/components/ui/app-modal";
+import {
+  ModalForm,
+  ModalFormGrid,
+  ModalFormSection,
+} from "@/components/ui/modal-form";
 import type {
   ApiAssignableUser,
   ApiProject,
@@ -25,6 +30,7 @@ type RaidManagementProps = {
   isLoading?: boolean;
   isSaving?: boolean;
   items: ApiRaidItem[];
+  onAddComment?: (itemId: string, body: string) => Promise<void> | void;
   onCreate?: (input: RaidMutationInput) => Promise<void> | void;
   onDelete?: (itemId: string) => Promise<void> | void;
   onUpdate?: (
@@ -70,6 +76,7 @@ export function RaidManagement({
   isLoading = false,
   isSaving = false,
   items,
+  onAddComment,
   onCreate,
   onDelete,
   onUpdate,
@@ -245,6 +252,7 @@ export function RaidManagement({
             setEditingItem(null);
             setIsCreateOpen(false);
           }}
+          onAddComment={onAddComment}
           onSubmit={handleSubmit}
           projects={projects}
           users={users}
@@ -291,6 +299,7 @@ function RaidItemDialog({
   fixedType,
   isSaving,
   item,
+  onAddComment,
   onClose,
   onSubmit,
   projects,
@@ -300,6 +309,7 @@ function RaidItemDialog({
   fixedType?: RaidType;
   isSaving: boolean;
   item: ApiRaidItem | null;
+  onAddComment?: RaidManagementProps["onAddComment"];
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   projects: ApiProject[];
@@ -307,6 +317,7 @@ function RaidItemDialog({
 }) {
   const type = fixedType ?? item?.type ?? "risk";
   const title = item ? `Edit ${formatType(type)}` : `Create ${formatType(type)}`;
+  const [commentBody, setCommentBody] = useState("");
 
   return (
     <AppModal
@@ -335,7 +346,12 @@ function RaidItemDialog({
       title={title}
       widthClassName="max-w-3xl"
     >
-        <form className="grid gap-4 sm:grid-cols-2" id="raid-item-form" onSubmit={onSubmit}>
+      <ModalForm id="raid-item-form" onSubmit={onSubmit}>
+        <ModalFormSection
+          description="Capture ownership, status, and the core RAID detail needed for delivery follow-up."
+          title="Core Detail"
+        >
+          <ModalFormGrid>
           {!fixedType ? (
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Type</span>
@@ -425,9 +441,12 @@ function RaidItemDialog({
               ))}
             </select>
           </label>
+          </ModalFormGrid>
+        </ModalFormSection>
 
           {type === "risk" ? (
-            <>
+            <ModalFormSection title="Risk Controls">
+              <ModalFormGrid>
               <SelectField
                 defaultValue={item?.probability ?? "medium"}
                 label="Probability"
@@ -450,11 +469,13 @@ function RaidItemDialog({
                   name="mitigationPlan"
                 />
               </label>
-            </>
+              </ModalFormGrid>
+            </ModalFormSection>
           ) : null}
 
           {type === "issue" ? (
-            <>
+            <ModalFormSection title="Issue Resolution">
+              <ModalFormGrid>
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">
                   Due Date
@@ -476,11 +497,13 @@ function RaidItemDialog({
                   name="resolutionPlan"
                 />
               </label>
-            </>
+              </ModalFormGrid>
+            </ModalFormSection>
           ) : null}
 
           {type === "assumption" ? (
-            <>
+            <ModalFormSection title="Assumption Validation">
+              <ModalFormGrid>
               <SelectField
                 defaultValue={item?.validationStatus ?? "unvalidated"}
                 label="Validation Status"
@@ -497,11 +520,13 @@ function RaidItemDialog({
                   name="validationNotes"
                 />
               </label>
-            </>
+              </ModalFormGrid>
+            </ModalFormSection>
           ) : null}
 
           {type === "dependency" ? (
-            <>
+            <ModalFormSection title="Dependency Tracking">
+              <ModalFormGrid>
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">
                   Depends On
@@ -523,10 +548,107 @@ function RaidItemDialog({
                   type="date"
                 />
               </label>
-            </>
+              </ModalFormGrid>
+            </ModalFormSection>
           ) : null}
+        {item ? (
+          <ModalFormSection title="Audit Trail">
+            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-slate-900">Comments</h4>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                    {item.comments?.length ?? 0}
+                  </span>
+                </div>
+                <div className="max-h-48 space-y-3 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
+                  {(item.comments?.length ?? 0) > 0 ? (
+                    item.comments?.map((comment) => (
+                      <article
+                        className="rounded-md border border-slate-200 bg-white p-3"
+                        key={comment.id}
+                      >
+                        <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+                          <span>{formatActor(comment.author)}</span>
+                          <span>{formatDateTime(comment.createdAt)}</span>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-700">{comment.body}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">No comments yet.</p>
+                  )}
+                </div>
+                {onAddComment ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Add comment
+                      <textarea
+                        className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                        onChange={(event) => setCommentBody(event.target.value)}
+                        placeholder="Capture why this changed or the follow-up needed."
+                        value={commentBody}
+                      />
+                    </label>
+                    <button
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isSaving || !commentBody.trim()}
+                      onClick={async () => {
+                        if (!item || !commentBody.trim() || !onAddComment) {
+                          return;
+                        }
 
-        </form>
+                        await onAddComment(item.id, commentBody.trim());
+                        setCommentBody("");
+                      }}
+                      type="button"
+                    >
+                      Add comment
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-slate-900">History</h4>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                    {item.history?.length ?? 0}
+                  </span>
+                </div>
+                <div className="max-h-72 space-y-3 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
+                  {(item.history?.length ?? 0) > 0 ? (
+                    item.history?.map((entry) => (
+                      <article
+                        className="rounded-md border border-slate-200 bg-white p-3"
+                        key={entry.id}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {formatHistoryAction(entry.action, entry.fieldName)}
+                          </p>
+                          <span className="text-xs text-slate-500">
+                            {formatDateTime(entry.createdAt)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatActor(entry.actor)}
+                        </p>
+                        {entry.previousValue || entry.nextValue ? (
+                          <p className="mt-2 text-sm text-slate-700">
+                            {formatChangeSummary(entry.previousValue, entry.nextValue)}
+                          </p>
+                        ) : null}
+                      </article>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">No history yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </ModalFormSection>
+        ) : null}
+      </ModalForm>
     </AppModal>
   );
 }
@@ -663,4 +785,52 @@ function formatDate(value?: string | null) {
 
 function toDateInputValue(value?: string | null) {
   return value ? value.slice(0, 10) : "";
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return "Unknown time";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatActor(
+  actor?: {
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null,
+) {
+  if (!actor) {
+    return "System";
+  }
+
+  return `${actor.firstName ?? ""} ${actor.lastName ?? ""}`.trim() || "System";
+}
+
+function formatHistoryAction(action: string, fieldName?: string | null) {
+  switch (action) {
+    case "status_changed":
+      return "Status changed";
+    case "owner_changed":
+      return "Owner changed";
+    case "commented":
+      return "Comment added";
+    case "created":
+      return "Item created";
+    case "deleted":
+      return "Item soft deleted";
+    default:
+      return fieldName ? `${formatLabel(fieldName)} updated` : "Item updated";
+  }
+}
+
+function formatChangeSummary(previousValue?: string | null, nextValue?: string | null) {
+  return `${previousValue ?? "Not set"} -> ${nextValue ?? "Not set"}`;
 }

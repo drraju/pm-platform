@@ -35,6 +35,7 @@ import {
   type ApiProjectMember,
 } from "@/features/projects";
 import {
+  addRaidComment,
   createRaidItem,
   deleteRaidItem,
   updateRaidItem,
@@ -347,6 +348,29 @@ export default function ProjectWorkspacePage() {
     }
   }
 
+  async function handleAddRaidComment(itemId: string, body: string) {
+    setError(null);
+    setIsSavingRaid(true);
+    try {
+      const item = await addRaidComment(itemId, { body });
+      setProject((currentProject) =>
+        currentProject
+          ? replaceRaidItem(currentProject, hydrateRaidItem(item))
+          : currentProject,
+      );
+      showToast(setToast, "success", "RAID comment added.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to add RAID comment.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to add RAID comment",
+      );
+    } finally {
+      setIsSavingRaid(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -498,6 +522,9 @@ export default function ProjectWorkspacePage() {
               fixedType="risk"
               isSaving={isSavingRaid}
               items={risks}
+              onAddComment={
+                raidPermissions.canUpdate ? handleAddRaidComment : undefined
+              }
               onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
@@ -514,6 +541,9 @@ export default function ProjectWorkspacePage() {
               fixedType="issue"
               isSaving={isSavingRaid}
               items={issues}
+              onAddComment={
+                raidPermissions.canUpdate ? handleAddRaidComment : undefined
+              }
               onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
@@ -530,6 +560,9 @@ export default function ProjectWorkspacePage() {
               fixedType="assumption"
               isSaving={isSavingRaid}
               items={assumptions}
+              onAddComment={
+                raidPermissions.canUpdate ? handleAddRaidComment : undefined
+              }
               onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
@@ -546,6 +579,9 @@ export default function ProjectWorkspacePage() {
               fixedType="dependency"
               isSaving={isSavingRaid}
               items={dependencies}
+              onAddComment={
+                raidPermissions.canUpdate ? handleAddRaidComment : undefined
+              }
               onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}

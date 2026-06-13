@@ -148,6 +148,39 @@ export type ApiRaidItem = {
   dueDate?: string | null;
   project?: ApiProject | null;
   owner?: ApiUser | null;
+  comments?: ApiRaidComment[];
+  history?: ApiRaidHistoryEntry[];
+};
+
+export type ApiRaidComment = {
+  id: string;
+  raidItemId: string;
+  raidType: ApiRaidItem["type"];
+  projectId: string;
+  body: string;
+  authorId?: string | null;
+  author?: ApiUser | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ApiRaidHistoryEntry = {
+  id: string;
+  raidItemId: string;
+  raidType: ApiRaidItem["type"];
+  projectId: string;
+  action: string;
+  fieldName?: string | null;
+  previousValue?: string | null;
+  nextValue?: string | null;
+  changes?: Record<
+    string,
+    { previousValue: string | null; nextValue: string | null }
+  > | null;
+  actorId?: string | null;
+  actor?: ApiUser | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ApiTaskSummary = {
@@ -733,5 +766,12 @@ export function updateRaidItem(
 export function deleteRaidItem(itemId: string) {
   return apiRequest<void>(`/raid/${itemId}`, {
     method: "DELETE",
+  });
+}
+
+export function addRaidComment(itemId: string, input: { body: string }) {
+  return apiRequest<ApiRaidItem>(`/raid/${itemId}/comments`, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }

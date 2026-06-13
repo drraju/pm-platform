@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
+import { StartupValidationService } from './modules/health/startup-validation.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -38,6 +39,14 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  try {
+    await app.init();
+    const startupValidationService = app.get(StartupValidationService);
+    await startupValidationService.prepareApplication();
+    await app.listen(process.env.PORT ?? 3000);
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
 }
 bootstrap();

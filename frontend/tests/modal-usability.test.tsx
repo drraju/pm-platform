@@ -4,6 +4,66 @@ import { describe, expect, it, vi } from "vitest";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 import { RaidManagement } from "@/components/raid/raid-management";
 import { AppModal } from "@/components/ui/app-modal";
+import ProjectsPage from "@/app/(app)/projects/page";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
+vi.mock("@/features/auth", () => ({
+  getAuthMe: vi.fn(async () => ({
+    permissions: [
+      { id: "permission-project-create", key: "project.create" },
+      { id: "permission-project-update", key: "project.update" },
+      { id: "permission-project-delete", key: "project.delete" },
+    ],
+    roles: [],
+    user: {
+      email: "pm@example.com",
+      firstName: "Program",
+      id: "user-1",
+      lastName: "Manager",
+      roleId: "role-1",
+      status: "active",
+    },
+  })),
+  getStoredAccessToken: () => "test-token",
+  getStoredPermissionKeys: () => [],
+  hasPermission: (permissionKeys: string[], requiredPermission: string) =>
+    permissionKeys.includes(requiredPermission),
+  storeAuthMe: vi.fn(),
+}));
+
+vi.mock("@/features/projects", () => ({
+  createProject: vi.fn(),
+  deleteProject: vi.fn(),
+  getAssignableUsers: vi.fn(async () => [
+    {
+      email: "owner@example.com",
+      firstName: "Ava",
+      id: "user-1",
+      lastName: "Patel",
+      role: "Project Manager",
+    },
+  ]),
+  getProject: vi.fn(async () => ({
+    createdAt: "2026-06-01T10:00:00.000Z",
+    id: "project-1",
+    name: "ERP Modernization",
+    ownerId: "user-1",
+    status: "active",
+  })),
+  getProjects: vi.fn(async () => [
+    {
+      createdAt: "2026-06-01T10:00:00.000Z",
+      id: "project-1",
+      name: "ERP Modernization",
+      ownerId: "user-1",
+      status: "active",
+    },
+  ]),
+  updateProject: vi.fn(),
+}));
 
 describe("AppModal usability", () => {
   it("constrains height and keeps header, body, and footer usable", () => {
@@ -19,6 +79,7 @@ describe("AppModal usability", () => {
     );
 
     expect(screen.getByTestId("app-modal-panel")).toHaveClass("max-h-[90vh]");
+    expect(screen.getByTestId("app-modal-header")).toHaveClass("sticky");
     expect(screen.getByTestId("app-modal-body")).toHaveClass("overflow-y-auto");
     expect(screen.getByTestId("app-modal-footer")).toHaveClass("sticky");
     expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
@@ -56,6 +117,21 @@ describe("AppModal usability", () => {
       within(footer).getByRole("button", { name: /save changes/i }),
     ).toBeInTheDocument();
     expect(within(footer).getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it("keeps project form actions in the sticky footer", async () => {
+    render(<ProjectsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /create project/i }));
+
+    expect(screen.getByTestId("app-modal-panel")).toHaveClass("max-h-[90vh]");
+    expect(screen.getByTestId("app-modal-header")).toHaveClass("sticky");
+    expect(screen.getByTestId("app-modal-body")).toHaveClass("overflow-y-auto");
+    expect(
+      within(screen.getByTestId("app-modal-footer")).getByRole("button", {
+        name: /create project/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("keeps RAID save actions in the sticky footer", () => {

@@ -4,13 +4,22 @@ import { ProjectsModule } from '../projects/projects.module';
 import { Assumption } from './entities/assumption.entity';
 import { Dependency } from './entities/dependency.entity';
 import { Issue } from './entities/issue.entity';
+import { RaidComment } from './entities/raid-comment.entity';
+import { RaidHistoryEntry } from './entities/raid-history-entry.entity';
 import { Risk } from './entities/risk.entity';
 import { RaidController } from './raid.controller';
 import { RaidService } from './raid.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Assumption, Dependency, Issue, Risk]),
+    TypeOrmModule.forFeature([
+      Assumption,
+      Dependency,
+      Issue,
+      RaidComment,
+      RaidHistoryEntry,
+      Risk,
+    ]),
     ProjectsModule,
   ],
   controllers: [RaidController],

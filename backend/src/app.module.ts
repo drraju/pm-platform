@@ -8,6 +8,7 @@ import { SanitizeResponseInterceptor } from './common/serialization/sanitize-res
 import { createTypeOrmOptions } from './database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { HealthModule } from './modules/health/health.module';
 import { GoogleDriveModule } from './modules/integrations/google-drive/google-drive.module';
 import { SlackModule } from './modules/integrations/slack/slack.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -30,6 +31,7 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     RaidModule,
     DashboardModule,
     PortfolioModule,
+    HealthModule,
     NotificationsModule,
     SlackModule,
     GoogleDriveModule,

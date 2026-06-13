@@ -15,6 +15,7 @@ import {
 } from "@/features/auth";
 import { getProjects, type ApiProject } from "@/features/projects";
 import {
+  addRaidComment,
   createRaidItem,
   deleteRaidItem,
   getRaidItems,
@@ -129,6 +130,28 @@ export default function RaidPage() {
     }
   }
 
+  async function handleAddComment(itemId: string, body: string) {
+    setIsSaving(true);
+    try {
+      const item = await addRaidComment(itemId, { body });
+      setItems((currentItems) =>
+        currentItems.map((currentItem) =>
+          currentItem.id === itemId ? hydrateRaidItem({ ...currentItem, ...item }) : currentItem,
+        ),
+      );
+      showToast(setToast, "success", "RAID comment added.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to add RAID comment.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to add RAID comment",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   const sessionUser = getStoredSessionUser();
   const permissions = getRaidPermissions(permissionKeys, sessionUser?.userId);
 
@@ -148,6 +171,7 @@ export default function RaidPage() {
         isLoading={isLoading}
         isSaving={isSaving}
         items={items}
+        onAddComment={permissions.canUpdate ? handleAddComment : undefined}
         onCreate={permissions.canCreate ? handleCreate : undefined}
         onDelete={permissions.canDelete ? handleDelete : undefined}
         onUpdate={permissions.canUpdate ? handleUpdate : undefined}

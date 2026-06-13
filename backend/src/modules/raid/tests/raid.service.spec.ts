@@ -7,6 +7,8 @@ import { ProjectVisibilityService } from '../../projects/project-visibility.serv
 import { Assumption } from '../entities/assumption.entity';
 import { Dependency } from '../entities/dependency.entity';
 import { Issue } from '../entities/issue.entity';
+import { RaidComment } from '../entities/raid-comment.entity';
+import { RaidHistoryEntry } from '../entities/raid-history-entry.entity';
 import { Risk } from '../entities/risk.entity';
 import { RaidModule } from '../raid.module';
 import { RaidService } from '../raid.service';
@@ -23,6 +25,8 @@ describe('RaidService', () => {
   let issuesRepository: MockRepository<Issue>;
   let assumptionsRepository: MockRepository<Assumption>;
   let dependenciesRepository: MockRepository<Dependency>;
+  let raidCommentsRepository: MockRepository<RaidComment>;
+  let raidHistoryRepository: MockRepository<RaidHistoryEntry>;
   let authorizationPolicyService: {
     canManageRaid: jest.Mock;
     hasPermission: jest.Mock;
@@ -58,6 +62,16 @@ describe('RaidService', () => {
       save: jest.fn(),
       softRemove: jest.fn(),
     };
+    raidCommentsRepository = {
+      create: jest.fn((input) => input),
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(async (input) => input),
+    };
+    raidHistoryRepository = {
+      create: jest.fn((input) => input),
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(async (input) => input),
+    };
     risksRepository.findOne = jest.fn();
     issuesRepository.findOne = jest.fn();
     assumptionsRepository.findOne = jest.fn();
@@ -83,6 +97,14 @@ describe('RaidService', () => {
         {
           provide: getRepositoryToken(Dependency),
           useValue: dependenciesRepository,
+        },
+        {
+          provide: getRepositoryToken(RaidComment),
+          useValue: raidCommentsRepository,
+        },
+        {
+          provide: getRepositoryToken(RaidHistoryEntry),
+          useValue: raidHistoryRepository,
         },
         {
           provide: AuthorizationPolicyService,
@@ -126,6 +148,8 @@ describe('RaidService', () => {
     expect(risksRepository.find).toHaveBeenCalledWith({
       relations: { project: true, owner: true },
     });
+    expect(raidCommentsRepository.find).toHaveBeenCalled();
+    expect(raidHistoryRepository.find).toHaveBeenCalled();
   });
 
   it('filters global RAID aggregation by visible project ids', async () => {
@@ -166,9 +190,11 @@ describe('RaidService', () => {
 
   it('updates an owned RAID item when the actor has item-level update permission', async () => {
     risksRepository.findOne?.mockResolvedValue({
+      createdAt: new Date('2026-01-01T00:00:00Z'),
       id: 'risk-1',
       ownerId: 'user-1',
       projectId: 'project-1',
+      title: 'Legacy risk',
       type: 'risk',
     });
     risksRepository.save?.mockImplementation(async (item) => item);
@@ -182,7 +208,17 @@ describe('RaidService', () => {
         { roleId: 'role-1', userId: 'user-1' },
       ),
     ).resolves.toEqual(
-      expect.objectContaining({ status: 'mitigating', title: 'Updated risk' }),
+      expect.objectContaining({
+        history: expect.any(Array),
+        status: 'mitigating',
+        title: 'Updated risk',
+      }),
+    );
+    expect(raidHistoryRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'status_changed',
+        fieldName: 'status',
+      }),
     );
   });
 
@@ -206,6 +242,7 @@ describe('RaidService', () => {
 
   it('deletes a RAID item only with delete permission', async () => {
     issuesRepository.findOne?.mockResolvedValue({
+      createdAt: new Date('2026-01-01T00:00:00Z'),
       id: 'issue-1',
       ownerId: 'user-1',
       projectId: 'project-1',
@@ -218,7 +255,47 @@ describe('RaidService', () => {
     await service.remove('issue-1', { roleId: 'role-1', userId: 'user-1' });
 
     expect(issuesRepository.softRemove).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'issue-1' }),
+      expect.objectContaining({ deletedById: 'user-1', id: 'issue-1' }),
+    );
+    expect(raidHistoryRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'deleted' }),
+    );
+  });
+
+  it('adds RAID comments and records them in history', async () => {
+    risksRepository.findOne?.mockResolvedValue({
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      id: 'risk-1',
+      ownerId: 'user-1',
+      projectId: 'project-1',
+      status: 'open',
+      title: 'Supplier risk',
+      type: 'risk',
+    });
+    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    authorizationPolicyService.hasPermission.mockResolvedValue(true);
+
+    await expect(
+      service.addComment(
+        'risk-1',
+        { body: 'Escalated with procurement.' },
+        { roleId: 'role-1', userId: 'user-1' },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        comments: expect.any(Array),
+        id: 'risk-1',
+      }),
+    );
+
+    expect(raidCommentsRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorId: 'user-1',
+        body: 'Escalated with procurement.',
+      }),
+    );
+    expect(raidHistoryRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'commented' }),
     );
   });
 
@@ -235,6 +312,10 @@ describe('RaidService', () => {
         expect.objectContaining({ provide: getRepositoryToken(Assumption) }),
         expect.objectContaining({ provide: getRepositoryToken(Dependency) }),
         expect.objectContaining({ provide: getRepositoryToken(Issue) }),
+        expect.objectContaining({ provide: getRepositoryToken(RaidComment) }),
+        expect.objectContaining({
+          provide: getRepositoryToken(RaidHistoryEntry),
+        }),
         expect.objectContaining({ provide: getRepositoryToken(Risk) }),
       ]),
     );
