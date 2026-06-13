@@ -15,10 +15,10 @@ export class RaidHistoryEntry extends AuditableEntity {
   @Column({ name: 'project_id', type: 'uuid' })
   projectId: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 50 })
   action: string;
 
-  @Column({ name: 'field_name', nullable: true })
+  @Column({ name: 'field_name', type: 'varchar', length: 100, nullable: true })
   fieldName?: string | null;
 
   @Column({ name: 'previous_value', type: 'text', nullable: true })
@@ -27,7 +27,7 @@ export class RaidHistoryEntry extends AuditableEntity {
   @Column({ name: 'next_value', type: 'text', nullable: true })
   nextValue?: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ name: 'changes', type: 'jsonb', nullable: true })
   changes?: Record<string, { previousValue: string | null; nextValue: string | null }> | null;
 
   @Column({ name: 'actor_id', type: 'uuid', nullable: true })
