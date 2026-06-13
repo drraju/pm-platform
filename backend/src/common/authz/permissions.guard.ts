@@ -3,25 +3,20 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
-  Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Role } from '../../modules/users/entities/role.entity';
 import {
   ANY_PERMISSIONS_KEY,
   PERMISSIONS_KEY,
   PermissionKey,
 } from './permissions';
+import { AuthorizationPolicyService } from './authorization-policy.service';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    @Optional()
-    @InjectRepository(Role)
-    private readonly rolesRepository?: Repository<Role>,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -38,23 +33,19 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<{
-      user?: { roleId?: string };
+      user?: { email?: string; roleId?: string; userId?: string };
     }>();
+    const userId = request.user?.userId;
     const roleId = request.user?.roleId;
-    if (!roleId) {
+    if (!userId || !roleId) {
       throw new ForbiddenException('Missing role for permission check');
     }
-    if (!this.rolesRepository) {
-      throw new ForbiddenException('Permission repository is unavailable');
-    }
-
-    const role = await this.rolesRepository.findOne({
-      relations: { permissions: true },
-      where: { id: roleId },
-    });
-    const grantedPermissions = new Set(
-      role?.permissions?.map((permission) => permission.key) ?? [],
-    );
+    const grantedPermissions =
+      await this.authorizationPolicyService.getGrantedPermissionKeys({
+        email: request.user?.email,
+        roleId,
+        userId,
+      });
 
     const hasPermissions =
       !requiredPermissions?.length ||

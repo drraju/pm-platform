@@ -1,12 +1,11 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Repository } from 'typeorm';
-import { Role } from '../../modules/users/entities/role.entity';
 import {
   ANY_PERMISSIONS_KEY,
   PERMISSIONS_KEY,
   PermissionKey,
 } from './permissions';
+import { AuthorizationPolicyService } from './authorization-policy.service';
 import { PermissionsGuard } from './permissions.guard';
 
 type ReflectorMock = Pick<Reflector, 'getAllAndOverride'> & {
@@ -15,8 +14,11 @@ type ReflectorMock = Pick<Reflector, 'getAllAndOverride'> & {
 
 describe('PermissionsGuard', () => {
   let reflector: ReflectorMock;
-  let rolesRepository: Pick<Repository<Role>, 'findOne'> & {
-    findOne: jest.Mock;
+  let authorizationPolicyService: Pick<
+    AuthorizationPolicyService,
+    'getGrantedPermissionKeys'
+  > & {
+    getGrantedPermissionKeys: jest.Mock;
   };
   let guard: PermissionsGuard;
 
@@ -24,12 +26,12 @@ describe('PermissionsGuard', () => {
     reflector = {
       getAllAndOverride: jest.fn(),
     };
-    rolesRepository = {
-      findOne: jest.fn(),
+    authorizationPolicyService = {
+      getGrantedPermissionKeys: jest.fn(),
     };
     guard = new PermissionsGuard(
       reflector as unknown as Reflector,
-      rolesRepository as unknown as Repository<Role>,
+      authorizationPolicyService as unknown as AuthorizationPolicyService,
     );
   });
 
@@ -38,10 +40,9 @@ describe('PermissionsGuard', () => {
       all: [],
       any: [PermissionKey.ProjectRead, PermissionKey.ProjectTeamManage],
     });
-    rolesRepository.findOne.mockResolvedValue({
-      name: 'Program Manager',
-      permissions: [{ key: PermissionKey.ProjectRead }],
-    });
+    authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
+      new Set([PermissionKey.ProjectRead]),
+    );
 
     await expect(guard.canActivate(createContext())).resolves.toBe(true);
   });
@@ -51,10 +52,9 @@ describe('PermissionsGuard', () => {
       all: [],
       any: [PermissionKey.ProjectRead, PermissionKey.ProjectTeamManage],
     });
-    rolesRepository.findOne.mockResolvedValue({
-      name: 'Team Member',
-      permissions: [{ key: PermissionKey.TaskComment }],
-    });
+    authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
+      new Set([PermissionKey.TaskComment]),
+    );
 
     await expect(guard.canActivate(createContext())).rejects.toBeInstanceOf(
       ForbiddenException,
@@ -66,15 +66,30 @@ describe('PermissionsGuard', () => {
       all: [PermissionKey.UserManage],
       any: [PermissionKey.ProjectRead],
     });
-    rolesRepository.findOne.mockResolvedValue({
-      name: 'Admin',
-      permissions: [
-        { key: PermissionKey.UserManage },
-        { key: PermissionKey.ProjectRead },
-      ],
-    });
+    authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
+      new Set([PermissionKey.UserManage, PermissionKey.ProjectRead]),
+    );
 
     await expect(guard.canActivate(createContext())).resolves.toBe(true);
+  });
+
+  it('queries the centralized authorization service with request actor data', async () => {
+    mockMetadata({
+      all: [PermissionKey.ProjectRead],
+    });
+    authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
+      new Set([PermissionKey.ProjectRead]),
+    );
+
+    await expect(guard.canActivate(createContext())).resolves.toBe(true);
+
+    expect(
+      authorizationPolicyService.getGrantedPermissionKeys,
+    ).toHaveBeenCalledWith({
+      email: 'user@example.com',
+      roleId: 'role-1',
+      userId: 'user-1',
+    });
   });
 
   function mockMetadata(input: {
@@ -99,7 +114,11 @@ function createContext(): ExecutionContext {
     getHandler: jest.fn(),
     switchToHttp: jest.fn(() => ({
       getRequest: () => ({
-        user: { roleId: 'role-1' },
+        user: {
+          email: 'user@example.com',
+          roleId: 'role-1',
+          userId: 'user-1',
+        },
       }),
     })),
   } as unknown as ExecutionContext;

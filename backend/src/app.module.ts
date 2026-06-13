@@ -3,6 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthzModule } from './common/authz/authz.module';
 import { SanitizeResponseInterceptor } from './common/serialization/sanitize-response.interceptor';
 import { createTypeOrmOptions } from './database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
@@ -20,6 +21,7 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot(createTypeOrmOptions()),
+    AuthzModule,
     AuthModule,
     UsersModule,
     ProjectsModule,

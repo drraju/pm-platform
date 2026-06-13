@@ -4,9 +4,7 @@ import { HealthModule } from '../health/health.module';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
-import { Role } from '../users/entities/role.entity';
 import { User } from '../users/entities/user.entity';
-import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import { ProjectMember } from './entities/project-member.entity';
 import { Project } from './entities/project.entity';
 import { ProjectVisibilityService } from './project-visibility.service';
@@ -21,17 +19,12 @@ import { ProjectsService } from './projects.service';
       ProjectMember,
       Task,
       User,
-      Role,
       Risk,
       Issue,
     ]),
   ],
   controllers: [ProjectsController],
-  providers: [
-    ProjectsService,
-    ProjectVisibilityService,
-    AuthorizationPolicyService,
-  ],
-  exports: [ProjectsService, ProjectVisibilityService, AuthorizationPolicyService],
+  providers: [ProjectsService, ProjectVisibilityService],
+  exports: [ProjectsService, ProjectVisibilityService],
 })
 export class ProjectsModule {}

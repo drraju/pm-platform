@@ -170,6 +170,16 @@ export class AuthorizationPolicyService {
     return this.hasAnyGrantedPermission(grantedPermissions, permissionKeys);
   }
 
+  async getGrantedPermissionKeys(
+    actor: AuthorizationActor | undefined,
+  ): Promise<Set<string>> {
+    if (!actor) {
+      return new Set();
+    }
+
+    return this.getPermissionKeys(actor);
+  }
+
   private async canManageProjectWithPermissions(
     projectId: string,
     actor: AuthorizationActor,
