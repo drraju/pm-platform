@@ -4,6 +4,7 @@ import React from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectTable } from "@/components/projects/project-table";
+import { AppModal } from "@/components/ui/app-modal";
 import {
   createProject,
   getAssignableUsers,
@@ -11,7 +12,13 @@ import {
   getProjects,
   type ApiProject,
 } from "@/features/projects";
-import { getStoredAccessToken } from "@/features/auth";
+import {
+  getAuthMe,
+  getStoredAccessToken,
+  getStoredPermissionKeys,
+  hasPermission,
+  storeAuthMe,
+} from "@/features/auth";
 import type { ApiAssignableUser, ApiProjectHealthStatus } from "@/lib/api/client";
 
 const projectStatuses = [
@@ -30,19 +37,26 @@ export default function ProjectsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
+    getStoredPermissionKeys(),
+  );
   const [sortMode, setSortMode] = useState<
     "created_asc" | "created_desc" | "health_asc" | "health_desc"
   >("created_desc");
   const hasSession = useMemo(() => Boolean(getStoredAccessToken()), []);
+  const canCreateProject = hasPermission(permissionKeys, "project.create");
 
   async function loadData() {
     setError(null);
     setIsLoading(true);
     try {
-      const [projectData, userData] = await Promise.all([
+      const [projectData, userData, authMe] = await Promise.all([
         getProjects(),
         getAssignableUsers(),
+        getAuthMe(),
       ]);
+      storeAuthMe(authMe);
+      setPermissionKeys(authMe.permissions.map((permission) => permission.key));
       const projectsWithMemberCounts = await Promise.all(
         projectData.map(async (project) => {
           try {
@@ -147,14 +161,16 @@ export default function ProjectsPage() {
     <div className="space-y-6">
       <PageHeader
         actions={
-          <button
-            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={!hasSession}
-            onClick={() => setIsCreateModalOpen(true)}
-            type="button"
-          >
-            Create project
-          </button>
+          canCreateProject ? (
+            <button
+              className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={!hasSession}
+              onClick={() => setIsCreateModalOpen(true)}
+              type="button"
+            >
+              Create project
+            </button>
+          ) : null
         }
         description="Track delivery ownership, project stage, health, milestones, and integration readiness across the active portfolio."
         eyebrow="Multi-project support"
@@ -239,35 +255,34 @@ export default function ProjectsPage() {
       />
 
       {isCreateModalOpen ? (
-        <div
-          aria-labelledby="create-project-title"
-          aria-modal="true"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 py-6"
-          role="dialog"
-        >
-          <section className="w-full max-w-2xl rounded-md border border-slate-200 bg-white p-6 shadow-soft">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2
-                  className="text-lg font-semibold text-slate-950"
-                  id="create-project-title"
-                >
-                  Create project
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Set the delivery owner, status, and target dates.
-                </p>
-              </div>
+        <AppModal
+          description="Set the delivery owner, status, and target dates."
+          footer={
+            <>
               <button
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 onClick={() => setIsCreateModalOpen(false)}
                 type="button"
               >
-                Close
+                Cancel
               </button>
-            </div>
+              <button
+                className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={isCreating}
+                form="create-project-form"
+                type="submit"
+              >
+                {isCreating ? "Creating..." : "Create project"}
+              </button>
+            </>
+          }
+          labelledById="create-project-title"
+          onClose={() => setIsCreateModalOpen(false)}
+          title="Create project"
+          widthClassName="max-w-2xl"
+        >
 
-            <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleCreateProject}>
+            <form className="grid gap-4 sm:grid-cols-2" id="create-project-form" onSubmit={handleCreateProject}>
               <label className="block sm:col-span-2">
                 <span className="text-sm font-medium text-slate-700">Name</span>
                 <input
@@ -333,26 +348,8 @@ export default function ProjectsPage() {
                   type="date"
                 />
               </label>
-
-              <div className="flex justify-end gap-3 sm:col-span-2">
-                <button
-                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  type="button"
-                >
-                  Cancel
-                </button>
-                <button
-                  className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={isCreating}
-                  type="submit"
-                >
-                  {isCreating ? "Creating..." : "Create project"}
-                </button>
-              </div>
             </form>
-          </section>
-        </div>
+        </AppModal>
       ) : null}
     </div>
   );

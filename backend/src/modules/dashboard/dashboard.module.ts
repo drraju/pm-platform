@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HealthModule } from '../health/health.module';
+import { ProjectsModule } from '../projects/projects.module';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import { Project } from '../projects/entities/project.entity';
 import { Issue } from '../raid/entities/issue.entity';
@@ -12,6 +13,7 @@ import { DashboardService } from './dashboard.service';
 @Module({
   imports: [
     HealthModule,
+    ProjectsModule,
     TypeOrmModule.forFeature([Project, ProjectMember, Task, Risk, Issue]),
   ],
   controllers: [DashboardController],

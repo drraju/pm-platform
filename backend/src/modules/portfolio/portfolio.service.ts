@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ProjectHealthStatus } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
 import { Project } from '../projects/entities/project.entity';
+import {
+  ProjectVisibilityActor,
+  ProjectVisibilityService,
+} from '../projects/project-visibility.service';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -29,17 +33,43 @@ export class PortfolioService {
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
     private readonly projectHealthService: ProjectHealthService,
+    private readonly projectVisibilityService: ProjectVisibilityService,
   ) {}
 
-  async getSummary(): Promise<PortfolioSummaryDto> {
-    const [projects, risks, issues, tasks] = await Promise.all([
-      this.projectsRepository.find({
-        relations: { issues: true, risks: true, tasks: true },
-      }),
-      this.risksRepository.find(),
-      this.issuesRepository.find(),
-      this.tasksRepository.find({ relations: { project: true } }),
-    ]);
+  async getSummary(
+    actor?: ProjectVisibilityActor,
+  ): Promise<PortfolioSummaryDto> {
+    const visibleProjectIds =
+      await this.projectVisibilityService.getVisibleProjectIds(actor);
+
+    const [projects, risks, issues, tasks] =
+      visibleProjectIds === 'all'
+        ? await Promise.all([
+            this.projectsRepository.find({
+              relations: { issues: true, risks: true, tasks: true },
+            }),
+            this.risksRepository.find(),
+            this.issuesRepository.find(),
+            this.tasksRepository.find({ relations: { project: true } }),
+          ])
+        : visibleProjectIds.length > 0
+          ? await Promise.all([
+              this.projectsRepository.find({
+                relations: { issues: true, risks: true, tasks: true },
+                where: { id: In(visibleProjectIds) },
+              }),
+              this.risksRepository.find({
+                where: { projectId: In(visibleProjectIds) },
+              }),
+              this.issuesRepository.find({
+                where: { projectId: In(visibleProjectIds) },
+              }),
+              this.tasksRepository.find({
+                relations: { project: true },
+                where: { projectId: In(visibleProjectIds) },
+              }),
+            ])
+          : [[], [], [], []];
 
     const summary = projects.reduce<PortfolioSummaryDto>(
       (summary, project) => {

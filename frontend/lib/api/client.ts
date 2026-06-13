@@ -324,6 +324,7 @@ export async function apiRequest<T>(
   { token = getStoredAccessToken(), headers, ...options }: RequestOptions = {},
 ): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    cache: "no-store",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -690,5 +691,35 @@ export function createRaidItem(input: {
   return apiRequest<ApiRaidItem>("/raid", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function updateRaidItem(
+  itemId: string,
+  input: Partial<{
+    title: string;
+    description: string;
+    ownerId: string | null;
+    status: string;
+    severity: string;
+    probability: string;
+    impact: string;
+    mitigationPlan: string | null;
+    resolutionPlan: string | null;
+    validationStatus: string;
+    validationNotes: string | null;
+    dependsOn: string | null;
+    dueDate: string | null;
+  }>,
+) {
+  return apiRequest<ApiRaidItem>(`/raid/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteRaidItem(itemId: string) {
+  return apiRequest<void>(`/raid/${itemId}`, {
+    method: "DELETE",
   });
 }

@@ -26,6 +26,10 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
 import { ProjectMember } from './entities/project-member.entity';
 import { Project } from './entities/project.entity';
+import {
+  ProjectVisibilityActor,
+  ProjectVisibilityService,
+} from './project-visibility.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
 type AuthenticatedActor = {
@@ -55,6 +59,7 @@ export class ProjectsService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly projectHealthService: ProjectHealthService,
+    private readonly projectVisibilityService: ProjectVisibilityService,
   ) {}
 
   create(createProjectDto: CreateProjectDto): Promise<Project> {
@@ -63,16 +68,17 @@ export class ProjectsService {
     );
   }
 
-  async findAll(): Promise<ProjectWithHealth[]> {
-    const projects = await this.projectsRepository.find({
-      order: { createdAt: 'DESC' },
-      relations: { issues: true, owner: true, risks: true, tasks: true },
-    });
-
+  async findAll(actor?: ProjectVisibilityActor): Promise<ProjectWithHealth[]> {
+    const projects =
+      await this.projectVisibilityService.getVisibleProjects(actor);
     return projects.map((project) => this.withHealth(project));
   }
 
-  async findOne(id: string): Promise<ProjectWithHealth> {
+  async findOne(
+    id: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<ProjectWithHealth> {
+    await this.ensureProjectVisible(id, actor);
     const project = await this.projectsRepository.findOne({
       where: { id },
       relations: {
@@ -137,8 +143,12 @@ export class ProjectsService {
     );
   }
 
-  async findMembers(projectId: string): Promise<ProjectMemberResponseDto[]> {
+  async findMembers(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<ProjectMemberResponseDto[]> {
     await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
 
     const members = await this.projectMembersRepository.find({
       order: { createdAt: 'ASC' },
@@ -182,8 +192,10 @@ export class ProjectsService {
   async findProjectTasks(
     projectId: string,
     query: ProjectTaskQueryDto = {},
+    actor?: ProjectVisibilityActor,
   ): Promise<Task[]> {
     await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
 
     return this.tasksRepository.find({
       order: { createdAt: 'DESC' },
@@ -247,23 +259,35 @@ export class ProjectsService {
     await this.tasksRepository.softRemove(task);
   }
 
-  async findProjectRisks(projectId: string): Promise<Risk[]> {
-    const project = await this.findOne(projectId);
+  async findProjectRisks(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<Risk[]> {
+    const project = await this.findOne(projectId, actor);
     return project.risks ?? [];
   }
 
-  async findProjectIssues(projectId: string): Promise<Issue[]> {
-    const project = await this.findOne(projectId);
+  async findProjectIssues(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<Issue[]> {
+    const project = await this.findOne(projectId, actor);
     return project.issues ?? [];
   }
 
-  async findProjectAssumptions(projectId: string): Promise<Assumption[]> {
-    const project = await this.findOne(projectId);
+  async findProjectAssumptions(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<Assumption[]> {
+    const project = await this.findOne(projectId, actor);
     return project.assumptions ?? [];
   }
 
-  async findProjectDependencies(projectId: string): Promise<Dependency[]> {
-    const project = await this.findOne(projectId);
+  async findProjectDependencies(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<Dependency[]> {
+    const project = await this.findOne(projectId, actor);
     return project.dependencies ?? [];
   }
 
@@ -275,6 +299,17 @@ export class ProjectsService {
     if (!project) {
       throw new NotFoundException(`Project ${projectId} not found`);
     }
+  }
+
+  private async ensureProjectVisible(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<void> {
+    if (await this.projectVisibilityService.canViewProject(projectId, actor)) {
+      return;
+    }
+
+    throw new ForbiddenException('Project access is restricted');
   }
 
   private async findProjectEntity(id: string): Promise<Project> {

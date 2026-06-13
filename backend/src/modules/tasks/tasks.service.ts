@@ -5,10 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { ProjectRole } from '../../common/enums/project-role.enum';
 import { ProjectMember } from '../projects/entities/project-member.entity';
+import {
+  ProjectVisibilityActor,
+  ProjectVisibilityService,
+} from '../projects/project-visibility.service';
 import { User } from '../users/entities/user.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
@@ -40,6 +44,7 @@ export class TasksService {
     private readonly projectMembersRepository: Repository<ProjectMember>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly projectVisibilityService: ProjectVisibilityService,
   ) {}
 
   async create(
@@ -56,9 +61,19 @@ export class TasksService {
     );
   }
 
-  findAll(): Promise<Task[]> {
+  async findAll(actor?: ProjectVisibilityActor): Promise<Task[]> {
+    const visibleProjectIds =
+      await this.projectVisibilityService.getVisibleProjectIds(actor);
+    if (visibleProjectIds !== 'all' && visibleProjectIds.length === 0) {
+      return [];
+    }
+
     return this.tasksRepository.find({
       relations: { project: true, assignee: true },
+      where:
+        visibleProjectIds === 'all'
+          ? undefined
+          : { projectId: In(visibleProjectIds) },
     });
   }
 
@@ -105,12 +120,21 @@ export class TasksService {
     };
   }
 
-  async findOne(id: string): Promise<Task> {
+  async findOne(id: string, actor?: ProjectVisibilityActor): Promise<Task> {
     const task = await this.tasksRepository.findOne({
       where: { id },
       relations: { project: true, assignee: true },
     });
     if (!task) {
+      throw new NotFoundException(`Task ${id} not found`);
+    }
+
+    if (
+      !(await this.projectVisibilityService.canViewProject(
+        task.projectId,
+        actor,
+      ))
+    ) {
       throw new NotFoundException(`Task ${id} not found`);
     }
 
@@ -122,7 +146,7 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<Task> {
-    const task = await this.findOne(id);
+    const task = await this.findOne(id, actor);
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
     await this.validateAssigneeMembership(
       updateTaskDto.projectId ?? task.projectId,
@@ -133,7 +157,7 @@ export class TasksService {
   }
 
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
-    const task = await this.findOne(id);
+    const task = await this.findOne(id, actor);
     await this.ensureCanManageProject(task.projectId, actor);
     await this.tasksRepository.softRemove(task);
   }

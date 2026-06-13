@@ -1,35 +1,60 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import {
+  RaidManagement,
+  type RaidMutationInput,
+} from "@/components/raid/raid-management";
+import {
+  getAuthMe,
+  getStoredPermissionKeys,
+  getStoredSessionUser,
+  hasPermission,
+  storeAuthMe,
+} from "@/features/auth";
 import { getProjects, type ApiProject } from "@/features/projects";
-import { createRaidItem, getRaidItems, type ApiRaidItem } from "@/features/raid";
+import {
+  createRaidItem,
+  deleteRaidItem,
+  getRaidItems,
+  type ApiRaidItem,
+  updateRaidItem,
+} from "@/features/raid";
+import { getRaidPermissions } from "@/features/raid/permissions";
 import { getAssignableUsers, type ApiAssignableUser } from "@/features/users";
-
-const raidTypes: Array<ApiRaidItem["type"]> = ["risk", "assumption", "issue", "dependency"];
 
 export default function RaidPage() {
   const [items, setItems] = useState<ApiRaidItem[]>([]);
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [users, setUsers] = useState<ApiAssignableUser[]>([]);
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
+    getStoredPermissionKeys(),
+  );
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   async function loadData() {
     setError(null);
     setIsLoading(true);
     try {
-      const [raidData, projectData, userData] = await Promise.all([
+      const [raidData, projectData, userData, authMe] = await Promise.all([
         getRaidItems(),
         getProjects(),
         getAssignableUsers(),
+        getAuthMe(),
       ]);
+      storeAuthMe(authMe);
       setItems(raidData);
       setProjects(projectData);
       setUsers(userData);
+      setPermissionKeys(authMe.permissions.map((permission) => permission.key));
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to load RAID");
+      setError(
+        requestError instanceof Error ? requestError.message : "Unable to load RAID",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -39,129 +64,164 @@ export default function RaidPage() {
     void loadData();
   }, []);
 
-  async function handleCreateItem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsCreating(true);
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const ownerId = String(formData.get("ownerId") ?? "");
-    const type = String(formData.get("type") ?? "risk") as ApiRaidItem["type"];
-
+  async function handleCreate(input: RaidMutationInput) {
+    setIsSaving(true);
     try {
-      await createRaidItem({
-        type,
-        projectId: String(formData.get("projectId") ?? ""),
-        title: String(formData.get("title") ?? ""),
-        description: String(formData.get("description") ?? ""),
-        ownerId: ownerId || undefined,
-        status: String(formData.get("status") ?? "open"),
-        severity: String(formData.get("severity") ?? "medium"),
-        probability: String(formData.get("severity") ?? "medium"),
-        impact: String(formData.get("severity") ?? "medium"),
-        validationStatus: "unvalidated",
-      });
-      form.reset();
-      await loadData();
+      const item = await createRaidItem(input);
+      setItems((currentItems) => [...currentItems, hydrateRaidItem(item)]);
+      showToast(setToast, "success", "RAID item created.");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to create RAID item");
+      showToast(setToast, "error", "Unable to create RAID item.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create RAID item",
+      );
     } finally {
-      setIsCreating(false);
+      setIsSaving(false);
     }
   }
+
+  async function handleUpdate(
+    itemId: string,
+    input: Partial<RaidMutationInput>,
+  ) {
+    setIsSaving(true);
+    try {
+      const item = await updateRaidItem(itemId, input);
+      setItems((currentItems) =>
+        currentItems.map((currentItem) =>
+          currentItem.id === itemId
+            ? hydrateRaidItem({ ...currentItem, ...item })
+            : currentItem,
+        ),
+      );
+      showToast(setToast, "success", "RAID item updated.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to update RAID item.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update RAID item",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete(itemId: string) {
+    setIsSaving(true);
+    try {
+      await deleteRaidItem(itemId);
+      setItems((currentItems) =>
+        currentItems.filter((currentItem) => currentItem.id !== itemId),
+      );
+      showToast(setToast, "success", "RAID item deleted.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to delete RAID item.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to delete RAID item",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const sessionUser = getStoredSessionUser();
+  const permissions = getRaidPermissions(permissionKeys, sessionUser?.userId);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        description="Capture risks, assumptions, issues, and dependencies with severity, ownership, status, and escalation context."
+        description="Capture risks, assumptions, issues, and dependencies with ownership, status, and escalation context."
         eyebrow="RAID register"
         title="RAID"
       />
 
-      {error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </section>
-      ) : null}
+      {error ? <ErrorMessage message={error} /> : null}
+      {toast ? <ToastMessage toast={toast} /> : null}
 
-      <form
-        className="grid gap-4 rounded-md border border-slate-200 bg-white p-5 shadow-soft lg:grid-cols-[150px_1fr_1fr_160px_160px_auto]"
-        onSubmit={handleCreateItem}
-      >
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Type</span>
-          <select className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" name="type">
-            {raidTypes.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Project</span>
-          <select className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" name="projectId" required>
-            <option value="">Choose project</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Title</span>
-          <input className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" name="title" required />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Owner</span>
-          <select className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" name="ownerId">
-            <option value="">Unassigned</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Severity</span>
-          <select className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" name="severity">
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-        </label>
-        <button
-          className="mt-7 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-70"
-          disabled={isCreating || projects.length === 0}
-          type="submit"
-        >
-          Add item
-        </button>
-        <input name="description" type="hidden" value="" />
-        <input name="status" type="hidden" value="open" />
-      </form>
-
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-        <div className="hidden grid-cols-[0.7fr_1.4fr_1fr_0.8fr_0.8fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
-          <span>Type</span>
-          <span>Title</span>
-          <span>Project</span>
-          <span>Owner</span>
-          <span>Status</span>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {isLoading ? <p className="px-4 py-6 text-sm text-slate-500">Loading RAID items...</p> : null}
-          {!isLoading && items.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">No RAID items have been created yet.</p>
-          ) : null}
-          {items.map((item) => (
-            <article className="grid gap-2 px-4 py-4 text-sm md:grid-cols-[0.7fr_1.4fr_1fr_0.8fr_0.8fr] md:items-center" key={`${item.type}-${item.id}`}>
-              <span className="font-semibold capitalize text-slate-950">{item.type}</span>
-              <span className="text-slate-700">{item.title}</span>
-              <span className="text-slate-600">{item.project?.name ?? "No project"}</span>
-              <span className="text-slate-600">
-                {item.owner ? `${item.owner.firstName} ${item.owner.lastName}` : "Unassigned"}
-              </span>
-              <span className="capitalize text-slate-600">{item.status}</span>
-            </article>
-          ))}
-        </div>
-      </section>
+      <RaidManagement
+        emptyMessage="No RAID items have been created yet."
+        isLoading={isLoading}
+        isSaving={isSaving}
+        items={items}
+        onCreate={permissions.canCreate ? handleCreate : undefined}
+        onDelete={permissions.canDelete ? handleDelete : undefined}
+        onUpdate={permissions.canUpdate ? handleUpdate : undefined}
+        permissions={permissions}
+        projects={projects}
+        title="RAID Items"
+        users={users}
+      />
     </div>
+  );
+
+  function hydrateRaidItem(item: ApiRaidItem) {
+    return {
+      ...item,
+      owner: item.ownerId
+        ? toRaidOwner(users.find((user) => user.id === item.ownerId)) ??
+          item.owner
+        : null,
+      project: item.projectId
+        ? projects.find((project) => project.id === item.projectId) ?? item.project
+        : item.project,
+    };
+  }
+}
+
+function toRaidOwner(user: ApiAssignableUser | undefined) {
+  return user
+    ? {
+        email: user.email,
+        firstName: user.firstName,
+        id: user.id,
+        lastName: user.lastName,
+        status: user.status ?? "active",
+      }
+    : undefined;
+}
+
+type ToastState = {
+  id: number;
+  message: string;
+  tone: "error" | "success";
+};
+
+function showToast(
+  setToast: React.Dispatch<React.SetStateAction<ToastState | null>>,
+  tone: ToastState["tone"],
+  message: string,
+) {
+  const id = Date.now();
+  setToast({ id, message, tone });
+  window.setTimeout(() => {
+    setToast((currentToast) => (currentToast?.id === id ? null : currentToast));
+  }, 3000);
+}
+
+function ErrorMessage({ message }: { message: string }) {
+  return (
+    <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      {message}
+    </section>
+  );
+}
+
+function ToastMessage({ toast }: { toast: ToastState }) {
+  return (
+    <section
+      className={`fixed right-4 top-4 z-50 rounded-md border px-4 py-3 text-sm font-semibold shadow-lg ${
+        toast.tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-red-200 bg-red-50 text-red-700"
+      }`}
+      role="status"
+    >
+      {toast.message}
+    </section>
   );
 }

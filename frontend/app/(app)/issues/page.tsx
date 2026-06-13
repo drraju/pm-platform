@@ -2,20 +2,54 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
-import { getRaidItems, type ApiRaidItem } from "@/features/raid";
+import {
+  RaidManagement,
+  type RaidMutationInput,
+} from "@/components/raid/raid-management";
+import {
+  getAuthMe,
+  getStoredPermissionKeys,
+  getStoredSessionUser,
+  storeAuthMe,
+} from "@/features/auth";
+import { getProjects, type ApiProject } from "@/features/projects";
+import {
+  createRaidItem,
+  deleteRaidItem,
+  getRaidItems,
+  type ApiRaidItem,
+  updateRaidItem,
+} from "@/features/raid";
+import { getRaidPermissions } from "@/features/raid/permissions";
+import { getAssignableUsers, type ApiAssignableUser } from "@/features/users";
 
 export default function IssuesPage() {
-  const [issues, setIssues] = useState<ApiRaidItem[]>([]);
+  const [items, setItems] = useState<ApiRaidItem[]>([]);
+  const [projects, setProjects] = useState<ApiProject[]>([]);
+  const [users, setUsers] = useState<ApiAssignableUser[]>([]);
+  const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
+    getStoredPermissionKeys(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     async function loadIssues() {
       setError(null);
       setIsLoading(true);
       try {
-        const items = await getRaidItems();
-        setIssues(items.filter((item) => item.type === "issue"));
+        const [raidItems, projectData, userData, authMe] = await Promise.all([
+          getRaidItems(),
+          getProjects(),
+          getAssignableUsers(),
+          getAuthMe(),
+        ]);
+        storeAuthMe(authMe);
+        setItems(raidItems);
+        setProjects(projectData);
+        setUsers(userData);
+        setPermissionKeys(authMe.permissions.map((permission) => permission.key));
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -29,6 +63,50 @@ export default function IssuesPage() {
 
     void loadIssues();
   }, []);
+
+  async function handleCreate(input: RaidMutationInput) {
+    setIsSaving(true);
+    try {
+      const item = await createRaidItem({ ...input, type: "issue" });
+      setItems((currentItems) => [...currentItems, hydrateItem(item)]);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleUpdate(
+    itemId: string,
+    input: Partial<RaidMutationInput>,
+  ) {
+    setIsSaving(true);
+    try {
+      const item = await updateRaidItem(itemId, input);
+      setItems((currentItems) =>
+        currentItems.map((currentItem) =>
+          currentItem.id === itemId
+            ? hydrateItem({ ...currentItem, ...item })
+            : currentItem,
+        ),
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete(itemId: string) {
+    setIsSaving(true);
+    try {
+      await deleteRaidItem(itemId);
+      setItems((currentItems) =>
+        currentItems.filter((currentItem) => currentItem.id !== itemId),
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const sessionUser = getStoredSessionUser();
+  const permissions = getRaidPermissions(permissionKeys, sessionUser?.userId);
 
   return (
     <div className="space-y-6">
@@ -44,45 +122,45 @@ export default function IssuesPage() {
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-        <div className="hidden grid-cols-[1.4fr_1fr_0.8fr_0.8fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
-          <span>Issue</span>
-          <span>Project</span>
-          <span>Owner</span>
-          <span>Status</span>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {isLoading ? (
-            <p className="px-4 py-6 text-sm text-slate-500">
-              Loading issues...
-            </p>
-          ) : null}
-          {!isLoading && issues.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">
-              No issues have been created yet.
-            </p>
-          ) : null}
-          {issues.map((issue) => (
-            <article
-              className="grid gap-2 px-4 py-4 text-sm md:grid-cols-[1.4fr_1fr_0.8fr_0.8fr] md:items-center"
-              key={issue.id}
-            >
-              <span className="font-semibold text-slate-950">
-                {issue.title}
-              </span>
-              <span className="text-slate-600">
-                {issue.project?.name ?? "No project"}
-              </span>
-              <span className="text-slate-600">
-                {issue.owner
-                  ? `${issue.owner.firstName} ${issue.owner.lastName}`
-                  : "Unassigned"}
-              </span>
-              <span className="capitalize text-slate-600">{issue.status}</span>
-            </article>
-          ))}
-        </div>
-      </section>
+      <RaidManagement
+        emptyMessage="No issues have been created yet."
+        fixedType="issue"
+        isLoading={isLoading}
+        isSaving={isSaving}
+        items={items}
+        onCreate={permissions.canCreate ? handleCreate : undefined}
+        onDelete={permissions.canDelete ? handleDelete : undefined}
+        onUpdate={permissions.canUpdate ? handleUpdate : undefined}
+        permissions={permissions}
+        projects={projects}
+        title="Issues"
+        users={users}
+      />
     </div>
   );
+
+  function hydrateItem(item: ApiRaidItem) {
+    return {
+      ...item,
+      owner: item.ownerId
+        ? toRaidOwner(users.find((user) => user.id === item.ownerId)) ??
+          item.owner
+        : null,
+      project: item.projectId
+        ? projects.find((project) => project.id === item.projectId) ?? item.project
+        : item.project,
+    };
+  }
+}
+
+function toRaidOwner(user: ApiAssignableUser | undefined) {
+  return user
+    ? {
+        email: user.email,
+        firstName: user.firstName,
+        id: user.id,
+        lastName: user.lastName,
+        status: user.status ?? "active",
+      }
+    : undefined;
 }

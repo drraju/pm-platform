@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThan, Not, Repository } from 'typeorm';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { ProjectHealthService } from '../health/project-health.service';
+import {
+  ProjectVisibilityActor,
+  ProjectVisibilityService,
+} from '../projects/project-visibility.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import { Project } from '../projects/entities/project.entity';
 import { Issue } from '../raid/entities/issue.entity';
@@ -31,15 +35,16 @@ export class DashboardService {
     @InjectRepository(Issue)
     private readonly issuesRepository: Repository<Issue>,
     private readonly projectHealthService: ProjectHealthService,
+    private readonly projectVisibilityService: ProjectVisibilityService,
   ) {}
 
-  async getMyDashboard(userId: string): Promise<MeDashboardDto> {
-    const [ownedProjects, memberProjects, assignedTasks] = await Promise.all([
-      this.projectsRepository.find({
-        order: { createdAt: 'DESC' },
-        relations: { issues: true, owner: true, risks: true, tasks: true },
-        where: { ownerId: userId },
-      }),
+  async getMyDashboard(
+    userId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<MeDashboardDto> {
+    const effectiveActor = actor ?? { roleId: '', userId };
+    const [visibleProjects, memberProjects, assignedTasks] = await Promise.all([
+      this.projectVisibilityService.getVisibleProjects(effectiveActor),
       this.projectMembersRepository.find({
         relations: {
           project: { issues: true, owner: true, risks: true, tasks: true },
@@ -70,7 +75,12 @@ export class DashboardService {
       ]);
 
     return {
-      assignedProjects: this.mapAssignedProjects(ownedProjects, memberProjects),
+      assignedProjects: this.mapAssignedProjects(
+        visibleProjects,
+        memberProjects,
+        assignedTasks,
+        userId,
+      ),
       taskSummary: this.summarizeTasks(assignedTasks),
       overdueTasks: overdueTasks.map((task) => this.toDashboardTask(task)),
       upcomingTasks: upcomingTasks.map((task) => this.toDashboardTask(task)),
@@ -129,17 +139,33 @@ export class DashboardService {
   }
 
   private mapAssignedProjects(
-    ownedProjects: Project[],
+    visibleProjects: Project[],
     memberProjects: ProjectMember[],
+    assignedTasks: Task[],
+    userId: string,
   ): DashboardProjectDto[] {
     const projectMap = new Map<string, DashboardProjectDto>();
+    const membershipByProjectId = new Map(
+      memberProjects
+        .filter((membership) => membership.projectId)
+        .map((membership) => [membership.projectId, membership]),
+    );
+    const assignedTaskProjectIds = new Set(
+      assignedTasks.map((task) => task.projectId),
+    );
 
-    for (const project of ownedProjects) {
+    for (const project of visibleProjects) {
+      const membership = membershipByProjectId.get(project.id);
       projectMap.set(project.id, {
         id: project.id,
         name: project.name,
         status: project.status,
-        role: 'owner',
+        role: this.getDashboardProjectRole(
+          project,
+          membership,
+          assignedTaskProjectIds,
+          userId,
+        ),
         health: this.projectHealthService.calculate({
           issues: project.issues,
           risks: project.risks,
@@ -148,25 +174,28 @@ export class DashboardService {
       });
     }
 
-    for (const membership of memberProjects) {
-      if (!membership.project || projectMap.has(membership.project.id)) {
-        continue;
-      }
+    return Array.from(projectMap.values());
+  }
 
-      projectMap.set(membership.project.id, {
-        id: membership.project.id,
-        name: membership.project.name,
-        status: membership.project.status,
-        role: membership.role,
-        health: this.projectHealthService.calculate({
-          issues: membership.project.issues,
-          risks: membership.project.risks,
-          tasks: membership.project.tasks,
-        }),
-      });
+  private getDashboardProjectRole(
+    project: Project,
+    membership: ProjectMember | undefined,
+    assignedTaskProjectIds: Set<string>,
+    userId: string,
+  ): string {
+    if (project.ownerId === userId) {
+      return 'owner';
     }
 
-    return Array.from(projectMap.values());
+    if (membership) {
+      return membership.role;
+    }
+
+    if (assignedTaskProjectIds.has(project.id)) {
+      return 'assignee';
+    }
+
+    return 'viewer';
   }
 
   private toDashboardTask(task: Task): DashboardTaskDto {

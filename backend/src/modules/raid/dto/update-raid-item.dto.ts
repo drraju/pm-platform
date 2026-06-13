@@ -1,5 +1,4 @@
-export class UpdateRaidItemDto {
-  title?: string;
-  ownerId?: string;
-  status?: string;
-}
+import { PartialType } from '@nestjs/swagger';
+import { CreateRaidItemDto } from './create-raid-item.dto';
+
+export class UpdateRaidItemDto extends PartialType(CreateRaidItemDto) {}

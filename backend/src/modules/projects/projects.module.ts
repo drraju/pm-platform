@@ -8,6 +8,7 @@ import { Role } from '../users/entities/role.entity';
 import { User } from '../users/entities/user.entity';
 import { ProjectMember } from './entities/project-member.entity';
 import { Project } from './entities/project.entity';
+import { ProjectVisibilityService } from './project-visibility.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 
@@ -25,7 +26,7 @@ import { ProjectsService } from './projects.service';
     ]),
   ],
   controllers: [ProjectsController],
-  providers: [ProjectsService],
-  exports: [ProjectsService],
+  providers: [ProjectsService, ProjectVisibilityService],
+  exports: [ProjectsService, ProjectVisibilityService],
 })
 export class ProjectsModule {}

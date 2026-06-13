@@ -10,6 +10,7 @@ import { Task } from '../../tasks/entities/task.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectMember } from '../entities/project-member.entity';
 import { Project } from '../entities/project.entity';
+import { ProjectVisibilityService } from '../project-visibility.service';
 import { ProjectsService } from '../projects.service';
 
 type MockRepository<T extends object = object> = Partial<
@@ -26,6 +27,10 @@ describe('ProjectsService', () => {
   let projectMembersRepository: MockRepository<ProjectMember>;
   let tasksRepository: MockRepository<Task>;
   let usersRepository: MockRepository<User>;
+  let projectVisibilityService: {
+    canViewProject: jest.Mock;
+    getVisibleProjects: jest.Mock;
+  };
 
   beforeEach(async () => {
     projectsRepository = {
@@ -52,6 +57,10 @@ describe('ProjectsService', () => {
     usersRepository = {
       findOne: jest.fn(),
     };
+    projectVisibilityService = {
+      canViewProject: jest.fn().mockResolvedValue(true),
+      getVisibleProjects: jest.fn().mockResolvedValue([{ id: projectId }]),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -73,6 +82,10 @@ describe('ProjectsService', () => {
           useValue: usersRepository,
         },
         ProjectHealthService,
+        {
+          provide: ProjectVisibilityService,
+          useValue: projectVisibilityService,
+        },
       ],
     }).compile();
 
@@ -105,7 +118,9 @@ describe('ProjectsService', () => {
   });
 
   it('lists projects with owner details newest first', async () => {
-    projectsRepository.find?.mockResolvedValue([{ id: projectId }]);
+    projectVisibilityService.getVisibleProjects.mockResolvedValue([
+      { id: projectId },
+    ]);
 
     await expect(service.findAll()).resolves.toEqual([
       {
@@ -118,10 +133,9 @@ describe('ProjectsService', () => {
         id: projectId,
       },
     ]);
-    expect(projectsRepository.find).toHaveBeenCalledWith({
-      order: { createdAt: 'DESC' },
-      relations: { issues: true, owner: true, risks: true, tasks: true },
-    });
+    expect(projectVisibilityService.getVisibleProjects).toHaveBeenCalledWith(
+      undefined,
+    );
   });
 
   it('loads project details with members, tasks, and RAID context', async () => {

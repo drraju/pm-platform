@@ -8,11 +8,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ProjectHealthCard } from "@/components/projects/project-health-card";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
 import {
-  formatRaidDate,
-  formatRaidLabel,
-  formatRaidOwner,
-  ProjectWorkspaceRegisterSection,
-} from "@/components/projects/project-workspace-register-section";
+  RaidManagement,
+  type RaidMutationInput,
+  type RaidType,
+} from "@/components/raid/raid-management";
 import { ProjectWorkspaceSummary } from "@/components/projects/project-workspace-summary";
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
@@ -35,9 +34,15 @@ import {
   type ApiProjectDetails,
   type ApiProjectMember,
 } from "@/features/projects";
-import type { ApiAssignableUser, ApiTask } from "@/lib/api/client";
+import {
+  createRaidItem,
+  deleteRaidItem,
+  updateRaidItem,
+} from "@/features/raid";
+import { getRaidPermissions } from "@/features/raid/permissions";
+import type { ApiAssignableUser, ApiRaidItem, ApiTask } from "@/lib/api/client";
 
-type WorkspaceTab = "tasks" | "team";
+type WorkspaceTab = "tasks" | "team" | RaidType;
 
 export default function ProjectWorkspacePage() {
   const params = useParams<{ id: string }>();
@@ -49,6 +54,7 @@ export default function ProjectWorkspacePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
   const [isSavingTask, setIsSavingTask] = useState(false);
+  const [isSavingRaid, setIsSavingRaid] = useState(false);
   const [activeWorkspaceTab, setActiveWorkspaceTab] =
     useState<WorkspaceTab>("tasks");
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
@@ -273,6 +279,74 @@ export default function ProjectWorkspacePage() {
     }
   }
 
+  async function handleCreateRaidItem(input: RaidMutationInput) {
+    setError(null);
+    setIsSavingRaid(true);
+    try {
+      const item = await createRaidItem({ ...input, projectId });
+      setProject((currentProject) =>
+        currentProject ? appendRaidItem(currentProject, hydrateRaidItem(item)) : currentProject,
+      );
+      showToast(setToast, "success", "RAID item created.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to create RAID item.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create RAID item",
+      );
+    } finally {
+      setIsSavingRaid(false);
+    }
+  }
+
+  async function handleUpdateRaidItem(
+    itemId: string,
+    input: Partial<RaidMutationInput>,
+  ) {
+    setError(null);
+    setIsSavingRaid(true);
+    try {
+      const item = await updateRaidItem(itemId, input);
+      setProject((currentProject) =>
+        currentProject
+          ? replaceRaidItem(currentProject, hydrateRaidItem(item))
+          : currentProject,
+      );
+      showToast(setToast, "success", "RAID item updated.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to update RAID item.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update RAID item",
+      );
+    } finally {
+      setIsSavingRaid(false);
+    }
+  }
+
+  async function handleDeleteRaidItem(itemId: string) {
+    setError(null);
+    setIsSavingRaid(true);
+    try {
+      await deleteRaidItem(itemId);
+      setProject((currentProject) =>
+        currentProject ? removeRaidItem(currentProject, itemId) : currentProject,
+      );
+      showToast(setToast, "success", "RAID item deleted.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to delete RAID item.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to delete RAID item",
+      );
+    } finally {
+      setIsSavingRaid(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -312,6 +386,7 @@ export default function ProjectWorkspacePage() {
   const permissions = getProjectWorkspacePermissions({
     permissionKeys,
   });
+  const raidPermissions = getRaidPermissions(permissionKeys, sessionUser?.userId);
   const health = project.health ?? {
     reasons: ['No critical issues, high risks, or overdue task threshold breaches'],
     status: "GREEN" as const,
@@ -349,6 +424,30 @@ export default function ProjectWorkspacePage() {
             label="Project Team"
             onClick={() => setActiveWorkspaceTab("team")}
           />
+          <WorkspaceTabButton
+            active={activeWorkspaceTab === "risk"}
+            count={risks.length}
+            label="Risks"
+            onClick={() => setActiveWorkspaceTab("risk")}
+          />
+          <WorkspaceTabButton
+            active={activeWorkspaceTab === "issue"}
+            count={issues.length}
+            label="Issues"
+            onClick={() => setActiveWorkspaceTab("issue")}
+          />
+          <WorkspaceTabButton
+            active={activeWorkspaceTab === "assumption"}
+            count={assumptions.length}
+            label="Assumptions"
+            onClick={() => setActiveWorkspaceTab("assumption")}
+          />
+          <WorkspaceTabButton
+            active={activeWorkspaceTab === "dependency"}
+            count={dependencies.length}
+            label="Dependencies"
+            onClick={() => setActiveWorkspaceTab("dependency")}
+          />
         </div>
         <div className="p-3">
           {activeWorkspaceTab === "tasks" ? (
@@ -375,7 +474,8 @@ export default function ProjectWorkspacePage() {
               }
               tasks={tasks}
             />
-          ) : (
+          ) : null}
+          {activeWorkspaceTab === "team" ? (
             <ProjectWorkspaceTeam
               availableUsers={users}
               isSaving={isSavingTeam}
@@ -390,85 +490,72 @@ export default function ProjectWorkspacePage() {
                 permissions.canManageTeam ? handleUpdateMember : undefined
               }
             />
-          )}
+          ) : null}
+          {activeWorkspaceTab === "risk" ? (
+            <RaidManagement
+              emptyMessage="No risks yet."
+              fixedProjectId={projectId}
+              fixedType="risk"
+              isSaving={isSavingRaid}
+              items={risks}
+              onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
+              onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
+              onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
+              permissions={raidPermissions}
+              projects={[project]}
+              title="Risks"
+              users={users}
+            />
+          ) : null}
+          {activeWorkspaceTab === "issue" ? (
+            <RaidManagement
+              emptyMessage="No issues yet."
+              fixedProjectId={projectId}
+              fixedType="issue"
+              isSaving={isSavingRaid}
+              items={issues}
+              onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
+              onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
+              onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
+              permissions={raidPermissions}
+              projects={[project]}
+              title="Issues"
+              users={users}
+            />
+          ) : null}
+          {activeWorkspaceTab === "assumption" ? (
+            <RaidManagement
+              emptyMessage="No assumptions yet."
+              fixedProjectId={projectId}
+              fixedType="assumption"
+              isSaving={isSavingRaid}
+              items={assumptions}
+              onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
+              onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
+              onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
+              permissions={raidPermissions}
+              projects={[project]}
+              title="Assumptions"
+              users={users}
+            />
+          ) : null}
+          {activeWorkspaceTab === "dependency" ? (
+            <RaidManagement
+              emptyMessage="No dependencies yet."
+              fixedProjectId={projectId}
+              fixedType="dependency"
+              isSaving={isSavingRaid}
+              items={dependencies}
+              onCreate={raidPermissions.canCreate ? handleCreateRaidItem : undefined}
+              onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
+              onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
+              permissions={raidPermissions}
+              projects={[project]}
+              title="Dependencies"
+              users={users}
+            />
+          ) : null}
         </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-2">
-        <ProjectWorkspaceRegisterSection
-          columns={[
-            { header: "Title", render: (risk) => risk.title },
-            { header: "Status", render: (risk) => formatRaidLabel(risk.status) },
-            {
-              header: "Probability",
-              render: (risk) => formatRaidLabel(risk.probability),
-            },
-            { header: "Impact", render: (risk) => formatRaidLabel(risk.impact) },
-            { header: "Owner", render: formatRaidOwner },
-          ]}
-          description="Project risks with ownership and current status."
-          emptyMessage="No risks yet."
-          items={risks}
-          title="Risks"
-        />
-        <ProjectWorkspaceRegisterSection
-          columns={[
-            { header: "Title", render: (issue) => issue.title },
-            {
-              header: "Status",
-              render: (issue) => formatRaidLabel(issue.status),
-            },
-            {
-              header: "Severity",
-              render: (issue) => formatRaidLabel(issue.severity),
-            },
-            { header: "Owner", render: formatRaidOwner },
-          ]}
-          description="Open and tracked issues affecting delivery."
-          emptyMessage="No issues yet."
-          items={issues}
-          title="Issues"
-        />
-        <ProjectWorkspaceRegisterSection
-          columns={[
-            { header: "Title", render: (assumption) => assumption.title },
-            {
-              header: "Status",
-              render: (assumption) => formatRaidLabel(assumption.status),
-            },
-            {
-              header: "Validation Status",
-              render: (assumption) => formatRaidLabel(assumption.validationStatus),
-            },
-            { header: "Owner", render: formatRaidOwner },
-          ]}
-          description="Delivery assumptions and their validation state."
-          emptyMessage="No assumptions yet."
-          items={assumptions}
-          title="Assumptions"
-        />
-        <ProjectWorkspaceRegisterSection
-          columns={[
-            { header: "Title", render: (dependency) => dependency.title },
-            {
-              header: "Status",
-              render: (dependency) => formatRaidLabel(dependency.status),
-            },
-            {
-              header: "Depends On",
-              render: (dependency) => dependency.dependsOn ?? "Not set",
-            },
-            {
-              header: "Due Date",
-              render: (dependency) => formatRaidDate(dependency.dueDate),
-            },
-            { header: "Owner", render: formatRaidOwner },
-          ]}
-          description="Internal and external dependencies for the project."
-          emptyMessage="No dependencies yet."
-          items={dependencies}
-          title="Dependencies"
-        />
       </section>
     </div>
   );
@@ -553,6 +640,51 @@ function replaceMember(
       member.id === updatedMember.id ? updatedMember : member,
     ),
   };
+}
+
+function hydrateRaidItem(item: ApiRaidItem): ApiRaidItem {
+  return item;
+}
+
+function appendRaidItem(project: ApiProjectDetails, item: ApiRaidItem) {
+  const collectionKey = getRaidCollectionKey(item.type);
+  return {
+    ...project,
+    [collectionKey]: [...(project[collectionKey] ?? []), item],
+  };
+}
+
+function replaceRaidItem(project: ApiProjectDetails, item: ApiRaidItem) {
+  const collectionKey = getRaidCollectionKey(item.type);
+  return {
+    ...project,
+    [collectionKey]: (project[collectionKey] ?? []).map((currentItem) =>
+      currentItem.id === item.id ? { ...currentItem, ...item } : currentItem,
+    ),
+  };
+}
+
+function removeRaidItem(project: ApiProjectDetails, itemId: string) {
+  return {
+    ...project,
+    risks: (project.risks ?? []).filter((item) => item.id !== itemId),
+    issues: (project.issues ?? []).filter((item) => item.id !== itemId),
+    assumptions: (project.assumptions ?? []).filter((item) => item.id !== itemId),
+    dependencies: (project.dependencies ?? []).filter((item) => item.id !== itemId),
+  };
+}
+
+function getRaidCollectionKey(type: RaidType) {
+  switch (type) {
+    case "risk":
+      return "risks";
+    case "issue":
+      return "issues";
+    case "assumption":
+      return "assumptions";
+    case "dependency":
+      return "dependencies";
+  }
 }
 
 function ProjectWorkspaceLoadingState() {

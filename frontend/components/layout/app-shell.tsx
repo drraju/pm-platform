@@ -13,6 +13,7 @@ import {
 
 const navigation = [
   { label: "Dashboard", href: "/dashboard", permissions: ["dashboard.view"] },
+  { label: "Executive", href: "/executive", permissions: ["executive.view"] },
   { label: "Projects", href: "/projects", permissions: ["project.read"] },
   { label: "My Tasks", href: "/tasks", permissions: ["task.update", "task.comment"] },
   { label: "Risks", href: "/risks", permissions: ["raid.read"] },

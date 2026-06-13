@@ -1,13 +1,225 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
+import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ProjectVisibilityService } from '../../projects/project-visibility.service';
+import { Role } from '../../users/entities/role.entity';
 import { Assumption } from '../entities/assumption.entity';
 import { Dependency } from '../entities/dependency.entity';
 import { Issue } from '../entities/issue.entity';
 import { Risk } from '../entities/risk.entity';
 import { RaidModule } from '../raid.module';
+import { RaidService } from '../raid.service';
+
+type MockRepository<T extends object = object> = Partial<
+  Record<keyof Repository<T>, jest.Mock>
+>;
 
 describe('RaidService', () => {
   it.todo('defines RAID register behavior');
+
+  let service: RaidService;
+  let risksRepository: MockRepository<Risk>;
+  let issuesRepository: MockRepository<Issue>;
+  let assumptionsRepository: MockRepository<Assumption>;
+  let dependenciesRepository: MockRepository<Dependency>;
+  let rolesRepository: MockRepository<Role>;
+  let projectVisibilityService: Pick<
+    ProjectVisibilityService,
+    'canViewProject' | 'getVisibleProjectIds'
+  >;
+
+  beforeEach(async () => {
+    risksRepository = {
+      find: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    };
+    issuesRepository = {
+      find: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    };
+    assumptionsRepository = {
+      find: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    };
+    dependenciesRepository = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    };
+    risksRepository.findOne = jest.fn();
+    issuesRepository.findOne = jest.fn();
+    assumptionsRepository.findOne = jest.fn();
+    dependenciesRepository.findOne = jest.fn();
+    rolesRepository = {
+      findOne: jest.fn(),
+    };
+    projectVisibilityService = {
+      canViewProject: jest.fn(),
+      getVisibleProjectIds: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        RaidService,
+        { provide: getRepositoryToken(Risk), useValue: risksRepository },
+        { provide: getRepositoryToken(Issue), useValue: issuesRepository },
+        {
+          provide: getRepositoryToken(Assumption),
+          useValue: assumptionsRepository,
+        },
+        {
+          provide: getRepositoryToken(Dependency),
+          useValue: dependenciesRepository,
+        },
+        { provide: getRepositoryToken(Role), useValue: rolesRepository },
+        {
+          provide: ProjectVisibilityService,
+          useValue: projectVisibilityService,
+        },
+      ],
+    }).compile();
+
+    service = moduleRef.get(RaidService);
+  });
+
+  it('returns all RAID items for roles with all-project visibility', async () => {
+    jest
+      .spyOn(projectVisibilityService, 'getVisibleProjectIds')
+      .mockResolvedValue('all');
+    risksRepository.find?.mockResolvedValue([
+      { id: 'risk-1', createdAt: new Date('2026-01-04T00:00:00Z') },
+    ]);
+    issuesRepository.find?.mockResolvedValue([
+      { id: 'issue-1', createdAt: new Date('2026-01-03T00:00:00Z') },
+    ]);
+    assumptionsRepository.find?.mockResolvedValue([
+      { id: 'assumption-1', createdAt: new Date('2026-01-02T00:00:00Z') },
+    ]);
+    dependenciesRepository.find?.mockResolvedValue([
+      { id: 'dependency-1', createdAt: new Date('2026-01-01T00:00:00Z') },
+    ]);
+
+    await expect(
+      service.findAll({ roleId: 'role-1', userId: 'executive-1' }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'risk-1' }),
+      expect.objectContaining({ id: 'issue-1' }),
+      expect.objectContaining({ id: 'assumption-1' }),
+      expect.objectContaining({ id: 'dependency-1' }),
+    ]);
+    expect(risksRepository.find).toHaveBeenCalledWith({
+      relations: { project: true, owner: true },
+    });
+  });
+
+  it('filters global RAID aggregation by visible project ids', async () => {
+    jest
+      .spyOn(projectVisibilityService, 'getVisibleProjectIds')
+      .mockResolvedValue(['project-1', 'project-2']);
+    risksRepository.find?.mockResolvedValue([]);
+    issuesRepository.find?.mockResolvedValue([]);
+    assumptionsRepository.find?.mockResolvedValue([]);
+    dependenciesRepository.find?.mockResolvedValue([]);
+
+    await service.findAll({ roleId: 'role-1', userId: 'customer-1' });
+
+    expect(risksRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relations: { project: true, owner: true },
+        where: { projectId: expect.any(Object) },
+      }),
+    );
+    expect(issuesRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { projectId: expect.any(Object) },
+      }),
+    );
+  });
+
+  it('returns no RAID items when the actor has no visible projects', async () => {
+    jest
+      .spyOn(projectVisibilityService, 'getVisibleProjectIds')
+      .mockResolvedValue([]);
+
+    await expect(
+      service.findAll({ roleId: 'role-1', userId: 'customer-1' }),
+    ).resolves.toEqual([]);
+    expect(risksRepository.find).not.toHaveBeenCalled();
+    expect(issuesRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('updates an owned RAID item when the actor has own-update permission', async () => {
+    risksRepository.findOne?.mockResolvedValue({
+      id: 'risk-1',
+      ownerId: 'user-1',
+      projectId: 'project-1',
+      type: 'risk',
+    });
+    risksRepository.save?.mockImplementation(async (item) => item);
+    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    rolesRepository.findOne?.mockResolvedValue({
+      permissions: [{ key: 'raid:update:own' }],
+    });
+
+    await expect(
+      service.update(
+        'risk-1',
+        { status: 'mitigating', title: 'Updated risk' },
+        { roleId: 'role-1', userId: 'user-1' },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: 'mitigating', title: 'Updated risk' }),
+    );
+  });
+
+  it('blocks update of another owner RAID item without any-update permission', async () => {
+    risksRepository.findOne?.mockResolvedValue({
+      id: 'risk-1',
+      ownerId: 'other-user',
+      projectId: 'project-1',
+      type: 'risk',
+    });
+    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    rolesRepository.findOne?.mockResolvedValue({
+      permissions: [{ key: 'raid:update:own' }],
+    });
+
+    await expect(
+      service.update(
+        'risk-1',
+        { status: 'mitigating' },
+        { roleId: 'role-1', userId: 'user-1' },
+      ),
+    ).rejects.toThrow('Insufficient RAID update permissions');
+  });
+
+  it('deletes a RAID item only with delete permission', async () => {
+    issuesRepository.findOne?.mockResolvedValue({
+      id: 'issue-1',
+      ownerId: 'user-1',
+      projectId: 'project-1',
+      type: 'issue',
+    });
+    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    rolesRepository.findOne?.mockResolvedValue({
+      permissions: [{ key: 'raid.delete' }],
+    });
+
+    await service.remove('issue-1', { roleId: 'role-1', userId: 'user-1' });
+
+    expect(issuesRepository.remove).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'issue-1' }),
+    );
+  });
 
   it('registers all RAID entities with TypeORM', () => {
     const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, RaidModule) as

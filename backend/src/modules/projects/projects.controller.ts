@@ -74,8 +74,8 @@ export class ProjectsController {
   @Get()
   @ApiOperation({ summary: 'List projects' })
   @ApiOkResponse({ type: Project, isArray: true })
-  findAll(): Promise<Project[]> {
-    return this.projectsService.findAll();
+  findAll(@Req() request: AuthenticatedRequest): Promise<Project[]> {
+    return this.projectsService.findAll(request.user);
   }
 
   @Post(':id/members')
@@ -106,8 +106,11 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: ProjectMemberResponseDto, isArray: true })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  findMembers(@Param('id') id: string): Promise<ProjectMemberResponseDto[]> {
-    return this.projectsService.findMembers(id);
+  findMembers(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<ProjectMemberResponseDto[]> {
+    return this.projectsService.findMembers(id, request.user);
   }
 
   @Patch(':id/members/:memberId')
@@ -160,10 +163,15 @@ export class ProjectsController {
   @ApiOkResponse({ type: Task, isArray: true })
   @ApiNotFoundResponse({ description: 'Project not found' })
   findProjectTasks(
+    @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
     @Query() query: ProjectTaskQueryDto,
   ): Promise<Task[]> {
-    return this.projectsService.findProjectTasks(projectId, query);
+    return this.projectsService.findProjectTasks(
+      projectId,
+      query,
+      request.user,
+    );
   }
 
   @Post(':projectId/tasks')
@@ -232,8 +240,11 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: Risk, isArray: true })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  findProjectRisks(@Param('id') id: string): Promise<Risk[]> {
-    return this.projectsService.findProjectRisks(id);
+  findProjectRisks(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Risk[]> {
+    return this.projectsService.findProjectRisks(id, request.user);
   }
 
   @Get(':id/issues')
@@ -241,8 +252,11 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: Issue, isArray: true })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  findProjectIssues(@Param('id') id: string): Promise<Issue[]> {
-    return this.projectsService.findProjectIssues(id);
+  findProjectIssues(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Issue[]> {
+    return this.projectsService.findProjectIssues(id, request.user);
   }
 
   @Get(':id/assumptions')
@@ -250,8 +264,11 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: Assumption, isArray: true })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  findProjectAssumptions(@Param('id') id: string): Promise<Assumption[]> {
-    return this.projectsService.findProjectAssumptions(id);
+  findProjectAssumptions(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Assumption[]> {
+    return this.projectsService.findProjectAssumptions(id, request.user);
   }
 
   @Get(':id/dependencies')
@@ -259,8 +276,11 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: Dependency, isArray: true })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  findProjectDependencies(@Param('id') id: string): Promise<Dependency[]> {
-    return this.projectsService.findProjectDependencies(id);
+  findProjectDependencies(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Dependency[]> {
+    return this.projectsService.findProjectDependencies(id, request.user);
   }
 
   @Get(':id')
@@ -268,8 +288,11 @@ export class ProjectsController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: Project })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  findOne(@Param('id') id: string): Promise<Project> {
-    return this.projectsService.findOne(id);
+  findOne(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Project> {
+    return this.projectsService.findOne(id, request.user);
   }
 
   @Patch(':id')

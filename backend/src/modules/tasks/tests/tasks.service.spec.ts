@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
+import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { User } from '../../users/entities/user.entity';
 import { Task } from '../entities/task.entity';
 import { TasksService } from '../tasks.service';
@@ -22,6 +23,10 @@ describe('TasksService', () => {
   let tasksRepository: MockRepository<Task>;
   let projectMembersRepository: MockRepository<ProjectMember>;
   let usersRepository: MockRepository<User>;
+  let projectVisibilityService: {
+    canViewProject: jest.Mock;
+    getVisibleProjectIds: jest.Mock;
+  };
 
   beforeEach(async () => {
     tasksRepository = {
@@ -38,6 +43,10 @@ describe('TasksService', () => {
     usersRepository = {
       findOne: jest.fn(),
     };
+    projectVisibilityService = {
+      canViewProject: jest.fn().mockResolvedValue(true),
+      getVisibleProjectIds: jest.fn().mockResolvedValue('all'),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -53,6 +62,10 @@ describe('TasksService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: usersRepository,
+        },
+        {
+          provide: ProjectVisibilityService,
+          useValue: projectVisibilityService,
         },
       ],
     }).compile();
@@ -91,6 +104,7 @@ describe('TasksService', () => {
     await expect(service.findAll()).resolves.toEqual([{ id: taskId }]);
     expect(tasksRepository.find).toHaveBeenCalledWith({
       relations: { project: true, assignee: true },
+      where: undefined,
     });
   });
 

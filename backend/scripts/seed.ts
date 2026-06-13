@@ -198,6 +198,7 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.RaidCreate,
     PermissionKey.RaidRead,
     PermissionKey.RaidUpdate,
+    PermissionKey.RaidDelete,
     PermissionKey.TaskCreate,
     PermissionKey.TaskUpdate,
     PermissionKey.TaskDelete,

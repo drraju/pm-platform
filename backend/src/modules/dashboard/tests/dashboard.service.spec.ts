@@ -7,6 +7,7 @@ import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
 import { ProjectHealthService } from '../../health/project-health.service';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Project } from '../../projects/entities/project.entity';
+import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { Issue } from '../../raid/entities/issue.entity';
 import { Risk } from '../../raid/entities/risk.entity';
 import { Task } from '../../tasks/entities/task.entity';
@@ -25,6 +26,9 @@ describe('DashboardService', () => {
   let tasksRepository: MockRepository<Task>;
   let risksRepository: MockRepository<Risk>;
   let issuesRepository: MockRepository<Issue>;
+  let projectVisibilityService: {
+    getVisibleProjects: jest.Mock;
+  };
 
   beforeEach(async () => {
     projectsRepository = { find: jest.fn() };
@@ -32,6 +36,9 @@ describe('DashboardService', () => {
     tasksRepository = { find: jest.fn() };
     risksRepository = { find: jest.fn() };
     issuesRepository = { find: jest.fn() };
+    projectVisibilityService = {
+      getVisibleProjects: jest.fn(),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -45,6 +52,10 @@ describe('DashboardService', () => {
         { provide: getRepositoryToken(Risk), useValue: risksRepository },
         { provide: getRepositoryToken(Issue), useValue: issuesRepository },
         ProjectHealthService,
+        {
+          provide: ProjectVisibilityService,
+          useValue: projectVisibilityService,
+        },
       ],
     }).compile();
 
@@ -70,6 +81,7 @@ describe('DashboardService', () => {
       status: 'at_risk',
     };
     const duplicateOwnedMembership = {
+      projectId: 'owned-project',
       project: ownedProject,
       role: ProjectRole.Contributor,
     };
@@ -112,9 +124,16 @@ describe('DashboardService', () => {
       },
     ];
 
-    projectsRepository.find?.mockResolvedValue([ownedProject]);
+    projectVisibilityService.getVisibleProjects.mockResolvedValue([
+      ownedProject,
+      memberProject,
+    ]);
     projectMembersRepository.find?.mockResolvedValue([
-      { project: memberProject, role: ProjectRole.Manager },
+      {
+        projectId: 'member-project',
+        project: memberProject,
+        role: ProjectRole.Manager,
+      },
       duplicateOwnedMembership,
     ]);
     tasksRepository.find
@@ -197,10 +216,9 @@ describe('DashboardService', () => {
       },
     });
 
-    expect(projectsRepository.find).toHaveBeenCalledWith({
-      order: { createdAt: 'DESC' },
-      relations: { issues: true, owner: true, risks: true, tasks: true },
-      where: { ownerId: userId },
+    expect(projectVisibilityService.getVisibleProjects).toHaveBeenCalledWith({
+      roleId: '',
+      userId,
     });
     expect(projectMembersRepository.find).toHaveBeenCalledWith({
       relations: {

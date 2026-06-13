@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -8,6 +8,15 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PortfolioSummaryDto } from './dto/portfolio-summary.dto';
 import { PortfolioService } from './portfolio.service';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & {
+  user: {
+    userId: string;
+    email: string;
+    roleId: string;
+  };
+};
 
 @ApiTags('portfolio')
 @ApiBearerAuth()
@@ -19,7 +28,9 @@ export class PortfolioController {
   @Get('summary')
   @ApiOperation({ summary: 'Get portfolio health summary' })
   @ApiOkResponse({ type: PortfolioSummaryDto })
-  getSummary(): Promise<PortfolioSummaryDto> {
-    return this.portfolioService.getSummary();
+  getSummary(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<PortfolioSummaryDto> {
+    return this.portfolioService.getSummary(request.user);
   }
 }

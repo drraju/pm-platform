@@ -58,8 +58,8 @@ export class TasksController {
 
   @Get()
   @ApiOkResponse({ type: Task, isArray: true })
-  findAll(): Promise<Task[]> {
-    return this.tasksService.findAll();
+  findAll(@Req() request: AuthenticatedRequest): Promise<Task[]> {
+    return this.tasksService.findAll(request.user);
   }
 
   @Get('my')
@@ -88,8 +88,11 @@ export class TasksController {
 
   @Get(':id')
   @ApiOkResponse({ type: Task })
-  findOne(@Param('id') id: string): Promise<Task> {
-    return this.tasksService.findOne(id);
+  findOne(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Task> {
+    return this.tasksService.findOne(id, request.user);
   }
 
   @Patch(':id')

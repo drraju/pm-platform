@@ -33,7 +33,23 @@ const projectMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/features/auth", () => ({
+  getAuthMe: vi.fn(async () => ({
+    permissions: [{ id: "permission-project-read", key: "project.read" }],
+    roles: [],
+    user: {
+      email: "executive@example.com",
+      firstName: "Executive",
+      id: "user-1",
+      lastName: "User",
+      roleId: "role-1",
+      status: "active",
+    },
+  })),
   getStoredAccessToken: () => "test-token",
+  getStoredPermissionKeys: () => ["project.read"],
+  hasPermission: (permissionKeys: string[], requiredPermission: string) =>
+    permissionKeys.includes(requiredPermission),
+  storeAuthMe: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({

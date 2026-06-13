@@ -30,6 +30,7 @@ describe("AppShell", () => {
   it("renders primary navigation and page content", () => {
     const cachedPermissions = JSON.stringify([
       "dashboard.view",
+      "executive.view",
       "project.read",
       "task.update",
       "raid.read",
@@ -52,6 +53,10 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: /dashboard/i })).toHaveAttribute(
       "href",
       "/dashboard",
+    );
+    expect(screen.getByRole("link", { name: /executive/i })).toHaveAttribute(
+      "href",
+      "/executive",
     );
     expect(screen.getByRole("link", { name: /projects/i })).toHaveAttribute(
       "href",

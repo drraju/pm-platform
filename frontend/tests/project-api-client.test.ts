@@ -6,8 +6,10 @@ import {
   getAssignableUsers,
   getAuthMe,
   getPermissions,
+  createRaidItem,
   deleteProject,
   deleteProjectTask,
+  deleteRaidItem,
   getMyTasks,
   getProject,
   getProjectAssumptions,
@@ -20,6 +22,7 @@ import {
   updateProject,
   updateProjectMember,
   updateProjectTask,
+  updateRaidItem,
 } from "@/lib/api/client";
 
 function mockFetch(response: unknown, init: { status?: number; ok?: boolean } = {}) {
@@ -56,6 +59,7 @@ describe("project API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects",
       expect.objectContaining({
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
       }),
     );
@@ -285,6 +289,63 @@ describe("project API client", () => {
     ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://localhost:3001/projects/project-1/tasks/task-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("creates, updates, and deletes RAID items", async () => {
+    const fetchMock = mockFetch({ id: "risk-1", title: "Supplier risk" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createRaidItem({
+      impact: "high",
+      probability: "medium",
+      projectId: "project-1",
+      status: "open",
+      title: "Supplier risk",
+      type: "risk",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/raid",
+      expect.objectContaining({
+        body: JSON.stringify({
+          impact: "high",
+          probability: "medium",
+          projectId: "project-1",
+          status: "open",
+          title: "Supplier risk",
+          type: "risk",
+        }),
+        method: "POST",
+      }),
+    );
+
+    await updateRaidItem("risk-1", {
+      mitigationPlan: "Escalate weekly",
+      status: "mitigating",
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/raid/risk-1",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mitigationPlan: "Escalate weekly",
+          status: "mitigating",
+        }),
+        method: "PATCH",
+      }),
+    );
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json: vi.fn(),
+    });
+
+    await expect(deleteRaidItem("risk-1")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/raid/risk-1",
       expect.objectContaining({ method: "DELETE" }),
     );
   });

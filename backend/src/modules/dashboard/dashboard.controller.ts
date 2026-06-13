@@ -31,6 +31,9 @@ export class DashboardController {
   getMyDashboard(
     @Req() request: AuthenticatedRequest,
   ): Promise<MeDashboardDto> {
-    return this.dashboardService.getMyDashboard(request.user.userId);
+    return this.dashboardService.getMyDashboard(
+      request.user.userId,
+      request.user,
+    );
   }
 }

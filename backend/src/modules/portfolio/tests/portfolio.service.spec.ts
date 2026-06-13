@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectHealthService } from '../../health/project-health.service';
 import { Project } from '../../projects/entities/project.entity';
+import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { Issue } from '../../raid/entities/issue.entity';
 import { Risk } from '../../raid/entities/risk.entity';
 import { Task } from '../../tasks/entities/task.entity';
@@ -19,6 +20,9 @@ describe('PortfolioService', () => {
   let risksRepository: MockRepository<Risk>;
   let issuesRepository: MockRepository<Issue>;
   let tasksRepository: MockRepository<Task>;
+  let projectVisibilityService: {
+    getVisibleProjectIds: jest.Mock;
+  };
 
   beforeEach(async () => {
     projectsRepository = {
@@ -33,6 +37,9 @@ describe('PortfolioService', () => {
     tasksRepository = {
       find: jest.fn(),
     };
+    projectVisibilityService = {
+      getVisibleProjectIds: jest.fn().mockResolvedValue('all'),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -42,6 +49,10 @@ describe('PortfolioService', () => {
         { provide: getRepositoryToken(Issue), useValue: issuesRepository },
         { provide: getRepositoryToken(Task), useValue: tasksRepository },
         ProjectHealthService,
+        {
+          provide: ProjectVisibilityService,
+          useValue: projectVisibilityService,
+        },
       ],
     }).compile();
 

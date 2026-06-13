@@ -1,4 +1,5 @@
 import React from "react";
+import { AppModal } from "@/components/ui/app-modal";
 import type { ApiProjectMember, ApiTask } from "@/features/projects";
 
 type TaskOperationInput = {
@@ -222,40 +223,47 @@ export function ProjectWorkspaceTasks({
       </div>
 
       {dialogMode ? (
-        <div
-          aria-modal="true"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
-          role="dialog"
-        >
-          <form
-            className="w-full max-w-2xl rounded-md bg-white p-5 shadow-xl"
-            onSubmit={handleSubmit}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-950">
-                  {dialogMode === "create"
-                    ? "Create Task"
-                    : dialogMode === "reassign"
-                      ? "Reassign Task"
-                      : "Edit Task"}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {dialogMode === "reassign"
-                    ? "Move this task to another project team member."
-                    : "Update task details, assignment, status, and priority."}
-                </p>
-              </div>
+        <AppModal
+          description={
+            dialogMode === "reassign"
+              ? "Move this task to another project team member."
+              : "Update task details, assignment, status, and priority."
+          }
+          footer={
+            <>
               <button
-                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-sm font-semibold text-slate-600"
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
                 onClick={closeDialog}
                 type="button"
               >
-                Close
+                Cancel
               </button>
-            </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <button
+                className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isSaving || (dialogMode === "create" && !form.title.trim())}
+                form="project-task-form"
+                type="submit"
+              >
+                {isSaving ? "Saving..." : "Save changes"}
+              </button>
+            </>
+          }
+          labelledById="project-task-dialog-title"
+          onClose={closeDialog}
+          title={
+            dialogMode === "create"
+              ? "Create Task"
+              : dialogMode === "reassign"
+                ? "Reassign Task"
+                : "Edit Task"
+          }
+          widthClassName="max-w-2xl"
+        >
+          <form
+            className="grid gap-3 md:grid-cols-2"
+            id="project-task-form"
+            onSubmit={handleSubmit}
+          >
               <label className="block text-sm font-medium text-slate-700 md:col-span-2">
                 Title
                 <input
@@ -399,43 +407,14 @@ export function ProjectWorkspaceTasks({
                   value={form.remarks}
                 />
               </label>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-                onClick={closeDialog}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isSaving || (dialogMode === "create" && !form.title.trim())}
-                type="submit"
-              >
-                {isSaving ? "Saving..." : "Save changes"}
-              </button>
-            </div>
           </form>
-        </div>
+        </AppModal>
       ) : null}
 
       {taskPendingDelete ? (
-        <div
-          aria-modal="true"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
-          role="dialog"
-        >
-          <div className="w-full max-w-md rounded-md bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-950">
-              Delete Task
-            </h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Delete "{taskPendingDelete.title}"? This removes it from the
-              project workspace.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
+        <AppModal
+          footer={
+            <>
               <button
                 className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
                 onClick={() => setTaskPendingDelete(null)}
@@ -454,9 +433,18 @@ export function ProjectWorkspaceTasks({
               >
                 Confirm delete
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          labelledById="delete-task-dialog-title"
+          onClose={() => setTaskPendingDelete(null)}
+          title="Delete Task"
+          widthClassName="max-w-md"
+        >
+            <p className="mt-2 text-sm text-slate-600">
+              Delete "{taskPendingDelete.title}"? This removes it from the
+              project workspace.
+            </p>
+        </AppModal>
       ) : null}
     </section>
   );

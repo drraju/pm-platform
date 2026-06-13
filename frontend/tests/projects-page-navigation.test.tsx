@@ -208,9 +208,13 @@ describe("Projects List navigation", () => {
         name: /Selected Project Workspace/i,
       }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /risks/i }));
     expect(screen.getByText("Supplier onboarding delay")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /issues/i }));
     expect(screen.getByText("Integration outage")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /assumptions/i }));
     expect(screen.getByText("Vendor API remains available")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /dependencies/i }));
     expect(screen.getByText("IAM approval")).toBeInTheDocument();
   });
 
