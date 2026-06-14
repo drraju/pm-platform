@@ -28,11 +28,21 @@ import {
 function mockFetch(response: unknown, init: { status?: number; ok?: boolean } = {}) {
   const status = init.status ?? 200;
   const ok = init.ok ?? status < 400;
+  const text =
+    response === null || typeof response === "undefined"
+      ? ""
+      : JSON.stringify(response);
 
   return vi.fn().mockResolvedValue({
     ok,
     status,
+    headers: {
+      get: vi.fn((name: string) =>
+        name.toLowerCase() === "content-length" ? String(text.length) : null,
+      ),
+    },
     json: vi.fn().mockResolvedValue(response),
+    text: vi.fn().mockResolvedValue(text),
   });
 }
 
@@ -210,7 +220,9 @@ describe("project API client", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 204,
+      headers: { get: vi.fn(() => null) },
       json: vi.fn(),
+      text: vi.fn().mockResolvedValue(""),
     });
 
     await expect(
@@ -292,7 +304,9 @@ describe("project API client", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 204,
+      headers: { get: vi.fn(() => null) },
       json: vi.fn(),
+      text: vi.fn().mockResolvedValue(""),
     });
 
     await expect(
@@ -351,7 +365,9 @@ describe("project API client", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 204,
+      headers: { get: vi.fn(() => null) },
       json: vi.fn(),
+      text: vi.fn().mockResolvedValue(""),
     });
 
     await expect(deleteRaidItem("risk-1")).resolves.toBeUndefined();
@@ -359,6 +375,25 @@ describe("project API client", () => {
       "http://localhost:3001/raid/risk-1",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("treats successful empty delete responses as undefined even when the API returns 200", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {
+        get: vi.fn((name: string) =>
+          name.toLowerCase() === "content-length" ? "0" : null,
+        ),
+      },
+      json: vi.fn(),
+      text: vi.fn().mockResolvedValue(""),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(deleteRaidItem("risk-1")).resolves.toBeUndefined();
+    await expect(deleteProjectTask("project-1", "task-1")).resolves.toBeUndefined();
+    await expect(deleteProject("project-1")).resolves.toBeUndefined();
   });
 
   it("loads authenticated user tasks with query filters", async () => {

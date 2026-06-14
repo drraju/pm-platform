@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -108,6 +110,7 @@ export class TasksController {
 
   @Delete(':id')
   @RequirePermissions(PermissionKey.TaskDelete)
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOkResponse()
   remove(
     @Req() request: AuthenticatedRequest,

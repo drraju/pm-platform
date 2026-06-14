@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
+import { AuthorizationPolicyService } from '../src/common/authz/authorization-policy.service';
 import { RaidController } from '../src/modules/raid/raid.controller';
 import { RaidService } from '../src/modules/raid/raid.service';
 
@@ -23,7 +25,17 @@ describe('RAID management API integration', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [RaidController],
-      providers: [{ provide: RaidService, useValue: raidService }],
+      providers: [
+        { provide: RaidService, useValue: raidService },
+        {
+          provide: AuthorizationPolicyService,
+          useValue: {
+            canManageRaid: jest.fn(),
+            hasPermission: jest.fn(),
+            hasAnyPermission: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     controller = moduleFixture.get(RaidController);
@@ -67,5 +79,6 @@ describe('RAID management API integration', () => {
 
     await controller.remove('risk-1', request as never);
     expect(raidService.remove).toHaveBeenCalledWith('risk-1', request.user);
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, RaidController.prototype.remove)).toBe(204);
   });
 });

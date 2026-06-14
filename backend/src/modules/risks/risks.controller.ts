@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -77,6 +79,7 @@ export class RisksController {
 
   @Delete(':id')
   @RequirePermissions(PermissionKey.RaidDelete)
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOkResponse()
   remove(
     @Param('id') id: string,

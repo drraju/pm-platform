@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -81,6 +83,7 @@ export class RaidController {
 
   @Delete(':id')
   @RequirePermissions(PermissionKey.RaidDelete)
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOkResponse()
   remove(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
     return this.raidService.remove(id, request.user);
