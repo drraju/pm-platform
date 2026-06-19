@@ -291,6 +291,58 @@ describe('ProjectsService', () => {
     );
   });
 
+  it('restores a soft-deleted project member when re-adding the same user', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    usersRepository.findOne?.mockResolvedValue({ id: userId });
+    projectMembersRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'member-id',
+        projectId,
+        userId,
+        role: ProjectRole.Viewer,
+        deletedAt: new Date('2026-06-19T09:00:00Z'),
+        deletedById: 'user-remover',
+      })
+      .mockResolvedValueOnce({
+        id: 'member-id',
+        projectId,
+        userId,
+        role: ProjectRole.Owner,
+      });
+
+    const result = await service.addMember(
+      projectId,
+      {
+        userId,
+        role: ProjectRole.Owner,
+      },
+      {
+        email: 'manager@example.com',
+        roleId: 'role-project-manager',
+        userId: 'user-manager',
+      },
+    );
+
+    expect(projectMembersRepository.create).not.toHaveBeenCalled();
+    expect(projectMembersRepository.save).toHaveBeenCalledWith({
+      id: 'member-id',
+      projectId,
+      userId,
+      role: ProjectRole.Owner,
+      deletedAt: null,
+      deletedById: null,
+      updatedById: 'user-manager',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'member-id',
+        projectId,
+        userId,
+        role: ProjectRole.Owner,
+      }),
+    );
+  });
+
   it('defaults new project members to contributor', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
@@ -319,6 +371,7 @@ describe('ProjectsService', () => {
       id: 'existing-member-id',
       projectId,
       userId,
+      deletedAt: null,
     });
 
     await expect(service.addMember(projectId, { userId })).rejects.toThrow(
@@ -434,9 +487,20 @@ describe('ProjectsService', () => {
     usersRepository.findOne?.mockResolvedValue({ id: userId });
     projectMembersRepository.findOne?.mockResolvedValue(member);
 
-    await service.removeMember(projectId, userId);
+    await service.removeMember(projectId, userId, {
+      email: 'manager@example.com',
+      roleId: 'role-project-manager',
+      userId: 'user-manager',
+    });
 
-    expect(projectMembersRepository.softRemove).toHaveBeenCalledWith(member);
+    expect(projectMembersRepository.softRemove).toHaveBeenCalledWith({
+      id: 'member-id',
+      projectId,
+      userId,
+      role: ProjectRole.Viewer,
+      deletedById: 'user-manager',
+      updatedById: 'user-manager',
+    });
   });
 
   it('lists project tasks with optional filters', async () => {

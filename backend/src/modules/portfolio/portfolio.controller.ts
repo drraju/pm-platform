@@ -5,6 +5,9 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { PermissionKey } from '../../common/authz/permissions';
+import { PermissionsGuard } from '../../common/authz/permissions.guard';
+import { RequirePermissions } from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PortfolioSummaryDto } from './dto/portfolio-summary.dto';
 import { PortfolioService } from './portfolio.service';
@@ -20,7 +23,8 @@ type AuthenticatedRequest = Request & {
 
 @ApiTags('portfolio')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionKey.PortfolioView)
 @Controller('portfolio')
 export class PortfolioController {
   constructor(private readonly portfolioService: PortfolioService) {}

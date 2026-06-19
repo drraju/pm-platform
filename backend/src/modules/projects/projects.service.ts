@@ -133,19 +133,34 @@ export class ProjectsService {
     await this.ensureUserExists(createProjectMemberDto.userId);
 
     const existingMember = await this.projectMembersRepository.findOne({
+      withDeleted: true,
       where: {
         projectId,
         userId: createProjectMemberDto.userId,
       },
     });
     if (existingMember) {
-      throw new ConflictException('User is already a project member');
+      if (!existingMember.deletedAt) {
+        throw new ConflictException('User is already a project member');
+      }
+
+      existingMember.role = createProjectMemberDto.role ?? ProjectRole.Contributor;
+      existingMember.deletedAt = null;
+      existingMember.deletedById = null;
+      existingMember.updatedById = actor?.userId;
+
+      const restoredMember = await this.projectMembersRepository.save(existingMember);
+      return this.toProjectMemberResponse(
+        await this.findMember(projectId, restoredMember.id),
+      );
     }
 
     const member = this.projectMembersRepository.create({
+      createdById: actor?.userId,
       projectId,
       userId: createProjectMemberDto.userId,
       role: createProjectMemberDto.role ?? ProjectRole.Contributor,
+      updatedById: actor?.userId,
     });
 
     const savedMember = await this.projectMembersRepository.save(member);
@@ -197,6 +212,8 @@ export class ProjectsService {
     await this.ensureCanManageProject(projectId, actor);
 
     const member = await this.findMember(projectId, memberId);
+    member.deletedById = actor?.userId;
+    member.updatedById = actor?.userId;
     await this.projectMembersRepository.softRemove(member);
   }
 
