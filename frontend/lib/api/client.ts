@@ -94,19 +94,24 @@ export type ApiProjectMember = {
 export type ApiTask = {
   id: string;
   projectId: string;
+  parentTaskId?: string | null;
   title: string;
   description?: string | null;
   assigneeId?: string | null;
   status: "backlog" | "todo" | "in_progress" | "blocked" | "done";
   priority: string;
   remarks?: string | null;
+  taskKind?: "standard" | "summary" | "milestone";
   percentComplete?: number;
+  sequenceNumber?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   actualStartDate?: string | null;
   actualEndDate?: string | null;
+  estimatedHours?: number | null;
+  remainingHours?: number | null;
   project?: ApiProject | null;
   assignee?: {
     id: string;

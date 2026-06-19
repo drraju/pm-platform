@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -10,6 +11,7 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from '../../common/authz/authorization-policy.service';
+import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import {
@@ -46,6 +48,7 @@ export class TasksService {
     actor?: AuthenticatedActor,
   ): Promise<Task> {
     await this.ensureCanManageProject(createTaskDto.projectId, actor);
+    await this.validatePlanningFields(createTaskDto.projectId, createTaskDto);
     await this.validateAssigneeMembership(
       createTaskDto.projectId,
       createTaskDto.assigneeId,
@@ -142,6 +145,11 @@ export class TasksService {
   ): Promise<Task> {
     const task = await this.findOne(id, actor);
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
+    await this.validatePlanningFields(
+      updateTaskDto.projectId ?? task.projectId,
+      updateTaskDto,
+      task,
+    );
     await this.validateAssigneeMembership(
       updateTaskDto.projectId ?? task.projectId,
       updateTaskDto.assigneeId,
@@ -224,6 +232,111 @@ export class TasksService {
     if (!membership) {
       throw new ConflictException('Assignee must be a project member');
     }
+  }
+
+  private async validatePlanningFields(
+    projectId: string,
+    input: Partial<CreateTaskDto | UpdateTaskDto>,
+    existingTask?: Task,
+  ): Promise<void> {
+    const effectiveTaskKind = input.taskKind ?? existingTask?.taskKind ?? TaskKind.Standard;
+    const effectiveParentTaskId =
+      typeof input.parentTaskId !== 'undefined'
+        ? input.parentTaskId
+        : existingTask?.parentTaskId;
+
+    this.validateMilestoneDates(
+      effectiveTaskKind,
+      input.plannedStartDate ?? existingTask?.plannedStartDate,
+      input.plannedEndDate ?? existingTask?.plannedEndDate,
+    );
+
+    if (
+      existingTask &&
+      input.taskKind &&
+      input.taskKind !== TaskKind.Summary &&
+      input.taskKind !== existingTask.taskKind
+    ) {
+      await this.ensureTaskHasNoChildren(existingTask.id);
+    }
+
+    if (!effectiveParentTaskId) {
+      return;
+    }
+
+    if (existingTask && effectiveParentTaskId === existingTask.id) {
+      throw new BadRequestException('A task cannot be its own parent');
+    }
+
+    const parentTask = await this.findPlanningTask(effectiveParentTaskId);
+    if (!parentTask) {
+      throw new NotFoundException(`Parent task ${effectiveParentTaskId} not found`);
+    }
+
+    if (parentTask.projectId !== projectId) {
+      throw new BadRequestException('Parent task must belong to the same project');
+    }
+
+    if (parentTask.taskKind !== TaskKind.Summary) {
+      throw new BadRequestException('Only summary tasks can contain child tasks');
+    }
+
+    if (existingTask) {
+      await this.ensureNoHierarchyCycle(existingTask.id, parentTask.id);
+    }
+  }
+
+  private validateMilestoneDates(
+    taskKind: TaskKind,
+    plannedStartDate?: string | null,
+    plannedEndDate?: string | null,
+  ) {
+    if (
+      taskKind === TaskKind.Milestone &&
+      plannedStartDate &&
+      plannedEndDate &&
+      plannedStartDate !== plannedEndDate
+    ) {
+      throw new BadRequestException(
+        'Milestones must have matching planned start and end dates',
+      );
+    }
+  }
+
+  private async ensureTaskHasNoChildren(taskId: string) {
+    const childTask = await this.tasksRepository.findOne({
+      select: { id: true },
+      where: { parentTaskId: taskId },
+    });
+
+    if (childTask) {
+      throw new BadRequestException('Only summary tasks can contain child tasks');
+    }
+  }
+
+  private async ensureNoHierarchyCycle(taskId: string, parentTaskId: string) {
+    let currentParentId: string | null = parentTaskId;
+
+    while (currentParentId) {
+      if (currentParentId === taskId) {
+        throw new BadRequestException('Task hierarchy cannot contain cycles');
+      }
+
+      const currentParent = await this.findPlanningTask(currentParentId);
+      currentParentId = currentParent?.parentTaskId ?? null;
+    }
+  }
+
+  private findPlanningTask(taskId: string) {
+    return this.tasksRepository.findOne({
+      select: {
+        id: true,
+        parentTaskId: true,
+        projectId: true,
+        taskKind: true,
+      },
+      where: { id: taskId },
+    });
   }
 
 }

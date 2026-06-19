@@ -1,8 +1,9 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
+import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
@@ -83,12 +84,16 @@ describe('TasksService', () => {
   it('creates a task from the existing DTO shape', async () => {
     const result = await service.create({
       projectId,
+      sequenceNumber: 10,
+      taskKind: TaskKind.Standard,
       title: 'Prepare steering committee readout',
       status: TaskStatus.Todo,
     });
 
     expect(tasksRepository.create).toHaveBeenCalledWith({
       projectId,
+      sequenceNumber: 10,
+      taskKind: TaskKind.Standard,
       title: 'Prepare steering committee readout',
       status: TaskStatus.Todo,
     });
@@ -99,6 +104,59 @@ describe('TasksService', () => {
         title: 'Prepare steering committee readout',
       }),
     );
+  });
+
+  it('creates a child task under a summary parent in the same project', async () => {
+    tasksRepository.findOne?.mockResolvedValueOnce({
+      id: 'parent-task-id',
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Summary,
+    });
+
+    await service.create({
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+  });
+
+  it('rejects child task creation under a non-summary parent', async () => {
+    tasksRepository.findOne?.mockResolvedValueOnce({
+      id: 'parent-task-id',
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Standard,
+    });
+
+    await expect(
+      service.create({
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects milestone creation when planned dates do not match', async () => {
+    await expect(
+      service.create({
+        plannedEndDate: '2026-07-03',
+        plannedStartDate: '2026-07-01',
+        projectId,
+        taskKind: TaskKind.Milestone,
+        title: 'Go-live',
+      }),
+    ).rejects.toThrow('Milestones must have matching planned start and end dates');
   });
 
   it('lists all tasks with project and assignee relations', async () => {
@@ -233,6 +291,55 @@ describe('TasksService', () => {
       title: 'Updated',
       status: TaskStatus.Done,
     });
+  });
+
+  it('rejects assigning a task to itself as parent', async () => {
+    tasksRepository.findOne?.mockResolvedValue({
+      id: taskId,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    });
+
+    await expect(
+      service.update(taskId, {
+        parentTaskId: taskId,
+      }),
+    ).rejects.toThrow('A task cannot be its own parent');
+  });
+
+  it('rejects hierarchy cycles when updating a parent task', async () => {
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: taskId,
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Original',
+      })
+      .mockResolvedValueOnce({
+        id: 'child-task-id',
+        parentTaskId: taskId,
+        projectId,
+        taskKind: TaskKind.Summary,
+      })
+      .mockResolvedValueOnce({
+        id: 'child-task-id',
+        parentTaskId: taskId,
+        projectId,
+        taskKind: TaskKind.Summary,
+      })
+      .mockResolvedValueOnce({
+        id: taskId,
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Summary,
+      });
+
+    await expect(
+      service.update(taskId, {
+        parentTaskId: 'child-task-id',
+      }),
+    ).rejects.toThrow('Task hierarchy cannot contain cycles');
   });
 
   it('allows an assigned team member to update own operational task fields', async () => {

@@ -37,6 +37,7 @@ import { Dependency } from '../raid/entities/dependency.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
+import { CreateProjectBaselineDto } from './dto/create-project-baseline.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
 import { ProjectMemberResponseDto } from './dto/project-member-response.dto';
@@ -44,8 +45,12 @@ import { ProjectTaskQueryDto } from './dto/project-task-query.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
+import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto';
+import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
+import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { Project } from './entities/project.entity';
+import { ProjectBaseline } from './entities/project-baseline.entity';
 import { ProjectsService } from './projects.service';
 import { Request } from 'express';
 
@@ -235,6 +240,118 @@ export class ProjectsController {
     return this.projectsService.removeProjectTask(
       projectId,
       taskId,
+      request.user,
+    );
+  }
+
+  @Post(':projectId/baselines')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiOperation({ summary: 'Capture a project baseline' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiCreatedResponse({ type: ProjectBaseline })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  captureProjectBaseline(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Body() createProjectBaselineDto: CreateProjectBaselineDto,
+  ): Promise<ProjectBaseline> {
+    return this.projectsService.captureProjectBaseline(
+      projectId,
+      createProjectBaselineDto,
+      request.user,
+    );
+  }
+
+  @Get(':projectId/task-dependencies')
+  @ApiOperation({ summary: 'List project task dependencies' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiOkResponse({ type: TaskDependency, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  findProjectTaskDependencies(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<TaskDependency[]> {
+    return this.projectsService.findProjectTaskDependencies(
+      projectId,
+      request.user,
+    );
+  }
+
+  @Get(':projectId/task-dependencies/:dependencyId')
+  @ApiOperation({ summary: 'Get a project task dependency' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'dependencyId', format: 'uuid' })
+  @ApiOkResponse({ type: TaskDependency })
+  @ApiNotFoundResponse({ description: 'Project or task dependency not found' })
+  findProjectTaskDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('dependencyId') dependencyId: string,
+  ): Promise<TaskDependency> {
+    return this.projectsService.findProjectTaskDependency(
+      projectId,
+      dependencyId,
+      request.user,
+    );
+  }
+
+  @Post(':projectId/task-dependencies')
+  @RequirePermissions(PermissionKey.TaskCreate)
+  @ApiOperation({ summary: 'Create a project task dependency' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiCreatedResponse({ type: TaskDependency })
+  @ApiNotFoundResponse({ description: 'Project or task not found' })
+  @ApiConflictResponse({ description: 'Dependency already exists' })
+  createProjectTaskDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Body() createTaskDependencyDto: CreateTaskDependencyDto,
+  ): Promise<TaskDependency> {
+    return this.projectsService.createProjectTaskDependency(
+      projectId,
+      createTaskDependencyDto,
+      request.user,
+    );
+  }
+
+  @Patch(':projectId/task-dependencies/:dependencyId')
+  @RequirePermissions(PermissionKey.TaskUpdate)
+  @ApiOperation({ summary: 'Update a project task dependency' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'dependencyId', format: 'uuid' })
+  @ApiOkResponse({ type: TaskDependency })
+  @ApiNotFoundResponse({ description: 'Project or task dependency not found' })
+  @ApiConflictResponse({ description: 'Dependency already exists' })
+  updateProjectTaskDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('dependencyId') dependencyId: string,
+    @Body() updateTaskDependencyDto: UpdateTaskDependencyDto,
+  ): Promise<TaskDependency> {
+    return this.projectsService.updateProjectTaskDependency(
+      projectId,
+      dependencyId,
+      updateTaskDependencyDto,
+      request.user,
+    );
+  }
+
+  @Delete(':projectId/task-dependencies/:dependencyId')
+  @RequirePermissions(PermissionKey.TaskDelete)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a project task dependency' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'dependencyId', format: 'uuid' })
+  @ApiNoContentResponse({ description: 'Project task dependency deleted' })
+  @ApiNotFoundResponse({ description: 'Project or task dependency not found' })
+  removeProjectTaskDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('dependencyId') dependencyId: string,
+  ): Promise<void> {
+    return this.projectsService.removeProjectTaskDependency(
+      projectId,
+      dependencyId,
       request.user,
     );
   }

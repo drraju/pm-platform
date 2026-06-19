@@ -3,18 +3,25 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Max,
   Min,
 } from 'class-validator';
+import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 
 export class CreateTaskDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   projectId: string;
+
+  @ApiProperty({ format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
+  parentTaskId?: string | null;
 
   @ApiProperty()
   @IsString()
@@ -45,12 +52,23 @@ export class CreateTaskDto {
   @IsString()
   remarks?: string | null;
 
+  @ApiProperty({ enum: TaskKind, default: TaskKind.Standard, required: false })
+  @IsOptional()
+  @IsEnum(TaskKind)
+  taskKind?: TaskKind;
+
   @ApiProperty({ default: 0, maximum: 100, minimum: 0, required: false })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(100)
   percentComplete?: number;
+
+  @ApiProperty({ minimum: 0, required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sequenceNumber?: number | null;
 
   @ApiProperty({ format: 'date', required: false })
   @IsOptional()
@@ -81,4 +99,16 @@ export class CreateTaskDto {
   @IsOptional()
   @IsDateString()
   actualEndDate?: string | null;
+
+  @ApiProperty({ minimum: 0, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  estimatedHours?: number | null;
+
+  @ApiProperty({ minimum: 0, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  remainingHours?: number | null;
 }

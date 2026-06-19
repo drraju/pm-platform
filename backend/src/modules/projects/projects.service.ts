@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -12,8 +13,16 @@ import {
 } from '../../common/authz/authorization-policy.service';
 import { PermissionKey } from '../../common/authz/permissions';
 import { ProjectRole } from '../../common/enums/project-role.enum';
+import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
+import { TaskKind } from '../../common/enums/task-kind.enum';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
+import { CreateProjectBaselineDto } from './dto/create-project-baseline.dto';
+import { ProjectBaselineTask } from './entities/project-baseline-task.entity';
+import { ProjectBaseline } from './entities/project-baseline.entity';
+import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto';
+import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
+import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { Assumption } from '../raid/entities/assumption.entity';
 import { Dependency } from '../raid/entities/dependency.entity';
@@ -51,8 +60,14 @@ export class ProjectsService {
     private readonly projectsRepository: Repository<Project>,
     @InjectRepository(ProjectMember)
     private readonly projectMembersRepository: Repository<ProjectMember>,
+    @InjectRepository(ProjectBaseline)
+    private readonly projectBaselinesRepository: Repository<ProjectBaseline>,
+    @InjectRepository(ProjectBaselineTask)
+    private readonly projectBaselineTasksRepository: Repository<ProjectBaselineTask>,
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
+    @InjectRepository(TaskDependency)
+    private readonly taskDependenciesRepository: Repository<TaskDependency>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly projectHealthService: ProjectHealthService,
@@ -244,6 +259,7 @@ export class ProjectsService {
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
     await this.ensureCanManageProject(projectId, actor);
+    await this.validateTaskPlanningFields(projectId, createProjectTaskDto);
     await this.validateAssigneeMembership(
       projectId,
       createProjectTaskDto.assigneeId,
@@ -266,6 +282,7 @@ export class ProjectsService {
     await this.ensureProjectExists(projectId);
     const task = await this.findProjectTask(projectId, taskId);
     await this.ensureCanUpdateTask(task, updateProjectTaskDto, actor);
+    await this.validateTaskPlanningFields(projectId, updateProjectTaskDto, task);
     await this.validateAssigneeMembership(
       projectId,
       updateProjectTaskDto.assigneeId,
@@ -285,6 +302,184 @@ export class ProjectsService {
 
     const task = await this.findProjectTask(projectId, taskId);
     await this.tasksRepository.softRemove(task);
+  }
+
+  async captureProjectBaseline(
+    projectId: string,
+    createProjectBaselineDto: CreateProjectBaselineDto,
+    actor?: AuthenticatedActor,
+  ): Promise<ProjectBaseline> {
+    if (!actor?.userId) {
+      throw new ForbiddenException('Authenticated user is required');
+    }
+
+    await this.ensureProjectExists(projectId);
+    await this.ensureCanManageProject(projectId, actor);
+
+    const projectTasks = await this.tasksRepository.find({
+      order: {
+        createdAt: 'ASC',
+      },
+      where: { projectId },
+    });
+    const latestBaseline = await this.projectBaselinesRepository.findOne({
+      order: { versionNumber: 'DESC' },
+      select: { id: true, versionNumber: true },
+      where: { projectId },
+    });
+    const versionNumber = (latestBaseline?.versionNumber ?? 0) + 1;
+    const capturedAt = new Date();
+    const setAsCurrent = createProjectBaselineDto.setAsCurrent ?? true;
+
+    return this.projectsRepository.manager.transaction(
+      async (transactionalEntityManager) => {
+        if (setAsCurrent) {
+          await transactionalEntityManager.update(
+            ProjectBaseline,
+            { isCurrent: true, projectId },
+            {
+              isCurrent: false,
+              status: 'superseded',
+              updatedById: actor.userId,
+            },
+          );
+        }
+
+        const savedBaseline = await transactionalEntityManager.save(
+          ProjectBaseline,
+          this.projectBaselinesRepository.create({
+            capturedAt,
+            capturedById: actor.userId,
+            createdById: actor.userId,
+            isCurrent: setAsCurrent,
+            name: createProjectBaselineDto.name,
+            projectId,
+            status: createProjectBaselineDto.status ?? 'approved',
+            updatedById: actor.userId,
+            versionNumber,
+          }),
+        );
+
+        if (projectTasks.length > 0) {
+          await transactionalEntityManager.save(
+            ProjectBaselineTask,
+            projectTasks.map((task) =>
+              this.projectBaselineTasksRepository.create({
+                createdById: actor.userId,
+                estimatedHours: task.estimatedHours ?? null,
+                parentTaskId: task.parentTaskId ?? null,
+                percentComplete: task.percentComplete,
+                plannedEndDate: task.plannedEndDate ?? null,
+                plannedStartDate: task.plannedStartDate ?? null,
+                projectBaselineId: savedBaseline.id,
+                projectId,
+                sequenceNumber: task.sequenceNumber ?? null,
+                taskId: task.id,
+                taskKind: task.taskKind,
+                taskTitle: task.title,
+                updatedById: actor.userId,
+              }),
+            ),
+          );
+        }
+
+        return savedBaseline;
+      },
+    );
+  }
+
+  async findProjectTaskDependencies(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<TaskDependency[]> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
+
+    return this.taskDependenciesRepository.find({
+      order: { createdAt: 'ASC' },
+      relations: {
+        predecessorTask: true,
+        successorTask: true,
+      },
+      where: [
+        { predecessorTask: { projectId } },
+        { successorTask: { projectId } },
+      ],
+    });
+  }
+
+  async findProjectTaskDependency(
+    projectId: string,
+    dependencyId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<TaskDependency> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
+    return this.findTaskDependency(projectId, dependencyId);
+  }
+
+  async createProjectTaskDependency(
+    projectId: string,
+    createTaskDependencyDto: CreateTaskDependencyDto,
+    actor?: AuthenticatedActor,
+  ): Promise<TaskDependency> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureCanManageProject(projectId, actor);
+    await this.validateTaskDependency(projectId, createTaskDependencyDto);
+
+    const dependency = this.taskDependenciesRepository.create({
+      ...createTaskDependencyDto,
+      createdById: actor?.userId,
+      lagDays: createTaskDependencyDto.lagDays ?? 0,
+      updatedById: actor?.userId,
+    });
+
+    return this.taskDependenciesRepository.save(dependency);
+  }
+
+  async updateProjectTaskDependency(
+    projectId: string,
+    dependencyId: string,
+    updateTaskDependencyDto: UpdateTaskDependencyDto,
+    actor?: AuthenticatedActor,
+  ): Promise<TaskDependency> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureCanManageProject(projectId, actor);
+
+    const dependency = await this.findTaskDependency(projectId, dependencyId);
+    const nextInput = {
+      dependencyType:
+        updateTaskDependencyDto.dependencyType ?? dependency.dependencyType,
+      lagDays: updateTaskDependencyDto.lagDays ?? dependency.lagDays,
+      predecessorTaskId:
+        updateTaskDependencyDto.predecessorTaskId ??
+        dependency.predecessorTaskId,
+      successorTaskId:
+        updateTaskDependencyDto.successorTaskId ?? dependency.successorTaskId,
+    };
+
+    await this.validateTaskDependency(projectId, nextInput, dependency.id);
+
+    Object.assign(dependency, updateTaskDependencyDto, {
+      lagDays: updateTaskDependencyDto.lagDays ?? dependency.lagDays,
+      updatedById: actor?.userId,
+    });
+
+    return this.taskDependenciesRepository.save(dependency);
+  }
+
+  async removeProjectTaskDependency(
+    projectId: string,
+    dependencyId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureCanManageProject(projectId, actor);
+
+    const dependency = await this.findTaskDependency(projectId, dependencyId);
+    dependency.deletedById = actor?.userId;
+    dependency.updatedById = actor?.userId;
+    await this.taskDependenciesRepository.softRemove(dependency);
   }
 
   async findProjectRisks(
@@ -430,6 +625,30 @@ export class ProjectsService {
     return task;
   }
 
+  private async findTaskDependency(
+    projectId: string,
+    dependencyId: string,
+  ): Promise<TaskDependency> {
+    const dependency = await this.taskDependenciesRepository.findOne({
+      relations: {
+        predecessorTask: true,
+        successorTask: true,
+      },
+      where: { id: dependencyId },
+    });
+    if (
+      !dependency ||
+      dependency.predecessorTask.projectId !== projectId ||
+      dependency.successorTask.projectId !== projectId
+    ) {
+      throw new NotFoundException(
+        `Task dependency ${dependencyId} not found for project ${projectId}`,
+      );
+    }
+
+    return dependency;
+  }
+
   private async validateAssigneeMembership(
     projectId: string,
     assigneeId?: string | null,
@@ -447,6 +666,188 @@ export class ProjectsService {
     if (!membership) {
       throw new ConflictException('Assignee must be a project member');
     }
+  }
+
+  private async validateTaskPlanningFields(
+    projectId: string,
+    input: Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
+    existingTask?: Task,
+  ) {
+    const effectiveTaskKind = input.taskKind ?? existingTask?.taskKind ?? TaskKind.Standard;
+    const effectiveParentTaskId =
+      typeof input.parentTaskId !== 'undefined'
+        ? input.parentTaskId
+        : existingTask?.parentTaskId;
+
+    this.validateMilestoneDates(
+      effectiveTaskKind,
+      input.plannedStartDate ?? existingTask?.plannedStartDate,
+      input.plannedEndDate ?? existingTask?.plannedEndDate,
+    );
+
+    if (
+      existingTask &&
+      input.taskKind &&
+      input.taskKind !== TaskKind.Summary &&
+      input.taskKind !== existingTask.taskKind
+    ) {
+      await this.ensureTaskHasNoChildren(projectId, existingTask.id);
+    }
+
+    if (!effectiveParentTaskId) {
+      return;
+    }
+
+    if (existingTask && effectiveParentTaskId === existingTask.id) {
+      throw new BadRequestException('A task cannot be its own parent');
+    }
+
+    const parentTask = await this.findPlanningTask(projectId, effectiveParentTaskId);
+    if (!parentTask) {
+      throw new NotFoundException(
+        `Parent task ${effectiveParentTaskId} not found for project ${projectId}`,
+      );
+    }
+
+    if (parentTask.taskKind !== TaskKind.Summary) {
+      throw new BadRequestException('Only summary tasks can contain child tasks');
+    }
+
+    if (existingTask) {
+      await this.ensureNoHierarchyCycle(projectId, existingTask.id, parentTask.id);
+    }
+  }
+
+  private async validateTaskDependency(
+    projectId: string,
+    input: {
+      predecessorTaskId: string;
+      successorTaskId: string;
+      dependencyType: TaskDependencyType;
+      lagDays?: number;
+    },
+    existingDependencyId?: string,
+  ) {
+    if (input.predecessorTaskId === input.successorTaskId) {
+      throw new BadRequestException(
+        'A task dependency cannot reference the same task twice',
+      );
+    }
+
+    const [predecessorTask, successorTask] = await Promise.all([
+      this.findPlanningTask(projectId, input.predecessorTaskId),
+      this.findPlanningTask(projectId, input.successorTaskId),
+    ]);
+
+    if (!predecessorTask) {
+      throw new NotFoundException(
+        `Task ${input.predecessorTaskId} not found for project ${projectId}`,
+      );
+    }
+
+    if (!successorTask) {
+      throw new NotFoundException(
+        `Task ${input.successorTaskId} not found for project ${projectId}`,
+      );
+    }
+
+    await this.ensureDependencyEndpointEligible(projectId, predecessorTask);
+    await this.ensureDependencyEndpointEligible(projectId, successorTask);
+
+    const duplicateDependency = await this.taskDependenciesRepository.findOne({
+      select: { id: true },
+      where: {
+        predecessorTaskId: input.predecessorTaskId,
+        successorTaskId: input.successorTaskId,
+      },
+    });
+    if (duplicateDependency && duplicateDependency.id !== existingDependencyId) {
+      throw new ConflictException(
+        'An active dependency already exists between these tasks',
+      );
+    }
+  }
+
+  private async ensureDependencyEndpointEligible(
+    projectId: string,
+    task: Pick<Task, 'id' | 'taskKind'>,
+  ) {
+    if (task.taskKind === TaskKind.Summary) {
+      throw new BadRequestException(
+        'Summary tasks cannot be dependency endpoints',
+      );
+    }
+
+    if (task.taskKind === TaskKind.Milestone) {
+      return;
+    }
+
+    const childTask = await this.tasksRepository.findOne({
+      select: { id: true },
+      where: { parentTaskId: task.id, projectId },
+    });
+    if (childTask) {
+      throw new BadRequestException(
+        'Only leaf tasks and milestones can be dependency endpoints',
+      );
+    }
+  }
+
+  private validateMilestoneDates(
+    taskKind: TaskKind,
+    plannedStartDate?: string | null,
+    plannedEndDate?: string | null,
+  ) {
+    if (
+      taskKind === TaskKind.Milestone &&
+      plannedStartDate &&
+      plannedEndDate &&
+      plannedStartDate !== plannedEndDate
+    ) {
+      throw new BadRequestException(
+        'Milestones must have matching planned start and end dates',
+      );
+    }
+  }
+
+  private async ensureTaskHasNoChildren(projectId: string, taskId: string) {
+    const childTask = await this.tasksRepository.findOne({
+      select: { id: true },
+      where: { parentTaskId: taskId, projectId },
+    });
+
+    if (childTask) {
+      throw new BadRequestException('Only summary tasks can contain child tasks');
+    }
+  }
+
+  private async ensureNoHierarchyCycle(
+    projectId: string,
+    taskId: string,
+    parentTaskId: string,
+  ) {
+    let currentParentId: string | null = parentTaskId;
+
+    while (currentParentId) {
+      if (currentParentId === taskId) {
+        throw new BadRequestException('Task hierarchy cannot contain cycles');
+      }
+
+      const currentParent = await this.findPlanningTask(projectId, currentParentId);
+      currentParentId = currentParent?.parentTaskId ?? null;
+    }
+  }
+
+  private findPlanningTask(projectId: string, taskId: string) {
+    return this.tasksRepository.findOne({
+      select: {
+        id: true,
+        parentTaskId: true,
+        projectId: true,
+        taskKind: true,
+      },
+      where: { id: taskId, projectId },
+    });
   }
 
   private async ensureCanManageProject(

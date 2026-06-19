@@ -1,12 +1,17 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
+import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
+import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
 import { ProjectHealthService } from '../../health/project-health.service';
+import { ProjectBaselineTask } from '../entities/project-baseline-task.entity';
+import { ProjectBaseline } from '../entities/project-baseline.entity';
+import { TaskDependency } from '../../tasks/entities/task-dependency.entity';
 import { Task } from '../../tasks/entities/task.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectMember } from '../entities/project-member.entity';
@@ -26,7 +31,10 @@ describe('ProjectsService', () => {
   let service: ProjectsService;
   let projectsRepository: MockRepository<Project>;
   let projectMembersRepository: MockRepository<ProjectMember>;
+  let projectBaselinesRepository: MockRepository<ProjectBaseline>;
+  let projectBaselineTasksRepository: MockRepository<ProjectBaselineTask>;
   let tasksRepository: MockRepository<Task>;
+  let taskDependenciesRepository: MockRepository<TaskDependency>;
   let usersRepository: MockRepository<User>;
   let authorizationPolicyService: {
     canDeleteProject: jest.Mock;
@@ -37,6 +45,10 @@ describe('ProjectsService', () => {
   let projectVisibilityService: {
     canViewProject: jest.Mock;
     getVisibleProjects: jest.Mock;
+  };
+  let transactionalEntityManager: {
+    save: jest.Mock;
+    update: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -54,11 +66,44 @@ describe('ProjectsService', () => {
       save: jest.fn((input) => Promise.resolve({ id: 'member-id', ...input })),
       softRemove: jest.fn(() => Promise.resolve()),
     };
+    projectBaselinesRepository = {
+      create: jest.fn((input) => input),
+      findOne: jest.fn(),
+      save: jest.fn((input) =>
+        Promise.resolve({ id: 'project-baseline-id', ...input }),
+      ),
+    };
+    projectBaselineTasksRepository = {
+      create: jest.fn((input) => input),
+      save: jest.fn((input) => Promise.resolve(input)),
+    };
     tasksRepository = {
       create: jest.fn((input) => input),
       find: jest.fn(),
       findOne: jest.fn(),
       save: jest.fn((input) => Promise.resolve({ id: taskId, ...input })),
+      softRemove: jest.fn(() => Promise.resolve()),
+    };
+    transactionalEntityManager = {
+      save: jest.fn((entity, input) => {
+        if (entity === ProjectBaseline) {
+          return Promise.resolve({ id: 'project-baseline-id', ...input });
+        }
+
+        return Promise.resolve(input);
+      }),
+      update: jest.fn(() => Promise.resolve()),
+    };
+    projectsRepository.manager = {
+      transaction: jest.fn((callback) => callback(transactionalEntityManager)),
+    } as Repository<Project>['manager'];
+    taskDependenciesRepository = {
+      create: jest.fn((input) => input),
+      find: jest.fn(),
+      findOne: jest.fn(),
+      save: jest.fn((input) =>
+        Promise.resolve({ id: 'task-dependency-id', ...input }),
+      ),
       softRemove: jest.fn(() => Promise.resolve()),
     };
     usersRepository = {
@@ -87,8 +132,20 @@ describe('ProjectsService', () => {
           useValue: projectMembersRepository,
         },
         {
+          provide: getRepositoryToken(ProjectBaseline),
+          useValue: projectBaselinesRepository,
+        },
+        {
+          provide: getRepositoryToken(ProjectBaselineTask),
+          useValue: projectBaselineTasksRepository,
+        },
+        {
           provide: getRepositoryToken(Task),
           useValue: tasksRepository,
+        },
+        {
+          provide: getRepositoryToken(TaskDependency),
+          useValue: taskDependenciesRepository,
         },
         {
           provide: getRepositoryToken(User),
@@ -535,7 +592,9 @@ describe('ProjectsService', () => {
     const result = await service.createProjectTask(projectId, {
       assigneeId: userId,
       priority: 'high',
+      sequenceNumber: 20,
       status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
       title: 'Complete steering committee readout',
     });
 
@@ -543,7 +602,9 @@ describe('ProjectsService', () => {
       projectId,
       assigneeId: userId,
       priority: 'high',
+      sequenceNumber: 20,
       status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
       title: 'Complete steering committee readout',
     });
     expect(result).toEqual(
@@ -554,6 +615,60 @@ describe('ProjectsService', () => {
         title: 'Complete steering committee readout',
       }),
     );
+  });
+
+  it('creates a child project task under a summary parent', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValueOnce({
+      id: 'parent-task-id',
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Summary,
+    });
+
+    await service.createProjectTask(projectId, {
+      parentTaskId: 'parent-task-id',
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+  });
+
+  it('rejects child project task creation under a non-summary parent', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValueOnce({
+      id: 'parent-task-id',
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Standard,
+    });
+
+    await expect(
+      service.createProjectTask(projectId, {
+        parentTaskId: 'parent-task-id',
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      }),
+    ).rejects.toThrow('Only summary tasks can contain child tasks');
+  });
+
+  it('rejects milestone project task creation when planned dates do not match', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+
+    await expect(
+      service.createProjectTask(projectId, {
+        plannedEndDate: '2026-07-03',
+        plannedStartDate: '2026-07-01',
+        taskKind: TaskKind.Milestone,
+        title: 'Go-live',
+      }),
+    ).rejects.toThrow('Milestones must have matching planned start and end dates');
   });
 
   it('creates an unassigned project task without assignee validation', async () => {
@@ -600,6 +715,7 @@ describe('ProjectsService', () => {
     const task = {
       id: taskId,
       projectId,
+      taskKind: TaskKind.Standard,
       title: 'Original task',
       status: TaskStatus.Backlog,
     };
@@ -610,7 +726,9 @@ describe('ProjectsService', () => {
 
     await service.updateProjectTask(projectId, taskId, {
       assigneeId: userId,
+      sequenceNumber: 30,
       status: TaskStatus.Done,
+      taskKind: TaskKind.Standard,
       title: 'Updated task',
     });
 
@@ -624,7 +742,25 @@ describe('ProjectsService', () => {
       title: 'Updated task',
       status: TaskStatus.Done,
       assigneeId: userId,
+      sequenceNumber: 30,
+      taskKind: TaskKind.Standard,
     });
+  });
+
+  it('rejects setting a project task as its own parent', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValue({
+      id: taskId,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Original task',
+    });
+
+    await expect(
+      service.updateProjectTask(projectId, taskId, {
+        parentTaskId: taskId,
+      }),
+    ).rejects.toThrow('A task cannot be its own parent');
   });
 
   it('throws when updating a task outside the project scope', async () => {
@@ -646,5 +782,420 @@ describe('ProjectsService', () => {
     await service.removeProjectTask(projectId, taskId);
 
     expect(tasksRepository.softRemove).toHaveBeenCalledWith(task);
+  });
+
+  it('captures a project baseline with immutable snapshot rows', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    projectBaselinesRepository.findOne?.mockResolvedValue({
+      id: 'existing-baseline-id',
+      versionNumber: 2,
+    });
+    tasksRepository.find?.mockResolvedValue([
+      {
+        id: 'summary-task-id',
+        projectId,
+        title: 'Design Phase',
+        taskKind: TaskKind.Summary,
+        parentTaskId: null,
+        sequenceNumber: 10,
+        plannedStartDate: '2026-07-01',
+        plannedEndDate: '2026-07-21',
+        estimatedHours: 120,
+        percentComplete: 40,
+        createdAt: new Date('2026-06-19T10:00:00Z'),
+      },
+      {
+        id: 'child-task-id',
+        projectId,
+        title: 'Solution Design',
+        taskKind: TaskKind.Standard,
+        parentTaskId: 'summary-task-id',
+        sequenceNumber: 20,
+        plannedStartDate: '2026-07-02',
+        plannedEndDate: '2026-07-10',
+        estimatedHours: 48,
+        percentComplete: 25,
+        createdAt: new Date('2026-06-19T11:00:00Z'),
+      },
+    ]);
+
+    const result = await service.captureProjectBaseline(
+      projectId,
+      {
+        name: 'Approved Delivery Baseline',
+        status: 'approved',
+        setAsCurrent: true,
+      },
+      {
+        email: 'manager@example.com',
+        roleId: 'role-project-manager',
+        userId: 'user-manager',
+      },
+    );
+
+    expect(projectsRepository.manager?.transaction).toHaveBeenCalled();
+    expect(transactionalEntityManager.update).toHaveBeenCalledWith(
+      ProjectBaseline,
+      { isCurrent: true, projectId },
+      {
+        isCurrent: false,
+        status: 'superseded',
+        updatedById: 'user-manager',
+      },
+    );
+    expect(transactionalEntityManager.save).toHaveBeenCalledTimes(2);
+    expect(projectBaselinesRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capturedById: 'user-manager',
+        createdById: 'user-manager',
+        isCurrent: true,
+        name: 'Approved Delivery Baseline',
+        projectId,
+        status: 'approved',
+        updatedById: 'user-manager',
+        versionNumber: 3,
+      }),
+    );
+    expect(projectBaselineTasksRepository.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        projectBaselineId: 'project-baseline-id',
+        projectId,
+        taskId: 'summary-task-id',
+        taskTitle: 'Design Phase',
+        taskKind: TaskKind.Summary,
+      }),
+    );
+    expect(projectBaselineTasksRepository.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        parentTaskId: 'summary-task-id',
+        projectBaselineId: 'project-baseline-id',
+        projectId,
+        taskId: 'child-task-id',
+        taskTitle: 'Solution Design',
+        taskKind: TaskKind.Standard,
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'project-baseline-id',
+        isCurrent: true,
+        name: 'Approved Delivery Baseline',
+        projectId,
+        status: 'approved',
+        versionNumber: 3,
+      }),
+    );
+  });
+
+  it('captures a non-current baseline without demoting the current baseline', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    projectBaselinesRepository.findOne?.mockResolvedValue(null);
+    tasksRepository.find?.mockResolvedValue([]);
+
+    await service.captureProjectBaseline(
+      projectId,
+      {
+        name: 'Draft Baseline',
+        setAsCurrent: false,
+      },
+      {
+        email: 'manager@example.com',
+        roleId: 'role-project-manager',
+        userId: 'user-manager',
+      },
+    );
+
+    expect(transactionalEntityManager.update).not.toHaveBeenCalled();
+    expect(projectBaselinesRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isCurrent: false,
+        status: 'approved',
+        versionNumber: 1,
+      }),
+    );
+  });
+
+  it('lists project task dependencies', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    taskDependenciesRepository.find?.mockResolvedValue([
+      { id: 'task-dependency-id' },
+    ]);
+
+    await expect(service.findProjectTaskDependencies(projectId)).resolves.toEqual([
+      { id: 'task-dependency-id' },
+    ]);
+    expect(taskDependenciesRepository.find).toHaveBeenCalledWith({
+      order: { createdAt: 'ASC' },
+      relations: {
+        predecessorTask: true,
+        successorTask: true,
+      },
+      where: [
+        { predecessorTask: { projectId } },
+        { successorTask: { projectId } },
+      ],
+    });
+  });
+
+  it('creates a project task dependency between two leaf tasks', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    taskDependenciesRepository.findOne?.mockResolvedValue(null);
+
+    const result = await service.createProjectTaskDependency(
+      projectId,
+      {
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+        dependencyType: TaskDependencyType.FinishToStart,
+        lagDays: 2,
+      },
+      {
+        email: 'manager@example.com',
+        roleId: 'role-project-manager',
+        userId: 'user-manager',
+      },
+    );
+
+    expect(taskDependenciesRepository.create).toHaveBeenCalledWith({
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-task-id',
+      dependencyType: TaskDependencyType.FinishToStart,
+      lagDays: 2,
+      createdById: 'user-manager',
+      updatedById: 'user-manager',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'task-dependency-id',
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+      }),
+    );
+  });
+
+  it('allows milestones as dependency endpoints', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-milestone-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Milestone,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce(null);
+    taskDependenciesRepository.findOne?.mockResolvedValue(null);
+
+    await service.createProjectTaskDependency(projectId, {
+      predecessorTaskId: 'pred-milestone-id',
+      successorTaskId: 'succ-task-id',
+      dependencyType: TaskDependencyType.FinishToFinish,
+    });
+
+    expect(taskDependenciesRepository.create).toHaveBeenCalledWith({
+      predecessorTaskId: 'pred-milestone-id',
+      successorTaskId: 'succ-task-id',
+      dependencyType: TaskDependencyType.FinishToFinish,
+      lagDays: 0,
+      createdById: undefined,
+      updatedById: undefined,
+    });
+  });
+
+  it('rejects self-referential project task dependencies', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+
+    await expect(
+      service.createProjectTaskDependency(projectId, {
+        predecessorTaskId: taskId,
+        successorTaskId: taskId,
+        dependencyType: TaskDependencyType.FinishToStart,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects dependency creation when an endpoint is a summary task', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Summary,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      });
+
+    await expect(
+      service.createProjectTaskDependency(projectId, {
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+        dependencyType: TaskDependencyType.FinishToStart,
+      }),
+    ).rejects.toThrow('Summary tasks cannot be dependency endpoints');
+  });
+
+  it('rejects dependency creation when an endpoint is not a leaf task', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({ id: 'pred-child-task-id' });
+
+    await expect(
+      service.createProjectTaskDependency(projectId, {
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+        dependencyType: TaskDependencyType.StartToStart,
+      }),
+    ).rejects.toThrow('Only leaf tasks and milestones can be dependency endpoints');
+  });
+
+  it('rejects duplicate active dependencies between the same tasks', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    taskDependenciesRepository.findOne?.mockResolvedValue({
+      id: 'existing-task-dependency-id',
+    });
+
+    await expect(
+      service.createProjectTaskDependency(projectId, {
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+        dependencyType: TaskDependencyType.FinishToStart,
+      }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('updates a project task dependency', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    taskDependenciesRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'task-dependency-id',
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+        dependencyType: TaskDependencyType.FinishToStart,
+        lagDays: 0,
+        predecessorTask: { projectId },
+        successorTask: { projectId },
+      })
+      .mockResolvedValueOnce(null);
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+
+    await service.updateProjectTaskDependency(
+      projectId,
+      'task-dependency-id',
+      {
+        dependencyType: TaskDependencyType.StartToStart,
+        lagDays: 3,
+      },
+      {
+        email: 'manager@example.com',
+        roleId: 'role-project-manager',
+        userId: 'user-manager',
+      },
+    );
+
+    expect(taskDependenciesRepository.save).toHaveBeenCalledWith({
+      id: 'task-dependency-id',
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-task-id',
+      dependencyType: TaskDependencyType.StartToStart,
+      lagDays: 3,
+      predecessorTask: { projectId },
+      successorTask: { projectId },
+      updatedById: 'user-manager',
+    });
+  });
+
+  it('soft deletes a project task dependency', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    taskDependenciesRepository.findOne?.mockResolvedValue({
+      id: 'task-dependency-id',
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-task-id',
+      predecessorTask: { projectId },
+      successorTask: { projectId },
+    });
+
+    await service.removeProjectTaskDependency(projectId, 'task-dependency-id', {
+      email: 'manager@example.com',
+      roleId: 'role-project-manager',
+      userId: 'user-manager',
+    });
+
+    expect(taskDependenciesRepository.softRemove).toHaveBeenCalledWith({
+      id: 'task-dependency-id',
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-task-id',
+      predecessorTask: { projectId },
+      successorTask: { projectId },
+      deletedById: 'user-manager',
+      updatedById: 'user-manager',
+    });
   });
 });

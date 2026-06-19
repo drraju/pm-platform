@@ -8,6 +8,7 @@ import { Risk } from '../../raid/entities/risk.entity';
 import { Assumption } from '../../raid/entities/assumption.entity';
 import { Task } from '../../tasks/entities/task.entity';
 import { User } from '../../users/entities/user.entity';
+import { ProjectBaseline } from './project-baseline.entity';
 import { ProjectMember } from './project-member.entity';
 
 @Entity({ name: 'projects' })
@@ -81,6 +82,9 @@ export class Project extends AuditableEntity {
 
   @OneToMany(() => Dependency, (dependency) => dependency.project)
   dependencies: Dependency[];
+
+  @OneToMany(() => ProjectBaseline, (baseline) => baseline.project)
+  baselines: ProjectBaseline[];
 
   @ApiPropertyOptional({ type: ProjectHealthDto })
   health?: ProjectHealthDto;

@@ -1,6 +1,8 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
 import { Notification } from '../modules/notifications/entities/notification.entity';
+import { ProjectBaselineTask } from '../modules/projects/entities/project-baseline-task.entity';
+import { ProjectBaseline } from '../modules/projects/entities/project-baseline.entity';
 import { ProjectMember } from '../modules/projects/entities/project-member.entity';
 import { Project } from '../modules/projects/entities/project.entity';
 import { Assumption } from '../modules/raid/entities/assumption.entity';
@@ -9,6 +11,7 @@ import { Issue } from '../modules/raid/entities/issue.entity';
 import { RaidComment } from '../modules/raid/entities/raid-comment.entity';
 import { RaidHistoryEntry } from '../modules/raid/entities/raid-history-entry.entity';
 import { Risk } from '../modules/raid/entities/risk.entity';
+import { TaskDependency } from '../modules/tasks/entities/task-dependency.entity';
 import { Task } from '../modules/tasks/entities/task.entity';
 import { Permission } from '../modules/users/entities/permission.entity';
 import { RolePermission } from '../modules/users/entities/role-permission.entity';
@@ -21,8 +24,11 @@ export const databaseEntities: Function[] = [
   Permission,
   RolePermission,
   Project,
+  ProjectBaseline,
+  ProjectBaselineTask,
   ProjectMember,
   Task,
+  TaskDependency,
   Risk,
   Issue,
   Assumption,

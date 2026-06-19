@@ -89,19 +89,63 @@ CREATE TABLE project_members (
 CREATE TABLE tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  parent_task_id UUID REFERENCES tasks(id),
   title VARCHAR(255) NOT NULL,
   description TEXT,
   assignee_id UUID REFERENCES users(id),
   status task_status NOT NULL DEFAULT 'backlog',
   priority VARCHAR(50) NOT NULL DEFAULT 'medium',
   remarks TEXT,
+  task_kind VARCHAR(20) NOT NULL DEFAULT 'standard' CHECK (task_kind IN ('standard', 'summary', 'milestone')),
   percent_complete INTEGER NOT NULL DEFAULT 0 CHECK (percent_complete >= 0 AND percent_complete <= 100),
+  sequence_number INTEGER,
   start_date DATE,
   due_date DATE,
   planned_start_date DATE,
   planned_end_date DATE,
   actual_start_date DATE,
   actual_end_date DATE,
+  estimated_hours NUMERIC(10,2) CHECK (estimated_hours IS NULL OR estimated_hours >= 0),
+  remaining_hours NUMERIC(10,2) CHECK (remaining_hours IS NULL OR remaining_hours >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  created_by_id UUID REFERENCES users(id),
+  updated_by_id UUID REFERENCES users(id),
+  deleted_by_id UUID REFERENCES users(id),
+  CONSTRAINT chk_tasks_milestone_planned_dates CHECK (
+    task_kind <> 'milestone'
+    OR planned_start_date IS NULL
+    OR planned_end_date IS NULL
+    OR planned_start_date = planned_end_date
+  ),
+  CONSTRAINT chk_tasks_parent_not_self CHECK (parent_task_id IS NULL OR parent_task_id <> id)
+);
+
+CREATE TABLE task_dependencies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  predecessor_task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  successor_task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  dependency_type VARCHAR(2) NOT NULL CHECK (dependency_type IN ('FS', 'SS', 'FF', 'SF')),
+  lag_days INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  created_by_id UUID REFERENCES users(id),
+  updated_by_id UUID REFERENCES users(id),
+  deleted_by_id UUID REFERENCES users(id),
+  CONSTRAINT chk_task_dependencies_not_self CHECK (predecessor_task_id <> successor_task_id)
+);
+
+CREATE TABLE project_baselines (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  version_number INTEGER NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'approved' CHECK (status IN ('draft', 'approved', 'superseded')),
+  captured_at TIMESTAMPTZ NOT NULL,
+  captured_by_id UUID NOT NULL REFERENCES users(id),
+  is_current BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
@@ -109,6 +153,73 @@ CREATE TABLE tasks (
   updated_by_id UUID REFERENCES users(id),
   deleted_by_id UUID REFERENCES users(id)
 );
+
+CREATE TABLE project_baseline_tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_baseline_id UUID NOT NULL REFERENCES project_baselines(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
+  parent_task_id UUID,
+  task_title VARCHAR(255) NOT NULL,
+  task_kind VARCHAR(20) NOT NULL CHECK (task_kind IN ('standard', 'summary', 'milestone')),
+  sequence_number INTEGER,
+  planned_start_date DATE,
+  planned_end_date DATE,
+  estimated_hours NUMERIC(10,2),
+  percent_complete INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  created_by_id UUID REFERENCES users(id),
+  updated_by_id UUID REFERENCES users(id),
+  deleted_by_id UUID REFERENCES users(id)
+);
+
+CREATE OR REPLACE FUNCTION prevent_project_baseline_task_mutation()
+RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'Project baseline tasks are immutable';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION prevent_project_baseline_mutation()
+RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Project baselines are immutable';
+  END IF;
+
+  IF NEW.id IS DISTINCT FROM OLD.id
+    OR NEW.project_id IS DISTINCT FROM OLD.project_id
+    OR NEW.name IS DISTINCT FROM OLD.name
+    OR NEW.version_number IS DISTINCT FROM OLD.version_number
+    OR NEW.captured_at IS DISTINCT FROM OLD.captured_at
+    OR NEW.captured_by_id IS DISTINCT FROM OLD.captured_by_id
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at
+    OR NEW.created_by_id IS DISTINCT FROM OLD.created_by_id
+    OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at
+    OR NEW.deleted_by_id IS DISTINCT FROM OLD.deleted_by_id
+  THEN
+    RAISE EXCEPTION 'Project baselines are immutable';
+  END IF;
+
+  IF NEW.status NOT IN ('draft', 'approved', 'superseded') THEN
+    RAISE EXCEPTION 'Project baseline status must be a lifecycle status';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_project_baseline_tasks_immutable
+  BEFORE UPDATE OR DELETE ON project_baseline_tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION prevent_project_baseline_task_mutation();
+
+CREATE TRIGGER trg_project_baselines_immutable
+  BEFORE UPDATE OR DELETE ON project_baselines
+  FOR EACH ROW
+  EXECUTE FUNCTION prevent_project_baseline_mutation();
 
 CREATE TABLE risks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -207,6 +318,23 @@ CREATE INDEX idx_project_members_project_id ON project_members(project_id);
 CREATE INDEX idx_project_members_user_id ON project_members(user_id);
 CREATE INDEX idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX idx_tasks_assignee_id ON tasks(assignee_id);
+CREATE INDEX idx_tasks_parent_task_id ON tasks(parent_task_id);
+CREATE INDEX idx_tasks_project_parent_sequence ON tasks(project_id, parent_task_id, sequence_number);
+CREATE INDEX idx_task_dependencies_predecessor_task_id ON task_dependencies(predecessor_task_id);
+CREATE INDEX idx_task_dependencies_successor_task_id ON task_dependencies(successor_task_id);
+CREATE UNIQUE INDEX idx_task_dependencies_active_unique_edge
+  ON task_dependencies(predecessor_task_id, successor_task_id)
+  WHERE deleted_at IS NULL;
+CREATE INDEX idx_project_baselines_project_id ON project_baselines(project_id);
+CREATE UNIQUE INDEX idx_project_baselines_project_version
+  ON project_baselines(project_id, version_number);
+CREATE UNIQUE INDEX idx_project_baselines_current
+  ON project_baselines(project_id)
+  WHERE is_current = true AND deleted_at IS NULL;
+CREATE INDEX idx_project_baseline_tasks_project_baseline_id
+  ON project_baseline_tasks(project_baseline_id);
+CREATE INDEX idx_project_baseline_tasks_project_task
+  ON project_baseline_tasks(project_id, task_id);
 CREATE INDEX idx_risks_project_id ON risks(project_id);
 CREATE INDEX idx_issues_project_id ON issues(project_id);
 CREATE INDEX idx_assumptions_project_id ON assumptions(project_id);
