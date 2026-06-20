@@ -1,27 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addProjectMember,
+  captureProjectBaseline,
   createProjectTask,
   createProject,
+  createProjectTaskDependency,
   getAssignableUsers,
   getAuthMe,
   getPermissions,
   createRaidItem,
   deleteProject,
+  deleteProjectTaskDependency,
   deleteProjectTask,
   deleteRaidItem,
   getMyTasks,
+  getProjectBaseline,
+  getProjectBaselines,
   getProject,
   getProjectAssumptions,
   getProjectDependencies,
   getProjectIssues,
   getProjectRisks,
+  getProjectTaskDependencies,
   getProjects,
   removeProjectMember,
   updateRolePermissions,
   updateProject,
   updateProjectMember,
   updateProjectTask,
+  updateProjectTaskDependency,
   updateRaidItem,
 } from "@/lib/api/client";
 
@@ -119,6 +126,29 @@ describe("project API client", () => {
     );
   });
 
+  it("loads project planning dependencies and baselines", async () => {
+    const fetchMock = mockFetch([{ id: "dependency-1" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getProjectTaskDependencies("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/task-dependencies",
+      expect.any(Object),
+    );
+
+    await getProjectBaselines("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/baselines",
+      expect.any(Object),
+    );
+
+    await getProjectBaseline("project-1", "baseline-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/baselines/baseline-1",
+      expect.any(Object),
+    );
+  });
+
   it("creates projects with the existing DTO shape", async () => {
     const fetchMock = mockFetch({ id: "project-1", name: "ERP" });
     vi.stubGlobal("fetch", fetchMock);
@@ -185,6 +215,86 @@ describe("project API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects/project-1",
       expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("creates, updates, and deletes project task dependencies", async () => {
+    const fetchMock = mockFetch({ id: "dependency-1" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createProjectTaskDependency("project-1", {
+      dependencyType: "FS",
+      lagDays: 2,
+      predecessorTaskId: "task-1",
+      successorTaskId: "task-2",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/task-dependencies",
+      expect.objectContaining({
+        body: JSON.stringify({
+          dependencyType: "FS",
+          lagDays: 2,
+          predecessorTaskId: "task-1",
+          successorTaskId: "task-2",
+        }),
+        method: "POST",
+      }),
+    );
+
+    await updateProjectTaskDependency("project-1", "dependency-1", {
+      dependencyType: "SS",
+      lagDays: 1,
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/task-dependencies/dependency-1",
+      expect.objectContaining({
+        body: JSON.stringify({
+          dependencyType: "SS",
+          lagDays: 1,
+        }),
+        method: "PATCH",
+      }),
+    );
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      headers: { get: vi.fn(() => null) },
+      json: vi.fn(),
+      text: vi.fn().mockResolvedValue(""),
+    });
+
+    await expect(
+      deleteProjectTaskDependency("project-1", "dependency-1"),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/task-dependencies/dependency-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("captures project baselines", async () => {
+    const fetchMock = mockFetch({ id: "baseline-1" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await captureProjectBaseline("project-1", {
+      name: "Approved Delivery Baseline",
+      setAsCurrent: true,
+      status: "approved",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/baselines",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "Approved Delivery Baseline",
+          setAsCurrent: true,
+          status: "approved",
+        }),
+        method: "POST",
+      }),
     );
   });
 
@@ -269,10 +379,18 @@ describe("project API client", () => {
 
     await createProjectTask("project-1", {
       title: "Mobilise team",
+      parentTaskId: "summary-task-1",
+      taskKind: "standard",
       assigneeId: "user-1",
       status: "todo",
       priority: "high",
-      dueDate: "2026-06-30",
+      sequenceNumber: 20,
+      plannedStartDate: "2026-07-01",
+      plannedEndDate: "2026-07-10",
+      actualStartDate: "2026-07-02",
+      actualEndDate: null,
+      estimatedHours: 16,
+      remainingHours: 12,
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -280,23 +398,49 @@ describe("project API client", () => {
       expect.objectContaining({
         body: JSON.stringify({
           title: "Mobilise team",
+          parentTaskId: "summary-task-1",
+          taskKind: "standard",
           assigneeId: "user-1",
           status: "todo",
           priority: "high",
-          dueDate: "2026-06-30",
+          sequenceNumber: 20,
+          plannedStartDate: "2026-07-01",
+          plannedEndDate: "2026-07-10",
+          actualStartDate: "2026-07-02",
+          actualEndDate: null,
+          estimatedHours: 16,
+          remainingHours: 12,
         }),
         method: "POST",
       }),
     );
 
     await updateProjectTask("project-1", "task-1", {
+      parentTaskId: null,
+      taskKind: "milestone",
       status: "in_progress",
+      plannedStartDate: "2026-07-12",
+      plannedEndDate: "2026-07-12",
+      actualStartDate: null,
+      actualEndDate: null,
+      estimatedHours: 0,
+      remainingHours: 0,
     });
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://localhost:3001/projects/project-1/tasks/task-1",
       expect.objectContaining({
-        body: JSON.stringify({ status: "in_progress" }),
+        body: JSON.stringify({
+          parentTaskId: null,
+          taskKind: "milestone",
+          status: "in_progress",
+          plannedStartDate: "2026-07-12",
+          plannedEndDate: "2026-07-12",
+          actualStartDate: null,
+          actualEndDate: null,
+          estimatedHours: 0,
+          remainingHours: 0,
+        }),
         method: "PATCH",
       }),
     );

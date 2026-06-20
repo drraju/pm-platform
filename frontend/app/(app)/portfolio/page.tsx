@@ -62,18 +62,21 @@ export default function PortfolioPage() {
       {!isLoading && !error && summary ? (
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard label="Total Projects" value={summary.totalProjects} />
+            <SummaryCard href="/projects" label="Total Projects" value={summary.totalProjects} />
             <SummaryCard
+              href="/projects?health=GREEN&sort=health_asc"
               label="Green Projects"
               tone="success"
               value={summary.greenProjects}
             />
             <SummaryCard
+              href="/projects?health=AMBER&sort=health_desc"
               label="Amber Projects"
               tone="warning"
               value={summary.amberProjects}
             />
             <SummaryCard
+              href="/projects?health=RED&sort=health_desc"
               label="Red Projects"
               tone="danger"
               value={summary.redProjects}
@@ -184,7 +187,12 @@ function OverdueTasksWidget({
         </div>
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-red-700">
           <p className="text-sm font-medium opacity-75">Total Overdue Tasks</p>
-          <p className="mt-2 text-3xl font-semibold">{overdueTasks.total}</p>
+          <Link
+            className="mt-2 inline-block text-3xl font-semibold hover:underline"
+            href="/tasks?scope=all&timing=overdue"
+          >
+            {overdueTasks.total}
+          </Link>
         </div>
       </div>
 
@@ -201,7 +209,7 @@ function OverdueTasksWidget({
             {overdueTasks.projects.map((project) => (
               <Link
                 className="flex flex-col gap-2 rounded-md px-3 py-3 text-sm transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
-                href={`/projects/${project.projectId}`}
+                href={`/tasks?scope=all&projectId=${project.projectId}&timing=overdue`}
                 key={project.projectId}
               >
                 <span className="font-semibold text-slate-950">
@@ -251,21 +259,25 @@ function OpenRisksBySeverityWidget({
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
+          href="/risks?severity=critical&status=open"
           label="Critical Risks"
           tone="danger"
           value={openRisksBySeverity.critical}
         />
         <SummaryCard
+          href="/risks?severity=high&status=open"
           label="High Risks"
           tone="danger"
           value={openRisksBySeverity.high}
         />
         <SummaryCard
+          href="/risks?severity=medium&status=open"
           label="Medium Risks"
           tone="warning"
           value={openRisksBySeverity.medium}
         />
         <SummaryCard
+          href="/risks?severity=low&status=open"
           label="Low Risks"
           tone="success"
           value={openRisksBySeverity.low}
@@ -305,21 +317,25 @@ function OpenIssuesByPriorityWidget({
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
+          href="/issues?priority=critical&status=open"
           label="Critical Issues"
           tone="danger"
           value={openIssuesByPriority.critical}
         />
         <SummaryCard
+          href="/issues?priority=high&status=open"
           label="High Priority Issues"
           tone="danger"
           value={openIssuesByPriority.high}
         />
         <SummaryCard
+          href="/issues?priority=medium&status=open"
           label="Medium Priority Issues"
           tone="warning"
           value={openIssuesByPriority.medium}
         />
         <SummaryCard
+          href="/issues?priority=low&status=open"
           label="Low Priority Issues"
           tone="success"
           value={openIssuesByPriority.low}

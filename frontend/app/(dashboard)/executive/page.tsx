@@ -1,7 +1,7 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { SummaryCard } from "@/components/dashboard/summary-card";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -81,18 +81,21 @@ export default function ExecutiveDashboardPage() {
       {!isLoading && !error && canViewExecutive && summary ? (
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard label="Total Projects" value={summary.totalProjects} />
+            <SummaryCard href="/projects" label="Total Projects" value={summary.totalProjects} />
             <SummaryCard
+              href="/projects?health=GREEN"
               label="Green Projects"
               tone="success"
               value={summary.greenProjects}
             />
             <SummaryCard
+              href="/projects?health=AMBER&sort=health_desc"
               label="Amber Projects"
               tone="warning"
               value={summary.amberProjects}
             />
             <SummaryCard
+              href="/projects?health=RED&sort=health_desc"
               label="Red Projects"
               tone="danger"
               value={summary.redProjects}
@@ -101,16 +104,19 @@ export default function ExecutiveDashboardPage() {
 
           <section className="grid gap-6 xl:grid-cols-3">
             <SummaryCard
+              href="/risks?status=open"
               label="Open Risks"
               tone="danger"
               value={getSeverityTotal(summary.openRisksBySeverity)}
             />
             <SummaryCard
+              href="/issues?status=open"
               label="Open Issues"
               tone="warning"
               value={getSeverityTotal(summary.openIssuesByPriority)}
             />
             <SummaryCard
+              href="/tasks?scope=all&timing=overdue"
               label="Overdue Tasks"
               tone="danger"
               value={summary.overdueTasks.total}

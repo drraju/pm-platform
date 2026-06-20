@@ -12,8 +12,11 @@ import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
 
 const projectMocks = vi.hoisted(() => ({
   addProjectMember: vi.fn(),
+  captureProjectBaseline: vi.fn(),
   createProjectTask: vi.fn(),
+  createProjectTaskDependency: vi.fn(),
   deleteProject: vi.fn(),
+  deleteProjectTaskDependency: vi.fn(),
   deleteProjectTask: vi.fn(),
   getProject: vi.fn(async (projectId: string) => ({
     assumptions: [
@@ -82,15 +85,30 @@ const projectMocks = vi.hoisted(() => ({
     },
   ]),
   getAssignableUsers: vi.fn(async () => []),
+  getProjectBaseline: vi.fn(async (projectId: string, baselineId: string) => ({
+    capturedAt: "2026-06-01T10:00:00.000Z",
+    capturedById: "user-1",
+    id: baselineId,
+    isCurrent: true,
+    name: "Approved Delivery Baseline",
+    projectId,
+    status: "approved",
+    tasks: [],
+    versionNumber: 1,
+  })),
+  getProjectBaselines: vi.fn(async () => []),
+  getProjectTaskDependencies: vi.fn(async () => []),
   removeProjectMember: vi.fn(),
   updateProject: vi.fn(),
   updateProjectTask: vi.fn(),
+  updateProjectTaskDependency: vi.fn(),
   updateProjectMember: vi.fn(),
 }));
 
 const navigationMocks = vi.hoisted(() => ({
   push: vi.fn((href: string) => {
     window.history.pushState({}, "", href);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }),
 }));
 
@@ -148,23 +166,36 @@ vi.mock("next/navigation", () => ({
   useParams: () => ({
     id: window.location.pathname.split("/").filter(Boolean).at(-1) ?? "",
   }),
+  usePathname: () => window.location.pathname,
+  useSearchParams: () => new URLSearchParams(window.location.search),
   useRouter: () => ({
     push: navigationMocks.push,
+    replace: (href: string) => {
+      window.history.replaceState({}, "", href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
   }),
 }));
 
 vi.mock("@/features/projects", () => ({
   addProjectMember: projectMocks.addProjectMember,
+  captureProjectBaseline: projectMocks.captureProjectBaseline,
   createProjectTask: projectMocks.createProjectTask,
+  createProjectTaskDependency: projectMocks.createProjectTaskDependency,
   createProject: vi.fn(),
   deleteProject: projectMocks.deleteProject,
+  deleteProjectTaskDependency: projectMocks.deleteProjectTaskDependency,
   deleteProjectTask: projectMocks.deleteProjectTask,
   getAssignableUsers: projectMocks.getAssignableUsers,
+  getProjectBaseline: projectMocks.getProjectBaseline,
+  getProjectBaselines: projectMocks.getProjectBaselines,
   getProject: projectMocks.getProject,
+  getProjectTaskDependencies: projectMocks.getProjectTaskDependencies,
   getProjects: projectMocks.getProjects,
   removeProjectMember: projectMocks.removeProjectMember,
   updateProject: projectMocks.updateProject,
   updateProjectTask: projectMocks.updateProjectTask,
+  updateProjectTaskDependency: projectMocks.updateProjectTaskDependency,
   updateProjectMember: projectMocks.updateProjectMember,
 }));
 

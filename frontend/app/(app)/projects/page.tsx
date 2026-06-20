@@ -2,6 +2,7 @@
 
 import React from "react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectTable } from "@/components/projects/project-table";
 import { AppModal } from "@/components/ui/app-modal";
@@ -39,6 +40,22 @@ const projectStatuses = [
 ];
 
 export default function ProjectsPage() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  console.log("PROJECTS DEBUG", {
+  href: typeof window !== "undefined" ? window.location.href : "server",
+  pathname,
+  params: searchParams.toString(),
+  health: searchParams.get("health"),
+  sort: searchParams.get("sort"),
+});
+  console.log("PROJECTS PAGE URL", {
+    pathname,
+    search: searchParams.toString(),
+    health: searchParams.get("health"),
+    sort: searchParams.get("sort"),
+  });
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [users, setUsers] = useState<ApiAssignableUser[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -49,18 +66,43 @@ export default function ProjectsPage() {
   const [projectPendingDelete, setProjectPendingDelete] =
     useState<ApiProject | null>(null);
   const [selectedProject, setSelectedProject] = useState<ApiProject | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const searchTerm = searchParams.get("search") ?? "";
+  const statusFilter = searchParams.get("status") ?? "all";
+  const requestedHealth = searchParams.get("health")?.toUpperCase();
+  const healthFilter: "all" | ApiProjectHealthStatus =
+    requestedHealth === "GREEN" ||
+    requestedHealth === "AMBER" ||
+    requestedHealth === "RED"
+      ? requestedHealth
+      : "all";
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
     getStoredPermissionKeys(),
   );
-  const [sortMode, setSortMode] = useState<
-    "created_asc" | "created_desc" | "health_asc" | "health_desc"
-  >("created_desc");
+  const requestedSort = searchParams.get("sort");
+  const sortMode: "created_asc" | "created_desc" | "health_asc" | "health_desc" =
+    isProjectSortMode(requestedSort) ? requestedSort : "created_desc";
   const hasSession = useMemo(() => Boolean(getStoredAccessToken()), []);
   const canCreateProject = hasPermission(permissionKeys, "project.create");
   const canEditProject = hasPermission(permissionKeys, "project.update");
   const canDeleteProject = hasPermission(permissionKeys, "project.delete");
+
+  function syncProjectFilters(nextFilters: {
+    health?: "all" | ApiProjectHealthStatus;
+    search?: string;
+    sort?: "created_asc" | "created_desc" | "health_asc" | "health_desc";
+    status?: string;
+  }) {
+    const nextUrl = buildProjectFiltersUrl(pathname, {
+      health: nextFilters.health ?? healthFilter,
+      search: nextFilters.search ?? searchTerm,
+      sort: nextFilters.sort ?? sortMode,
+      status: nextFilters.status ?? statusFilter,
+    });
+
+    if (`${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}` !== nextUrl) {
+      router.replace(nextUrl);
+    }
+  }
 
   async function loadData() {
     setError(null);
@@ -134,6 +176,11 @@ export default function ProjectsPage() {
       .filter((project) =>
         statusFilter === "all" ? true : project.status === statusFilter,
       )
+      .filter((project) =>
+        healthFilter === "all"
+          ? true
+          : (project.health?.status ?? "GREEN") === healthFilter,
+      )
       .toSorted((left, right) => {
         if (sortMode === "health_asc" || sortMode === "health_desc") {
           const leftHealth = healthRank(left.health?.status ?? "GREEN");
@@ -153,7 +200,7 @@ export default function ProjectsPage() {
           ? rightTime - leftTime
           : leftTime - rightTime;
       });
-  }, [projects, searchTerm, sortMode, statusFilter]);
+  }, [healthFilter, projects, searchTerm, sortMode, statusFilter]);
 
   function openCreateProjectModal() {
     setSelectedProject(null);
@@ -263,14 +310,14 @@ export default function ProjectsPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[1fr_220px_240px]">
+      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[1fr_220px_220px_240px]">
         <label className="block">
           <span className="text-sm font-medium text-slate-700">
             Search by project name
           </span>
           <input
             className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) => setSearchTerm(event.target.value)}
+            onChange={(event) => syncProjectFilters({ search: event.target.value })}
             placeholder="Search projects"
             type="search"
             value={searchTerm}
@@ -282,7 +329,7 @@ export default function ProjectsPage() {
           </span>
           <select
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(event) => syncProjectFilters({ status: event.target.value })}
             value={statusFilter}
           >
             <option value="all">All statuses</option>
@@ -300,13 +347,14 @@ export default function ProjectsPage() {
           <select
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
             onChange={(event) =>
-              setSortMode(
-                event.target.value as
-                  | "created_asc"
-                  | "created_desc"
-                  | "health_asc"
-                  | "health_desc",
-              )
+              syncProjectFilters({
+                sort:
+                  event.target.value as
+                    | "created_asc"
+                    | "created_desc"
+                    | "health_asc"
+                    | "health_desc",
+              })
             }
             value={sortMode}
           >
@@ -314,6 +362,25 @@ export default function ProjectsPage() {
             <option value="created_asc">Oldest first</option>
             <option value="health_desc">Health: Red first</option>
             <option value="health_asc">Health: Green first</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">
+            Filter by health
+          </span>
+          <select
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            onChange={(event) =>
+              syncProjectFilters({
+                health: event.target.value as "all" | ApiProjectHealthStatus,
+              })
+            }
+            value={healthFilter}
+          >
+            <option value="all">All health</option>
+            <option value="RED">Red</option>
+            <option value="AMBER">Amber</option>
+            <option value="GREEN">Green</option>
           </select>
         </label>
       </section>
@@ -411,6 +478,49 @@ export default function ProjectsPage() {
       ) : null}
     </div>
   );
+}
+
+function isProjectSortMode(value: string | null): value is
+  | "created_asc"
+  | "created_desc"
+  | "health_asc"
+  | "health_desc" {
+  return (
+    value === "created_asc" ||
+    value === "created_desc" ||
+    value === "health_asc" ||
+    value === "health_desc"
+  );
+}
+
+function buildProjectFiltersUrl(pathname: string, filters: {
+  health: "all" | ApiProjectHealthStatus;
+  search: string;
+  sort: "created_asc" | "created_desc" | "health_asc" | "health_desc";
+  status: string;
+}) {
+  const searchParams = new URLSearchParams();
+  const trimmedSearch = filters.search.trim();
+
+
+  if (trimmedSearch) {
+    searchParams.set("search", trimmedSearch);
+  }
+
+  if (filters.status !== "all") {
+    searchParams.set("status", filters.status);
+  }
+
+  if (filters.sort !== "created_desc") {
+    searchParams.set("sort", filters.sort);
+  }
+
+  if (filters.health !== "all") {
+    searchParams.set("health", filters.health);
+  }
+
+  const nextSearch = searchParams.toString();
+  return nextSearch ? `${pathname}?${nextSearch}` : pathname;
 }
 
 function ProjectForm({

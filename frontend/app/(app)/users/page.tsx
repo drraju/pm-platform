@@ -367,6 +367,8 @@ const roleMatrixOrder = [
   "Project Manager",
   "Delivery Lead",
   "Team Member",
+  "Engineer",
+  "QA Engineer",
   "Executive",
   "Customer",
   "Partner",

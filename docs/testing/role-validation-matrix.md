@@ -22,3 +22,34 @@
 | **Executive** | ⚠️ R | ⚠️ R | ⚠️ R | ⚠️ R | ⚠️ R | ❌ No Access |
 | **Customer** | ⚠️ R | ⚠️ R | ⚠️ R | ❌ No Access | ❌ No Access | ❌ No Access |
 | **Partner** | ⚠️ R | ⚠️ R | ⚠️ R | ❌ No Access | ❌ No Access | ❌ No Access |
+
+## Dashboard Default Landing
+
+| Role | Default Landing | Expected Drilldown Scope |
+| :--- | :--- | :--- |
+| **SuperAdmin** | `/dashboard` | User-scoped dashboard widgets unless a portfolio/executive page is opened explicitly |
+| **Admin** | `/dashboard` | User-scoped dashboard widgets unless a portfolio/executive page is opened explicitly |
+| **Program Manager** | `/dashboard` | User dashboard plus global portfolio and executive pages when chosen |
+| **Portfolio Manager** | `/portfolio` | Global portfolio-visible datasets |
+| **Project Manager** | `/dashboard` | User-scoped dashboard widgets |
+| **Delivery Lead** | `/dashboard` | User-scoped dashboard widgets |
+| **Team Member** | `/dashboard` | User-scoped dashboard widgets |
+| **Executive** | `/executive` | Global executive-visible datasets |
+| **Customer** | `/dashboard` | User-scoped dashboard widgets |
+| **Partner** | `/dashboard` | User-scoped dashboard widgets |
+
+## Executive Drilldown Expectations
+
+| Widget | URL Contract | Result Expectation |
+| :--- | :--- | :--- |
+| **Green Projects** | `/projects?health=GREEN&sort=health_asc` | Project list count matches green project widget total |
+| **Amber Projects** | `/projects?health=AMBER&sort=health_desc` | Project list count matches amber project widget total |
+| **Red Projects** | `/projects?health=RED&sort=health_desc` | Project list count matches red project widget total |
+| **Open Risks** | `/risks?status=open` | Visible risks exclude closed/resolved items and match widget total |
+| **Open Issues** | `/issues?status=open` | Visible issues exclude closed/resolved items and match widget total |
+| **Overdue Tasks** | `/tasks?scope=all&timing=overdue` | Visible overdue tasks use date-only comparison and match widget total |
+
+Notes:
+- `Engineer` and `QA Engineer` follow the same runtime navigation and task-update expectations as the `Team Member` contributor experience.
+- Enterprise planning UI uses `Phase` as the end-user label for `summary` tasks; role expectations do not change with this terminology update.
+- Executive and portfolio dashboard drilldowns are expected to preserve their active filter state through URL parameters so refresh and deep-link behavior stay consistent.

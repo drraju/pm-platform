@@ -9,6 +9,7 @@ import {
   formatRaidLabel,
   formatRaidOwner,
 } from "@/components/projects/project-workspace-register-section";
+import { ProjectWorkspaceBaselines } from "@/components/projects/project-workspace-baselines";
 import { ProjectWorkspaceSummary } from "@/components/projects/project-workspace-summary";
 import { ProjectWorkspaceTable } from "@/components/projects/project-workspace-table";
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
@@ -119,8 +120,8 @@ describe("Project workspace components", () => {
                 lastName: "Chen",
                 status: "active",
               },
-              dueDate: "2026-06-30",
               id: "task-1",
+              plannedEndDate: "2026-06-30",
               priority: "high",
               projectId: "project-1",
               status: "in_progress",
@@ -135,6 +136,10 @@ describe("Project workspace components", () => {
     expect(screen.getByText("manager")).toBeInTheDocument();
     expect(screen.getByText("Prepare release plan")).toBeInTheDocument();
     expect(screen.getByText("Li Chen")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "WBS" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Planned End" }),
+    ).toBeInTheDocument();
   });
 
   it("supports project team add, role update, and remove controls", () => {
@@ -239,18 +244,32 @@ describe("Project workspace components", () => {
         onUpdateTask={onUpdateTask}
         tasks={[
           {
+            description: "Phase container.",
+            id: "summary-1",
+            plannedEndDate: "2026-06-30",
+            plannedStartDate: "2026-06-01",
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 1,
+            status: "todo",
+            taskKind: "summary",
+            title: "Planning",
+          },
+          {
             assigneeId: "user-1",
             assignee: members[0].user,
             description: "Initial release plan.",
-            dueDate: "2026-06-30",
             id: "task-1",
+            parentTaskId: "summary-1",
             percentComplete: 25,
             plannedEndDate: "2026-06-28",
             plannedStartDate: "2026-06-10",
             priority: "high",
             projectId: "project-1",
             remarks: "Draft is ready.",
+            sequenceNumber: 10,
             status: "todo",
+            taskKind: "standard",
             title: "Prepare release plan",
           },
         ]}
@@ -265,7 +284,10 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/description/i), {
       target: { value: "Create the launch working group." },
     });
-    fireEvent.change(within(dialog).getByLabelText(/assignee/i), {
+    fireEvent.change(within(dialog).getByLabelText(/plan item type/i), {
+      target: { value: "standard" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^assignee$/i), {
       target: { value: "user-2" },
     });
     fireEvent.change(within(dialog).getByLabelText(/priority/i), {
@@ -274,14 +296,23 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/status/i), {
       target: { value: "in_progress" },
     });
-    fireEvent.change(within(dialog).getByLabelText(/due date/i), {
-      target: { value: "2026-07-15" },
-    });
     fireEvent.change(within(dialog).getByLabelText(/planned start/i), {
       target: { value: "2026-07-01" },
     });
     fireEvent.change(within(dialog).getByLabelText(/planned end/i), {
       target: { value: "2026-07-14" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/actual start/i), {
+      target: { value: "2026-07-02" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/estimated hours/i), {
+      target: { value: "24" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/remaining hours/i), {
+      target: { value: "18" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/sequence/i), {
+      target: { value: "20" },
     });
     fireEvent.change(within(dialog).getByLabelText(/percent complete/i), {
       target: { value: "10" },
@@ -293,24 +324,38 @@ describe("Project workspace components", () => {
 
     expect(onCreateTask).toHaveBeenCalledWith({
       assigneeId: "user-2",
+      actualEndDate: null,
+      actualStartDate: "2026-07-02",
       description: "Create the launch working group.",
-      dueDate: "2026-07-15",
+      estimatedHours: 24,
+      parentTaskId: null,
       percentComplete: 10,
       plannedEndDate: "2026-07-14",
       plannedStartDate: "2026-07-01",
       priority: "critical",
+      remainingHours: 18,
       remarks: "Kickoff scheduled.",
+      sequenceNumber: 20,
       status: "in_progress",
+      taskKind: "standard",
       title: "Mobilise team",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const taskRow = screen.getByText("Prepare release plan").closest("tr");
+    expect(taskRow).not.toBeNull();
+    fireEvent.click(within(taskRow as HTMLElement).getByRole("button", { name: /edit/i }));
     dialog = screen.getByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText(/title/i), {
       target: { value: "Prepare updated release plan" },
     });
-    fireEvent.change(within(dialog).getByLabelText(/assignee/i), {
+    fireEvent.change(within(dialog).getByLabelText(/^assignee$/i), {
       target: { value: "user-2" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/estimated hours/i), {
+      target: { value: "40" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/remaining hours/i), {
+      target: { value: "16" },
     });
     fireEvent.change(within(dialog).getByLabelText(/status/i), {
       target: { value: "blocked" },
@@ -328,20 +373,26 @@ describe("Project workspace components", () => {
 
     expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
       assigneeId: "user-2",
+      actualEndDate: null,
+      actualStartDate: null,
       description: "Initial release plan.",
-      dueDate: "2026-06-30",
+      estimatedHours: 40,
+      parentTaskId: "summary-1",
       percentComplete: 60,
       plannedEndDate: "2026-06-28",
       plannedStartDate: "2026-06-10",
       priority: "medium",
+      remainingHours: 16,
       remarks: "Plan is under review.",
+      sequenceNumber: 10,
       status: "blocked",
+      taskKind: "standard",
       title: "Prepare updated release plan",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /reassign/i }));
+    fireEvent.click(within(taskRow as HTMLElement).getByRole("button", { name: /reassign/i }));
     dialog = screen.getByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText(/assignee/i), {
+    fireEvent.change(within(dialog).getByLabelText(/^assignee$/i), {
       target: { value: "user-2" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
@@ -350,7 +401,7 @@ describe("Project workspace components", () => {
       assigneeId: "user-2",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(within(taskRow as HTMLElement).getByRole("button", { name: /delete/i }));
     expect(onDeleteTask).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
     expect(onDeleteTask).toHaveBeenCalledWith("task-1");
@@ -364,8 +415,8 @@ describe("Project workspace components", () => {
         tasks={[
           {
             assigneeId: "user-1",
-            dueDate: "2026-06-30",
             id: "task-1",
+            plannedEndDate: "2026-06-30",
             priority: "high",
             projectId: "project-1",
             status: "todo",
@@ -401,8 +452,310 @@ describe("Project workspace components", () => {
     );
 
     expect(screen.getByText("No members yet.")).toBeInTheDocument();
-    expect(screen.getByText("No tasks yet.")).toBeInTheDocument();
+    expect(screen.getByText("No plan items yet.")).toBeInTheDocument();
     expect(screen.getByText("No risks yet.")).toBeInTheDocument();
+  });
+
+  it("renders derived WBS numbering with expand and collapse controls", () => {
+    render(
+      <ProjectWorkspaceTasks
+        canManageTasks
+        onCreateTask={vi.fn()}
+        tasks={[
+          {
+            id: "summary-1",
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 10,
+            status: "todo",
+            taskKind: "summary",
+            title: "Planning",
+          },
+          {
+            id: "task-1",
+            parentTaskId: "summary-1",
+            priority: "high",
+            projectId: "project-1",
+            sequenceNumber: 20,
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+          {
+            id: "milestone-1",
+            parentTaskId: "summary-1",
+            priority: "high",
+            projectId: "project-1",
+            sequenceNumber: 30,
+            status: "todo",
+            taskKind: "milestone",
+            title: "Approval checkpoint",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("1.1")).toBeInTheDocument();
+    expect(screen.getByText("1.2")).toBeInTheDocument();
+    expect(screen.getByText("phase")).toBeInTheDocument();
+    expect(screen.getByText("milestone")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    expect(screen.queryByText("Prepare release plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("◆ Approval checkpoint")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /expand planning/i }));
+    expect(screen.getByText("Prepare release plan")).toBeInTheDocument();
+    expect(screen.getByText("◆ Approval checkpoint")).toBeInTheDocument();
+  });
+
+  it("creates child tasks from phase rows and supports phase and milestone shortcuts", () => {
+    const onCreateTask = vi.fn();
+
+    render(
+      <ProjectWorkspaceTasks
+        canManageTasks
+        members={[]}
+        onCreateTask={onCreateTask}
+        tasks={[
+          {
+            id: "summary-1",
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 10,
+            status: "todo",
+            taskKind: "summary",
+            title: "Planning",
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /create phase/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /create milestone/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /child task/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText(/parent phase/i)).toHaveValue("summary-1");
+    fireEvent.change(within(dialog).getByLabelText(/title/i), {
+      target: { value: "Define scope" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    expect(onCreateTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: "summary-1",
+        taskKind: "standard",
+        title: "Define scope",
+      }),
+    );
+  });
+
+  it("limits assigned team members to progress-safe edits", () => {
+    const onUpdateTask = vi.fn();
+
+    render(
+      <ProjectWorkspaceTasks
+        currentUserId="user-2"
+        onUpdateTask={onUpdateTask}
+        tasks={[
+          {
+            assigneeId: "user-2",
+            id: "task-1",
+            percentComplete: 25,
+            priority: "high",
+            projectId: "project-1",
+            remarks: "Waiting for review",
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /update progress/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText(/title/i)).toBeDisabled();
+    expect(within(dialog).getByLabelText(/planned start/i)).toBeDisabled();
+    expect(within(dialog).getByLabelText(/estimated hours/i)).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText(/percent complete/i), {
+      target: { value: "60" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/remarks/i), {
+      target: { value: "Ready for review" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/status/i), {
+      target: { value: "in_progress" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      assigneeId: "user-2",
+      percentComplete: 60,
+      remarks: "Ready for review",
+      status: "in_progress",
+    });
+  });
+
+  it("manages task dependencies from the plan workspace", () => {
+    const onCreateDependency = vi.fn();
+    const onUpdateDependency = vi.fn();
+    const onDeleteDependency = vi.fn();
+
+    render(
+      <ProjectWorkspaceTasks
+        canManageDependencies
+        dependencies={[
+          {
+            dependencyType: "FS",
+            id: "dependency-1",
+            lagDays: 2,
+            predecessorTask: {
+              id: "task-1",
+              priority: "high",
+              projectId: "project-1",
+              status: "todo",
+              taskKind: "standard",
+              title: "Prepare release plan",
+            },
+            predecessorTaskId: "task-1",
+            successorTask: {
+              id: "task-2",
+              priority: "medium",
+              projectId: "project-1",
+              status: "todo",
+              taskKind: "milestone",
+              title: "Executive checkpoint",
+            },
+            successorTaskId: "task-2",
+          },
+        ]}
+        onCreateDependency={onCreateDependency}
+        onDeleteDependency={onDeleteDependency}
+        onUpdateDependency={onUpdateDependency}
+        tasks={[
+          {
+            id: "task-1",
+            priority: "high",
+            projectId: "project-1",
+            sequenceNumber: 10,
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+          {
+            id: "task-2",
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 20,
+            status: "todo",
+            taskKind: "milestone",
+            title: "Executive checkpoint",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Dependencies" })).toBeInTheDocument();
+    expect(screen.getByText("2 days")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /add dependency/i }));
+    let dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^predecessor$/i), {
+      target: { value: "task-1" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^successor$/i), {
+      target: { value: "task-2" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/lag days/i), {
+      target: { value: "3" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save dependency/i }));
+
+    expect(onCreateDependency).toHaveBeenCalledWith({
+      dependencyType: "FS",
+      lagDays: 3,
+      predecessorTaskId: "task-1",
+      successorTaskId: "task-2",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/dependency type/i), {
+      target: { value: "SS" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save dependency/i }));
+
+    expect(onUpdateDependency).toHaveBeenCalledWith("dependency-1", {
+      dependencyType: "SS",
+      lagDays: 2,
+      predecessorTaskId: "task-1",
+      successorTaskId: "task-2",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+    expect(onDeleteDependency).toHaveBeenCalledWith("dependency-1");
+  });
+
+  it("renders baseline snapshots with variance against the current plan", () => {
+    render(
+      <ProjectWorkspaceBaselines
+        baselines={[
+          {
+            capturedAt: "2026-06-01T10:00:00.000Z",
+            capturedById: "user-1",
+            id: "baseline-1",
+            isCurrent: true,
+            name: "Approved Delivery Baseline",
+            projectId: "project-1",
+            status: "approved",
+            tasks: [
+              {
+                estimatedHours: 24,
+                id: "baseline-task-1",
+                parentTaskId: null,
+                percentComplete: 10,
+                plannedEndDate: "2026-06-14",
+                plannedStartDate: "2026-06-01",
+                projectBaselineId: "baseline-1",
+                projectId: "project-1",
+                sequenceNumber: 10,
+                taskId: "task-1",
+                taskKind: "standard",
+                taskTitle: "Prepare release plan",
+              },
+            ],
+            versionNumber: 1,
+          },
+        ]}
+        currentTasks={[
+          {
+            estimatedHours: 30,
+            id: "task-1",
+            plannedEndDate: "2026-06-18",
+            plannedStartDate: "2026-06-02",
+            priority: "high",
+            projectId: "project-1",
+            sequenceNumber: 10,
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Baselines" })).toBeInTheDocument();
+    expect(screen.getAllByText("Approved Delivery Baseline")).toHaveLength(2);
+    expect(screen.getByText("+4 days")).toBeInTheDocument();
+    expect(screen.getByText("+6h")).toBeInTheDocument();
   });
 
   it("renders reusable register sections", () => {

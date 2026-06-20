@@ -124,6 +124,48 @@ export type ApiTask = {
   } | null;
 };
 
+export type ApiTaskDependency = {
+  id: string;
+  predecessorTaskId: string;
+  successorTaskId: string;
+  dependencyType: "FS" | "SS" | "FF" | "SF";
+  lagDays: number;
+  predecessorTask?: ApiTask | null;
+  successorTask?: ApiTask | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ApiProjectBaselineTask = {
+  id: string;
+  projectBaselineId: string;
+  projectId: string;
+  taskId?: string | null;
+  parentTaskId?: string | null;
+  taskTitle: string;
+  taskKind: "standard" | "summary" | "milestone";
+  sequenceNumber?: number | null;
+  plannedStartDate?: string | null;
+  plannedEndDate?: string | null;
+  estimatedHours?: number | null;
+  percentComplete?: number | null;
+};
+
+export type ApiProjectBaseline = {
+  id: string;
+  projectId: string;
+  name: string;
+  versionNumber: number;
+  status: string;
+  capturedAt: string;
+  capturedById: string;
+  isCurrent: boolean;
+  capturedBy?: ApiUser | null;
+  tasks?: ApiProjectBaselineTask[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type ApiProjectDetails = ApiProject & {
   members?: ApiProjectMember[];
   tasks?: ApiTask[];
@@ -131,6 +173,7 @@ export type ApiProjectDetails = ApiProject & {
   issues?: ApiRaidItem[];
   assumptions?: ApiRaidItem[];
   dependencies?: ApiRaidItem[];
+  baselines?: ApiProjectBaseline[];
 };
 
 export type ApiRaidItem = {
@@ -675,21 +718,50 @@ export function createProjectTask(
   projectId: string,
   input: {
     title: string;
-    description?: string;
-    assigneeId?: string;
+    parentTaskId?: string | null;
+    taskKind?: ApiTask["taskKind"];
+    description?: string | null;
+    assigneeId?: string | null;
     status?: ApiTask["status"];
     priority?: string;
-    remarks?: string;
+    remarks?: string | null;
     percentComplete?: number;
-    startDate?: string;
-    dueDate?: string;
-    plannedStartDate?: string;
-    plannedEndDate?: string;
-    actualStartDate?: string;
-    actualEndDate?: string;
+    sequenceNumber?: number | null;
+    startDate?: string | null;
+    dueDate?: string | null;
+    plannedStartDate?: string | null;
+    plannedEndDate?: string | null;
+    actualStartDate?: string | null;
+    actualEndDate?: string | null;
+    estimatedHours?: number | null;
+    remainingHours?: number | null;
   },
 ) {
   return apiRequest<ApiTask>(`/projects/${projectId}/tasks`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getProjectBaselines(projectId: string) {
+  return apiRequest<ApiProjectBaseline[]>(`/projects/${projectId}/baselines`);
+}
+
+export function getProjectBaseline(projectId: string, baselineId: string) {
+  return apiRequest<ApiProjectBaseline>(
+    `/projects/${projectId}/baselines/${baselineId}`,
+  );
+}
+
+export function captureProjectBaseline(
+  projectId: string,
+  input: {
+    name: string;
+    status?: string;
+    setAsCurrent?: boolean;
+  },
+) {
+  return apiRequest<ApiProjectBaseline>(`/projects/${projectId}/baselines`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -700,18 +772,23 @@ export function updateProjectTask(
   taskId: string,
   input: {
     title?: string;
-    description?: string;
-    assigneeId?: string;
+    parentTaskId?: string | null;
+    taskKind?: ApiTask["taskKind"];
+    description?: string | null;
+    assigneeId?: string | null;
     status?: ApiTask["status"];
     priority?: string;
-    remarks?: string;
+    remarks?: string | null;
     percentComplete?: number;
-    startDate?: string;
-    dueDate?: string;
-    plannedStartDate?: string;
-    plannedEndDate?: string;
-    actualStartDate?: string;
-    actualEndDate?: string;
+    sequenceNumber?: number | null;
+    startDate?: string | null;
+    dueDate?: string | null;
+    plannedStartDate?: string | null;
+    plannedEndDate?: string | null;
+    actualStartDate?: string | null;
+    actualEndDate?: string | null;
+    estimatedHours?: number | null;
+    remainingHours?: number | null;
   },
 ) {
   return apiRequest<ApiTask>(`/projects/${projectId}/tasks/${taskId}`, {
@@ -724,6 +801,56 @@ export function deleteProjectTask(projectId: string, taskId: string) {
   return apiRequest<void>(`/projects/${projectId}/tasks/${taskId}`, {
     method: "DELETE",
   });
+}
+
+export function getProjectTaskDependencies(projectId: string) {
+  return apiRequest<ApiTaskDependency[]>(`/projects/${projectId}/task-dependencies`);
+}
+
+export function createProjectTaskDependency(
+  projectId: string,
+  input: {
+    predecessorTaskId: string;
+    successorTaskId: string;
+    dependencyType: ApiTaskDependency["dependencyType"];
+    lagDays?: number;
+  },
+) {
+  return apiRequest<ApiTaskDependency>(`/projects/${projectId}/task-dependencies`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProjectTaskDependency(
+  projectId: string,
+  dependencyId: string,
+  input: Partial<{
+    predecessorTaskId: string;
+    successorTaskId: string;
+    dependencyType: ApiTaskDependency["dependencyType"];
+    lagDays: number;
+  }>,
+) {
+  return apiRequest<ApiTaskDependency>(
+    `/projects/${projectId}/task-dependencies/${dependencyId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteProjectTaskDependency(
+  projectId: string,
+  dependencyId: string,
+) {
+  return apiRequest<void>(
+    `/projects/${projectId}/task-dependencies/${dependencyId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function getRaidItems() {

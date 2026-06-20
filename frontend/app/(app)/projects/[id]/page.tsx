@@ -6,6 +6,7 @@ import React from "react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectHealthCard } from "@/components/projects/project-health-card";
+import { ProjectWorkspaceBaselines } from "@/components/projects/project-workspace-baselines";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
 import {
   RaidManagement,
@@ -16,23 +17,32 @@ import { ProjectWorkspaceSummary } from "@/components/projects/project-workspace
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 import {
+  type ApiAuthMe,
   getAuthMe,
   getStoredPermissionKeys,
-  getStoredSessionUser,
   hasPermission,
   storeAuthMe,
 } from "@/features/auth";
 import {
   addProjectMember,
+  captureProjectBaseline,
   createProjectTask,
+  createProjectTaskDependency,
   deleteProjectTask,
+  deleteProjectTaskDependency,
   getAssignableUsers,
+  getProjectBaseline,
+  getProjectBaselines,
   getProject,
+  getProjectTaskDependencies,
   removeProjectMember,
   updateProjectTask,
+  updateProjectTaskDependency,
   updateProjectMember,
+  type ApiProjectBaseline,
   type ApiProjectDetails,
   type ApiProjectMember,
+  type ApiTaskDependency,
 } from "@/features/projects";
 import {
   addRaidComment,
@@ -43,21 +53,27 @@ import {
 import { getRaidPermissions } from "@/features/raid/permissions";
 import type { ApiAssignableUser, ApiRaidItem, ApiTask } from "@/lib/api/client";
 
-type WorkspaceTab = "tasks" | "team" | RaidType;
+type WorkspaceTab = "plan" | "baselines" | "team" | RaidType;
 
 export default function ProjectWorkspacePage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
+  const [sessionProfile, setSessionProfile] = useState<ApiAuthMe | null>(null);
+  const [taskDependencies, setTaskDependencies] = useState<ApiTaskDependency[]>([]);
+  const [projectBaselines, setProjectBaselines] = useState<ApiProjectBaseline[]>([]);
   const [users, setUsers] = useState<ApiAssignableUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
   const [isSavingTask, setIsSavingTask] = useState(false);
+  const [isSavingDependency, setIsSavingDependency] = useState(false);
+  const [isSavingBaseline, setIsSavingBaseline] = useState(false);
   const [isSavingRaid, setIsSavingRaid] = useState(false);
+  const [planStatusFilter, setPlanStatusFilter] = useState<"all" | ApiTask["status"]>("all");
   const [activeWorkspaceTab, setActiveWorkspaceTab] =
-    useState<WorkspaceTab>("tasks");
+    useState<WorkspaceTab>("plan");
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
     getStoredPermissionKeys(),
   );
@@ -67,13 +83,33 @@ export default function ProjectWorkspacePage() {
       setError(null);
       setIsLoading(true);
       try {
-        const [projectDetails, userData, authMe] = await Promise.all([
+        const [
+          projectDetails,
+          userData,
+          authMe,
+          dependencyData,
+          baselineHeaders,
+        ] = await Promise.all([
           getProject(projectId),
           getAssignableUsers(),
           getAuthMe(),
+          getProjectTaskDependencies(projectId),
+          getProjectBaselines(projectId),
         ]);
+        const baselineData = await Promise.all(
+          baselineHeaders.map(async (baseline) =>
+            getProjectBaseline(projectId, baseline.id).catch(() => baseline),
+          ),
+        );
         storeAuthMe(authMe);
         setProject(projectDetails);
+        setSessionProfile(authMe);
+        setTaskDependencies(
+          dependencyData.map((dependency) =>
+            hydrateTaskDependency(dependency, projectDetails.tasks ?? []),
+          ),
+        );
+        setProjectBaselines(baselineData);
         setUsers(userData);
         setPermissionKeys(authMe.permissions.map((permission) => permission.key));
       } catch (requestError) {
@@ -169,15 +205,21 @@ export default function ProjectWorkspacePage() {
   }
 
   async function handleCreateTask(input: {
-    assigneeId?: string;
-    description?: string;
-    dueDate?: string;
+    actualEndDate?: string | null;
+    actualStartDate?: string | null;
+    assigneeId?: string | null;
+    description?: string | null;
+    estimatedHours?: number | null;
+    parentTaskId?: string | null;
     percentComplete?: number;
-    plannedEndDate?: string;
-    plannedStartDate?: string;
+    plannedEndDate?: string | null;
+    plannedStartDate?: string | null;
     priority?: string;
-    remarks?: string;
+    remainingHours?: number | null;
+    remarks?: string | null;
+    sequenceNumber?: number | null;
     status?: ApiTask["status"];
+    taskKind?: ApiTask["taskKind"];
     title: string;
   }) {
     setError(null);
@@ -195,6 +237,14 @@ export default function ProjectWorkspacePage() {
             }
           : currentProject,
       );
+      setTaskDependencies((currentDependencies) =>
+        currentDependencies.map((dependency) =>
+          hydrateTaskDependency(dependency, [
+            ...(project?.tasks ?? []),
+            hydrateTask(task, project ?? ({ id: projectId } as ApiProjectDetails), users),
+          ]),
+        ),
+      );
       showToast(setToast, "success", "Task created.");
     } catch (requestError) {
       showToast(setToast, "error", "Unable to create task.");
@@ -211,15 +261,21 @@ export default function ProjectWorkspacePage() {
   async function handleUpdateTask(
     taskId: string,
     input: {
-      assigneeId?: string;
-      description?: string;
-      dueDate?: string;
+      actualEndDate?: string | null;
+      actualStartDate?: string | null;
+      assigneeId?: string | null;
+      description?: string | null;
+      estimatedHours?: number | null;
+      parentTaskId?: string | null;
       percentComplete?: number;
-      plannedEndDate?: string;
-      plannedStartDate?: string;
+      plannedEndDate?: string | null;
+      plannedStartDate?: string | null;
       priority?: string;
-      remarks?: string;
+      remainingHours?: number | null;
+      remarks?: string | null;
+      sequenceNumber?: number | null;
       status?: ApiTask["status"];
+      taskKind?: ApiTask["taskKind"];
       title?: string;
     },
   ) {
@@ -238,6 +294,13 @@ export default function ProjectWorkspacePage() {
               ),
             }
           : currentProject,
+      );
+      setTaskDependencies((currentDependencies) =>
+        currentDependencies.map((dependency) =>
+          hydrateTaskDependency(dependency, (project?.tasks ?? []).map((currentTask) =>
+            currentTask.id === taskId ? { ...currentTask, ...task } : currentTask,
+          )),
+        ),
       );
       showToast(setToast, "success", "Task updated.");
     } catch (requestError) {
@@ -267,6 +330,13 @@ export default function ProjectWorkspacePage() {
             }
           : currentProject,
       );
+      setTaskDependencies((currentDependencies) =>
+        currentDependencies.filter(
+          (dependency) =>
+            dependency.predecessorTaskId !== taskId &&
+            dependency.successorTaskId !== taskId,
+        ),
+      );
       showToast(setToast, "success", "Task deleted.");
     } catch (requestError) {
       showToast(setToast, "error", "Unable to delete task.");
@@ -277,6 +347,130 @@ export default function ProjectWorkspacePage() {
       );
     } finally {
       setIsSavingTask(false);
+    }
+  }
+
+  async function handleCreateDependency(input: {
+    dependencyType: ApiTaskDependency["dependencyType"];
+    lagDays?: number;
+    predecessorTaskId: string;
+    successorTaskId: string;
+  }) {
+    setError(null);
+    setIsSavingDependency(true);
+    try {
+      const dependency = await createProjectTaskDependency(projectId, input);
+      setTaskDependencies((currentDependencies) => [
+        ...currentDependencies,
+        hydrateTaskDependency(dependency, project?.tasks ?? []),
+      ]);
+      showToast(setToast, "success", "Dependency created.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to create dependency.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create dependency",
+      );
+    } finally {
+      setIsSavingDependency(false);
+    }
+  }
+
+  async function handleUpdateDependency(
+    dependencyId: string,
+    input: {
+      dependencyType: ApiTaskDependency["dependencyType"];
+      lagDays?: number;
+      predecessorTaskId: string;
+      successorTaskId: string;
+    },
+  ) {
+    setError(null);
+    setIsSavingDependency(true);
+    try {
+      const dependency = await updateProjectTaskDependency(projectId, dependencyId, input);
+      setTaskDependencies((currentDependencies) =>
+        currentDependencies.map((currentDependency) =>
+          currentDependency.id === dependencyId
+            ? hydrateTaskDependency(
+                { ...currentDependency, ...dependency },
+                project?.tasks ?? [],
+              )
+            : currentDependency,
+        ),
+      );
+      showToast(setToast, "success", "Dependency updated.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to update dependency.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update dependency",
+      );
+    } finally {
+      setIsSavingDependency(false);
+    }
+  }
+
+  async function handleDeleteDependency(dependencyId: string) {
+    setError(null);
+    setIsSavingDependency(true);
+    try {
+      await deleteProjectTaskDependency(projectId, dependencyId);
+      setTaskDependencies((currentDependencies) =>
+        currentDependencies.filter(
+          (currentDependency) => currentDependency.id !== dependencyId,
+        ),
+      );
+      showToast(setToast, "success", "Dependency deleted.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to delete dependency.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to delete dependency",
+      );
+    } finally {
+      setIsSavingDependency(false);
+    }
+  }
+
+  async function handleCaptureBaseline(input: {
+    name: string;
+    setAsCurrent?: boolean;
+    status?: string;
+  }) {
+    setError(null);
+    setIsSavingBaseline(true);
+    try {
+      const baseline = await captureProjectBaseline(projectId, input);
+      const baselineDetail = await getProjectBaseline(projectId, baseline.id);
+      setProjectBaselines((currentBaselines) => {
+        const nextBaselines = input.setAsCurrent
+          ? currentBaselines.map((currentBaseline) => ({
+              ...currentBaseline,
+              isCurrent: false,
+              status:
+                currentBaseline.isCurrent && currentBaseline.status === "approved"
+                  ? "superseded"
+                  : currentBaseline.status,
+            }))
+          : currentBaselines;
+
+        return [baselineDetail, ...nextBaselines];
+      });
+      setActiveWorkspaceTab("baselines");
+      showToast(setToast, "success", "Baseline captured.");
+    } catch (requestError) {
+      showToast(setToast, "error", "Unable to capture baseline.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to capture baseline",
+      );
+    } finally {
+      setIsSavingBaseline(false);
     }
   }
 
@@ -406,11 +600,12 @@ export default function ProjectWorkspacePage() {
   const issues = project.issues ?? [];
   const assumptions = project.assumptions ?? [];
   const dependencies = project.dependencies ?? [];
-  const sessionUser = getStoredSessionUser();
   const permissions = getProjectWorkspacePermissions({
+    authMe: sessionProfile,
     permissionKeys,
+    project,
   });
-  const raidPermissions = getRaidPermissions(permissionKeys, sessionUser?.userId);
+  const raidPermissions = getRaidPermissions(permissionKeys, sessionProfile?.user.id);
   const health = project.health ?? {
     reasons: ['No critical issues, high risks, or overdue task threshold breaches'],
     status: "GREEN" as const,
@@ -432,15 +627,27 @@ export default function ProjectWorkspacePage() {
         <ProjectHealthCard health={health} />
       </section>
 
-      <ProjectWorkspaceSummary tasks={tasks} />
+      <ProjectWorkspaceSummary
+        onSelectMetric={(status) => {
+          setActiveWorkspaceTab("plan");
+          setPlanStatusFilter(status);
+        }}
+        tasks={tasks}
+      />
 
       <section className="rounded-md border border-slate-200 bg-white p-2 shadow-soft">
         <div className="flex flex-wrap gap-2 border-b border-slate-200 p-2">
           <WorkspaceTabButton
-            active={activeWorkspaceTab === "tasks"}
+            active={activeWorkspaceTab === "plan"}
             count={tasks.length}
-            label="Tasks"
-            onClick={() => setActiveWorkspaceTab("tasks")}
+            label="Plan"
+            onClick={() => setActiveWorkspaceTab("plan")}
+          />
+          <WorkspaceTabButton
+            active={activeWorkspaceTab === "baselines"}
+            count={projectBaselines.length}
+            label="Baselines"
+            onClick={() => setActiveWorkspaceTab("baselines")}
           />
           <WorkspaceTabButton
             active={activeWorkspaceTab === "team"}
@@ -474,20 +681,32 @@ export default function ProjectWorkspacePage() {
           />
         </div>
         <div className="p-3">
-          {activeWorkspaceTab === "tasks" ? (
+          {activeWorkspaceTab === "plan" ? (
             <ProjectWorkspaceTasks
+              canManageDependencies={permissions.canManageDependencies}
               canCreateTasks={permissions.canCreateTasks}
               canDeleteTasks={permissions.canDeleteTasks}
               canEditTasks={permissions.canEditTasks}
+              canManageTasks={permissions.canEditTasks}
               canReassignTasks={permissions.canReassignTasks}
-              currentUserId={sessionUser?.userId}
-              isSaving={isSavingTask}
+              currentUserId={sessionProfile?.user.id ?? null}
+              dependencies={taskDependencies}
+              isSaving={isSavingTask || isSavingDependency}
               members={members}
+              onCreateDependency={
+                permissions.canManageDependencies ? handleCreateDependency : undefined
+              }
               onCreateTask={
                 permissions.canCreateTasks ? handleCreateTask : undefined
               }
+              onDeleteDependency={
+                permissions.canManageDependencies ? handleDeleteDependency : undefined
+              }
               onDeleteTask={
                 permissions.canDeleteTasks ? handleDeleteTask : undefined
+              }
+              onUpdateDependency={
+                permissions.canManageDependencies ? handleUpdateDependency : undefined
               }
               onUpdateTask={
                 permissions.canEditTasks ||
@@ -496,7 +715,19 @@ export default function ProjectWorkspacePage() {
                   ? handleUpdateTask
                   : undefined
               }
+              statusFilter={planStatusFilter}
               tasks={tasks}
+            />
+          ) : null}
+          {activeWorkspaceTab === "baselines" ? (
+            <ProjectWorkspaceBaselines
+              baselines={projectBaselines}
+              canCaptureBaseline={permissions.canCaptureBaseline}
+              currentTasks={tasks}
+              isSaving={isSavingBaseline}
+              onCaptureBaseline={
+                permissions.canCaptureBaseline ? handleCaptureBaseline : undefined
+              }
             />
           ) : null}
           {activeWorkspaceTab === "team" ? (
@@ -624,25 +855,63 @@ function WorkspaceTabButton({
 }
 
 function getProjectWorkspacePermissions({
+  authMe,
   permissionKeys,
+  project,
 }: {
+  authMe: ApiAuthMe | null;
   permissionKeys: string[];
+  project: ApiProjectDetails;
 }) {
-  const canCreateTasks = hasPermission(permissionKeys, "task.create");
-  const canDeleteTasks = hasPermission(permissionKeys, "task.delete");
-  const canEditTasks = hasPermission(permissionKeys, "task.update");
-  const canReassignTasks = hasPermission(permissionKeys, "task.reassign");
+  const roleNames = new Set(
+    authMe?.roles.map((role) => role.name).filter(Boolean) ?? [],
+  );
+  const isPlanningManager =
+    roleNames.has("Program Manager") ||
+    roleNames.has("Project Manager") ||
+    roleNames.has("Delivery Lead") ||
+    authMe?.user.id === project.ownerId ||
+    authMe?.user.id === project.deliveryLeadId;
+  const canCreateTasks =
+    hasPermission(permissionKeys, "task.create") && isPlanningManager;
+  const canDeleteTasks =
+    hasPermission(permissionKeys, "task.delete") && isPlanningManager;
+  const canEditTasks =
+    hasPermission(permissionKeys, "task.update") && isPlanningManager;
+  const canReassignTasks =
+    hasPermission(permissionKeys, "task.reassign") && isPlanningManager;
+  const canManageDependencies =
+    hasPermission(permissionKeys, "task.update") && isPlanningManager;
+  const canCaptureBaseline =
+    hasPermission(permissionKeys, "project.update") && isPlanningManager;
   const canManageTeam = hasPermission(permissionKeys, "project.team.manage");
 
   return {
+    canCaptureBaseline,
     canCreateTasks,
     canDeleteTasks,
     canEditTasks,
+    canManageDependencies,
     canReassignTasks,
     canManageTeam,
     canUpdateAssignedTasks:
       hasPermission(permissionKeys, "task.update") ||
       hasPermission(permissionKeys, "task.comment"),
+  };
+}
+
+function hydrateTaskDependency(
+  dependency: ApiTaskDependency,
+  tasks: ApiTask[],
+): ApiTaskDependency {
+  return {
+    ...dependency,
+    predecessorTask:
+      tasks.find((task) => task.id === dependency.predecessorTaskId) ??
+      dependency.predecessorTask,
+    successorTask:
+      tasks.find((task) => task.id === dependency.successorTaskId) ??
+      dependency.successorTask,
   };
 }
 

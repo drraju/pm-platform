@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectsPage from "@/app/(app)/projects/page";
 
 const projectMocks = vi.hoisted(() => ({
@@ -53,16 +53,39 @@ vi.mock("@/features/auth", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => window.location.pathname,
   useRouter: () => ({
     push: vi.fn(),
+    replace: (href: string) => {
+      window.history.replaceState({}, "", href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
   }),
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 vi.mock("@/features/projects", () => ({
+  captureProjectBaseline: vi.fn(),
   createProject: vi.fn(),
+  createProjectTaskDependency: vi.fn(),
+  deleteProjectTaskDependency: vi.fn(),
   getAssignableUsers: vi.fn(async () => []),
+  getProjectBaseline: vi.fn(async () => ({
+    capturedAt: "2026-06-01T10:00:00.000Z",
+    capturedById: "user-1",
+    id: "baseline-1",
+    isCurrent: true,
+    name: "Approved Delivery Baseline",
+    projectId: "project-1",
+    status: "approved",
+    tasks: [],
+    versionNumber: 1,
+  })),
+  getProjectBaselines: vi.fn(async () => []),
   getProject: projectMocks.getProject,
+  getProjectTaskDependencies: vi.fn(async () => []),
   getProjects: projectMocks.getProjects,
+  updateProjectTaskDependency: vi.fn(),
 }));
 
 vi.mock("@/features/users", () => ({
@@ -70,19 +93,84 @@ vi.mock("@/features/users", () => ({
 }));
 
 describe("Projects page health sorting", () => {
-  it("sorts projects by health", async () => {
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/projects");
+  });
+
+  it("preserves health drilldown filters from the URL", async () => {
+    window.history.replaceState({}, "", "/projects?health=RED&sort=health_desc");
+
     render(<ProjectsPage />);
+
+    await screen.findByText("Red Recovery");
+
+    expect(screen.getByDisplayValue("Red")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Health: Red first")).toBeInTheDocument();
+    expect(screen.queryByText("Green Delivery")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(window.location.search).toBe("?health=RED&sort=health_desc");
+  });
+
+  it("preserves incoming project filters during client-side navigation", async () => {
+    window.history.replaceState({}, "", "/executive");
+    window.history.pushState({}, "", "/projects?health=RED&sort=health_desc");
+
+    render(<ProjectsPage />);
+
+    await screen.findByText("Red Recovery");
+
+    expect(screen.getByDisplayValue("Red")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Health: Red first")).toBeInTheDocument();
+    expect(screen.queryByText("Green Delivery")).not.toBeInTheDocument();
+    expect(window.location.pathname + window.location.search).toBe(
+      "/projects?health=RED&sort=health_desc",
+    );
+  });
+
+  it("sorts projects by health", async () => {
+    const { rerender } = render(<ProjectsPage />);
 
     await screen.findByText("Green Delivery");
 
     fireEvent.change(screen.getByLabelText(/sort projects/i), {
       target: { value: "health_desc" },
     });
+    rerender(<ProjectsPage />);
 
     await waitFor(() => {
       const rows = screen.getAllByRole("link");
       expect(rows[0]).toHaveAccessibleName("Open Red Recovery");
       expect(rows[1]).toHaveAccessibleName("Open Green Delivery");
     });
+  });
+
+  it("restores filters after browser back and forward navigation", async () => {
+    const { rerender } = render(<ProjectsPage />);
+
+    await screen.findByText("Green Delivery");
+
+    act(() => {
+      window.history.pushState({}, "", "/projects?health=RED&sort=health_desc");
+      rerender(<ProjectsPage />);
+    });
+
+    expect(screen.queryByText("Green Delivery")).not.toBeInTheDocument();
+    expect(screen.getByText("Red Recovery")).toBeInTheDocument();
+
+    act(() => {
+      window.history.replaceState({}, "", "/projects");
+      rerender(<ProjectsPage />);
+    });
+
+    expect(screen.getByText("Green Delivery")).toBeInTheDocument();
+    expect(screen.getByText("Red Recovery")).toBeInTheDocument();
+
+    act(() => {
+      window.history.replaceState({}, "", "/projects?health=RED&sort=health_desc");
+      rerender(<ProjectsPage />);
+    });
+
+    expect(screen.queryByText("Green Delivery")).not.toBeInTheDocument();
+    expect(screen.getByText("Red Recovery")).toBeInTheDocument();
   });
 });

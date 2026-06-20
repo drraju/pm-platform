@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   clearSession,
+  type ApiAuthMe,
   getAuthMe,
   getStoredPermissionKeys,
   hasAnyPermission,
@@ -28,6 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [sessionProfile, setSessionProfile] = useState<ApiAuthMe | null>(null);
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
     getStoredPermissionKeys(),
   );
@@ -42,6 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           return;
         }
         storeAuthMe(authMe);
+        setSessionProfile(authMe);
         setPermissionKeys(authMe.permissions.map((permission) => permission.key));
       } catch {
         if (isMounted) {
@@ -116,12 +119,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-medium text-slate-900">
-                  User Profile
+                  {getDisplayName(sessionProfile)}
                 </p>
-                <p className="text-xs text-slate-500">Signed in workspace</p>
+                <p className="text-xs text-slate-500">{getRoleName(sessionProfile)}</p>
               </div>
               <div className="grid size-10 place-items-center rounded-full bg-brand text-sm font-semibold text-white">
-                UP
+                {getInitials(sessionProfile)}
               </div>
               <button
                 className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -138,6 +141,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   );
+}
+
+function getDisplayName(sessionProfile: ApiAuthMe | null) {
+  const firstName = sessionProfile?.user.firstName?.trim() ?? "";
+  const lastName = sessionProfile?.user.lastName?.trim() ?? "";
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+
+  return fullName || sessionProfile?.user.email || "Signed in user";
+}
+
+function getRoleName(sessionProfile: ApiAuthMe | null) {
+  return (
+    sessionProfile?.user.role?.name ??
+    sessionProfile?.roles[0]?.name ??
+    "Signed in workspace"
+  );
+}
+
+function getInitials(sessionProfile: ApiAuthMe | null) {
+  const firstName = sessionProfile?.user.firstName?.trim() ?? "";
+  const lastName = sessionProfile?.user.lastName?.trim() ?? "";
+  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+
+  return initials || sessionProfile?.user.email?.slice(0, 2).toUpperCase() || "PM";
 }
 
 function DesktopSidebar({

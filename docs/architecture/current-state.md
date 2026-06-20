@@ -18,7 +18,7 @@ Docker Compose includes Postgres, Redis, MinIO, backend, and frontend, so deploy
 - Google Drive integration is only a module shell.
 - Project-scoped authorization is absent. JWT auth protects many routes, but services return all projects/tasks/RAID globally, not scoped to requester or project membership.
 - Project membership management exists as an entity/table but has no controller/service operations.
-- Timeline/Gantt is not implemented. `v1.0.6` Phase 1, Phase 2, and Phase 3 now add task hierarchy, milestone semantics, sequencing, task dependency APIs, and baseline capture, but frontend timeline/Gantt views remain incomplete.
+- Timeline/Gantt is not implemented. `v1.0.6` Phase 1, Phase 2, and Phase 3 now add task hierarchy, milestone semantics, sequencing, task dependency APIs, and baseline capture. Phase 4 adds the Project Workspace Plan grid UI, Phase 4.1 adds dependency management, a baseline viewer, and plan drilldowns, and Phase 4.2 aligns enterprise planning terminology and drilldown behavior. Frontend timeline/Gantt views still remain incomplete.
 - Kanban is read/create only. There is no drag/drop, reorder, WIP limits, board columns per project, or task status mutation from UI.
 - RAID update/delete is incomplete for the generic RAID register. `RaidController` only has `GET` and `POST`.
 - Refresh-token flow is incomplete. Auth issues refresh tokens, but there is no refresh endpoint, persistence, revocation, session table, or rotation.
@@ -70,6 +70,7 @@ Core concepts:
   - parent-child relationship between tasks in the same project
 - `Summary Task`
   - derived roll-up task whose dates/progress come from children
+  - presented in the UI as a `Phase`, while the underlying `task_kind = summary` model remains unchanged
 - `Milestone`
   - zero-duration planning checkpoint
   - best modeled as a task flag/type, not a separate entity in v1.0.6

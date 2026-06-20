@@ -262,6 +262,36 @@ export class ProjectsController {
     );
   }
 
+  @Get(':projectId/baselines')
+  @ApiOperation({ summary: 'List project baselines' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiOkResponse({ type: ProjectBaseline, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  findProjectBaselines(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<ProjectBaseline[]> {
+    return this.projectsService.findProjectBaselines(projectId, request.user);
+  }
+
+  @Get(':projectId/baselines/:baselineId')
+  @ApiOperation({ summary: 'Get a project baseline with snapshot rows' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'baselineId', format: 'uuid' })
+  @ApiOkResponse({ type: ProjectBaseline })
+  @ApiNotFoundResponse({ description: 'Project or baseline not found' })
+  findProjectBaseline(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('baselineId') baselineId: string,
+  ): Promise<ProjectBaseline> {
+    return this.projectsService.findProjectBaseline(
+      projectId,
+      baselineId,
+      request.user,
+    );
+  }
+
   @Get(':projectId/task-dependencies')
   @ApiOperation({ summary: 'List project task dependencies' })
   @ApiParam({ name: 'projectId', format: 'uuid' })

@@ -1,8 +1,16 @@
 "use client";
 
+import React from "react";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAuthMe, login, register, storeAuthMe, storeSession } from "@/features/auth";
+import {
+  getAuthMe,
+  getDefaultDashboardPath,
+  login,
+  register,
+  storeAuthMe,
+  storeSession,
+} from "@/features/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,8 +39,9 @@ export default function LoginPage() {
             });
 
       storeSession(session.accessToken, session.refreshToken);
-      storeAuthMe(await getAuthMe());
-      router.push("/dashboard");
+      const authMe = await getAuthMe();
+      storeAuthMe(authMe);
+      router.push(getDefaultDashboardPath(authMe));
     } catch (requestError) {
       setError(
         requestError instanceof Error

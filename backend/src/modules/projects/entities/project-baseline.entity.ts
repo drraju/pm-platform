@@ -1,7 +1,8 @@
-import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { AuditableEntity } from '../../../common/entities/auditable.entity';
 import { User } from '../../users/entities/user.entity';
 import { Project } from './project.entity';
+import { ProjectBaselineTask } from './project-baseline-task.entity';
 
 @Entity({ name: 'project_baselines' })
 export class ProjectBaseline extends AuditableEntity {
@@ -33,4 +34,7 @@ export class ProjectBaseline extends AuditableEntity {
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'captured_by_id' })
   capturedBy?: User;
+
+  @OneToMany(() => ProjectBaselineTask, (baselineTask) => baselineTask.projectBaseline)
+  tasks?: ProjectBaselineTask[];
 }

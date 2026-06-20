@@ -89,9 +89,15 @@ const projectMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => window.location.pathname,
   useRouter: () => ({
     push: vi.fn(),
+    replace: (href: string) => {
+      window.history.replaceState({}, "", href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
   }),
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 vi.mock("@/features/auth", () => ({
@@ -120,12 +126,29 @@ vi.mock("@/features/auth", () => ({
 }));
 
 vi.mock("@/features/projects", () => ({
+  captureProjectBaseline: vi.fn(),
   createProject: projectMocks.createProject,
+  createProjectTaskDependency: vi.fn(),
+  deleteProjectTaskDependency: vi.fn(),
   deleteProject: projectMocks.deleteProject,
   getAssignableUsers: projectMocks.getAssignableUsers,
+  getProjectBaseline: vi.fn(async () => ({
+    capturedAt: "2026-06-01T10:00:00.000Z",
+    capturedById: "user-1",
+    id: "baseline-1",
+    isCurrent: true,
+    name: "Approved Delivery Baseline",
+    projectId: "project-1",
+    status: "approved",
+    tasks: [],
+    versionNumber: 1,
+  })),
+  getProjectBaselines: vi.fn(async () => []),
   getProject: projectMocks.getProject,
+  getProjectTaskDependencies: vi.fn(async () => []),
   getProjects: projectMocks.getProjects,
   updateProject: projectMocks.updateProject,
+  updateProjectTaskDependency: vi.fn(),
 }));
 
 describe("ProjectsPage CRUD", () => {

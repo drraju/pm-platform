@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";
 import { SummaryCard } from "@/components/dashboard/summary-card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -9,6 +10,11 @@ import {
   ProjectHealthBadge,
   ProjectHealthReasons,
 } from "@/components/projects/project-health-badge";
+import {
+  getAuthMe,
+  getDefaultDashboardPath,
+  storeAuthMe,
+} from "@/features/auth";
 import {
   getMyDashboard,
   type ApiDashboardIssue,
@@ -19,6 +25,7 @@ import {
 } from "@/features/dashboard";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [dashboard, setDashboard] = useState<ApiMeDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,6 +35,15 @@ export default function DashboardPage() {
       setError(null);
       setIsLoading(true);
       try {
+        const authMe = await getAuthMe();
+        storeAuthMe(authMe);
+
+        const defaultDashboardPath = getDefaultDashboardPath(authMe);
+        if (defaultDashboardPath !== "/dashboard") {
+          router.replace(defaultDashboardPath);
+          return;
+        }
+
         setDashboard(await getMyDashboard());
       } catch (requestError) {
         setError(
@@ -41,7 +57,7 @@ export default function DashboardPage() {
     }
 
     void loadDashboard();
-  }, []);
+  }, [router]);
 
   return (
     <div className="space-y-6">
@@ -63,20 +79,24 @@ export default function DashboardPage() {
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <SummaryCard
+              href="/tasks"
               label="Total Tasks"
               value={dashboard.taskSummary.total}
             />
             <SummaryCard
+              href="/tasks?status=in_progress"
               label="In progress"
               tone="warning"
               value={dashboard.taskSummary.inProgress}
             />
             <SummaryCard
+              href="/tasks?status=blocked"
               label="Blocked"
               tone="danger"
               value={dashboard.taskSummary.blocked}
             />
             <SummaryCard
+              href="/tasks?timing=overdue"
               label="Overdue"
               tone="danger"
               value={dashboard.taskSummary.overdue}
@@ -176,7 +196,7 @@ function ProjectItem({ project }: { project: ApiDashboardProject }) {
 
 function TaskItem({ task }: { task: ApiDashboardTask }) {
   return (
-    <article className="text-sm">
+    <Link className="block text-sm" href="/tasks?timing=upcoming">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{task.title}</h3>
@@ -188,13 +208,13 @@ function TaskItem({ task }: { task: ApiDashboardTask }) {
           {formatDate(task.dueDate)}
         </span>
       </div>
-    </article>
+    </Link>
   );
 }
 
 function RiskItem({ risk }: { risk: ApiDashboardRisk }) {
   return (
-    <article className="text-sm">
+    <Link className="block text-sm" href={`/risks?severity=${risk.severity}`}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{risk.title}</h3>
@@ -206,13 +226,13 @@ function RiskItem({ risk }: { risk: ApiDashboardRisk }) {
           {formatLabel(risk.severity)}
         </span>
       </div>
-    </article>
+    </Link>
   );
 }
 
 function IssueItem({ issue }: { issue: ApiDashboardIssue }) {
   return (
-    <article className="text-sm">
+    <Link className="block text-sm" href={`/issues?priority=${issue.priority}`}>
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{issue.title}</h3>
@@ -224,7 +244,7 @@ function IssueItem({ issue }: { issue: ApiDashboardIssue }) {
           {formatLabel(issue.priority)}
         </span>
       </div>
-    </article>
+    </Link>
   );
 }
 

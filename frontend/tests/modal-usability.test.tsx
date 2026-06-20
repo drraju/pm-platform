@@ -7,7 +7,15 @@ import { AppModal } from "@/components/ui/app-modal";
 import ProjectsPage from "@/app/(app)/projects/page";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => window.location.pathname,
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: (href: string) => {
+      window.history.replaceState({}, "", href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+  }),
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 vi.mock("@/features/auth", () => ({
@@ -35,7 +43,10 @@ vi.mock("@/features/auth", () => ({
 }));
 
 vi.mock("@/features/projects", () => ({
+  captureProjectBaseline: vi.fn(),
   createProject: vi.fn(),
+  createProjectTaskDependency: vi.fn(),
+  deleteProjectTaskDependency: vi.fn(),
   deleteProject: vi.fn(),
   getAssignableUsers: vi.fn(async () => [
     {
@@ -46,6 +57,18 @@ vi.mock("@/features/projects", () => ({
       role: "Project Manager",
     },
   ]),
+  getProjectBaseline: vi.fn(async () => ({
+    capturedAt: "2026-06-01T10:00:00.000Z",
+    capturedById: "user-1",
+    id: "baseline-1",
+    isCurrent: true,
+    name: "Approved Delivery Baseline",
+    projectId: "project-1",
+    status: "approved",
+    tasks: [],
+    versionNumber: 1,
+  })),
+  getProjectBaselines: vi.fn(async () => []),
   getProject: vi.fn(async () => ({
     createdAt: "2026-06-01T10:00:00.000Z",
     id: "project-1",
@@ -53,6 +76,7 @@ vi.mock("@/features/projects", () => ({
     ownerId: "user-1",
     status: "active",
   })),
+  getProjectTaskDependencies: vi.fn(async () => []),
   getProjects: vi.fn(async () => [
     {
       createdAt: "2026-06-01T10:00:00.000Z",
@@ -62,6 +86,7 @@ vi.mock("@/features/projects", () => ({
       status: "active",
     },
   ]),
+  updateProjectTaskDependency: vi.fn(),
   updateProject: vi.fn(),
 }));
 

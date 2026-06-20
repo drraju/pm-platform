@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { TaskTable } from "@/components/tasks/task-table";
 import {
@@ -15,7 +16,7 @@ import {
   hasPermission,
   storeAuthMe,
 } from "@/features/auth";
-import { getMyTasks, updateTask, type ApiTask } from "@/features/tasks";
+import { getMyTasks, getTasks, updateTask, type ApiTask } from "@/features/tasks";
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
   { label: "Backlog", value: "backlog" },
@@ -26,6 +27,9 @@ const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
 ];
 
 export default function TasksPage() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [membersByProjectId, setMembersByProjectId] = useState<
@@ -38,18 +42,45 @@ export default function TasksPage() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingTaskId, setIsSavingTaskId] = useState<string | null>(null);
-  const [projectFilter, setProjectFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | ApiTask["status"]>(
-    "all",
-  );
-  const [dueDateSort, setDueDateSort] = useState<"asc" | "desc">("asc");
+  const scopeFilter: "mine" | "all" =
+    searchParams.get("scope") === "all" ? "all" : "mine";
+  const projectFilter = searchParams.get("projectId") ?? "all";
+  const requestedStatus = searchParams.get("status");
+  const statusFilter: "all" | ApiTask["status"] =
+    isTaskStatus(requestedStatus) ? requestedStatus : "all";
+  const dueDateSort: "asc" | "desc" = searchParams.get("sort") === "desc" ? "desc" : "asc";
+  const requestedTiming = searchParams.get("timing");
+  const timingFilter: "all" | "overdue" | "upcoming" =
+    requestedTiming === "overdue" || requestedTiming === "upcoming"
+      ? requestedTiming
+      : "all";
+
+  function syncTaskFilters(nextFilters: {
+    projectId?: string;
+    scope?: "mine" | "all";
+    sort?: "asc" | "desc";
+    status?: "all" | ApiTask["status"];
+    timing?: "all" | "overdue" | "upcoming";
+  }) {
+    const nextUrl = buildTaskFiltersUrl(pathname, {
+      projectId: nextFilters.projectId ?? projectFilter,
+      scope: nextFilters.scope ?? scopeFilter,
+      sort: nextFilters.sort ?? dueDateSort,
+      status: nextFilters.status ?? statusFilter,
+      timing: nextFilters.timing ?? timingFilter,
+    });
+
+    if (`${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}` !== nextUrl) {
+      router.replace(nextUrl);
+    }
+  }
 
   async function loadData() {
     setError(null);
     setIsLoading(true);
     try {
       const [taskData, projectData, authMe] = await Promise.all([
-        getMyTasks(),
+        scopeFilter === "all" ? getTasks() : getMyTasks(),
         getProjects(),
         getAuthMe(),
       ]);
@@ -80,7 +111,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [scopeFilter]);
 
   async function handleUpdateTask(
     taskId: string,
@@ -127,6 +158,28 @@ export default function TasksPage() {
       .filter((task) =>
         projectFilter === "all" ? true : task.projectId === projectFilter,
       )
+      .filter((task) => {
+        if (timingFilter === "all") {
+          return true;
+        }
+
+        if (!task.dueDate || task.status === "done") {
+          return false;
+        }
+
+        const today = formatDateOnly(new Date());
+        const dueDate = task.dueDate.slice(0, 10);
+
+        if (timingFilter === "overdue") {
+          return dueDate < today;
+        }
+
+        const sevenDaysFromNow = new Date();
+        sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+        const latestUpcomingDate = formatDateOnly(sevenDaysFromNow);
+
+        return dueDate >= today && dueDate <= latestUpcomingDate;
+      })
       .toSorted((left, right) => {
         const leftTime = left.dueDate
           ? new Date(left.dueDate).getTime()
@@ -139,18 +192,23 @@ export default function TasksPage() {
           ? leftTime - rightTime
           : rightTime - leftTime;
       });
-  }, [dueDateSort, projectFilter, statusFilter, tasks]);
+  }, [dueDateSort, projectFilter, statusFilter, tasks, timingFilter]);
   const canUpdateMyTasks =
     hasPermission(permissionKeys, "task.update") ||
     hasPermission(permissionKeys, "task.comment") ||
     hasPermission(permissionKeys, "task.reassign");
+  const isAllTasksScope = scopeFilter === "all";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        description="A personal view of assigned work across projects, due dates, and delivery priority."
+        description={
+          isAllTasksScope
+            ? "A filtered view of visible project work across projects, due dates, and delivery priority."
+            : "A personal view of assigned work across projects, due dates, and delivery priority."
+        }
         eyebrow="My work"
-        title="My Tasks"
+        title={isAllTasksScope ? "Tasks" : "My Tasks"}
       />
 
       {error ? (
@@ -160,7 +218,25 @@ export default function TasksPage() {
       ) : null}
       {toast ? <ToastMessage toast={toast} /> : null}
 
-      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-3">
+      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-5">
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">
+            Task scope
+          </span>
+          <select
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            onChange={(event) =>
+              syncTaskFilters({
+                scope: event.target.value === "all" ? "all" : "mine",
+              })
+            }
+            value={scopeFilter}
+          >
+            <option value="mine">Assigned to me</option>
+            <option value="all">All visible tasks</option>
+          </select>
+        </label>
+
         <label className="block">
           <span className="text-sm font-medium text-slate-700">
             Filter by status
@@ -168,7 +244,9 @@ export default function TasksPage() {
           <select
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
             onChange={(event) =>
-              setStatusFilter(event.target.value as "all" | ApiTask["status"])
+              syncTaskFilters({
+                status: event.target.value as "all" | ApiTask["status"],
+              })
             }
             value={statusFilter}
           >
@@ -187,7 +265,7 @@ export default function TasksPage() {
           </span>
           <select
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) => setProjectFilter(event.target.value)}
+            onChange={(event) => syncTaskFilters({ projectId: event.target.value })}
             value={projectFilter}
           >
             <option value="all">All projects</option>
@@ -206,12 +284,31 @@ export default function TasksPage() {
           <select
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
             onChange={(event) =>
-              setDueDateSort(event.target.value as "asc" | "desc")
+              syncTaskFilters({ sort: event.target.value as "asc" | "desc" })
             }
             value={dueDateSort}
           >
             <option value="asc">Soonest first</option>
             <option value="desc">Latest first</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">
+            Filter by timing
+          </span>
+          <select
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            onChange={(event) =>
+              syncTaskFilters({
+                timing: event.target.value as "all" | "overdue" | "upcoming",
+              })
+            }
+            value={timingFilter}
+          >
+            <option value="all">All tasks</option>
+            <option value="upcoming">Upcoming in 7 days</option>
+            <option value="overdue">Overdue</option>
           </select>
         </label>
       </section>
@@ -230,6 +327,53 @@ export default function TasksPage() {
       />
     </div>
   );
+}
+
+function isTaskStatus(value: string | null): value is ApiTask["status"] {
+  return (
+    value === "backlog" ||
+    value === "todo" ||
+    value === "in_progress" ||
+    value === "blocked" ||
+    value === "done"
+  );
+}
+
+function buildTaskFiltersUrl(pathname: string, filters: {
+  projectId: string;
+  scope: "mine" | "all";
+  sort: "asc" | "desc";
+  status: "all" | ApiTask["status"];
+  timing: "all" | "overdue" | "upcoming";
+}) {
+  const searchParams = new URLSearchParams();
+
+  if (filters.scope !== "mine") {
+    searchParams.set("scope", filters.scope);
+  }
+
+  if (filters.projectId !== "all") {
+    searchParams.set("projectId", filters.projectId);
+  }
+
+  if (filters.status !== "all") {
+    searchParams.set("status", filters.status);
+  }
+
+  if (filters.sort !== "asc") {
+    searchParams.set("sort", filters.sort);
+  }
+
+  if (filters.timing !== "all") {
+    searchParams.set("timing", filters.timing);
+  }
+
+  const nextSearch = searchParams.toString();
+  return nextSearch ? `${pathname}?${nextSearch}` : pathname;
+}
+
+function formatDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
 type ToastState = {

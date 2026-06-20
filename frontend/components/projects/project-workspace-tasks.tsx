@@ -5,36 +5,113 @@ import {
   ModalFormGrid,
   ModalFormSection,
 } from "@/components/ui/modal-form";
-import type { ApiProjectMember, ApiTask } from "@/features/projects";
+import { ProjectTaskDependencyPanel } from "@/components/projects/project-task-dependency-panel";
+import type {
+  ApiProjectMember,
+  ApiTask,
+  ApiTaskDependency,
+} from "@/features/projects";
 
 type TaskOperationInput = {
-  actualEndDate?: string;
-  actualStartDate?: string;
-  assigneeId?: string;
-  description?: string;
-  dueDate?: string;
+  actualEndDate?: string | null;
+  actualStartDate?: string | null;
+  assigneeId?: string | null;
+  description?: string | null;
+  estimatedHours?: number | null;
+  parentTaskId?: string | null;
   percentComplete?: number;
-  plannedEndDate?: string;
-  plannedStartDate?: string;
+  plannedEndDate?: string | null;
+  plannedStartDate?: string | null;
   priority?: string;
-  remarks?: string;
+  remainingHours?: number | null;
+  remarks?: string | null;
+  sequenceNumber?: number | null;
   status?: ApiTask["status"];
+  taskKind?: ApiTask["taskKind"];
   title?: string;
 };
 
 type ProjectWorkspaceTasksProps = {
+  canManageDependencies?: boolean;
   canCreateTasks?: boolean;
   canDeleteTasks?: boolean;
   canEditTasks?: boolean;
   canManageTasks?: boolean;
   canReassignTasks?: boolean;
   currentUserId?: string | null;
+  dependencies?: ApiTaskDependency[];
   isSaving?: boolean;
   members?: ApiProjectMember[];
-  onCreateTask?: (input: Required<Pick<TaskOperationInput, "title">> & TaskOperationInput) => void;
+  onCreateDependency?: (input: {
+    dependencyType: ApiTaskDependency["dependencyType"];
+    lagDays?: number;
+    predecessorTaskId: string;
+    successorTaskId: string;
+  }) => void;
+  onCreateTask?: (
+    input: Required<Pick<TaskOperationInput, "title">> & TaskOperationInput,
+  ) => void;
+  onDeleteDependency?: (dependencyId: string) => void;
   onDeleteTask?: (taskId: string) => void;
+  onUpdateDependency?: (
+    dependencyId: string,
+    input: {
+      dependencyType: ApiTaskDependency["dependencyType"];
+      lagDays?: number;
+      predecessorTaskId: string;
+      successorTaskId: string;
+    },
+  ) => void;
   onUpdateTask?: (taskId: string, input: TaskOperationInput) => void;
+  statusFilter?: "all" | ApiTask["status"];
   tasks: ApiTask[];
+};
+
+type CreatePreset =
+  | { kind: "standard"; parentTaskId?: string | null }
+  | { kind: "summary"; parentTaskId?: string | null }
+  | { kind: "milestone"; parentTaskId?: string | null };
+
+type DialogMode = "create" | "edit" | "reassign";
+
+type PlanRow = {
+  childCount: number;
+  depth: number;
+  hasChildren: boolean;
+  task: ApiTask;
+  wbs: string;
+};
+
+type ParentOption = {
+  id: string;
+  label: string;
+};
+
+type TaskFormState = {
+  actualEndDate: string;
+  actualStartDate: string;
+  assigneeId: string;
+  description: string;
+  estimatedHours: string;
+  parentTaskId: string;
+  percentComplete: string;
+  plannedEndDate: string;
+  plannedStartDate: string;
+  priority: string;
+  remainingHours: string;
+  remarks: string;
+  sequenceNumber: string;
+  status: ApiTask["status"];
+  taskKind: NonNullable<ApiTask["taskKind"]>;
+  title: string;
+};
+
+type TaskFieldAccess = {
+  assignee: boolean;
+  core: boolean;
+  progress: boolean;
+  planning: boolean;
+  structure: boolean;
 };
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
@@ -46,39 +123,107 @@ const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
 ];
 
 const priorities = ["low", "medium", "high", "critical"];
+const taskKinds: Array<{
+  description: string;
+  label: string;
+  value: NonNullable<ApiTask["taskKind"]>;
+}> = [
+  {
+    description: "Work item that can have one assignee.",
+    label: "Task",
+    value: "standard",
+  },
+  {
+    description: "Phase container for child tasks and checkpoints.",
+    label: "Phase",
+    value: "summary",
+  },
+  {
+    description: "Checkpoint represented as a zero-duration milestone.",
+    label: "Milestone",
+    value: "milestone",
+  },
+];
 
 export function ProjectWorkspaceTasks({
+  canManageDependencies = false,
   canCreateTasks = false,
   canDeleteTasks = false,
   canEditTasks = false,
   canManageTasks = false,
   canReassignTasks = false,
   currentUserId = null,
+  dependencies = [],
   isSaving = false,
   members = [],
+  onCreateDependency,
   onCreateTask,
+  onDeleteDependency,
   onDeleteTask,
+  onUpdateDependency,
   onUpdateTask,
+  statusFilter = "all",
   tasks,
 }: ProjectWorkspaceTasksProps) {
-  const [dialogMode, setDialogMode] = React.useState<"create" | "edit" | "reassign" | null>(null);
+  const [dialogMode, setDialogMode] = React.useState<DialogMode | null>(null);
   const [taskPendingDelete, setTaskPendingDelete] = React.useState<ApiTask | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<ApiTask | null>(null);
   const [form, setForm] = React.useState<TaskFormState>(() => createEmptyTaskForm());
-  const canCreateTask = (canManageTasks || canCreateTasks) && Boolean(onCreateTask);
-  const canEditTask = canManageTasks || canEditTasks;
-  const canDeleteTask = canManageTasks || canDeleteTasks;
-  const canReassignTask = canManageTasks || canReassignTasks;
-  const canEditTaskFields = dialogMode === "create" ? canCreateTask : canEditTask;
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [expandedTaskIds, setExpandedTaskIds] = React.useState<string[]>([]);
+  const knownSummaryTaskIdsRef = React.useRef<Set<string>>(new Set());
 
-  function openCreateDialog() {
+  const canCreateTask = (canManageTasks || canCreateTasks) && Boolean(onCreateTask);
+  const hasFullEditAccess = canManageTasks || canEditTasks;
+  const hasDeleteAccess = canManageTasks || canDeleteTasks;
+  const hasReassignAccess = canManageTasks || canReassignTasks;
+  const visibleTasks =
+    statusFilter === "all"
+      ? tasks
+      : tasks.filter((task) => task.status === statusFilter);
+  const hierarchy = buildTaskHierarchy(visibleTasks, expandedTaskIds);
+
+  React.useEffect(() => {
+    setExpandedTaskIds((currentExpandedTaskIds) => {
+      const knownSummaryTaskIds = knownSummaryTaskIdsRef.current;
+      const nextExpandedTaskIds = new Set(currentExpandedTaskIds);
+      let didChange = false;
+
+      for (const task of visibleTasks) {
+        if (
+          task.taskKind === "summary" &&
+          hierarchy.summaryTaskIds.includes(task.id) &&
+          !knownSummaryTaskIds.has(task.id)
+        ) {
+          nextExpandedTaskIds.add(task.id);
+          knownSummaryTaskIds.add(task.id);
+          didChange = true;
+        }
+      }
+
+      if (!didChange) {
+        return currentExpandedTaskIds;
+      }
+
+      return Array.from(nextExpandedTaskIds);
+    });
+  }, [hierarchy.summaryTaskIds, visibleTasks]);
+
+  function openCreateDialog(preset: CreatePreset) {
     setSelectedTask(null);
-    setForm(createEmptyTaskForm());
+    setFormError(null);
+    setForm(
+      createEmptyTaskForm({
+        parentTaskId: preset.parentTaskId ?? "",
+        taskKind: preset.kind,
+      }),
+    );
     setDialogMode("create");
   }
 
-  function openTaskDialog(task: ApiTask, mode: "edit" | "reassign") {
+  function openTaskDialog(task: ApiTask, mode: DialogMode) {
     setSelectedTask(task);
+    setFormError(null);
     setForm(createTaskForm(task));
     setDialogMode(mode);
   }
@@ -87,10 +232,32 @@ export function ProjectWorkspaceTasks({
     setDialogMode(null);
     setSelectedTask(null);
     setForm(createEmptyTaskForm());
+    setFormError(null);
+  }
+
+  function toggleExpanded(taskId: string) {
+    setExpandedTaskIds((currentExpandedTaskIds) =>
+      currentExpandedTaskIds.includes(taskId)
+        ? currentExpandedTaskIds.filter((currentTaskId) => currentTaskId !== taskId)
+        : [...currentExpandedTaskIds, taskId],
+    );
+  }
+
+  function updateForm(nextForm: TaskFormState) {
+    setForm(nextForm);
+    if (formError) {
+      setFormError(null);
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const validationError = validateTaskForm(form);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
     const payload = toTaskPayload(form);
 
     if (dialogMode === "create" && payload.title && onCreateTask) {
@@ -99,104 +266,215 @@ export function ProjectWorkspaceTasks({
       return;
     }
 
-    if ((dialogMode === "edit" || dialogMode === "reassign") && selectedTask && onUpdateTask) {
+    if (selectedTask && onUpdateTask) {
+      if (!dialogMode) {
+        return;
+      }
+
       onUpdateTask(
         selectedTask.id,
-        dialogMode === "reassign"
-          ? { assigneeId: payload.assigneeId }
-          : payload,
+        getUpdatePayloadForDialog(dialogMode, payload, taskFieldAccess),
       );
       closeDialog();
     }
   }
 
+  const editableParentOptions = getParentOptions(tasks, hierarchy.wbsByTaskId, selectedTask);
+  const taskFieldAccess = getTaskFieldAccess({
+    currentUserId,
+    dialogMode,
+    hasFullEditAccess,
+    hasReassignAccess,
+    selectedTask,
+  });
+
   return (
     <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">Tasks</h2>
+          <h2 className="text-lg font-semibold text-slate-950">Plan</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Project tasks, assignments, status, and due dates.
+            Hierarchical project planning with WBS numbering, phases, milestones, and editable scheduling fields.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-            {tasks.length}
+            {hierarchy.rows.length}
           </span>
           {canCreateTask ? (
-            <button
-              className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
-              onClick={openCreateDialog}
-              type="button"
-            >
-              Create Task
-            </button>
+            <>
+              <button
+                className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
+                onClick={() => openCreateDialog({ kind: "standard" })}
+                type="button"
+              >
+                Create Task
+              </button>
+              <button
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+                onClick={() => openCreateDialog({ kind: "summary" })}
+                type="button"
+              >
+                Create Phase
+              </button>
+              <button
+                className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 transition hover:bg-sky-100"
+                onClick={() => openCreateDialog({ kind: "milestone" })}
+                type="button"
+              >
+                Create Milestone
+              </button>
+            </>
           ) : null}
         </div>
       </div>
 
       <div className="mt-5 overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[1200px] divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-3">Task</th>
+              <th className="px-3 py-3">WBS</th>
+              <th className="px-3 py-3">Plan Item</th>
               <th className="px-3 py-3">Assignee</th>
+              <th className="px-3 py-3">Planned Start</th>
+              <th className="px-3 py-3">Planned End</th>
+              <th className="px-3 py-3">Actual Start</th>
+              <th className="px-3 py-3">Actual End</th>
+              <th className="px-3 py-3">Est. Hours</th>
+              <th className="px-3 py-3">Remaining</th>
+              <th className="px-3 py-3">% Complete</th>
               <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">Priority</th>
-              <th className="px-3 py-3">Due Date</th>
               <th className="px-3 py-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {tasks.length === 0 ? (
+            {hierarchy.rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={6}>
-                  No tasks yet.
+                <td className="px-3 py-5 text-slate-500" colSpan={12}>
+                  No plan items yet.
                 </td>
               </tr>
             ) : null}
-            {tasks.map((task) => {
-              const canOperateOnTask =
-                canEditTask ||
-                canDeleteTask ||
-                canReassignTask ||
-                task.assigneeId === currentUserId;
+            {hierarchy.rows.map((row) => {
+              const task = row.task;
+              const isSummary = task.taskKind === "summary";
+              const isMilestone = task.taskKind === "milestone";
+              const isExpanded = expandedTaskIds.includes(task.id);
+              const canUpdateOwnTask = task.assigneeId === currentUserId && Boolean(onUpdateTask);
+              const canEditRow = hasFullEditAccess || canUpdateOwnTask;
+              const canDeleteRow = hasDeleteAccess && Boolean(onDeleteTask);
+              const canAddChild = canCreateTask && isSummary;
+              const rowClassName = isSummary
+                ? "bg-amber-50/70"
+                : isMilestone
+                  ? "bg-sky-50/70"
+                  : "bg-white";
 
               return (
-                <tr key={task.id}>
-                  <td className="px-3 py-3">
-                    <p className="font-semibold text-slate-950">{task.title}</p>
-                    {task.description ? (
-                      <p className="mt-1 max-w-xs text-xs text-slate-500">
-                        {task.description}
-                      </p>
-                    ) : null}
+                <tr className={rowClassName} key={task.id}>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs font-semibold text-slate-600">
+                    {row.wbs}
                   </td>
-                  <td className="px-3 py-3 text-slate-600">
+                  <td className="px-3 py-3">
+                    <div
+                      className="flex items-start gap-2"
+                      style={{ paddingLeft: `${row.depth * 1.25}rem` }}
+                    >
+                      <div className="mt-0.5 flex items-center gap-1">
+                        {row.hasChildren ? (
+                          <button
+                            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${task.title}`}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                            onClick={() => toggleExpanded(task.id)}
+                            type="button"
+                          >
+                            {isExpanded ? "−" : "+"}
+                          </button>
+                        ) : (
+                          <span className="inline-flex h-6 w-6 items-center justify-center text-slate-300">
+                            ·
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p
+                            className={`font-semibold ${
+                              isSummary
+                                ? "text-amber-950"
+                                : isMilestone
+                                  ? "text-sky-950"
+                                  : "text-slate-950"
+                            }`}
+                          >
+                            {isMilestone ? "◆ " : ""}
+                            {task.title}
+                          </p>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                              isSummary
+                                ? "bg-amber-200 text-amber-900"
+                                : isMilestone
+                                  ? "bg-sky-200 text-sky-900"
+                                  : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {formatTaskKindLabel(task.taskKind ?? "standard")}
+                          </span>
+                          {row.childCount > 0 ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                              {row.childCount} child{row.childCount === 1 ? "" : "ren"}
+                            </span>
+                          ) : null}
+                        </div>
+                        {task.description ? (
+                          <p className="mt-1 max-w-xl text-xs text-slate-500">
+                            {task.description}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     {formatAssignee(task)}
                   </td>
-                  <td className="px-3 py-3 capitalize text-slate-600">
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    {formatDate(task.plannedStartDate, "No plan")}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    {formatDate(task.plannedEndDate, "No plan")}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    {formatDate(task.actualStartDate, "Not started")}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    {formatDate(task.actualEndDate, "Not finished")}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    {formatNumber(task.estimatedHours)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    {formatNumber(task.remainingHours)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    {formatPercent(task.percentComplete)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 capitalize text-slate-600">
                     {formatLabel(task.status)}
                   </td>
-                  <td className="px-3 py-3 capitalize text-slate-600">
-                    {formatLabel(task.priority)}
-                  </td>
-                  <td className="px-3 py-3 text-slate-600">
-                    {formatDate(task.dueDate)}
-                  </td>
                   <td className="px-3 py-3">
-                    {canOperateOnTask ? (
+                    {canEditRow || canDeleteRow || canAddChild || hasReassignAccess ? (
                       <div className="flex flex-wrap gap-2">
-                        {canEditTask ? (
+                        {canEditRow ? (
                           <button
                             className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                             onClick={() => openTaskDialog(task, "edit")}
                             type="button"
                           >
-                            Edit
+                            {hasFullEditAccess ? "Edit" : "Update Progress"}
                           </button>
                         ) : null}
-                        {canReassignTask || task.assigneeId === currentUserId ? (
+                        {hasReassignAccess ? (
                           <button
                             className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                             onClick={() => openTaskDialog(task, "reassign")}
@@ -205,7 +483,21 @@ export function ProjectWorkspaceTasks({
                             Reassign
                           </button>
                         ) : null}
-                        {canDeleteTask && onDeleteTask ? (
+                        {canAddChild ? (
+                          <button
+                            className="rounded-md border border-amber-200 px-2.5 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
+                            onClick={() =>
+                              openCreateDialog({
+                                kind: "standard",
+                                parentTaskId: task.id,
+                              })
+                            }
+                            type="button"
+                          >
+                            Child Task
+                          </button>
+                        ) : null}
+                        {canDeleteRow ? (
                           <button
                             className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
                             disabled={isSaving}
@@ -231,8 +523,8 @@ export function ProjectWorkspaceTasks({
         <AppModal
           description={
             dialogMode === "reassign"
-              ? "Move this task to another project team member."
-              : "Update task details, assignment, status, and priority."
+              ? "Move this plan item to another project team member."
+              : "Capture phase hierarchy, planning dates, actual dates, effort, and ownership in one place."
           }
           footer={
             <>
@@ -255,168 +547,264 @@ export function ProjectWorkspaceTasks({
           }
           labelledById="project-task-dialog-title"
           onClose={closeDialog}
-          title={
-            dialogMode === "create"
-              ? "Create Task"
-              : dialogMode === "reassign"
-                ? "Reassign Task"
-                : "Edit Task"
-          }
-          widthClassName="max-w-2xl"
+          title={getDialogTitle(dialogMode, form, hasFullEditAccess)}
+          widthClassName="max-w-4xl"
         >
           <ModalForm id="project-task-form" onSubmit={handleSubmit}>
             <ModalFormSection
               description={
                 dialogMode === "reassign"
-                  ? "Update the assignee while keeping ownership controls visible."
-                  : "Capture the task summary, scheduling, and execution fields in one place."
+                  ? "Only assignee changes are available in this mode."
+                  : "Use canonical planning fields for the current project plan. WBS is derived from hierarchy and ordering, and phase numbering stays presentation-only."
               }
-              title="Task Detail"
+              title="Plan Item Detail"
             >
-              <ModalFormGrid className="md:grid-cols-2">
-              <label className="block text-sm font-medium text-slate-700 md:col-span-2">
-                Title
-                <input
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, title: event.target.value }))
-                  }
-                  required={dialogMode === "create"}
-                  value={form.title}
+              {formError ? (
+                <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {formError}
+                </div>
+              ) : null}
+
+              <ModalFormGrid className="md:grid-cols-2 xl:grid-cols-3">
+                <label className="block text-sm font-medium text-slate-700">
+                  Plan Item Type
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                    onChange={(event) =>
+                      updateForm({
+                        ...form,
+                        taskKind: event.target.value as NonNullable<ApiTask["taskKind"]>,
+                      })
+                    }
+                    value={form.taskKind}
+                  >
+                    {taskKinds.map((taskKind) => (
+                      <option key={taskKind.value} value={taskKind.value}>
+                        {taskKind.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {
+                      taskKinds.find((taskKind) => taskKind.value === form.taskKind)
+                        ?.description
+                    }
+                  </span>
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Parent Phase
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                    onChange={(event) =>
+                      updateForm({ ...form, parentTaskId: event.target.value })
+                    }
+                    value={form.parentTaskId}
+                  >
+                    <option value="">Top level</option>
+                    {editableParentOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Sequence
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                    min={0}
+                    onChange={(event) =>
+                      updateForm({ ...form, sequenceNumber: event.target.value })
+                    }
+                    type="number"
+                    value={form.sequenceNumber}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3">
+                  Title
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.core}
+                    onChange={(event) =>
+                      updateForm({ ...form, title: event.target.value })
+                    }
+                    required={dialogMode === "create"}
+                    value={form.title}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3">
+                  Description
+                  <textarea
+                    className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.core}
+                    onChange={(event) =>
+                      updateForm({ ...form, description: event.target.value })
+                    }
+                    value={form.description}
+                  />
+                </label>
+
+                <TaskAssigneeSelect
+                  disabled={dialogMode !== "create" && !taskFieldAccess.assignee}
+                  members={members}
+                  onChange={(assigneeId) => updateForm({ ...form, assigneeId })}
+                  value={form.assigneeId}
                 />
-              </label>
-              <label className="block text-sm font-medium text-slate-700 md:col-span-2">
-                Description
-                <textarea
-                  className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  value={form.description}
-                />
-              </label>
-              <TaskAssigneeSelect
-                members={members}
-                onChange={(assigneeId) =>
-                  setForm((current) => ({ ...current, assigneeId }))
-                }
-                value={form.assigneeId}
-              />
-              <label className="block text-sm font-medium text-slate-700">
-                Status
-                <select
-                  className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      status: event.target.value as ApiTask["status"],
-                    }))
-                  }
-                  value={form.status}
-                >
-                  {taskStatuses.map((status) => (
-                    <option key={status.value} value={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Priority
-                <select
-                  className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      priority: event.target.value,
-                    }))
-                  }
-                  value={form.priority}
-                >
-                  {priorities.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Due Date
-                <input
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, dueDate: event.target.value }))
-                  }
-                  type="date"
-                  value={form.dueDate}
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Planned Start
-                <input
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      plannedStartDate: event.target.value,
-                    }))
-                  }
-                  type="date"
-                  value={form.plannedStartDate}
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Planned End
-                <input
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      plannedEndDate: event.target.value,
-                    }))
-                  }
-                  type="date"
-                  value={form.plannedEndDate}
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700">
-                Percent Complete
-                <input
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  max={100}
-                  min={0}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      percentComplete: event.target.value,
-                    }))
-                  }
-                  type="number"
-                  value={form.percentComplete}
-                />
-              </label>
-              <label className="block text-sm font-medium text-slate-700 md:col-span-2">
-                Remarks
-                <textarea
-                  className="mt-2 min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                  disabled={dialogMode === "reassign" || !canEditTaskFields}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, remarks: event.target.value }))
-                  }
-                  value={form.remarks}
-                />
-              </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Status
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                    onChange={(event) =>
+                      updateForm({
+                        ...form,
+                        status: event.target.value as ApiTask["status"],
+                      })
+                    }
+                    value={form.status}
+                  >
+                    {taskStatuses.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Priority
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.core}
+                    onChange={(event) =>
+                      updateForm({ ...form, priority: event.target.value })
+                    }
+                    value={form.priority}
+                  >
+                    {priorities.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Planned Start
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    onChange={(event) =>
+                      updateForm(syncMilestoneDates(form, "plannedStartDate", event.target.value))
+                    }
+                    type="date"
+                    value={form.plannedStartDate}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Planned End
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    onChange={(event) =>
+                      updateForm(syncMilestoneDates(form, "plannedEndDate", event.target.value))
+                    }
+                    type="date"
+                    value={form.plannedEndDate}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Actual Start
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    onChange={(event) =>
+                      updateForm({ ...form, actualStartDate: event.target.value })
+                    }
+                    type="date"
+                    value={form.actualStartDate}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Actual End
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    onChange={(event) =>
+                      updateForm({ ...form, actualEndDate: event.target.value })
+                    }
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    type="date"
+                    value={form.actualEndDate}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Estimated Hours
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    min={0}
+                    onChange={(event) =>
+                      updateForm({ ...form, estimatedHours: event.target.value })
+                    }
+                    step="0.25"
+                    type="number"
+                    value={form.estimatedHours}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Remaining Hours
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    min={0}
+                    onChange={(event) =>
+                      updateForm({ ...form, remainingHours: event.target.value })
+                    }
+                    step="0.25"
+                    type="number"
+                    value={form.remainingHours}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Percent Complete
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                    max={100}
+                    min={0}
+                    onChange={(event) =>
+                      updateForm({ ...form, percentComplete: event.target.value })
+                    }
+                    type="number"
+                    value={form.percentComplete}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3">
+                  Remarks
+                  <textarea
+                    className="mt-2 min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                    disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                    onChange={(event) =>
+                      updateForm({ ...form, remarks: event.target.value })
+                    }
+                    value={form.remarks}
+                  />
+                </label>
               </ModalFormGrid>
             </ModalFormSection>
           </ModalForm>
@@ -449,24 +837,35 @@ export function ProjectWorkspaceTasks({
           }
           labelledById="delete-task-dialog-title"
           onClose={() => setTaskPendingDelete(null)}
-          title="Delete Task"
+          title="Delete Plan Item"
           widthClassName="max-w-md"
         >
-            <p className="mt-2 text-sm text-slate-600">
-              Delete "{taskPendingDelete.title}"? This removes it from the
-              project workspace.
-            </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Delete "{taskPendingDelete.title}" from the project plan?
+          </p>
         </AppModal>
       ) : null}
+
+      <ProjectTaskDependencyPanel
+        canManageDependencies={canManageDependencies}
+        dependencies={dependencies}
+        isSaving={isSaving}
+        onCreateDependency={onCreateDependency}
+        onDeleteDependency={onDeleteDependency}
+        onUpdateDependency={onUpdateDependency}
+        tasks={tasks}
+      />
     </section>
   );
 }
 
 function TaskAssigneeSelect({
+  disabled = false,
   members,
   onChange,
   value,
 }: {
+  disabled?: boolean;
   members: ApiProjectMember[];
   onChange: (assigneeId: string) => void;
   value: string;
@@ -475,7 +874,8 @@ function TaskAssigneeSelect({
     <label className="block text-sm font-medium text-slate-700">
       Assignee
       <select
-        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
@@ -492,62 +892,313 @@ function TaskAssigneeSelect({
   );
 }
 
-type TaskFormState = {
-  assigneeId: string;
-  description: string;
-  dueDate: string;
-  percentComplete: string;
-  plannedEndDate: string;
-  plannedStartDate: string;
-  priority: string;
-  remarks: string;
-  status: ApiTask["status"];
-  title: string;
-};
+function buildTaskHierarchy(tasks: ApiTask[], expandedTaskIds: string[]) {
+  const tasksByParentId = new Map<string | null, ApiTask[]>();
+  const wbsByTaskId = new Map<string, string>();
+  const rows: PlanRow[] = [];
+  const expandedTaskIdsSet = new Set(expandedTaskIds);
 
-function createEmptyTaskForm(): TaskFormState {
+  for (const task of tasks) {
+    const parentTaskId = task.parentTaskId ?? null;
+    const currentSiblingTasks = tasksByParentId.get(parentTaskId) ?? [];
+    currentSiblingTasks.push(task);
+    tasksByParentId.set(parentTaskId, currentSiblingTasks);
+  }
+
+  for (const [parentTaskId, siblingTasks] of tasksByParentId.entries()) {
+    tasksByParentId.set(parentTaskId, sortTasks(siblingTasks));
+  }
+
+  const summaryTaskIds = tasks.filter((task) => task.taskKind === "summary").map((task) => task.id);
+
+  function visit(parentTaskId: string | null, prefix: string, depth: number) {
+    const siblingTasks = tasksByParentId.get(parentTaskId) ?? [];
+
+    siblingTasks.forEach((task, index) => {
+      const wbs = prefix ? `${prefix}.${index + 1}` : `${index + 1}`;
+      const childCount = (tasksByParentId.get(task.id) ?? []).length;
+      const hasChildren = childCount > 0;
+      wbsByTaskId.set(task.id, wbs);
+      rows.push({
+        childCount,
+        depth,
+        hasChildren,
+        task,
+        wbs,
+      });
+
+      if (hasChildren && expandedTaskIdsSet.has(task.id)) {
+        visit(task.id, wbs, depth + 1);
+      }
+    });
+  }
+
+  visit(null, "", 0);
+
   return {
+    rows,
+    summaryTaskIds,
+    wbsByTaskId,
+  };
+}
+
+function sortTasks(tasks: ApiTask[]) {
+  return [...tasks].sort((leftTask, rightTask) => {
+    const leftSequenceNumber =
+      typeof leftTask.sequenceNumber === "number"
+        ? leftTask.sequenceNumber
+        : Number.MAX_SAFE_INTEGER;
+    const rightSequenceNumber =
+      typeof rightTask.sequenceNumber === "number"
+        ? rightTask.sequenceNumber
+        : Number.MAX_SAFE_INTEGER;
+
+    if (leftSequenceNumber !== rightSequenceNumber) {
+      return leftSequenceNumber - rightSequenceNumber;
+    }
+
+    return leftTask.title.localeCompare(rightTask.title);
+  });
+}
+
+function getTaskFieldAccess({
+  currentUserId,
+  dialogMode,
+  hasFullEditAccess,
+  hasReassignAccess,
+  selectedTask,
+}: {
+  currentUserId: string | null;
+  dialogMode: DialogMode | null;
+  hasFullEditAccess: boolean;
+  hasReassignAccess: boolean;
+  selectedTask: ApiTask | null;
+}): TaskFieldAccess {
+  if (dialogMode === "create") {
+    return {
+      assignee: true,
+      core: true,
+      planning: true,
+      progress: true,
+      structure: true,
+    };
+  }
+
+  if (dialogMode === "reassign") {
+    return {
+      assignee: true,
+      core: false,
+      planning: false,
+      progress: false,
+      structure: false,
+    };
+  }
+
+  if (hasFullEditAccess) {
+    return {
+      assignee: true,
+      core: true,
+      planning: true,
+      progress: true,
+      structure: true,
+    };
+  }
+
+  const canUpdateOwnTask =
+    Boolean(currentUserId) && selectedTask?.assigneeId === currentUserId;
+
+  return {
+    assignee: canUpdateOwnTask || hasReassignAccess,
+    core: false,
+    planning: false,
+    progress: canUpdateOwnTask,
+    structure: false,
+  };
+}
+
+function getParentOptions(
+  tasks: ApiTask[],
+  wbsByTaskId: Map<string, string>,
+  selectedTask: ApiTask | null,
+): ParentOption[] {
+  const blockedTaskIds = new Set<string>();
+
+  if (selectedTask) {
+    blockedTaskIds.add(selectedTask.id);
+
+    const childrenByParentId = new Map<string | null, ApiTask[]>();
+    for (const task of tasks) {
+      const parentTaskId = task.parentTaskId ?? null;
+      const childTasks = childrenByParentId.get(parentTaskId) ?? [];
+      childTasks.push(task);
+      childrenByParentId.set(parentTaskId, childTasks);
+    }
+
+    const queue = [...(childrenByParentId.get(selectedTask.id) ?? [])];
+    while (queue.length > 0) {
+      const task = queue.shift();
+      if (!task) {
+        continue;
+      }
+      blockedTaskIds.add(task.id);
+      queue.push(...(childrenByParentId.get(task.id) ?? []));
+    }
+  }
+
+  return sortTasks(tasks)
+    .filter((task) => task.taskKind === "summary" && !blockedTaskIds.has(task.id))
+    .map((task) => ({
+      id: task.id,
+      label: `${wbsByTaskId.get(task.id) ?? "?"} ${task.title}`,
+    }));
+}
+
+function createEmptyTaskForm(
+  defaults: Partial<Pick<TaskFormState, "parentTaskId" | "taskKind">> = {},
+): TaskFormState {
+  return {
+    actualEndDate: "",
+    actualStartDate: "",
     assigneeId: "",
     description: "",
-    dueDate: "",
+    estimatedHours: "",
+    parentTaskId: defaults.parentTaskId ?? "",
     percentComplete: "0",
     plannedEndDate: "",
     plannedStartDate: "",
     priority: "medium",
+    remainingHours: "",
     remarks: "",
+    sequenceNumber: "",
     status: "todo",
+    taskKind: defaults.taskKind ?? "standard",
     title: "",
   };
 }
 
 function createTaskForm(task: ApiTask): TaskFormState {
   return {
+    actualEndDate: task.actualEndDate ?? "",
+    actualStartDate: task.actualStartDate ?? "",
     assigneeId: task.assigneeId ?? "",
     description: task.description ?? "",
-    dueDate: task.dueDate ?? "",
+    estimatedHours:
+      typeof task.estimatedHours === "number" ? String(task.estimatedHours) : "",
+    parentTaskId: task.parentTaskId ?? "",
     percentComplete: String(task.percentComplete ?? 0),
     plannedEndDate: task.plannedEndDate ?? "",
     plannedStartDate: task.plannedStartDate ?? "",
     priority: task.priority,
+    remainingHours:
+      typeof task.remainingHours === "number" ? String(task.remainingHours) : "",
     remarks: task.remarks ?? "",
+    sequenceNumber:
+      typeof task.sequenceNumber === "number" ? String(task.sequenceNumber) : "",
     status: task.status,
+    taskKind: task.taskKind ?? "standard",
     title: task.title,
   };
 }
 
-function toTaskPayload(form: TaskFormState): TaskOperationInput {
+function syncMilestoneDates(
+  currentForm: TaskFormState,
+  fieldName: "plannedStartDate" | "plannedEndDate",
+  nextValue: string,
+) {
+  if (currentForm.taskKind !== "milestone") {
+    return {
+      ...currentForm,
+      [fieldName]: nextValue,
+    };
+  }
+
   return {
-    assigneeId: form.assigneeId || undefined,
-    description: form.description,
-    dueDate: form.dueDate || undefined,
+    ...currentForm,
+    plannedEndDate: fieldName === "plannedStartDate" ? nextValue : currentForm.plannedEndDate,
+    plannedStartDate: fieldName === "plannedEndDate" ? currentForm.plannedStartDate : nextValue,
+    [fieldName]: nextValue,
+  };
+}
+
+function validateTaskForm(form: TaskFormState) {
+  if (
+    form.taskKind === "milestone" &&
+    form.plannedStartDate &&
+    form.plannedEndDate &&
+    form.plannedStartDate !== form.plannedEndDate
+  ) {
+    return "Milestones must use the same planned start and planned end date.";
+  }
+
+  return null;
+}
+
+function toTaskPayload(
+  form: TaskFormState,
+): Required<Pick<TaskOperationInput, "title">> & TaskOperationInput {
+  return {
+    actualEndDate: toNullableString(form.actualEndDate),
+    actualStartDate: toNullableString(form.actualStartDate),
+    assigneeId: toNullableString(form.assigneeId),
+    description: toNullableString(form.description),
+    estimatedHours: toNullableNumber(form.estimatedHours),
+    parentTaskId: toNullableString(form.parentTaskId),
     percentComplete: Number(form.percentComplete || 0),
-    plannedEndDate: form.plannedEndDate || undefined,
-    plannedStartDate: form.plannedStartDate || undefined,
+    plannedEndDate: toNullableString(form.plannedEndDate),
+    plannedStartDate: toNullableString(form.plannedStartDate),
     priority: form.priority,
-    remarks: form.remarks,
+    remainingHours: toNullableNumber(form.remainingHours),
+    remarks: toNullableString(form.remarks),
+    sequenceNumber: toNullableInteger(form.sequenceNumber),
     status: form.status,
+    taskKind: form.taskKind,
     title: form.title.trim(),
   };
+}
+
+function getUpdatePayloadForDialog(
+  dialogMode: DialogMode,
+  payload: Required<Pick<TaskOperationInput, "title">> & TaskOperationInput,
+  taskFieldAccess: TaskFieldAccess,
+): TaskOperationInput {
+  if (dialogMode === "reassign") {
+    return { assigneeId: payload.assigneeId };
+  }
+
+  if (!taskFieldAccess.core && !taskFieldAccess.planning && !taskFieldAccess.structure) {
+    return {
+      assigneeId: taskFieldAccess.assignee ? payload.assigneeId : undefined,
+      percentComplete: taskFieldAccess.progress ? payload.percentComplete : undefined,
+      remarks: taskFieldAccess.progress ? payload.remarks : undefined,
+      status: taskFieldAccess.progress ? payload.status : undefined,
+    };
+  }
+
+  return payload;
+}
+
+function getDialogTitle(
+  dialogMode: DialogMode,
+  form: TaskFormState,
+  hasFullEditAccess: boolean,
+) {
+  if (dialogMode === "create") {
+    if (form.taskKind === "summary") {
+      return "Create Phase";
+    }
+
+    if (form.taskKind === "milestone") {
+      return "Create Milestone";
+    }
+
+    return form.parentTaskId ? "Create Child Task" : "Create Task";
+  }
+
+  if (dialogMode === "reassign") {
+    return "Reassign Plan Item";
+  }
+
+  return hasFullEditAccess ? "Edit Plan Item" : "Update Task Progress";
 }
 
 function formatAssignee(task: ApiTask) {
@@ -556,9 +1207,17 @@ function formatAssignee(task: ApiTask) {
     : "Unassigned";
 }
 
-function formatDate(value?: string | null) {
+function formatTaskKindLabel(value: NonNullable<ApiTask["taskKind"]>) {
+  if (value === "summary") {
+    return "phase";
+  }
+
+  return value.replaceAll("_", " ");
+}
+
+function formatDate(value?: string | null, emptyLabel = "None") {
   if (!value) {
-    return "No due date";
+    return emptyLabel;
   }
 
   return new Intl.DateTimeFormat("en", {
@@ -570,4 +1229,38 @@ function formatDate(value?: string | null) {
 
 function formatLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function formatNumber(value?: number | null) {
+  if (typeof value !== "number") {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  }).format(value);
+}
+
+function formatPercent(value?: number | null) {
+  if (typeof value !== "number") {
+    return "0%";
+  }
+
+  return `${value}%`;
+}
+
+function toNullableString(value: string) {
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function toNullableNumber(value: string) {
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? Number(trimmedValue) : null;
+}
+
+function toNullableInteger(value: string) {
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? Number.parseInt(trimmedValue, 10) : null;
 }

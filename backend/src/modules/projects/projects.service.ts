@@ -388,6 +388,67 @@ export class ProjectsService {
     );
   }
 
+  async findProjectBaselines(
+    projectId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<ProjectBaseline[]> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
+
+    return this.projectBaselinesRepository.find({
+      order: { versionNumber: 'DESC' },
+      relations: {
+        capturedBy: true,
+      },
+      where: { projectId },
+    });
+  }
+
+  async findProjectBaseline(
+    projectId: string,
+    baselineId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<ProjectBaseline> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
+
+    const baseline = await this.projectBaselinesRepository.findOne({
+      relations: {
+        capturedBy: true,
+        tasks: true,
+      },
+      where: {
+        id: baselineId,
+        projectId,
+      },
+    });
+
+    if (!baseline) {
+      throw new NotFoundException(
+        `Project baseline ${baselineId} not found for project ${projectId}`,
+      );
+    }
+
+    baseline.tasks = (baseline.tasks ?? []).toSorted((leftTask, rightTask) => {
+      const leftSequenceNumber =
+        typeof leftTask.sequenceNumber === 'number'
+          ? leftTask.sequenceNumber
+          : Number.MAX_SAFE_INTEGER;
+      const rightSequenceNumber =
+        typeof rightTask.sequenceNumber === 'number'
+          ? rightTask.sequenceNumber
+          : Number.MAX_SAFE_INTEGER;
+
+      if (leftSequenceNumber !== rightSequenceNumber) {
+        return leftSequenceNumber - rightSequenceNumber;
+      }
+
+      return leftTask.taskTitle.localeCompare(rightTask.taskTitle);
+    });
+
+    return baseline;
+  }
+
   async findProjectTaskDependencies(
     projectId: string,
     actor?: ProjectVisibilityActor,

@@ -1,6 +1,8 @@
 "use client";
 
+import React from "react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   RaidManagement,
@@ -25,6 +27,7 @@ import { getRaidPermissions } from "@/features/raid/permissions";
 import { getAssignableUsers, type ApiAssignableUser } from "@/features/users";
 
 export default function RisksPage() {
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<ApiRaidItem[]>([]);
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [users, setUsers] = useState<ApiAssignableUser[]>([]);
@@ -122,6 +125,21 @@ export default function RisksPage() {
 
   const sessionUser = getStoredSessionUser();
   const permissions = getRaidPermissions(permissionKeys, sessionUser?.userId);
+  const projectFilter = searchParams.get("projectId");
+  const severityFilter = searchParams.get("severity")?.toLowerCase();
+  const statusFilter = searchParams.get("status")?.toLowerCase();
+  const visibleItems = items.filter((item) => {
+    const matchesProject = projectFilter ? item.projectId === projectFilter : true;
+    const matchesSeverity = severityFilter
+      ? item.severity?.toLowerCase() === severityFilter
+      : true;
+    const matchesStatus = statusFilter
+      ? statusFilter === "open"
+        ? isOpenRaidStatus(item.status)
+        : item.status.toLowerCase() === statusFilter
+      : true;
+    return item.type === "risk" && matchesProject && matchesSeverity && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -142,7 +160,7 @@ export default function RisksPage() {
         fixedType="risk"
         isLoading={isLoading}
         isSaving={isSaving}
-        items={items}
+        items={visibleItems}
         onAddComment={permissions.canUpdate ? handleAddComment : undefined}
         onCreate={permissions.canCreate ? handleCreate : undefined}
         onDelete={permissions.canDelete ? handleDelete : undefined}
@@ -179,4 +197,10 @@ function toRaidOwner(user: ApiAssignableUser | undefined) {
         status: user.status ?? "active",
       }
     : undefined;
+}
+
+function isOpenRaidStatus(status: string) {
+  return !["cancelled", "closed", "complete", "completed", "done", "resolved"].includes(
+    status.toLowerCase(),
+  );
 }

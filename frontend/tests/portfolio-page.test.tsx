@@ -98,6 +98,18 @@ describe("Portfolio page", () => {
     expectSummaryCardValue("Green Projects", "2");
     expectSummaryCardValue("Amber Projects", "1");
     expectSummaryCardValue("Red Projects", "1");
+    expect(screen.getByText("Green Projects").closest("a")).toHaveAttribute(
+      "href",
+      "/projects?health=GREEN&sort=health_asc",
+    );
+    expect(screen.getByText("Amber Projects").closest("a")).toHaveAttribute(
+      "href",
+      "/projects?health=AMBER&sort=health_desc",
+    );
+    expect(screen.getByText("Red Projects").closest("a")).toHaveAttribute(
+      "href",
+      "/projects?health=RED&sort=health_desc",
+    );
     expect(
       screen.getByRole("heading", { name: "Projects Requiring Attention" }),
     ).toBeInTheDocument();
@@ -121,6 +133,10 @@ describe("Portfolio page", () => {
     expectSummaryCardValue("High Risks", "2");
     expectSummaryCardValue("Medium Risks", "3");
     expectSummaryCardValue("Low Risks", "4");
+    expect(screen.getByText("Critical Risks").closest("a")).toHaveAttribute(
+      "href",
+      "/risks?severity=critical&status=open",
+    );
     expect(
       screen.getByRole("heading", { name: "Open Issues by Priority" }),
     ).toBeInTheDocument();
@@ -128,24 +144,37 @@ describe("Portfolio page", () => {
     expectSummaryCardValue("High Priority Issues", "6");
     expectSummaryCardValue("Medium Priority Issues", "7");
     expectSummaryCardValue("Low Priority Issues", "8");
+    expect(screen.getByText("Critical Issues").closest("a")).toHaveAttribute(
+      "href",
+      "/issues?priority=critical&status=open",
+    );
     expect(screen.getByRole("heading", { name: "Overdue Tasks" })).toBeInTheDocument();
     const overdueWidget = getSectionByHeading("Overdue Tasks");
     expectSummaryCardValue("Total Overdue Tasks", "12", overdueWidget);
     expect(
+      within(overdueWidget).getByRole("link", { name: "12" }),
+    ).toHaveAttribute("href", "/tasks?scope=all&timing=overdue");
+    expect(
       within(overdueWidget).getByRole("link", {
         name: /Customer Experience Platform Upgrade/i,
       }),
-    ).toHaveAttribute("href", "/projects/project-cxp");
+    ).toHaveAttribute("href", "/tasks?scope=all&projectId=project-cxp&timing=overdue");
     expect(
       within(overdueWidget).getByRole("link", {
         name: /Observability Transformation Programme/i,
       }),
-    ).toHaveAttribute("href", "/projects/project-observability");
+    ).toHaveAttribute(
+      "href",
+      "/tasks?scope=all&projectId=project-observability&timing=overdue",
+    );
     expect(
       within(overdueWidget).getByRole("link", {
         name: /Data Centre Exit Programme/i,
       }),
-    ).toHaveAttribute("href", "/projects/project-data-centre");
+    ).toHaveAttribute(
+      "href",
+      "/tasks?scope=all&projectId=project-data-centre&timing=overdue",
+    );
     expectSummaryCardValue("Customer Experience Platform Upgrade", "4", overdueWidget);
     expectSummaryCardValue(
       "Observability Transformation Programme",
