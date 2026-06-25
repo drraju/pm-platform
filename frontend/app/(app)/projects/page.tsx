@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectTable } from "@/components/projects/project-table";
@@ -40,6 +40,14 @@ const projectStatuses = [
 ];
 
 export default function ProjectsPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PageContent />
+    </Suspense>
+  );
+}
+
+function PageContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -478,6 +486,10 @@ export default function ProjectsPage() {
       ) : null}
     </div>
   );
+}
+
+function PageLoading() {
+  return <div className="space-y-6" />;
 }
 
 function isProjectSortMode(value: string | null): value is

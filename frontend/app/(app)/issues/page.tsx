@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
@@ -27,6 +27,14 @@ import { getRaidPermissions } from "@/features/raid/permissions";
 import { getAssignableUsers, type ApiAssignableUser } from "@/features/users";
 
 export default function IssuesPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PageContent />
+    </Suspense>
+  );
+}
+
+function PageContent() {
   const searchParams = useSearchParams();
   const [items, setItems] = useState<ApiRaidItem[]>([]);
   const [projects, setProjects] = useState<ApiProject[]>([]);
@@ -185,6 +193,10 @@ export default function IssuesPage() {
         : item.project,
     };
   }
+}
+
+function PageLoading() {
+  return <div className="space-y-6" />;
 }
 
 function toRaidOwner(user: ApiAssignableUser | undefined) {

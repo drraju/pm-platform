@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getAuthMe,
@@ -13,6 +13,14 @@ import {
 } from "@/features/auth";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PageContent />
+    </Suspense>
+  );
+}
+
+function PageContent() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState<string | null>(null);
@@ -163,4 +171,8 @@ export default function LoginPage() {
       </div>
     </main>
   );
+}
+
+function PageLoading() {
+  return <main className="min-h-screen bg-surface" />;
 }
