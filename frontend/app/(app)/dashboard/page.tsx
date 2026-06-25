@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";
 import { SummaryCard } from "@/components/dashboard/summary-card";
@@ -25,6 +25,14 @@ import {
 } from "@/features/dashboard";
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <PageContent />
+    </Suspense>
+  );
+}
+
+function PageContent() {
   const router = useRouter();
   const [dashboard, setDashboard] = useState<ApiMeDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +154,10 @@ export default function DashboardPage() {
       ) : null}
     </div>
   );
+}
+
+function PageLoading() {
+  return <DashboardLoadingState />;
 }
 
 function DashboardLoadingState() {
