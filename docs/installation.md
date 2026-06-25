@@ -1,0 +1,1 @@
+Step-by-step instructions for installing PM Platform from source, including software prerequisites, cloning the repository, building the application, and performing the initial setup.

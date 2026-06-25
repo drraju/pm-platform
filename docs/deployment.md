@@ -1,0 +1,1 @@
+Describes how to deploy PM Platform to staging and production environments using Docker Compose, including environment configuration, upgrades, backups, and rollback procedures.

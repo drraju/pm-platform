@@ -1,0 +1,1 @@
+Explains the Docker architecture, container layout, volumes, networking, environment variables, and common Docker maintenance tasks.
