@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
+import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
 import { ProjectHealthService } from '../../health/project-health.service';
@@ -90,6 +91,7 @@ describe('DashboardService', () => {
       { id: 'in-progress-task', status: TaskStatus.InProgress },
       { id: 'blocked-task', status: TaskStatus.Blocked },
       { id: 'done-task', status: TaskStatus.Done },
+      { id: 'phase-task', status: TaskStatus.Done, taskKind: TaskKind.Summary },
     ];
     const overdueTasks = [
       {
@@ -229,7 +231,7 @@ describe('DashboardService', () => {
     expect(tasksRepository.find).toHaveBeenNthCalledWith(1, {
       order: { dueDate: 'ASC', createdAt: 'DESC' },
       relations: { assignee: true, project: true },
-      where: { assigneeId: userId },
+      where: expect.objectContaining({ assigneeId: userId }),
     });
     expect(tasksRepository.find).toHaveBeenNthCalledWith(
       2,

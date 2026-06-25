@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThan, Not, Repository } from 'typeorm';
+import { Between, In, LessThan, Not, Repository } from 'typeorm';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { TaskKind } from '../../common/enums/task-kind.enum';
 import { ProjectHealthService } from '../health/project-health.service';
 import {
   ProjectVisibilityActor,
@@ -12,6 +13,7 @@ import { Project } from '../projects/entities/project.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { getOperationalTasks } from '../tasks/planning-rollup';
 import {
   DashboardIssueDto,
   DashboardProjectDto,
@@ -54,7 +56,10 @@ export class DashboardService {
       this.tasksRepository.find({
         order: { dueDate: 'ASC', createdAt: 'DESC' },
         relations: { assignee: true, project: true },
-        where: { assigneeId: userId },
+        where: {
+          assigneeId: userId,
+          taskKind: In([TaskKind.Standard, TaskKind.Milestone]),
+        },
       }),
     ]);
 
@@ -102,6 +107,7 @@ export class DashboardService {
         assigneeId: userId,
         dueDate: LessThan(this.formatDate(new Date())),
         status: Not(TaskStatus.Done),
+        taskKind: In([TaskKind.Standard, TaskKind.Milestone]),
       },
     });
   }
@@ -121,20 +127,23 @@ export class DashboardService {
           this.formatDate(nextSevenDays),
         ),
         status: Not(TaskStatus.Done),
+        taskKind: In([TaskKind.Standard, TaskKind.Milestone]),
       },
     });
   }
 
   private summarizeTasks(tasks: Task[]): TaskSummaryDto {
+    const operationalTasks = getOperationalTasks(tasks);
+
     return {
-      total: tasks.length,
-      todo: tasks.filter((task) => task.status === TaskStatus.Todo).length,
-      inProgress: tasks.filter((task) => task.status === TaskStatus.InProgress)
+      total: operationalTasks.length,
+      todo: operationalTasks.filter((task) => task.status === TaskStatus.Todo).length,
+      inProgress: operationalTasks.filter((task) => task.status === TaskStatus.InProgress)
         .length,
-      blocked: tasks.filter((task) => task.status === TaskStatus.Blocked)
+      blocked: operationalTasks.filter((task) => task.status === TaskStatus.Blocked)
         .length,
-      completed: tasks.filter((task) => task.status === TaskStatus.Done).length,
-      overdue: tasks.filter((task) => this.isOverdue(task)).length,
+      completed: operationalTasks.filter((task) => task.status === TaskStatus.Done).length,
+      overdue: operationalTasks.filter((task) => this.isOverdue(task)).length,
     };
   }
 

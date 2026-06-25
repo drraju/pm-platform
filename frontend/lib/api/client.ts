@@ -71,6 +71,7 @@ export type ApiProject = {
   risks?: ApiRaidItem[];
   issues?: ApiRaidItem[];
   health?: ApiProjectHealth;
+  taskCounts?: ApiTaskCounts;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -89,6 +90,12 @@ export type ApiProjectMember = {
     role?: string | null;
     status?: string;
   } | null;
+};
+
+export type ApiTaskCounts = {
+  milestones: number;
+  phases: number;
+  tasks: number;
 };
 
 export type ApiTask = {
@@ -112,6 +119,10 @@ export type ApiTask = {
   actualEndDate?: string | null;
   estimatedHours?: number | null;
   remainingHours?: number | null;
+  phaseProgress?: number | null;
+  phaseStartDate?: string | null;
+  phaseEndDate?: string | null;
+  childTaskCount?: number;
   project?: ApiProject | null;
   assignee?: {
     id: string;
@@ -169,6 +180,7 @@ export type ApiProjectBaseline = {
 export type ApiProjectDetails = ApiProject & {
   members?: ApiProjectMember[];
   tasks?: ApiTask[];
+  taskCounts?: ApiTaskCounts;
   risks?: ApiRaidItem[];
   issues?: ApiRaidItem[];
   assumptions?: ApiRaidItem[];

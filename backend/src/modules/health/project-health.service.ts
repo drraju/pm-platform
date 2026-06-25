@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
+import { getOperationalTasks } from '../tasks/planning-rollup';
 import { Task } from '../tasks/entities/task.entity';
 import {
   ProjectHealthDto,
@@ -21,8 +22,9 @@ export class ProjectHealthService {
     risks = [],
     tasks = [],
   }: ProjectHealthInput): ProjectHealthDto {
-    const totalTasks = tasks.length;
-    const overdueTasks = tasks.filter((task) => this.isOverdue(task)).length;
+    const operationalTasks = getOperationalTasks(tasks);
+    const totalTasks = operationalTasks.length;
+    const overdueTasks = operationalTasks.filter((task) => this.isOverdue(task)).length;
     const overdueRatio = totalTasks > 0 ? overdueTasks / totalTasks : 0;
     const criticalIssues = issues.filter(
       (issue) => this.isOpen(issue.status) && this.isCritical(issue.severity),

@@ -35,6 +35,7 @@ export type {
   ApiProjectMember,
   ApiRaidItem,
   ApiTaskDependency,
+  ApiTaskCounts,
   ApiTask,
   ApiAssignableUser,
 } from "@/lib/api/client";

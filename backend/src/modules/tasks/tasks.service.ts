@@ -23,6 +23,10 @@ import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
 import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
+import {
+  decoratePlanningTasks,
+  getOperationalTasks,
+} from './planning-rollup';
 
 type AuthenticatedActor = AuthorizationActor;
 const teamMemberEditableTaskFields = new Set([
@@ -53,9 +57,10 @@ export class TasksService {
       createTaskDto.projectId,
       createTaskDto.assigneeId,
     );
-    return this.tasksRepository.save(
-      this.tasksRepository.create(createTaskDto),
+    const task = await this.tasksRepository.save(
+      this.tasksRepository.create(this.withNormalizedProgress(createTaskDto)),
     );
+    return this.decorateTask(task);
   }
 
   async findAll(actor?: ProjectVisibilityActor): Promise<Task[]> {
@@ -65,13 +70,14 @@ export class TasksService {
       return [];
     }
 
-    return this.tasksRepository.find({
+    const tasks = await this.tasksRepository.find({
       relations: { project: true, assignee: true },
       where:
         visibleProjectIds === 'all'
           ? undefined
           : { projectId: In(visibleProjectIds) },
     });
+    return decoratePlanningTasks(tasks);
   }
 
   findMyTasks(userId: string, query: MyTasksQueryDto = {}): Promise<Task[]> {
@@ -83,6 +89,7 @@ export class TasksService {
       relations: { project: true, assignee: true },
       where: {
         assigneeId: userId,
+        taskKind: In([TaskKind.Standard, TaskKind.Milestone]),
         ...(query.status ? { status: query.status } : {}),
         ...(query.projectId ? { projectId: query.projectId } : {}),
         ...(query.priority ? { priority: query.priority } : {}),
@@ -92,22 +99,26 @@ export class TasksService {
 
   async getMyTasksSummary(userId: string): Promise<MyTasksSummaryDto> {
     const tasks = await this.tasksRepository.find({
-      where: { assigneeId: userId },
+      where: {
+        assigneeId: userId,
+        taskKind: In([TaskKind.Standard, TaskKind.Milestone]),
+      },
     });
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const operationalTasks = getOperationalTasks(tasks);
 
     return {
-      totalTasks: tasks.length,
-      todoTasks: tasks.filter((task) => task.status === TaskStatus.Todo).length,
-      inProgressTasks: tasks.filter(
+      totalTasks: operationalTasks.length,
+      todoTasks: operationalTasks.filter((task) => task.status === TaskStatus.Todo).length,
+      inProgressTasks: operationalTasks.filter(
         (task) => task.status === TaskStatus.InProgress,
       ).length,
-      blockedTasks: tasks.filter((task) => task.status === TaskStatus.Blocked)
+      blockedTasks: operationalTasks.filter((task) => task.status === TaskStatus.Blocked)
         .length,
-      completedTasks: tasks.filter((task) => task.status === TaskStatus.Done)
+      completedTasks: operationalTasks.filter((task) => task.status === TaskStatus.Done)
         .length,
-      overdueTasks: tasks.filter((task) => {
+      overdueTasks: operationalTasks.filter((task) => {
         if (!task.dueDate || task.status === TaskStatus.Done) {
           return false;
         }
@@ -135,7 +146,7 @@ export class TasksService {
       throw new NotFoundException(`Task ${id} not found`);
     }
 
-    return task;
+    return this.decorateTask(task);
   }
 
   async update(
@@ -154,8 +165,9 @@ export class TasksService {
       updateTaskDto.projectId ?? task.projectId,
       updateTaskDto.assigneeId,
     );
-    Object.assign(task, updateTaskDto);
-    return this.tasksRepository.save(task);
+    Object.assign(task, this.withNormalizedProgress(updateTaskDto));
+    const savedTask = await this.tasksRepository.save(task);
+    return this.decorateTask(savedTask);
   }
 
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
@@ -250,6 +262,7 @@ export class TasksService {
       input.plannedStartDate ?? existingTask?.plannedStartDate,
       input.plannedEndDate ?? existingTask?.plannedEndDate,
     );
+    this.validatePhaseMutations(effectiveTaskKind, input);
 
     if (
       existingTask &&
@@ -303,6 +316,34 @@ export class TasksService {
     }
   }
 
+  private validatePhaseMutations(
+    taskKind: TaskKind,
+    input: Partial<CreateTaskDto | UpdateTaskDto>,
+  ) {
+    if (taskKind !== TaskKind.Summary) {
+      return;
+    }
+
+    if (input.assigneeId) {
+      throw new BadRequestException('Phases cannot be assigned to a user');
+    }
+
+    if (typeof input.status !== 'undefined') {
+      throw new BadRequestException('Phase status is calculated from child work');
+    }
+
+    if (typeof input.percentComplete !== 'undefined') {
+      throw new BadRequestException('Phase progress is calculated from child work');
+    }
+
+    if (
+      typeof input.estimatedHours !== 'undefined' ||
+      typeof input.remainingHours !== 'undefined'
+    ) {
+      throw new BadRequestException('Phases cannot store effort values');
+    }
+  }
+
   private async ensureTaskHasNoChildren(taskId: string) {
     const childTask = await this.tasksRepository.findOne({
       select: { id: true },
@@ -337,6 +378,26 @@ export class TasksService {
       },
       where: { id: taskId },
     });
+  }
+
+  private decorateTask(task: Task): Task {
+    return decoratePlanningTasks([task])[0] as Task;
+  }
+
+  private withNormalizedProgress<T extends Partial<CreateTaskDto | UpdateTaskDto>>(
+    input: T,
+  ): T {
+    const normalizedInput = { ...input };
+
+    if (normalizedInput.percentComplete === 100) {
+      normalizedInput.status = TaskStatus.Done;
+    }
+
+    if (normalizedInput.status === TaskStatus.Done) {
+      normalizedInput.percentComplete = 100;
+    }
+
+    return normalizedInput;
   }
 
 }

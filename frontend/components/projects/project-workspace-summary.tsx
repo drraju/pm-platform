@@ -1,50 +1,53 @@
 import React from "react";
 import { SummaryCard } from "@/components/dashboard/summary-card";
-import type { ApiTask } from "@/features/projects";
+import type { ApiTask, ApiTaskCounts } from "@/features/projects";
+import { countPlanningItems } from "@/features/projects/planning";
 
 type ProjectWorkspaceSummaryProps = {
   onSelectMetric?: (status: "all" | ApiTask["status"]) => void;
+  taskCounts?: ApiTaskCounts;
   tasks: ApiTask[];
 };
 
 export function ProjectWorkspaceSummary({
   onSelectMetric,
+  taskCounts,
   tasks,
 }: ProjectWorkspaceSummaryProps) {
+  const planningCounts = taskCounts ?? countPlanningItems(tasks);
   const summary = {
-    blocked: tasks.filter((task) => task.status === "blocked").length,
-    completed: tasks.filter((task) => task.status === "done").length,
-    inProgress: tasks.filter((task) => task.status === "in_progress").length,
-    total: tasks.length,
+    milestones: planningCounts.milestones,
+    phases: planningCounts.phases,
+    tasks: planningCounts.tasks,
   };
 
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <SummaryCard
         href={onSelectMetric ? "#plan" : undefined}
-        label="Total Tasks"
+        label="Phases"
         onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
-        value={summary.total}
+        value={summary.phases}
       />
       <SummaryCard
         href={onSelectMetric ? "#plan" : undefined}
-        label="Completed"
-        onClick={onSelectMetric ? () => onSelectMetric("done") : undefined}
-        value={summary.completed}
+        label="Tasks"
+        onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
+        value={summary.tasks}
         tone="success"
       />
       <SummaryCard
         href={onSelectMetric ? "#plan" : undefined}
-        label="In Progress"
-        onClick={onSelectMetric ? () => onSelectMetric("in_progress") : undefined}
-        value={summary.inProgress}
+        label="Milestones"
+        onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
+        value={summary.milestones}
         tone="warning"
       />
       <SummaryCard
         href={onSelectMetric ? "#plan" : undefined}
-        label="Blocked"
-        onClick={onSelectMetric ? () => onSelectMetric("blocked") : undefined}
-        value={summary.blocked}
+        label="Plan Items"
+        onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
+        value={summary.phases + summary.tasks + summary.milestones}
         tone="danger"
       />
     </section>
