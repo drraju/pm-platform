@@ -136,6 +136,56 @@ export type ApiTaskDependency = {
   updatedAt?: string;
 };
 
+export type ApiPlanningTaskSchedule = {
+  id: string;
+  snapshotId: string;
+  projectId: string;
+  taskId: string;
+  parentTaskId?: string | null;
+  taskTitle: string;
+  taskKind: "standard" | "summary" | "milestone";
+  ownerId?: string | null;
+  plannedStartDate?: string | null;
+  plannedFinishDate?: string | null;
+  durationDays: number;
+  percentComplete: number;
+  sequenceNumber?: number | null;
+  totalFloatDays?: number | null;
+  isCritical: boolean;
+  task?: ApiTask | null;
+};
+
+export type ApiScheduleSnapshot = {
+  id: string;
+  projectId: string;
+  versionNumber: number;
+  projectStartDate?: string | null;
+  projectFinishDate?: string | null;
+  projectCompletionPercent: number;
+  criticalPathTaskIds: string[];
+  calculatedAt?: string | null;
+};
+
+export type ApiResourceAllocation = {
+  id: string;
+  projectId: string;
+  taskId: string;
+  userId: string;
+  allocationPercent: number;
+  startDate?: string | null;
+  finishDate?: string | null;
+  user?: ApiUser | null;
+};
+
+export type ApiPlanningWorkspace = {
+  project: ApiProject;
+  snapshot: ApiScheduleSnapshot;
+  schedules: ApiPlanningTaskSchedule[];
+  dependencies: ApiTaskDependency[];
+  resourceAllocations: ApiResourceAllocation[];
+  criticalPathTaskIds: string[];
+};
+
 export type ApiProjectBaselineTask = {
   id: string;
   projectBaselineId: string;
@@ -493,6 +543,79 @@ export function getPortfolioSummary() {
 
 export function getProject(projectId: string) {
   return apiRequest<ApiProjectDetails>(`/projects/${projectId}`);
+}
+
+export function getPlanningWorkspace(projectId: string) {
+  return apiRequest<ApiPlanningWorkspace>(
+    `/planning/projects/${projectId}/workspace`,
+  );
+}
+
+export function updatePlanningTaskSchedule(
+  projectId: string,
+  taskId: string,
+  input: {
+    percentComplete?: number;
+    plannedFinishDate?: string | null;
+    plannedStartDate?: string | null;
+  },
+) {
+  return apiRequest<ApiPlanningTaskSchedule>(
+    `/planning/projects/${projectId}/task-schedules/${taskId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function createPlanningDependency(
+  projectId: string,
+  input: {
+    dependencyType: ApiTaskDependency["dependencyType"];
+    lagDays?: number;
+    predecessorTaskId: string;
+    successorTaskId: string;
+  },
+) {
+  return apiRequest<ApiTaskDependency>(
+    `/planning/projects/${projectId}/dependencies`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deletePlanningDependency(
+  projectId: string,
+  dependencyId: string,
+) {
+  return apiRequest<void>(
+    `/planning/projects/${projectId}/dependencies/${dependencyId}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export function createPlanningResourceAllocation(
+  projectId: string,
+  input: {
+    allocationPercent: number;
+    finishDate?: string | null;
+    startDate?: string | null;
+    taskId: string;
+    userId: string;
+  },
+) {
+  return apiRequest<ApiResourceAllocation>(
+    `/planning/projects/${projectId}/resource-allocations`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function getProjectRisks(projectId: string) {
