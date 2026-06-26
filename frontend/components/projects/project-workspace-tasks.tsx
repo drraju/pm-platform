@@ -109,6 +109,7 @@ type TaskFormState = {
 type TaskFieldAccess = {
   assignee: boolean;
   core: boolean;
+  effort: boolean;
   progress: boolean;
   planning: boolean;
   structure: boolean;
@@ -294,7 +295,7 @@ export function ProjectWorkspaceTasks({
         <div>
           <h2 className="text-lg font-semibold text-slate-950">Plan</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Hierarchical project planning with WBS numbering, phases, milestones, and editable scheduling fields.
+            Hierarchical project planning with enterprise-style phases, tasks, milestones, and calculated rollups.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -419,7 +420,7 @@ export function ProjectWorkspaceTasks({
                                   : "bg-slate-100 text-slate-700"
                             }`}
                           >
-                            {formatTaskKindLabel(task.taskKind ?? "standard")}
+                            {formatTaskKindBadge(task.taskKind ?? "standard")}
                           </span>
                           {row.childCount > 0 ? (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
@@ -436,13 +437,13 @@ export function ProjectWorkspaceTasks({
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatAssignee(task)}
+                    {isSummary ? "Not assignable" : formatAssignee(task)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatDate(task.plannedStartDate, "No plan")}
+                    {formatDate(getDisplayedStartDate(task), "No plan")}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatDate(task.plannedEndDate, "No plan")}
+                    {formatDate(getDisplayedEndDate(task), "No plan")}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     {formatDate(task.actualStartDate, "Not started")}
@@ -451,16 +452,16 @@ export function ProjectWorkspaceTasks({
                     {formatDate(task.actualEndDate, "Not finished")}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatNumber(task.estimatedHours)}
+                    {isSummary ? "—" : formatNumber(task.estimatedHours)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatNumber(task.remainingHours)}
+                    {isSummary ? "—" : formatNumber(task.remainingHours)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatPercent(task.percentComplete)}
+                    {formatPercent(getDisplayedPercentComplete(task))}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 capitalize text-slate-600">
-                    {formatLabel(task.status)}
+                    {formatTaskStatus(task)}
                   </td>
                   <td className="px-3 py-3">
                     {canEditRow || canDeleteRow || canAddChild || hasReassignAccess ? (
@@ -524,7 +525,7 @@ export function ProjectWorkspaceTasks({
           description={
             dialogMode === "reassign"
               ? "Move this plan item to another project team member."
-              : "Capture phase hierarchy, planning dates, actual dates, effort, and ownership in one place."
+              : "Capture phase hierarchy, planning dates, effort, and ownership in one place."
           }
           footer={
             <>
@@ -555,7 +556,9 @@ export function ProjectWorkspaceTasks({
               description={
                 dialogMode === "reassign"
                   ? "Only assignee changes are available in this mode."
-                  : "Use canonical planning fields for the current project plan. WBS is derived from hierarchy and ordering, and phase numbering stays presentation-only."
+                  : isPhaseForm(form)
+                    ? "Phases are planning containers. Progress and rolled-up dates are calculated from descendant work."
+                    : "Use canonical planning fields for the current project plan. WBS is derived from hierarchy and ordering, and phase numbering stays presentation-only."
               }
               title="Plan Item Detail"
             >
@@ -566,65 +569,69 @@ export function ProjectWorkspaceTasks({
               ) : null}
 
               <ModalFormGrid className="md:grid-cols-2 xl:grid-cols-3">
-                <label className="block text-sm font-medium text-slate-700">
-                  Plan Item Type
-                  <select
-                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
-                    onChange={(event) =>
-                      updateForm({
-                        ...form,
-                        taskKind: event.target.value as NonNullable<ApiTask["taskKind"]>,
-                      })
-                    }
-                    value={form.taskKind}
-                  >
-                    {taskKinds.map((taskKind) => (
-                      <option key={taskKind.value} value={taskKind.value}>
-                        {taskKind.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    {
-                      taskKinds.find((taskKind) => taskKind.value === form.taskKind)
-                        ?.description
-                    }
-                  </span>
-                </label>
+                {!shouldHideStructuralFields(dialogMode, form) ? (
+                  <>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Plan Item Type
+                      <select
+                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                        onChange={(event) =>
+                          updateForm({
+                            ...form,
+                            taskKind: event.target.value as NonNullable<ApiTask["taskKind"]>,
+                          })
+                        }
+                        value={form.taskKind}
+                      >
+                        {taskKinds.map((taskKind) => (
+                          <option key={taskKind.value} value={taskKind.value}>
+                            {taskKind.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {
+                          taskKinds.find((taskKind) => taskKind.value === form.taskKind)
+                            ?.description
+                        }
+                      </span>
+                    </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Parent Phase
-                  <select
-                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
-                    onChange={(event) =>
-                      updateForm({ ...form, parentTaskId: event.target.value })
-                    }
-                    value={form.parentTaskId}
-                  >
-                    <option value="">Top level</option>
-                    {editableParentOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Parent Phase
+                      <select
+                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                        onChange={(event) =>
+                          updateForm({ ...form, parentTaskId: event.target.value })
+                        }
+                        value={form.parentTaskId}
+                      >
+                        <option value="">Top level</option>
+                        {editableParentOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Sequence
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
-                    min={0}
-                    onChange={(event) =>
-                      updateForm({ ...form, sequenceNumber: event.target.value })
-                    }
-                    type="number"
-                    value={form.sequenceNumber}
-                  />
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Sequence
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                        min={0}
+                        onChange={(event) =>
+                          updateForm({ ...form, sequenceNumber: event.target.value })
+                        }
+                        type="number"
+                        value={form.sequenceNumber}
+                      />
+                    </label>
+                  </>
+                ) : null}
 
                 <label className="block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3">
                   Title
@@ -651,51 +658,57 @@ export function ProjectWorkspaceTasks({
                   />
                 </label>
 
-                <TaskAssigneeSelect
-                  disabled={dialogMode !== "create" && !taskFieldAccess.assignee}
-                  members={members}
-                  onChange={(assigneeId) => updateForm({ ...form, assigneeId })}
-                  value={form.assigneeId}
-                />
+                {!isPhaseForm(form) ? (
+                  <>
+                    <TaskAssigneeSelect
+                      disabled={dialogMode !== "create" && !taskFieldAccess.assignee}
+                      members={members}
+                      onChange={(assigneeId) => updateForm({ ...form, assigneeId })}
+                      value={form.assigneeId}
+                    />
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Status
-                  <select
-                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
-                    onChange={(event) =>
-                      updateForm({
-                        ...form,
-                        status: event.target.value as ApiTask["status"],
-                      })
-                    }
-                    value={form.status}
-                  >
-                    {taskStatuses.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Status
+                      <select
+                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                        onChange={(event) =>
+                          updateForm({
+                            ...form,
+                            status: event.target.value as ApiTask["status"],
+                          })
+                        }
+                        value={form.status}
+                      >
+                        {taskStatuses.map((status) => (
+                          <option key={status.value} value={status.value}>
+                            {status.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Priority
-                  <select
-                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.core}
-                    onChange={(event) =>
-                      updateForm({ ...form, priority: event.target.value })
-                    }
-                    value={form.priority}
-                  >
-                    {priorities.map((priority) => (
-                      <option key={priority} value={priority}>
-                        {priority}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Priority
+                      <select
+                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.core}
+                        onChange={(event) =>
+                          updateForm({ ...form, priority: event.target.value })
+                        }
+                        value={form.priority}
+                      >
+                        {priorities.map((priority) => (
+                          <option key={priority} value={priority}>
+                            {priority}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <PhaseRollupReadOnly task={selectedTask} />
+                )}
 
                 <label className="block text-sm font-medium text-slate-700">
                   Planned Start
@@ -723,76 +736,80 @@ export function ProjectWorkspaceTasks({
                   />
                 </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Actual Start
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
-                    onChange={(event) =>
-                      updateForm({ ...form, actualStartDate: event.target.value })
-                    }
-                    type="date"
-                    value={form.actualStartDate}
-                  />
-                </label>
+                {!isPhaseForm(form) ? (
+                  <>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Actual Start
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                        onChange={(event) =>
+                          updateForm({ ...form, actualStartDate: event.target.value })
+                        }
+                        type="date"
+                        value={form.actualStartDate}
+                      />
+                    </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Actual End
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    onChange={(event) =>
-                      updateForm({ ...form, actualEndDate: event.target.value })
-                    }
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
-                    type="date"
-                    value={form.actualEndDate}
-                  />
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Actual End
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        onChange={(event) =>
+                          updateForm({ ...form, actualEndDate: event.target.value })
+                        }
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                        type="date"
+                        value={form.actualEndDate}
+                      />
+                    </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Estimated Hours
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
-                    min={0}
-                    onChange={(event) =>
-                      updateForm({ ...form, estimatedHours: event.target.value })
-                    }
-                    step="0.25"
-                    type="number"
-                    value={form.estimatedHours}
-                  />
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Estimated Hours
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.effort}
+                        min={0}
+                        onChange={(event) =>
+                          updateForm({ ...form, estimatedHours: event.target.value })
+                        }
+                        step="0.25"
+                        type="number"
+                        value={form.estimatedHours}
+                      />
+                    </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Remaining Hours
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
-                    min={0}
-                    onChange={(event) =>
-                      updateForm({ ...form, remainingHours: event.target.value })
-                    }
-                    step="0.25"
-                    type="number"
-                    value={form.remainingHours}
-                  />
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Remaining Hours
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.effort}
+                        min={0}
+                        onChange={(event) =>
+                          updateForm({ ...form, remainingHours: event.target.value })
+                        }
+                        step="0.25"
+                        type="number"
+                        value={form.remainingHours}
+                      />
+                    </label>
 
-                <label className="block text-sm font-medium text-slate-700">
-                  Percent Complete
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
-                    max={100}
-                    min={0}
-                    onChange={(event) =>
-                      updateForm({ ...form, percentComplete: event.target.value })
-                    }
-                    type="number"
-                    value={form.percentComplete}
-                  />
-                </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Percent Complete
+                      <input
+                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                        max={100}
+                        min={0}
+                        onChange={(event) =>
+                          updateForm({ ...form, percentComplete: event.target.value })
+                        }
+                        type="number"
+                        value={form.percentComplete}
+                      />
+                    </label>
+                  </>
+                ) : null}
 
                 <label className="block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3">
                   Remarks
@@ -892,6 +909,42 @@ function TaskAssigneeSelect({
   );
 }
 
+function PhaseRollupReadOnly({ task }: { task: ApiTask | null }) {
+  return (
+    <>
+      <ReadOnlyPlanningField
+        label="Calculated Progress"
+        value={formatPercent(task?.phaseProgress ?? task?.percentComplete ?? 0)}
+      />
+      <ReadOnlyPlanningField
+        label="Calculated Start"
+        value={formatDate(getDisplayedStartDate(task), "No calculated start")}
+      />
+      <ReadOnlyPlanningField
+        label="Calculated Finish"
+        value={formatDate(getDisplayedEndDate(task), "No calculated finish")}
+      />
+    </>
+  );
+}
+
+function ReadOnlyPlanningField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        {value}
+      </div>
+    </label>
+  );
+}
+
 function buildTaskHierarchy(tasks: ApiTask[], expandedTaskIds: string[]) {
   const tasksByParentId = new Map<string | null, ApiTask[]>();
   const wbsByTaskId = new Map<string, string>();
@@ -978,6 +1031,7 @@ function getTaskFieldAccess({
     return {
       assignee: true,
       core: true,
+      effort: true,
       planning: true,
       progress: true,
       structure: true,
@@ -988,6 +1042,7 @@ function getTaskFieldAccess({
     return {
       assignee: true,
       core: false,
+      effort: false,
       planning: false,
       progress: false,
       structure: false,
@@ -998,6 +1053,7 @@ function getTaskFieldAccess({
     return {
       assignee: true,
       core: true,
+      effort: true,
       planning: true,
       progress: true,
       structure: true,
@@ -1010,6 +1066,7 @@ function getTaskFieldAccess({
   return {
     assignee: canUpdateOwnTask || hasReassignAccess,
     core: false,
+    effort: false,
     planning: false,
     progress: canUpdateOwnTask,
     structure: false,
@@ -1136,21 +1193,23 @@ function validateTaskForm(form: TaskFormState) {
 function toTaskPayload(
   form: TaskFormState,
 ): Required<Pick<TaskOperationInput, "title">> & TaskOperationInput {
+  const isPhase = isPhaseForm(form);
+
   return {
-    actualEndDate: toNullableString(form.actualEndDate),
-    actualStartDate: toNullableString(form.actualStartDate),
-    assigneeId: toNullableString(form.assigneeId),
+    actualEndDate: isPhase ? undefined : toNullableString(form.actualEndDate),
+    actualStartDate: isPhase ? undefined : toNullableString(form.actualStartDate),
+    assigneeId: isPhase ? undefined : toNullableString(form.assigneeId),
     description: toNullableString(form.description),
-    estimatedHours: toNullableNumber(form.estimatedHours),
+    estimatedHours: isPhase ? undefined : toNullableNumber(form.estimatedHours),
     parentTaskId: toNullableString(form.parentTaskId),
-    percentComplete: Number(form.percentComplete || 0),
+    percentComplete: isPhase ? undefined : Number(form.percentComplete || 0),
     plannedEndDate: toNullableString(form.plannedEndDate),
     plannedStartDate: toNullableString(form.plannedStartDate),
-    priority: form.priority,
-    remainingHours: toNullableNumber(form.remainingHours),
+    priority: isPhase ? undefined : form.priority,
+    remainingHours: isPhase ? undefined : toNullableNumber(form.remainingHours),
     remarks: toNullableString(form.remarks),
     sequenceNumber: toNullableInteger(form.sequenceNumber),
-    status: form.status,
+    status: isPhase ? undefined : form.status,
     taskKind: form.taskKind,
     title: form.title.trim(),
   };
@@ -1201,18 +1260,79 @@ function getDialogTitle(
   return hasFullEditAccess ? "Edit Plan Item" : "Update Task Progress";
 }
 
+function shouldHideStructuralFields(
+  dialogMode: DialogMode,
+  form: TaskFormState,
+) {
+  return dialogMode === "create" && isPhaseForm(form);
+}
+
+function isPhaseForm(form: TaskFormState) {
+  return form.taskKind === "summary";
+}
+
 function formatAssignee(task: ApiTask) {
   return task.assignee
     ? `${task.assignee.firstName} ${task.assignee.lastName}`
     : "Unassigned";
 }
 
-function formatTaskKindLabel(value: NonNullable<ApiTask["taskKind"]>) {
+function formatTaskKindBadge(value: NonNullable<ApiTask["taskKind"]>) {
   if (value === "summary") {
-    return "phase";
+    return "[PHASE]";
   }
 
-  return value.replaceAll("_", " ");
+  if (value === "milestone") {
+    return "[MILESTONE]";
+  }
+
+  return "[TASK]";
+}
+
+function getDisplayedStartDate(task?: ApiTask | null) {
+  if (!task) {
+    return null;
+  }
+
+  return task.taskKind === "summary"
+    ? task.phaseStartDate ?? task.plannedStartDate ?? null
+    : task.plannedStartDate ?? null;
+}
+
+function getDisplayedEndDate(task?: ApiTask | null) {
+  if (!task) {
+    return null;
+  }
+
+  return task.taskKind === "summary"
+    ? task.phaseEndDate ?? task.plannedEndDate ?? null
+    : task.plannedEndDate ?? null;
+}
+
+function getDisplayedPercentComplete(task: ApiTask) {
+  if (task.taskKind === "summary") {
+    return task.phaseProgress ?? task.percentComplete ?? 0;
+  }
+
+  return task.percentComplete ?? 0;
+}
+
+function formatTaskStatus(task: ApiTask) {
+  if (task.taskKind !== "summary") {
+    return formatLabel(task.status);
+  }
+
+  const phaseProgress = task.phaseProgress ?? task.percentComplete ?? 0;
+
+  if (phaseProgress >= 100) {
+    return "complete";
+  }
+
+  if (phaseProgress > 0) {
+    return "in progress";
+  }
+
+  return "not started";
 }
 
 function formatDate(value?: string | null, emptyLabel = "None") {

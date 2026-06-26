@@ -15,6 +15,7 @@ import { PermissionKey } from '../../common/authz/permissions';
 import { ProjectRole } from '../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
+import { TaskStatus } from '../../common/enums/task-status.enum';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
 import { CreateProjectBaselineDto } from './dto/create-project-baseline.dto';
@@ -24,6 +25,10 @@ import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto
 import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
+import {
+  countPlanningItems,
+  decoratePlanningTasks,
+} from '../tasks/planning-rollup';
 import { Assumption } from '../raid/entities/assumption.entity';
 import { Dependency } from '../raid/entities/dependency.entity';
 import { Issue } from '../raid/entities/issue.entity';
@@ -90,7 +95,7 @@ export class ProjectsService {
   async findAll(actor?: ProjectVisibilityActor): Promise<ProjectWithHealth[]> {
     const projects =
       await this.projectVisibilityService.getVisibleProjects(actor);
-    return projects.map((project) => this.withHealth(project));
+    return projects.map((project) => this.decorateProject(this.withHealth(project)));
   }
 
   async findOne(
@@ -117,7 +122,7 @@ export class ProjectsService {
       throw new NotFoundException(`Project ${id} not found`);
     }
 
-    return this.withHealth(project);
+    return this.decorateProject(this.withHealth(project));
   }
 
   async update(
@@ -240,7 +245,7 @@ export class ProjectsService {
     await this.ensureProjectExists(projectId);
     await this.ensureProjectVisible(projectId, actor);
 
-    return this.tasksRepository.find({
+    const tasks = await this.tasksRepository.find({
       order: { createdAt: 'DESC' },
       relations: { assignee: true, project: true },
       where: {
@@ -250,6 +255,7 @@ export class ProjectsService {
         ...(query.priority ? { priority: query.priority } : {}),
       },
     });
+    return decoratePlanningTasks(tasks);
   }
 
   async createProjectTask(
@@ -266,11 +272,12 @@ export class ProjectsService {
     );
 
     const task = this.tasksRepository.create({
-      ...createProjectTaskDto,
+      ...this.withNormalizedProgress(createProjectTaskDto),
       projectId,
     });
 
-    return this.tasksRepository.save(task);
+    const savedTask = await this.tasksRepository.save(task);
+    return this.decorateTask(savedTask);
   }
 
   async updateProjectTask(
@@ -287,9 +294,10 @@ export class ProjectsService {
       projectId,
       updateProjectTaskDto.assigneeId,
     );
-    Object.assign(task, updateProjectTaskDto, { projectId });
+    Object.assign(task, this.withNormalizedProgress(updateProjectTaskDto), { projectId });
 
-    return this.tasksRepository.save(task);
+    const savedTask = await this.tasksRepository.save(task);
+    return this.decorateTask(savedTask);
   }
 
   async removeProjectTask(
@@ -745,6 +753,7 @@ export class ProjectsService {
       input.plannedStartDate ?? existingTask?.plannedStartDate,
       input.plannedEndDate ?? existingTask?.plannedEndDate,
     );
+    this.validatePhaseMutations(effectiveTaskKind, input);
 
     if (
       existingTask &&
@@ -868,6 +877,34 @@ export class ProjectsService {
       throw new BadRequestException(
         'Milestones must have matching planned start and end dates',
       );
+    }
+  }
+
+  private validatePhaseMutations(
+    taskKind: TaskKind,
+    input: Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
+  ) {
+    if (taskKind !== TaskKind.Summary) {
+      return;
+    }
+
+    if (input.assigneeId) {
+      throw new BadRequestException('Phases cannot be assigned to a user');
+    }
+
+    if (typeof input.status !== 'undefined') {
+      throw new BadRequestException('Phase status is calculated from child work');
+    }
+
+    if (typeof input.percentComplete !== 'undefined') {
+      throw new BadRequestException('Phase progress is calculated from child work');
+    }
+
+    if (
+      typeof input.estimatedHours !== 'undefined' ||
+      typeof input.remainingHours !== 'undefined'
+    ) {
+      throw new BadRequestException('Phases cannot store effort values');
     }
   }
 
@@ -1018,5 +1055,34 @@ export class ProjectsService {
         tasks: project.tasks,
       }),
     });
+  }
+
+  private decorateProject(project: ProjectWithHealth): ProjectWithHealth {
+    const tasks = decoratePlanningTasks(project.tasks ?? []);
+
+    return Object.assign(project, {
+      taskCounts: countPlanningItems(tasks),
+      tasks,
+    });
+  }
+
+  private decorateTask(task: Task): Task {
+    return decoratePlanningTasks([task])[0] as Task;
+  }
+
+  private withNormalizedProgress<
+    T extends Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
+  >(input: T): T {
+    const normalizedInput = { ...input };
+
+    if (normalizedInput.percentComplete === 100) {
+      normalizedInput.status = TaskStatus.Done;
+    }
+
+    if (normalizedInput.status === TaskStatus.Done) {
+      normalizedInput.percentComplete = 100;
+    }
+
+    return normalizedInput;
   }
 }

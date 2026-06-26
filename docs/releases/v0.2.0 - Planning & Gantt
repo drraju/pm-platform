@@ -1,0 +1,75 @@
+v0.2.0 - Enterprise Planning Engine
+
+Status: Phase 1 implemented, pending review
+
+Phase 1 - Architecture, Database, API
+
+Architecture decisions
+
+- Added a dedicated backend Planning module to keep enterprise planning contracts separate from the existing task CRUD surface.
+- Reused existing task hierarchy, task dependency, and project baseline concepts where they are already stable.
+- Kept scheduling calculations out of the frontend and behind PlanningService. Phase 1 stores pending schedule snapshots; Phase 2 will replace those with calculated schedule/task rows.
+- Added resource planning as first-class backend data: capacity, allocation, and workload heat-map snapshots.
+- Added portfolio dependency data separately from single-project task dependencies so executive timeline and roadmap APIs can support cross-project planning.
+- Preserved existing schema and endpoints. All Phase 1 tables are additive.
+
+Database additions
+
+- planning_schedule_snapshots
+- planning_task_schedules
+- resource_capacities
+- resource_allocations
+- resource_workload_snapshots
+- portfolio_dependencies
+
+Migration
+
+- backend/src/database/migrations/013_v0_2_0_phase_1_enterprise_planning_engine.sql
+
+Backend API surface
+
+- GET /planning/projects/:projectId/workspace
+- GET /planning/projects/:projectId/schedule
+- POST /planning/projects/:projectId/schedule/recalculate
+- GET /planning/projects/:projectId/critical-path
+- GET /planning/projects/:projectId/baselines
+- POST /planning/projects/:projectId/baselines
+- GET /planning/projects/:projectId/dependencies
+- POST /planning/projects/:projectId/dependencies
+- PATCH /planning/projects/:projectId/dependencies/:dependencyId
+- DELETE /planning/projects/:projectId/dependencies/:dependencyId
+- GET /planning/projects/:projectId/resource-capacities
+- POST /planning/projects/:projectId/resource-capacities
+- PATCH /planning/projects/:projectId/resource-capacities/:capacityId
+- DELETE /planning/projects/:projectId/resource-capacities/:capacityId
+- GET /planning/projects/:projectId/resource-allocations
+- POST /planning/projects/:projectId/resource-allocations
+- PATCH /planning/projects/:projectId/resource-allocations/:allocationId
+- DELETE /planning/projects/:projectId/resource-allocations/:allocationId
+- GET /planning/projects/:projectId/resource-heat-map
+- GET /planning/portfolio/timeline
+- POST /planning/portfolio/dependencies
+- PATCH /planning/portfolio/dependencies/:dependencyId
+- DELETE /planning/portfolio/dependencies/:dependencyId
+
+Testing
+
+- Added PlanningService unit tests for workspace aggregation, schedule recalculation requests, permission checks, resource target validation, and allocation date validation.
+- Verified:
+  - npm test -- planning.service.spec.ts
+  - npm run build
+
+Deferred to Phase 2
+
+- Automatic parent recalculation
+- Successor rescheduling
+- Float calculation
+- Critical path calculation
+- Project completion calculation
+- Workload heat-map generation
+
+Suggested commit messages
+
+- feat(planning): add enterprise planning phase 1 backend contracts
+- feat(db): add planning schedule and resource allocation schema
+- test(planning): cover phase 1 planning service contracts

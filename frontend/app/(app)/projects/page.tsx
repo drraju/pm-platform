@@ -51,18 +51,12 @@ function PageContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  console.log("PROJECTS DEBUG", {
-  href: typeof window !== "undefined" ? window.location.href : "server",
-  pathname,
-  params: searchParams.toString(),
-  health: searchParams.get("health"),
-  sort: searchParams.get("sort"),
-});
-  console.log("PROJECTS PAGE URL", {
+  console.log("PROJECTS PAGE", {
     pathname,
     search: searchParams.toString(),
     health: searchParams.get("health"),
     sort: searchParams.get("sort"),
+    status: searchParams.get("status"),
   });
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [users, setUsers] = useState<ApiAssignableUser[]>([]);

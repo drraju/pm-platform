@@ -197,7 +197,7 @@ describe('ProjectsService', () => {
     ]);
 
     await expect(service.findAll()).resolves.toEqual([
-      {
+      expect.objectContaining({
         health: {
           reasons: [
             'No critical issues, high risks, or overdue task threshold breaches',
@@ -205,7 +205,13 @@ describe('ProjectsService', () => {
           status: ProjectHealthStatus.Green,
         },
         id: projectId,
-      },
+        taskCounts: {
+          milestones: 0,
+          phases: 0,
+          tasks: 0,
+        },
+        tasks: [],
+      }),
     ]);
     expect(projectVisibilityService.getVisibleProjects).toHaveBeenCalledWith(
       undefined,
@@ -213,9 +219,45 @@ describe('ProjectsService', () => {
   });
 
   it('loads project details with members, tasks, and RAID context', async () => {
-    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      tasks: [
+        {
+          id: 'phase-1',
+          plannedEndDate: '2026-07-21',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          status: TaskStatus.Backlog,
+          taskKind: TaskKind.Summary,
+          title: 'Planning',
+        },
+        {
+          id: 'task-1',
+          parentTaskId: 'phase-1',
+          percentComplete: 100,
+          plannedEndDate: '2026-07-10',
+          plannedStartDate: '2026-07-02',
+          projectId,
+          status: TaskStatus.Done,
+          taskKind: TaskKind.Standard,
+          title: 'Scope',
+        },
+        {
+          id: 'task-2',
+          parentTaskId: 'phase-1',
+          percentComplete: 0,
+          plannedEndDate: '2026-07-18',
+          plannedStartDate: '2026-07-11',
+          projectId,
+          status: TaskStatus.InProgress,
+          taskKind: TaskKind.Standard,
+          title: 'Design',
+        },
+      ],
+    });
 
-    await expect(service.findOne(projectId)).resolves.toEqual({
+    await expect(service.findOne(projectId)).resolves.toEqual(
+      expect.objectContaining({
       health: {
         reasons: [
           'No critical issues, high risks, or overdue task threshold breaches',
@@ -223,7 +265,22 @@ describe('ProjectsService', () => {
         status: ProjectHealthStatus.Green,
       },
       id: projectId,
-    });
+      taskCounts: {
+        milestones: 0,
+        phases: 1,
+        tasks: 2,
+      },
+      tasks: expect.arrayContaining([
+        expect.objectContaining({
+          childTaskCount: 2,
+          id: 'phase-1',
+          phaseEndDate: '2026-07-18',
+          phaseProgress: 50,
+          phaseStartDate: '2026-07-02',
+        }),
+      ]),
+      }),
+    );
     expect(projectsRepository.findOne).toHaveBeenCalledWith({
       where: { id: projectId },
       relations: {
@@ -562,7 +619,15 @@ describe('ProjectsService', () => {
 
   it('lists project tasks with optional filters', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    tasksRepository.find?.mockResolvedValue([{ id: taskId, projectId }]);
+    tasksRepository.find?.mockResolvedValue([
+      {
+        id: 'phase-1',
+        projectId,
+        taskKind: TaskKind.Summary,
+        title: 'Planning',
+      },
+      { id: taskId, projectId, taskKind: TaskKind.Standard },
+    ]);
 
     await expect(
       service.findProjectTasks(projectId, {
@@ -570,7 +635,12 @@ describe('ProjectsService', () => {
         priority: 'high',
         status: TaskStatus.InProgress,
       }),
-    ).resolves.toEqual([{ id: taskId, projectId }]);
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'phase-1', childTaskCount: 0 }),
+        expect.objectContaining({ id: taskId, childTaskCount: 0 }),
+      ]),
+    );
 
     expect(tasksRepository.find).toHaveBeenCalledWith({
       order: { createdAt: 'DESC' },
@@ -686,6 +756,18 @@ describe('ProjectsService', () => {
     });
   });
 
+  it('rejects assigning a phase to a project member', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+
+    await expect(
+      service.createProjectTask(projectId, {
+        assigneeId: userId,
+        taskKind: TaskKind.Summary,
+        title: 'Planning Phase',
+      }),
+    ).rejects.toThrow('Phases cannot be assigned to a user');
+  });
+
   it('rejects project task creation when the assignee does not exist', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue(null);
@@ -736,15 +818,84 @@ describe('ProjectsService', () => {
       relations: { assignee: true, project: true },
       where: { id: taskId, projectId },
     });
-    expect(tasksRepository.save).toHaveBeenCalledWith({
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        projectId,
+        title: 'Updated task',
+        status: TaskStatus.Done,
+        assigneeId: userId,
+        percentComplete: 100,
+        sequenceNumber: 30,
+        taskKind: TaskKind.Standard,
+      }),
+    );
+  });
+
+  it('sets percent complete to 100 when a project task status is updated to done', async () => {
+    const task = {
+      id: taskId,
+      percentComplete: 40,
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Original task',
+    };
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValue(task);
+
+    await service.updateProjectTask(projectId, taskId, {
+      status: TaskStatus.Done,
+    });
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
+  it('sets status to done when project task percent complete is updated to 100', async () => {
+    const task = {
+      id: taskId,
+      percentComplete: 40,
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Original task',
+    };
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValue(task);
+
+    await service.updateProjectTask(projectId, taskId, {
+      percentComplete: 100,
+    });
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
+  it('rejects manually completing a project phase', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValue({
       id: taskId,
       projectId,
-      title: 'Updated task',
-      status: TaskStatus.Done,
-      assigneeId: userId,
-      sequenceNumber: 30,
-      taskKind: TaskKind.Standard,
+      taskKind: TaskKind.Summary,
+      title: 'Planning Phase',
     });
+
+    await expect(
+      service.updateProjectTask(projectId, taskId, {
+        status: TaskStatus.Done,
+      }),
+    ).rejects.toThrow('Phase status is calculated from child work');
   });
 
   it('rejects setting a project task as its own parent', async () => {

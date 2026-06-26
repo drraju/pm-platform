@@ -64,6 +64,14 @@ export class Task extends AuditableEntity {
   @Column({ name: 'remaining_hours', type: 'numeric', precision: 10, scale: 2, nullable: true })
   remainingHours?: number | null;
 
+  phaseProgress?: number | null;
+
+  phaseStartDate?: string | null;
+
+  phaseEndDate?: string | null;
+
+  childTaskCount?: number;
+
   @ManyToOne(() => Project, (project) => project.tasks)
   @JoinColumn({ name: 'project_id' })
   project: Project;

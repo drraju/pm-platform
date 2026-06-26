@@ -25,6 +25,10 @@ import {
 } from "@/features/auth";
 import {
   addProjectMember,
+  type ApiProjectBaseline,
+  type ApiProjectDetails,
+  type ApiProjectMember,
+  type ApiTaskDependency,
   captureProjectBaseline,
   createProjectTask,
   createProjectTaskDependency,
@@ -39,11 +43,8 @@ import {
   updateProjectTask,
   updateProjectTaskDependency,
   updateProjectMember,
-  type ApiProjectBaseline,
-  type ApiProjectDetails,
-  type ApiProjectMember,
-  type ApiTaskDependency,
 } from "@/features/projects";
+import { countPlanningItems, decorateProjectPlan } from "@/features/projects/planning";
 import {
   addRaidComment,
   createRaidItem,
@@ -101,12 +102,13 @@ export default function ProjectWorkspacePage() {
             getProjectBaseline(projectId, baseline.id).catch(() => baseline),
           ),
         );
+        const hydratedProject = decorateProjectPlan(projectDetails);
         storeAuthMe(authMe);
-        setProject(projectDetails);
+        setProject(hydratedProject);
         setSessionProfile(authMe);
         setTaskDependencies(
           dependencyData.map((dependency) =>
-            hydrateTaskDependency(dependency, projectDetails.tasks ?? []),
+            hydrateTaskDependency(dependency, hydratedProject.tasks ?? []),
           ),
         );
         setProjectBaselines(baselineData);
@@ -228,13 +230,10 @@ export default function ProjectWorkspacePage() {
       const task = await createProjectTask(projectId, input);
       setProject((currentProject) =>
         currentProject
-          ? {
-              ...currentProject,
-              tasks: [
-                ...(currentProject.tasks ?? []),
-                hydrateTask(task, currentProject, users),
-              ],
-            }
+          ? syncProjectTasks(currentProject, [
+              ...(currentProject.tasks ?? []),
+              hydrateTask(task, currentProject, users),
+            ])
           : currentProject,
       );
       setTaskDependencies((currentDependencies) =>
@@ -285,14 +284,14 @@ export default function ProjectWorkspacePage() {
       const task = await updateProjectTask(projectId, taskId, input);
       setProject((currentProject) =>
         currentProject
-          ? {
-              ...currentProject,
-              tasks: (currentProject.tasks ?? []).map((currentTask) =>
+          ? syncProjectTasks(
+              currentProject,
+              (currentProject.tasks ?? []).map((currentTask) =>
                 currentTask.id === taskId
                   ? hydrateTask({ ...currentTask, ...task }, currentProject, users)
                   : currentTask,
               ),
-            }
+            )
           : currentProject,
       );
       setTaskDependencies((currentDependencies) =>
@@ -322,12 +321,10 @@ export default function ProjectWorkspacePage() {
       await deleteProjectTask(projectId, taskId);
       setProject((currentProject) =>
         currentProject
-          ? {
-              ...currentProject,
-              tasks: (currentProject.tasks ?? []).filter(
-                (task) => task.id !== taskId,
-              ),
-            }
+          ? syncProjectTasks(
+              currentProject,
+              (currentProject.tasks ?? []).filter((task) => task.id !== taskId),
+            )
           : currentProject,
       );
       setTaskDependencies((currentDependencies) =>
@@ -632,6 +629,7 @@ export default function ProjectWorkspacePage() {
           setActiveWorkspaceTab("plan");
           setPlanStatusFilter(status);
         }}
+        taskCounts={project.taskCounts}
         tasks={tasks}
       />
 
@@ -639,7 +637,11 @@ export default function ProjectWorkspacePage() {
         <div className="flex flex-wrap gap-2 border-b border-slate-200 p-2">
           <WorkspaceTabButton
             active={activeWorkspaceTab === "plan"}
-            count={tasks.length}
+            count={
+              (project.taskCounts?.phases ?? 0) +
+              (project.taskCounts?.tasks ?? 0) +
+              (project.taskCounts?.milestones ?? 0)
+            }
             label="Plan"
             onClick={() => setActiveWorkspaceTab("plan")}
           />
@@ -929,6 +931,14 @@ function hydrateTask(
     assignee,
     project,
   };
+}
+
+function syncProjectTasks(project: ApiProjectDetails, tasks: ApiTask[]) {
+  return decorateProjectPlan({
+    ...project,
+    taskCounts: countPlanningItems(tasks),
+    tasks,
+  });
 }
 
 function replaceMember(

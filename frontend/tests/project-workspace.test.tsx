@@ -50,6 +50,7 @@ describe("Project workspace components", () => {
   it("renders summary metrics", () => {
     render(
       <ProjectWorkspaceSummary
+        taskCounts={{ milestones: 0, phases: 1, tasks: 2 }}
         tasks={[
           {
             id: "task-1",
@@ -69,9 +70,9 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByText("Total Tasks")).toBeInTheDocument();
-    expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    expect(screen.getByText("Phases")).toBeInTheDocument();
+    expect(screen.getByText("Tasks")).toBeInTheDocument();
+    expect(screen.getByText("Milestones")).toBeInTheDocument();
   });
 
   it("renders project health status and reasons", () => {
@@ -244,7 +245,11 @@ describe("Project workspace components", () => {
         onUpdateTask={onUpdateTask}
         tasks={[
           {
+            childTaskCount: 1,
             description: "Phase container.",
+            phaseEndDate: "2026-06-28",
+            phaseProgress: 25,
+            phaseStartDate: "2026-06-10",
             id: "summary-1",
             plannedEndDate: "2026-06-30",
             plannedStartDate: "2026-06-01",
@@ -407,6 +412,40 @@ describe("Project workspace components", () => {
     expect(onDeleteTask).toHaveBeenCalledWith("task-1");
   });
 
+  it("treats phases as read-only planning containers in the editor", () => {
+    render(
+      <ProjectWorkspaceTasks
+        canManageTasks
+        tasks={[
+          {
+            childTaskCount: 2,
+            description: "Phase container.",
+            id: "summary-1",
+            phaseEndDate: "2026-06-28",
+            phaseProgress: 50,
+            phaseStartDate: "2026-06-10",
+            plannedEndDate: "2026-06-30",
+            plannedStartDate: "2026-06-01",
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 1,
+            status: "todo",
+            taskKind: "summary",
+            title: "Planning",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByLabelText(/^assignee$/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/status/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/estimated hours/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Calculated Progress")).toBeInTheDocument();
+    expect(within(dialog).getByText("50%")).toBeInTheDocument();
+  });
+
   it("renders project task actions as view-only without permissions", () => {
     render(
       <ProjectWorkspaceTasks
@@ -498,8 +537,8 @@ describe("Project workspace components", () => {
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("1.1")).toBeInTheDocument();
     expect(screen.getByText("1.2")).toBeInTheDocument();
-    expect(screen.getByText("phase")).toBeInTheDocument();
-    expect(screen.getByText("milestone")).toBeInTheDocument();
+    expect(screen.getByText("[PHASE]")).toBeInTheDocument();
+    expect(screen.getByText("[MILESTONE]")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
     expect(screen.queryByText("Prepare release plan")).not.toBeInTheDocument();

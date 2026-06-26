@@ -162,7 +162,9 @@ describe('TasksService', () => {
   it('lists all tasks with project and assignee relations', async () => {
     tasksRepository.find?.mockResolvedValue([{ id: taskId }]);
 
-    await expect(service.findAll()).resolves.toEqual([{ id: taskId }]);
+    await expect(service.findAll()).resolves.toEqual([
+      expect.objectContaining({ id: taskId }),
+    ]);
     expect(tasksRepository.find).toHaveBeenCalledWith({
       relations: { project: true, assignee: true },
       where: undefined,
@@ -188,12 +190,12 @@ describe('TasksService', () => {
         createdAt: 'DESC',
       },
       relations: { project: true, assignee: true },
-      where: {
+      where: expect.objectContaining({
         assigneeId: userId,
         priority: 'high',
         projectId,
         status: TaskStatus.InProgress,
-      },
+      }),
     });
   });
 
@@ -208,9 +210,9 @@ describe('TasksService', () => {
         createdAt: 'DESC',
       },
       relations: { project: true, assignee: true },
-      where: {
+      where: expect.objectContaining({
         assigneeId: userId,
-      },
+      }),
     });
   });
 
@@ -246,6 +248,12 @@ describe('TasksService', () => {
         assigneeId: userId,
         status: TaskStatus.Backlog,
       },
+      {
+        id: 'summary-phase',
+        assigneeId: userId,
+        status: TaskStatus.Done,
+        taskKind: TaskKind.Summary,
+      },
     ]);
 
     await expect(service.getMyTasksSummary(userId)).resolves.toEqual({
@@ -257,14 +265,42 @@ describe('TasksService', () => {
       overdueTasks: 2,
     });
     expect(tasksRepository.find).toHaveBeenCalledWith({
-      where: { assigneeId: userId },
+      where: expect.objectContaining({ assigneeId: userId }),
     });
+  });
+
+  it('rejects assigning a phase to a user', async () => {
+    await expect(
+      service.create({
+        assigneeId: userId,
+        projectId,
+        taskKind: TaskKind.Summary,
+        title: 'Planning Phase',
+      }),
+    ).rejects.toThrow('Phases cannot be assigned to a user');
+  });
+
+  it('rejects manually completing a phase', async () => {
+    tasksRepository.findOne?.mockResolvedValue({
+      id: taskId,
+      projectId,
+      taskKind: TaskKind.Summary,
+      title: 'Planning Phase',
+    });
+
+    await expect(
+      service.update(taskId, {
+        status: TaskStatus.Done,
+      }),
+    ).rejects.toThrow('Phase status is calculated from child work');
   });
 
   it('gets one task with project and assignee relations', async () => {
     tasksRepository.findOne?.mockResolvedValue({ id: taskId });
 
-    await expect(service.findOne(taskId)).resolves.toEqual({ id: taskId });
+    await expect(service.findOne(taskId)).resolves.toEqual(
+      expect.objectContaining({ id: taskId }),
+    );
     expect(tasksRepository.findOne).toHaveBeenCalledWith({
       where: { id: taskId },
       relations: { project: true, assignee: true },
@@ -286,11 +322,61 @@ describe('TasksService', () => {
       title: 'Updated',
     });
 
-    expect(tasksRepository.save).toHaveBeenCalledWith({
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        title: 'Updated',
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
+  it('sets percent complete to 100 when status is updated to done', async () => {
+    const task = {
       id: taskId,
-      title: 'Updated',
+      percentComplete: 40,
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+
+    await service.update(taskId, {
       status: TaskStatus.Done,
     });
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
+  it('sets status to done when percent complete is updated to 100', async () => {
+    const task = {
+      id: taskId,
+      percentComplete: 40,
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+
+    await service.update(taskId, {
+      percentComplete: 100,
+    });
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
   });
 
   it('rejects assigning a task to itself as parent', async () => {
@@ -368,14 +454,16 @@ describe('TasksService', () => {
       actor,
     );
 
-    expect(tasksRepository.save).toHaveBeenCalledWith({
-      id: taskId,
-      assigneeId: userId,
-      projectId,
-      percentComplete: 50,
-      remarks: 'Working through integration testing.',
-      status: TaskStatus.InProgress,
-    });
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        assigneeId: userId,
+        projectId,
+        percentComplete: 50,
+        remarks: 'Working through integration testing.',
+        status: TaskStatus.InProgress,
+      }),
+    );
   });
 
   it('rejects assigned team member edits to manager-only task fields', async () => {
@@ -402,6 +490,8 @@ describe('TasksService', () => {
 
     await service.remove(taskId);
 
-    expect(tasksRepository.softRemove).toHaveBeenCalledWith(task);
+    expect(tasksRepository.softRemove).toHaveBeenCalledWith(
+      expect.objectContaining(task),
+    );
   });
 });

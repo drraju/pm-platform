@@ -10,6 +10,7 @@ import { Task } from '../../tasks/entities/task.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectBaseline } from './project-baseline.entity';
 import { ProjectMember } from './project-member.entity';
+import { PlanningTaskCounts } from '../../tasks/planning-rollup';
 
 @Entity({ name: 'projects' })
 export class Project extends AuditableEntity {
@@ -88,4 +89,6 @@ export class Project extends AuditableEntity {
 
   @ApiPropertyOptional({ type: ProjectHealthDto })
   health?: ProjectHealthDto;
+
+  taskCounts?: PlanningTaskCounts;
 }

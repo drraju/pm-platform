@@ -24,14 +24,24 @@ import { PermissionKey } from '../../common/authz/permissions';
 import { PermissionsGuard } from '../../common/authz/permissions.guard';
 import { RequirePermissions } from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CreateProjectBaselineDto } from '../projects/dto/create-project-baseline.dto';
+import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
+import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto';
+import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
-import { CreatePlanningDependencyDto } from './dto/create-planning-dependency.dto';
+import { CriticalPathDto } from './dto/critical-path.dto';
+import { CreatePortfolioDependencyDto } from './dto/create-portfolio-dependency.dto';
 import { CreateResourceAllocationDto } from './dto/create-resource-allocation.dto';
+import { CreateResourceCapacityDto } from './dto/create-resource-capacity.dto';
 import { PlanningWorkspaceDto } from './dto/planning-workspace.dto';
-import { UpdatePlanningTaskScheduleDto } from './dto/update-planning-task-schedule.dto';
+import { UpdatePortfolioDependencyDto } from './dto/update-portfolio-dependency.dto';
 import { UpdateResourceAllocationDto } from './dto/update-resource-allocation.dto';
-import { PlanningTaskSchedule } from './entities/planning-task-schedule.entity';
+import { UpdateResourceCapacityDto } from './dto/update-resource-capacity.dto';
+import { PlanningScheduleSnapshot } from './entities/planning-schedule-snapshot.entity';
+import { PortfolioDependency } from './entities/portfolio-dependency.entity';
 import { ResourceAllocation } from './entities/resource-allocation.entity';
+import { ResourceCapacity } from './entities/resource-capacity.entity';
+import { ResourceWorkloadSnapshot } from './entities/resource-workload-snapshot.entity';
 import { PlanningService } from './planning.service';
 
 type AuthenticatedRequest = Request & {
@@ -50,7 +60,7 @@ export class PlanningController {
   constructor(private readonly planningService: PlanningService) {}
 
   @Get('projects/:projectId/workspace')
-  @ApiOperation({ summary: 'Load the project planning workspace' })
+  @ApiOperation({ summary: 'Get the project planning workspace payload' })
   @ApiOkResponse({ type: PlanningWorkspaceDto })
   getWorkspace(
     @Req() request: AuthenticatedRequest,
@@ -59,35 +69,101 @@ export class PlanningController {
     return this.planningService.getWorkspace(projectId, request.user);
   }
 
-  @Patch('projects/:projectId/task-schedules/:taskId')
-  @RequirePermissions(PermissionKey.TaskUpdate)
-  @ApiOperation({ summary: 'Update a planning schedule row' })
-  @ApiOkResponse({ type: PlanningTaskSchedule })
-  updateTaskSchedule(
+  @Get('projects/:projectId/schedule')
+  @ApiOperation({ summary: 'Get the latest project schedule snapshot' })
+  @ApiOkResponse({ type: PlanningScheduleSnapshot })
+  getLatestSchedule(
     @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
-    @Body() input: UpdatePlanningTaskScheduleDto,
-  ): Promise<PlanningTaskSchedule> {
-    return this.planningService.updateTaskSchedule(
+  ): Promise<PlanningScheduleSnapshot | null> {
+    return this.planningService.getLatestSchedule(projectId, request.user);
+  }
+
+  @Post('projects/:projectId/schedule/recalculate')
+  @RequirePermissions(PermissionKey.TaskUpdate)
+  @ApiOperation({ summary: 'Request a project schedule recalculation' })
+  @ApiCreatedResponse({ type: PlanningScheduleSnapshot })
+  requestScheduleRecalculation(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<PlanningScheduleSnapshot> {
+    return this.planningService.requestScheduleRecalculation(
       projectId,
-      taskId,
+      request.user,
+    );
+  }
+
+  @Get('projects/:projectId/critical-path')
+  @ApiOperation({ summary: 'Get the latest critical path task IDs' })
+  @ApiOkResponse({ type: CriticalPathDto })
+  getCriticalPath(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<CriticalPathDto> {
+    return this.planningService.getCriticalPath(projectId, request.user);
+  }
+
+  @Post('projects/:projectId/baselines')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiOperation({ summary: 'Capture a planning baseline' })
+  @ApiCreatedResponse({ type: ProjectBaseline })
+  captureBaseline(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Body() input: CreateProjectBaselineDto,
+  ): Promise<ProjectBaseline> {
+    return this.planningService.captureBaseline(projectId, input, request.user);
+  }
+
+  @Get('projects/:projectId/baselines')
+  @ApiOperation({ summary: 'List planning baselines' })
+  @ApiOkResponse({ type: ProjectBaseline, isArray: true })
+  listBaselines(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<ProjectBaseline[]> {
+    return this.planningService.listBaselines(projectId, request.user);
+  }
+
+  @Post('projects/:projectId/dependencies')
+  @RequirePermissions(PermissionKey.TaskCreate)
+  @ApiOperation({ summary: 'Create a planning task dependency' })
+  @ApiCreatedResponse({ type: TaskDependency })
+  createTaskDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Body() input: CreateTaskDependencyDto,
+  ): Promise<TaskDependency> {
+    return this.planningService.createTaskDependency(
+      projectId,
       input,
       request.user,
     );
   }
 
-  @Post('projects/:projectId/dependencies')
-  @RequirePermissions(PermissionKey.TaskCreate)
-  @ApiOperation({ summary: 'Create a planning dependency' })
-  @ApiCreatedResponse({ type: TaskDependency })
-  createDependency(
+  @Get('projects/:projectId/dependencies')
+  @ApiOperation({ summary: 'List planning task dependencies' })
+  @ApiOkResponse({ type: TaskDependency, isArray: true })
+  listTaskDependencies(
     @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
-    @Body() input: CreatePlanningDependencyDto,
+  ): Promise<TaskDependency[]> {
+    return this.planningService.listTaskDependencies(projectId, request.user);
+  }
+
+  @Patch('projects/:projectId/dependencies/:dependencyId')
+  @RequirePermissions(PermissionKey.TaskUpdate)
+  @ApiOperation({ summary: 'Update a planning task dependency' })
+  @ApiOkResponse({ type: TaskDependency })
+  updateTaskDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('dependencyId') dependencyId: string,
+    @Body() input: UpdateTaskDependencyDto,
   ): Promise<TaskDependency> {
-    return this.planningService.createDependency(
+    return this.planningService.updateTaskDependency(
       projectId,
+      dependencyId,
       input,
       request.user,
     );
@@ -96,27 +172,75 @@ export class PlanningController {
   @Delete('projects/:projectId/dependencies/:dependencyId')
   @RequirePermissions(PermissionKey.TaskDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a planning dependency' })
-  @ApiNoContentResponse({ description: 'Planning dependency deleted' })
-  deleteDependency(
+  @ApiOperation({ summary: 'Delete a planning task dependency' })
+  @ApiNoContentResponse({ description: 'Planning task dependency deleted' })
+  removeTaskDependency(
     @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
     @Param('dependencyId') dependencyId: string,
   ): Promise<void> {
-    return this.planningService.deleteDependency(
+    return this.planningService.removeTaskDependency(
       projectId,
       dependencyId,
       request.user,
     );
   }
 
-  @Get('projects/:projectId/critical-path')
-  @ApiOperation({ summary: 'Get critical path task IDs' })
-  getCriticalPath(
+  @Post('projects/:projectId/resource-capacities')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiCreatedResponse({ type: ResourceCapacity })
+  createResourceCapacity(
     @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
-  ): Promise<{ criticalPathTaskIds: string[] }> {
-    return this.planningService.getCriticalPath(projectId, request.user);
+    @Body() input: CreateResourceCapacityDto,
+  ): Promise<ResourceCapacity> {
+    return this.planningService.createResourceCapacity(
+      projectId,
+      input,
+      request.user,
+    );
+  }
+
+  @Get('projects/:projectId/resource-capacities')
+  @ApiOkResponse({ type: ResourceCapacity, isArray: true })
+  listResourceCapacities(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<ResourceCapacity[]> {
+    return this.planningService.listResourceCapacities(projectId, request.user);
+  }
+
+  @Patch('projects/:projectId/resource-capacities/:capacityId')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiOkResponse({ type: ResourceCapacity })
+  updateResourceCapacity(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('capacityId') capacityId: string,
+    @Body() input: UpdateResourceCapacityDto,
+  ): Promise<ResourceCapacity> {
+    return this.planningService.updateResourceCapacity(
+      projectId,
+      capacityId,
+      input,
+      request.user,
+    );
+  }
+
+  @Delete('projects/:projectId/resource-capacities/:capacityId')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: 'Resource capacity deleted' })
+  removeResourceCapacity(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('capacityId') capacityId: string,
+  ): Promise<void> {
+    return this.planningService.removeResourceCapacity(
+      projectId,
+      capacityId,
+      request.user,
+    );
   }
 
   @Post('projects/:projectId/resource-allocations')
@@ -130,6 +254,18 @@ export class PlanningController {
     return this.planningService.createResourceAllocation(
       projectId,
       input,
+      request.user,
+    );
+  }
+
+  @Get('projects/:projectId/resource-allocations')
+  @ApiOkResponse({ type: ResourceAllocation, isArray: true })
+  listResourceAllocations(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<ResourceAllocation[]> {
+    return this.planningService.listResourceAllocations(
+      projectId,
       request.user,
     );
   }
@@ -155,14 +291,68 @@ export class PlanningController {
   @RequirePermissions(PermissionKey.ProjectUpdate)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse({ description: 'Resource allocation deleted' })
-  deleteResourceAllocation(
+  removeResourceAllocation(
     @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
     @Param('allocationId') allocationId: string,
   ): Promise<void> {
-    return this.planningService.deleteResourceAllocation(
+    return this.planningService.removeResourceAllocation(
       projectId,
       allocationId,
+      request.user,
+    );
+  }
+
+  @Get('projects/:projectId/resource-heat-map')
+  @ApiOkResponse({ type: ResourceWorkloadSnapshot, isArray: true })
+  listResourceHeatMap(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<ResourceWorkloadSnapshot[]> {
+    return this.planningService.listResourceHeatMap(projectId, request.user);
+  }
+
+  @Get('portfolio/timeline')
+  @ApiOperation({ summary: 'Get portfolio roadmap schedules and dependencies' })
+  getPortfolioTimeline(@Req() request: AuthenticatedRequest) {
+    return this.planningService.getPortfolioTimeline(request.user);
+  }
+
+  @Post('portfolio/dependencies')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiCreatedResponse({ type: PortfolioDependency })
+  createPortfolioDependency(
+    @Req() request: AuthenticatedRequest,
+    @Body() input: CreatePortfolioDependencyDto,
+  ): Promise<PortfolioDependency> {
+    return this.planningService.createPortfolioDependency(input, request.user);
+  }
+
+  @Patch('portfolio/dependencies/:dependencyId')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiOkResponse({ type: PortfolioDependency })
+  updatePortfolioDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('dependencyId') dependencyId: string,
+    @Body() input: UpdatePortfolioDependencyDto,
+  ): Promise<PortfolioDependency> {
+    return this.planningService.updatePortfolioDependency(
+      dependencyId,
+      input,
+      request.user,
+    );
+  }
+
+  @Delete('portfolio/dependencies/:dependencyId')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: 'Portfolio dependency deleted' })
+  removePortfolioDependency(
+    @Req() request: AuthenticatedRequest,
+    @Param('dependencyId') dependencyId: string,
+  ): Promise<void> {
+    return this.planningService.removePortfolioDependency(
+      dependencyId,
       request.user,
     );
   }

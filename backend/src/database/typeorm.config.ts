@@ -1,11 +1,12 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
 import { Notification } from '../modules/notifications/entities/notification.entity';
+import { PlanningScheduleSnapshot } from '../modules/planning/entities/planning-schedule-snapshot.entity';
 import { PlanningTaskSchedule } from '../modules/planning/entities/planning-task-schedule.entity';
 import { PortfolioDependency } from '../modules/planning/entities/portfolio-dependency.entity';
 import { ResourceAllocation } from '../modules/planning/entities/resource-allocation.entity';
 import { ResourceCapacity } from '../modules/planning/entities/resource-capacity.entity';
-import { ScheduleSnapshot } from '../modules/planning/entities/schedule-snapshot.entity';
+import { ResourceWorkloadSnapshot } from '../modules/planning/entities/resource-workload-snapshot.entity';
 import { ProjectBaselineTask } from '../modules/projects/entities/project-baseline-task.entity';
 import { ProjectBaseline } from '../modules/projects/entities/project-baseline.entity';
 import { ProjectMember } from '../modules/projects/entities/project-member.entity';
@@ -34,11 +35,16 @@ export const databaseEntities: Function[] = [
   ProjectMember,
   Task,
   TaskDependency,
-  ScheduleSnapshot,
   PlanningTaskSchedule,
   PortfolioDependency,
   ResourceAllocation,
   ResourceCapacity,
+  PlanningScheduleSnapshot,
+  PlanningTaskSchedule,
+  PortfolioDependency,
+  ResourceAllocation,
+  ResourceCapacity,
+  ResourceWorkloadSnapshot,
   Risk,
   Issue,
   Assumption,

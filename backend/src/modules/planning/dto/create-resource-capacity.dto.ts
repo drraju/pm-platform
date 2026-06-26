@@ -3,21 +3,14 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   Min,
 } from 'class-validator';
 import { ResourceAllocationUnit } from '../../../common/enums/resource-allocation-unit.enum';
 
-export class CreateResourceAllocationDto {
-  @ApiProperty({ format: 'uuid', required: false })
-  @IsOptional()
-  @IsUUID()
-  taskId?: string | null;
-
+export class CreateResourceCapacityDto {
   @ApiProperty({ enum: ResourceAllocationUnit })
   @IsEnum(ResourceAllocationUnit)
   resourceUnit: ResourceAllocationUnit;
@@ -32,23 +25,17 @@ export class CreateResourceAllocationDto {
   @IsString()
   teamName?: string | null;
 
-  @ApiProperty({ minimum: 0, maximum: 100 })
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  allocationPercent: number;
-
   @ApiProperty({ format: 'date' })
   @IsDateString()
-  startDate: string;
+  capacityDate: string;
 
-  @ApiProperty({ format: 'date' })
-  @IsDateString()
-  endDate: string;
-
-  @ApiProperty({ minimum: 0, required: false })
-  @IsOptional()
+  @ApiProperty({ default: 480, minimum: 0 })
   @IsInt()
   @Min(0)
-  plannedMinutesPerDay?: number | null;
+  capacityMinutes: number;
+
+  @ApiProperty({ default: 'UTC', required: false })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }
