@@ -19,6 +19,7 @@ yarn-error.log*
 # Environment
 .env
 .env.local
+.env.production 
 .env.*.local
 
 # Editors and OS
