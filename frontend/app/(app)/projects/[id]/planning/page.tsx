@@ -53,21 +53,40 @@ function PageContent() {
   async function handleUpdateSchedule(
     taskId: string,
     input: {
+      durationDays?: number | null;
+      ownerId?: string | null;
+      percentComplete?: number;
       plannedFinishDate?: string | null;
       plannedStartDate?: string | null;
+      status?: NonNullable<ApiPlanningTaskSchedule["status"]>;
+      taskTitle?: string;
     },
-  ) {
+  ): Promise<ApiPlanningTaskSchedule> {
     setError(null);
     setIsSaving(true);
     try {
-      await updatePlanningTaskSchedule(projectId, taskId, input);
-      await loadWorkspace();
+      const schedule = await updatePlanningTaskSchedule(projectId, taskId, input);
+      setWorkspace((currentWorkspace) =>
+        currentWorkspace
+          ? {
+              ...currentWorkspace,
+              schedules: currentWorkspace.schedules.map((currentSchedule) =>
+                currentSchedule.taskId === schedule.taskId ||
+                currentSchedule.id === schedule.id
+                  ? schedule
+                  : currentSchedule,
+              ),
+            }
+          : currentWorkspace,
+      );
+      return schedule;
     } catch (requestError) {
       setError(
         requestError instanceof Error
           ? requestError.message
           : "Unable to update schedule",
       );
+      throw requestError;
     } finally {
       setIsSaving(false);
     }

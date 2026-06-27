@@ -2,14 +2,27 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsDateString,
   IsInt,
+  IsEnum,
   IsNumber,
   IsOptional,
+  IsString,
   IsUUID,
   Max,
   Min,
 } from 'class-validator';
+import { TaskStatus } from '../../../common/enums/task-status.enum';
 
 export class UpdatePlanningTaskScheduleDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  taskTitle?: string;
+
+  @ApiProperty({ enum: TaskStatus, required: false })
+  @IsOptional()
+  @IsEnum(TaskStatus)
+  status?: TaskStatus;
+
   @ApiProperty({ format: 'date', required: false })
   @IsOptional()
   @IsDateString()

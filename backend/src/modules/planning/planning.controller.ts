@@ -43,7 +43,6 @@ import { UpdatePortfolioDependencyDto } from './dto/update-portfolio-dependency.
 import { UpdateResourceAllocationDto } from './dto/update-resource-allocation.dto';
 import { UpdateResourceCapacityDto } from './dto/update-resource-capacity.dto';
 import { PlanningScheduleSnapshot } from './entities/planning-schedule-snapshot.entity';
-import { PlanningTaskSchedule } from './entities/planning-task-schedule.entity';
 import { PortfolioDependency } from './entities/portfolio-dependency.entity';
 import { ResourceAllocation } from './entities/resource-allocation.entity';
 import { ResourceCapacity } from './entities/resource-capacity.entity';
@@ -102,13 +101,13 @@ export class PlanningController {
   @Patch('projects/:projectId/task-schedules/:scheduleId')
   @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Update a planning task schedule row' })
-  @ApiOkResponse({ type: PlanningTaskSchedule })
+  @ApiOkResponse({ type: PlanningWorkspaceScheduleDto })
   updatePlanningTaskSchedule(
     @Req() request: AuthenticatedRequest,
     @Param('projectId') projectId: string,
     @Param('scheduleId') scheduleId: string,
     @Body() input: UpdatePlanningTaskScheduleDto,
-  ): Promise<PlanningTaskSchedule> {
+  ): Promise<PlanningWorkspaceScheduleDto> {
     return this.planningService.updatePlanningTaskSchedule(
       projectId,
       scheduleId,

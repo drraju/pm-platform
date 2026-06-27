@@ -10,6 +10,20 @@ import type {
 
 type ZoomMode = "day" | "week" | "month";
 type DragMode = "move" | "resize-end";
+type EditableField =
+  | "durationDays"
+  | "ownerId"
+  | "percentComplete"
+  | "plannedFinishDate"
+  | "plannedStartDate"
+  | "status"
+  | "taskTitle";
+
+type EditingCell = {
+  field: EditableField;
+  taskId: string;
+  value: string;
+};
 
 type PlanningWorkspaceProps = {
   isSaving?: boolean;
@@ -25,10 +39,15 @@ type PlanningWorkspaceProps = {
   onUpdateSchedule: (
     taskId: string,
     input: {
+      durationDays?: number | null;
+      ownerId?: string | null;
+      percentComplete?: number;
       plannedFinishDate?: string | null;
       plannedStartDate?: string | null;
+      status?: NonNullable<ApiPlanningTaskSchedule["status"]>;
+      taskTitle?: string;
     },
-  ) => Promise<void>;
+  ) => Promise<ApiPlanningTaskSchedule>;
   workspace: ApiPlanningWorkspace;
 };
 
@@ -46,11 +65,27 @@ type DragState = {
 
 const rowHeight = 46;
 const planningGridTemplate =
-  "70px minmax(260px,320px) 160px 120px 120px 90px 100px";
-const planningGridWidth = 980;
+  "70px minmax(260px,320px) 160px 120px 120px 90px 100px 120px";
+const planningGridWidth = 1100;
 const headerHeight = 44;
 const resourceHeight = 18;
 const barHeight = 16;
+const editableFields: EditableField[] = [
+  "taskTitle",
+  "ownerId",
+  "plannedStartDate",
+  "plannedFinishDate",
+  "durationDays",
+  "percentComplete",
+  "status",
+];
+const statusOptions: NonNullable<ApiPlanningTaskSchedule["status"]>[] = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "blocked",
+  "done",
+];
 
 export function PlanningWorkspace({
   isSaving = false,
@@ -64,6 +99,8 @@ export function PlanningWorkspace({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskFocusId, setNewTaskFocusId] = useState<string | null>(null);
+  const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [dependencyDraft, setDependencyDraft] = useState({
     dependencyType: "FS" as "FS" | "SS" | "FF",
     predecessorTaskId: "",
@@ -96,6 +133,7 @@ export function PlanningWorkspace({
         : null,
     [rows, selectedTaskId],
   );
+  const ownerOptions = useMemo(() => buildOwnerOptions(workspace), [workspace]);
 
   useEffect(() => {
     setDependencyDraft((currentDraft) => ({
@@ -149,6 +187,86 @@ export function PlanningWorkspace({
     }
     event.preventDefault();
     setSelectedTaskId(taskId);
+  }
+
+  function startEditing(
+    schedule: ApiPlanningTaskSchedule,
+    field: EditableField,
+  ) {
+    setSelectedTaskId(schedule.taskId);
+    setEditError(null);
+    setEditingCell({
+      field,
+      taskId: schedule.taskId,
+      value: getEditableValue(schedule, field),
+    });
+  }
+
+  async function commitEdit(moveDirection: 0 | 1 = 0) {
+    if (!editingCell) {
+      return;
+    }
+    const schedule = workspace.schedules.find(
+      (candidate) => candidate.taskId === editingCell.taskId,
+    );
+    if (!schedule) {
+      setEditingCell(null);
+      return;
+    }
+    const validation = validateEdit(schedule, editingCell);
+    if (validation) {
+      setEditError(validation);
+      return;
+    }
+    const input = buildEditPayload(editingCell);
+    const hasChanges = Object.keys(input).length > 0;
+    const currentTaskId = editingCell.taskId;
+    const currentField = editingCell.field;
+    setEditingCell(null);
+    setEditError(null);
+    if (hasChanges) {
+      await onUpdateSchedule(currentTaskId, input);
+    }
+    if (moveDirection > 0) {
+      moveToNextEditableCell(currentTaskId, currentField);
+    }
+  }
+
+  function cancelEdit() {
+    setEditingCell(null);
+    setEditError(null);
+  }
+
+  function moveToNextEditableCell(taskId: string, field: EditableField) {
+    const rowIndex = rows.findIndex((row) => row.schedule.taskId === taskId);
+    const fieldIndex = editableFields.indexOf(field);
+    if (rowIndex < 0 || fieldIndex < 0) {
+      return;
+    }
+    const nextField = editableFields[(fieldIndex + 1) % editableFields.length];
+    const nextRow =
+      fieldIndex === editableFields.length - 1
+        ? rows[Math.min(rowIndex + 1, rows.length - 1)]
+        : rows[rowIndex];
+    window.setTimeout(() => startEditing(nextRow.schedule, nextField), 0);
+  }
+
+  function handleEditKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void commitEdit();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEdit();
+      return;
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      void commitEdit(1);
+    }
   }
 
   function startDrag(
@@ -260,7 +378,7 @@ export function PlanningWorkspace({
       <section className="grid min-h-[560px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft xl:grid-cols-[minmax(560px,45%)_minmax(0,1fr)]">
         <div className="overflow-auto border-r border-slate-200">
           <div
-            className="grid h-11 min-w-[980px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
+            className="grid h-11 min-w-[1100px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
             style={{
               gridTemplateColumns: planningGridTemplate,
               width: planningGridWidth,
@@ -285,6 +403,9 @@ export function PlanningWorkspace({
               Duration
             </span>
             <span className="h-full px-3 py-3 text-right">% Complete</span>
+            <span className="h-full border-l border-slate-200 px-3 py-3">
+              Status
+            </span>
           </div>
           {rows.map(({ depth, schedule, wbs }) => {
             const children = workspace.schedules.some(
@@ -294,7 +415,7 @@ export function PlanningWorkspace({
             return (
               <div
                 aria-selected={selectedTaskId === schedule.taskId}
-                className={`grid h-[46px] min-w-[980px] items-center border-b border-slate-100 text-xs text-slate-700 hover:bg-slate-50 ${
+                className={`grid h-[46px] min-w-[1100px] items-center border-b border-slate-100 text-xs text-slate-700 hover:bg-slate-50 ${
                   selectedTaskId === schedule.taskId
                     ? "bg-brand/10 ring-1 ring-inset ring-brand/40"
                     : ""
@@ -340,6 +461,7 @@ export function PlanningWorkspace({
                   </span>
                   <span
                     className="truncate font-medium text-slate-950"
+                    onDoubleClick={() => startEditing(schedule, "taskTitle")}
                     ref={(element) => {
                       if (element) {
                         taskNameRefs.current.set(schedule.taskId, element);
@@ -350,27 +472,126 @@ export function PlanningWorkspace({
                     tabIndex={-1}
                     title={title}
                   >
-                    {title}
+                    {isEditing(editingCell, schedule.taskId, "taskTitle") ? (
+                      <InlineEditor
+                        error={editError}
+                        field="taskTitle"
+                        onBlur={() => void commitEdit()}
+                        onChange={(value) =>
+                          setEditingCell((current) =>
+                            current ? { ...current, value } : current,
+                          )
+                        }
+                        onKeyDown={handleEditKeyDown}
+                        ownerOptions={ownerOptions}
+                        value={editingCell?.value ?? ""}
+                      />
+                    ) : (
+                      title
+                    )}
                   </span>
                 </div>
-                <span
-                  className="flex h-full min-w-0 items-center truncate border-r border-slate-100 px-4"
-                  title={formatOwner(schedule)}
-                >
-                  {formatOwner(schedule)}
-                </span>
-                <span className="flex h-full items-center border-r border-slate-100 px-3">
-                  {formatShortDate(schedule.plannedStartDate)}
-                </span>
-                <span className="flex h-full items-center border-r border-slate-100 px-3">
-                  {formatShortDate(schedule.plannedFinishDate)}
-                </span>
-                <span className="flex h-full items-center justify-end border-r border-slate-100 px-3">
-                  {schedule.durationDays}d
-                </span>
-                <span className="flex h-full items-center justify-end px-3">
-                  {Number(schedule.percentComplete).toFixed(0)}%
-                </span>
+                <EditableGridCell
+                  align="left"
+                  displayValue={formatOwner(schedule)}
+                  editingCell={editingCell}
+                  editError={editError}
+                  field="ownerId"
+                  onBlur={() => void commitEdit()}
+                  onChange={(value) =>
+                    setEditingCell((current) =>
+                      current ? { ...current, value } : current,
+                    )
+                  }
+                  onKeyDown={handleEditKeyDown}
+                  onStartEdit={() => startEditing(schedule, "ownerId")}
+                  ownerOptions={ownerOptions}
+                  schedule={schedule}
+                />
+                <EditableGridCell
+                  displayValue={formatShortDate(schedule.plannedStartDate)}
+                  editingCell={editingCell}
+                  editError={editError}
+                  field="plannedStartDate"
+                  onBlur={() => void commitEdit()}
+                  onChange={(value) =>
+                    setEditingCell((current) =>
+                      current ? { ...current, value } : current,
+                    )
+                  }
+                  onKeyDown={handleEditKeyDown}
+                  onStartEdit={() => startEditing(schedule, "plannedStartDate")}
+                  ownerOptions={ownerOptions}
+                  schedule={schedule}
+                />
+                <EditableGridCell
+                  displayValue={formatShortDate(schedule.plannedFinishDate)}
+                  editingCell={editingCell}
+                  editError={editError}
+                  field="plannedFinishDate"
+                  onBlur={() => void commitEdit()}
+                  onChange={(value) =>
+                    setEditingCell((current) =>
+                      current ? { ...current, value } : current,
+                    )
+                  }
+                  onKeyDown={handleEditKeyDown}
+                  onStartEdit={() =>
+                    startEditing(schedule, "plannedFinishDate")
+                  }
+                  ownerOptions={ownerOptions}
+                  schedule={schedule}
+                />
+                <EditableGridCell
+                  align="right"
+                  displayValue={`${schedule.durationDays}d`}
+                  editingCell={editingCell}
+                  editError={editError}
+                  field="durationDays"
+                  onBlur={() => void commitEdit()}
+                  onChange={(value) =>
+                    setEditingCell((current) =>
+                      current ? { ...current, value } : current,
+                    )
+                  }
+                  onKeyDown={handleEditKeyDown}
+                  onStartEdit={() => startEditing(schedule, "durationDays")}
+                  ownerOptions={ownerOptions}
+                  schedule={schedule}
+                />
+                <EditableGridCell
+                  align="right"
+                  displayValue={`${Number(schedule.percentComplete).toFixed(0)}%`}
+                  editingCell={editingCell}
+                  editError={editError}
+                  field="percentComplete"
+                  onBlur={() => void commitEdit()}
+                  onChange={(value) =>
+                    setEditingCell((current) =>
+                      current ? { ...current, value } : current,
+                    )
+                  }
+                  onKeyDown={handleEditKeyDown}
+                  onStartEdit={() => startEditing(schedule, "percentComplete")}
+                  ownerOptions={ownerOptions}
+                  schedule={schedule}
+                />
+                <EditableGridCell
+                  displayValue={formatStatus(schedule.status)}
+                  editingCell={editingCell}
+                  editError={editError}
+                  field="status"
+                  onBlur={() => void commitEdit()}
+                  onChange={(value) =>
+                    setEditingCell((current) =>
+                      current ? { ...current, value } : current,
+                    )
+                  }
+                  onKeyDown={handleEditKeyDown}
+                  onStartEdit={() => startEditing(schedule, "status")}
+                  ownerOptions={ownerOptions}
+                  schedule={schedule}
+                />
               </div>
             );
           })}
@@ -692,6 +913,278 @@ function getPointerClientX(event: React.PointerEvent<SVGElement>) {
   return Number.isFinite(event.clientX) ? event.clientX : nativeClientX;
 }
 
+type OwnerOption = {
+  id: string;
+  label: string;
+};
+
+function EditableGridCell({
+  align = "left",
+  displayValue,
+  editingCell,
+  editError,
+  field,
+  onBlur,
+  onChange,
+  onKeyDown,
+  onStartEdit,
+  ownerOptions,
+  schedule,
+}: {
+  align?: "left" | "right";
+  displayValue: string;
+  editingCell: EditingCell | null;
+  editError: string | null;
+  field: EditableField;
+  onBlur: () => void;
+  onChange: (value: string) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  onStartEdit: () => void;
+  ownerOptions: OwnerOption[];
+  schedule: ApiPlanningTaskSchedule;
+}) {
+  const editing = isEditing(editingCell, schedule.taskId, field);
+  return (
+    <span
+      className={`flex h-full min-w-0 items-center border-r border-slate-100 px-3 ${
+        align === "right" ? "justify-end text-right" : ""
+      }`}
+      onDoubleClick={onStartEdit}
+      title={displayValue}
+    >
+      {editing ? (
+        <InlineEditor
+          error={editError}
+          field={field}
+          onBlur={onBlur}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          ownerOptions={ownerOptions}
+          value={editingCell?.value ?? ""}
+        />
+      ) : (
+        <span className="truncate">{displayValue}</span>
+      )}
+    </span>
+  );
+}
+
+function InlineEditor({
+  error,
+  field,
+  onBlur,
+  onChange,
+  onKeyDown,
+  ownerOptions,
+  value,
+}: {
+  error: string | null;
+  field: EditableField;
+  onBlur: () => void;
+  onChange: (value: string) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  ownerOptions: OwnerOption[];
+  value: string;
+}) {
+  const className = `w-full rounded-sm border px-2 py-1 text-xs text-slate-950 outline-none ${
+    error ? "border-red-500 bg-red-50" : "border-brand bg-white"
+  }`;
+  const commonProps = {
+    autoFocus: true,
+    className,
+    onBlur,
+    onKeyDown,
+  };
+
+  if (field === "ownerId") {
+    return (
+      <select
+        {...commonProps}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        <option value="">Unassigned</option>
+        {ownerOptions.map((owner) => (
+          <option key={owner.id} value={owner.id}>
+            {owner.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (field === "status") {
+    return (
+      <select
+        {...commonProps}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {statusOptions.map((status) => (
+          <option key={status} value={status}>
+            {formatStatus(status)}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <span className="relative w-full">
+      <input
+        {...commonProps}
+        onChange={(event) => onChange(event.target.value)}
+        type={
+          field === "plannedStartDate" || field === "plannedFinishDate"
+            ? "date"
+            : field === "durationDays" || field === "percentComplete"
+              ? "number"
+              : "text"
+        }
+        value={value}
+      />
+      {error ? (
+        <span className="absolute left-0 top-full z-10 mt-1 min-w-44 rounded-sm border border-red-200 bg-white px-2 py-1 text-left text-[11px] font-medium text-red-700 shadow-soft">
+          {error}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function isEditing(
+  editingCell: EditingCell | null,
+  taskId: string,
+  field: EditableField,
+) {
+  return editingCell?.taskId === taskId && editingCell.field === field;
+}
+
+function buildOwnerOptions(workspace: ApiPlanningWorkspace): OwnerOption[] {
+  const owners = new Map<string, OwnerOption>();
+  workspace.schedules.forEach((schedule) => {
+    const assignee = schedule.task?.assignee;
+    if (assignee?.id) {
+      owners.set(assignee.id, {
+        id: assignee.id,
+        label:
+          `${assignee.firstName} ${assignee.lastName}`.trim() ||
+          assignee.email ||
+          assignee.id,
+      });
+    }
+  });
+  workspace.resourceAllocations.forEach((allocation) => {
+    const user = allocation.user;
+    if (user?.id) {
+      owners.set(user.id, {
+        id: user.id,
+        label:
+          `${user.firstName} ${user.lastName}`.trim() || user.email || user.id,
+      });
+    }
+  });
+  return [...owners.values()].sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+}
+
+function getEditableValue(
+  schedule: ApiPlanningTaskSchedule,
+  field: EditableField,
+) {
+  if (field === "taskTitle") {
+    return getTaskTitle(schedule);
+  }
+  if (field === "ownerId") {
+    return schedule.ownerId ?? schedule.task?.assignee?.id ?? "";
+  }
+  if (field === "plannedStartDate") {
+    return schedule.plannedStartDate ?? "";
+  }
+  if (field === "plannedFinishDate") {
+    return schedule.plannedFinishDate ?? "";
+  }
+  if (field === "durationDays") {
+    return String(schedule.durationDays ?? 0);
+  }
+  if (field === "percentComplete") {
+    return String(Number(schedule.percentComplete ?? 0));
+  }
+  return schedule.status ?? schedule.task?.status ?? "todo";
+}
+
+function validateEdit(
+  schedule: ApiPlanningTaskSchedule,
+  editingCell: EditingCell,
+) {
+  const value = editingCell.value.trim();
+  if (editingCell.field === "taskTitle" && !value) {
+    return "Task name is required.";
+  }
+  if (
+    editingCell.field === "plannedStartDate" ||
+    editingCell.field === "plannedFinishDate"
+  ) {
+    if (value && Number.isNaN(parseDate(value).getTime())) {
+      return "Enter a valid date.";
+    }
+    const plannedStartDate =
+      editingCell.field === "plannedStartDate"
+        ? value
+        : schedule.plannedStartDate;
+    const plannedFinishDate =
+      editingCell.field === "plannedFinishDate"
+        ? value
+        : schedule.plannedFinishDate;
+    if (
+      plannedStartDate &&
+      plannedFinishDate &&
+      plannedFinishDate < plannedStartDate
+    ) {
+      return "Finish cannot be before start.";
+    }
+  }
+  if (editingCell.field === "durationDays") {
+    const duration = Number(value);
+    if (!Number.isInteger(duration) || duration < 0) {
+      return "Duration must be a whole number of days.";
+    }
+  }
+  if (editingCell.field === "percentComplete") {
+    const progress = Number(value);
+    if (!Number.isFinite(progress) || progress < 0 || progress > 100) {
+      return "Progress must be between 0 and 100.";
+    }
+  }
+  return null;
+}
+
+function buildEditPayload(editingCell: EditingCell): Parameters<
+  PlanningWorkspaceProps["onUpdateSchedule"]
+>[1] {
+  const value = editingCell.value.trim();
+  if (editingCell.field === "taskTitle") {
+    return { taskTitle: value };
+  }
+  if (editingCell.field === "ownerId") {
+    return { ownerId: value || null };
+  }
+  if (editingCell.field === "plannedStartDate") {
+    return { plannedStartDate: value || null };
+  }
+  if (editingCell.field === "plannedFinishDate") {
+    return { plannedFinishDate: value || null };
+  }
+  if (editingCell.field === "durationDays") {
+    return { durationDays: Number(value) };
+  }
+  if (editingCell.field === "percentComplete") {
+    return { percentComplete: Number(value) };
+  }
+  return { status: value as NonNullable<ApiPlanningTaskSchedule["status"]> };
+}
+
 function buildVisibleRows(
   schedules: ApiPlanningTaskSchedule[],
   collapsedIds: Set<string>,
@@ -844,6 +1337,20 @@ function formatOwner(schedule: ApiPlanningTaskSchedule) {
     return "Unassigned";
   }
   return `${assignee.firstName} ${assignee.lastName}`.trim() || assignee.email;
+}
+
+function formatStatus(value?: string | null) {
+  if (!value) {
+    return "Not Started";
+  }
+  const labels: Record<string, string> = {
+    backlog: "Not Started",
+    blocked: "Blocked",
+    done: "Done",
+    in_progress: "In Progress",
+    todo: "To Do",
+  };
+  return labels[value] ?? value;
 }
 
 function getTaskTitle(schedule: ApiPlanningTaskSchedule) {

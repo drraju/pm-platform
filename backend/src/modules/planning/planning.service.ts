@@ -294,7 +294,7 @@ export class PlanningService {
     scheduleId: string,
     input: UpdatePlanningTaskScheduleDto,
     actor?: AuthenticatedActor,
-  ): Promise<PlanningTaskSchedule> {
+  ): Promise<PlanningWorkspaceScheduleDto> {
     await this.ensureCanManageProject(projectId, actor);
 
     const schedule = await this.findPlanningTaskSchedule(projectId, scheduleId);
@@ -307,21 +307,48 @@ export class PlanningService {
       await this.ensureUserExists(input.ownerId);
     }
 
+    const plannedStartDate =
+      input.plannedStartDate === undefined
+        ? schedule.plannedStartDate
+        : input.plannedStartDate;
+    const plannedEndDate =
+      input.plannedFinishDate === undefined
+        ? schedule.plannedEndDate
+        : input.plannedFinishDate;
+    const durationDays =
+      input.durationDays === undefined
+        ? input.plannedStartDate !== undefined ||
+          input.plannedFinishDate !== undefined
+          ? this.calculateDurationDays(plannedStartDate, plannedEndDate)
+          : schedule.durationDays
+        : input.durationDays;
+    const nextPlannedEndDate =
+      input.plannedFinishDate === undefined &&
+      input.durationDays !== undefined &&
+      input.durationDays !== null &&
+      plannedStartDate
+        ? this.shiftDateString(plannedStartDate, input.durationDays)
+        : plannedEndDate;
+
+    if (
+      plannedStartDate &&
+      nextPlannedEndDate &&
+      nextPlannedEndDate < plannedStartDate
+    ) {
+      throw new BadRequestException(
+        'Planned finish date cannot be before planned start date',
+      );
+    }
+
     Object.assign(schedule, {
-      durationDays: input.durationDays ?? schedule.durationDays,
+      durationDays,
       parentTaskId:
         input.parentTaskId === undefined
           ? schedule.parentTaskId
           : input.parentTaskId,
       percentComplete: input.percentComplete ?? schedule.percentComplete,
-      plannedEndDate:
-        input.plannedFinishDate === undefined
-          ? schedule.plannedEndDate
-          : input.plannedFinishDate,
-      plannedStartDate:
-        input.plannedStartDate === undefined
-          ? schedule.plannedStartDate
-          : input.plannedStartDate,
+      plannedEndDate: nextPlannedEndDate,
+      plannedStartDate,
       sequenceNumber:
         input.sequenceNumber === undefined
           ? schedule.sequenceNumber
@@ -329,12 +356,38 @@ export class PlanningService {
       updatedById: actor?.userId,
     });
 
-    if (schedule.task && input.ownerId !== undefined) {
-      schedule.task.assigneeId = input.ownerId;
+    if (
+      schedule.task &&
+      (input.ownerId !== undefined ||
+        input.status !== undefined ||
+        input.taskTitle !== undefined)
+    ) {
+      if (input.ownerId !== undefined) {
+        schedule.task.assigneeId = input.ownerId;
+      }
+      if (input.status !== undefined) {
+        schedule.task.status = input.status;
+      }
+      if (input.taskTitle !== undefined) {
+        const nextTitle = input.taskTitle.trim();
+        if (!nextTitle) {
+          throw new BadRequestException('Task name is required');
+        }
+        schedule.task.title = nextTitle;
+      }
+      schedule.task.dueDate = nextPlannedEndDate;
+      schedule.task.plannedEndDate = nextPlannedEndDate;
+      schedule.task.plannedStartDate = plannedStartDate;
+      schedule.task.percentComplete = Number(schedule.percentComplete ?? 0);
       await this.tasksRepository.save(schedule.task);
     }
 
-    return this.planningTaskSchedulesRepository.save(schedule);
+    const savedSchedule = await this.planningTaskSchedulesRepository.save(
+      schedule,
+    );
+    return this.toWorkspaceSchedule(
+      Object.assign(savedSchedule, { task: schedule.task }),
+    );
   }
 
   async createPlanningTask(
@@ -794,6 +847,7 @@ export class PlanningService {
         taskSchedule.task?.sequenceNumber ??
         null,
       snapshotId: taskSchedule.snapshotId,
+      status: taskSchedule.task?.status ?? null,
       task: taskSchedule.task ?? null,
       taskId: taskSchedule.taskId,
       taskKind: taskSchedule.taskKind,

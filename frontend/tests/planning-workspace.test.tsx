@@ -228,6 +228,78 @@ describe("PlanningWorkspace", () => {
     expect(await screen.findByTitle("New Task")).toHaveFocus();
   });
 
+  it("saves inline task name edits with Enter and updates the row locally", async () => {
+    const updatedSchedule = {
+      ...workspace.schedules[1],
+      task: {
+        ...workspace.schedules[1].task,
+        title: "Build delivery plan",
+      },
+      taskTitle: "Build delivery plan",
+    };
+    const onUpdateSchedule = vi.fn().mockResolvedValue(updatedSchedule);
+
+    function Harness() {
+      const [currentWorkspace, setCurrentWorkspace] =
+        React.useState(workspace);
+      return (
+        <PlanningWorkspace
+          onCreateDependency={vi.fn()}
+          onCreateTask={vi.fn()}
+          onDeleteDependency={vi.fn()}
+          onUpdateSchedule={async (taskId, input) => {
+            const schedule = await onUpdateSchedule(taskId, input);
+            setCurrentWorkspace((current) => ({
+              ...current,
+              schedules: current.schedules.map((candidate) =>
+                candidate.taskId === schedule.taskId ? schedule : candidate,
+              ),
+            }));
+            return schedule;
+          }}
+          workspace={currentWorkspace}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.doubleClick(screen.getByTitle("Design schedule"));
+    fireEvent.change(screen.getByDisplayValue("Design schedule"), {
+      target: { value: "Build delivery plan" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("Build delivery plan"), {
+      key: "Enter",
+    });
+
+    expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
+      taskTitle: "Build delivery plan",
+    });
+    expect(await screen.findByText("Build delivery plan")).toBeInTheDocument();
+  });
+
+  it("blocks invalid inline progress edits", () => {
+    const onUpdateSchedule = vi.fn();
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByText("50%"));
+    fireEvent.change(screen.getByDisplayValue("50"), {
+      target: { value: "125" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("125"), { key: "Enter" });
+
+    expect(screen.getByText("Progress must be between 0 and 100.")).toBeInTheDocument();
+    expect(onUpdateSchedule).not.toHaveBeenCalled();
+  });
+
   it("submits dependency creation and deletion", async () => {
     const onCreateDependency = vi.fn().mockResolvedValue(undefined);
     const onCreateTask = vi.fn();

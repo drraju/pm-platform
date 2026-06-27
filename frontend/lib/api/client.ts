@@ -154,6 +154,7 @@ export type ApiPlanningTaskSchedule = {
   taskId: string;
   parentTaskId?: string | null;
   taskTitle: string;
+  status?: ApiTask["status"] | null;
   taskKind: "standard" | "summary" | "milestone";
   ownerId?: string | null;
   plannedStartDate?: string | null;
@@ -567,9 +568,13 @@ export function updatePlanningTaskSchedule(
   projectId: string,
   taskId: string,
   input: {
+    durationDays?: number | null;
+    ownerId?: string | null;
     percentComplete?: number;
     plannedFinishDate?: string | null;
     plannedStartDate?: string | null;
+    status?: ApiTask["status"];
+    taskTitle?: string;
   },
 ) {
   return apiRequest<ApiPlanningTaskSchedule>(

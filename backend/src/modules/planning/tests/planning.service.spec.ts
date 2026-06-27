@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { PlanningCalculationStatus } from '../../../common/enums/planning-calculation-status.enum';
 import { ResourceAllocationUnit } from '../../../common/enums/resource-allocation-unit.enum';
+import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectBaseline } from '../../projects/entities/project-baseline.entity';
 import { Project } from '../../projects/entities/project.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
@@ -251,6 +252,7 @@ describe('PlanningService', () => {
           projectId,
           sequenceNumber: 1,
           snapshotId: 'snapshot-id',
+          status: null,
           task,
           taskId,
           taskKind: 'standard',
@@ -282,6 +284,7 @@ describe('PlanningService', () => {
           projectId,
           sequenceNumber: 1,
           snapshotId: 'snapshot-id',
+          status: null,
           task,
           taskId,
           taskKind: 'standard',
@@ -541,7 +544,7 @@ describe('PlanningService', () => {
       ),
     ).resolves.toEqual(
       expect.objectContaining({
-        plannedEndDate: '2026-07-12',
+        plannedFinishDate: '2026-07-12',
         plannedStartDate: '2026-07-08',
       }),
     );
@@ -560,6 +563,7 @@ describe('PlanningService', () => {
     });
     expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
+        durationDays: 4,
         plannedEndDate: '2026-07-12',
         plannedStartDate: '2026-07-08',
         updatedById: actor.userId,
@@ -621,6 +625,91 @@ describe('PlanningService', () => {
         sequenceNumber: 3,
       }),
     );
+  });
+
+  it('updates inline-editable task fields through the planning schedule endpoint', async () => {
+    const schedule = {
+      durationDays: 4,
+      id: 'schedule-row-id',
+      parentTaskId: null,
+      percentComplete: 25,
+      plannedEndDate: '2026-07-05',
+      plannedStartDate: '2026-07-01',
+      projectId,
+      sequenceNumber: 1,
+      task: {
+        id: taskId,
+        assigneeId: userId,
+        percentComplete: 25,
+        projectId,
+        status: TaskStatus.Todo,
+        title: 'Design schedule',
+      } as Task,
+      taskId,
+      taskKind: 'standard',
+    } as PlanningTaskSchedule;
+
+    planningTaskSchedulesRepository.findOne?.mockResolvedValue(schedule);
+    planningTaskSchedulesRepository.save?.mockResolvedValue(schedule);
+
+    const result = await service.updatePlanningTaskSchedule(
+      projectId,
+      'schedule-row-id',
+      {
+        durationDays: 5,
+        percentComplete: 80,
+        status: TaskStatus.InProgress,
+        taskTitle: 'Build delivery plan',
+      },
+      actor,
+    );
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plannedEndDate: '2026-07-06',
+        plannedStartDate: '2026-07-01',
+        status: TaskStatus.InProgress,
+        title: 'Build delivery plan',
+      }),
+    );
+    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        durationDays: 5,
+        percentComplete: 80,
+        plannedEndDate: '2026-07-06',
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        durationDays: 5,
+        percentComplete: 80,
+        plannedFinishDate: '2026-07-06',
+        status: TaskStatus.InProgress,
+        taskTitle: 'Build delivery plan',
+      }),
+    );
+  });
+
+  it('rejects inline edits with a finish date before the start date', async () => {
+    planningTaskSchedulesRepository.findOne?.mockResolvedValue({
+      durationDays: 4,
+      id: 'schedule-row-id',
+      plannedEndDate: '2026-07-05',
+      plannedStartDate: '2026-07-01',
+      projectId,
+      task: { id: taskId, projectId } as Task,
+      taskId,
+    } as PlanningTaskSchedule);
+
+    await expect(
+      service.updatePlanningTaskSchedule(
+        projectId,
+        'schedule-row-id',
+        { plannedFinishDate: '2026-06-30' },
+        actor,
+      ),
+    ).rejects.toThrow('Planned finish date cannot be before planned start date');
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
 
   it('creates a planning task and matching schedule row in one transaction', async () => {
