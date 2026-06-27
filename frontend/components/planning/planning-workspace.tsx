@@ -18,6 +18,9 @@ type PlanningWorkspaceProps = {
     predecessorTaskId: string;
     successorTaskId: string;
   }) => Promise<void>;
+  onCreateTask: (input: {
+    parentTaskId?: string | null;
+  }) => Promise<ApiPlanningTaskSchedule>;
   onDeleteDependency: (dependencyId: string) => Promise<void>;
   onUpdateSchedule: (
     taskId: string,
@@ -42,7 +45,9 @@ type DragState = {
 };
 
 const rowHeight = 46;
-const treeWidth = 560;
+const planningGridTemplate =
+  "70px minmax(260px,320px) 160px 120px 120px 90px 100px";
+const planningGridWidth = 980;
 const headerHeight = 44;
 const resourceHeight = 18;
 const barHeight = 16;
@@ -50,12 +55,15 @@ const barHeight = 16;
 export function PlanningWorkspace({
   isSaving = false,
   onCreateDependency,
+  onCreateTask,
   onDeleteDependency,
   onUpdateSchedule,
   workspace,
 }: PlanningWorkspaceProps) {
   const [zoom, setZoom] = useState<ZoomMode>("week");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [newTaskFocusId, setNewTaskFocusId] = useState<string | null>(null);
   const [dependencyDraft, setDependencyDraft] = useState({
     dependencyType: "FS" as "FS" | "SS" | "FF",
     predecessorTaskId: "",
@@ -63,6 +71,7 @@ export function PlanningWorkspace({
   });
   const [dragState, setDragState] = useState<DragState | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const taskNameRefs = useRef(new Map<string, HTMLSpanElement>());
 
   const rows = useMemo(
     () => buildVisibleRows(workspace.schedules, collapsedIds),
@@ -80,6 +89,13 @@ export function PlanningWorkspace({
     () => groupAllocations(workspace.resourceAllocations),
     [workspace.resourceAllocations],
   );
+  const selectedSchedule = useMemo(
+    () =>
+      selectedTaskId
+        ? rows.find((row) => row.schedule.taskId === selectedTaskId)?.schedule
+        : null,
+    [rows, selectedTaskId],
+  );
 
   useEffect(() => {
     setDependencyDraft((currentDraft) => ({
@@ -90,6 +106,18 @@ export function PlanningWorkspace({
         currentDraft.successorTaskId || leafRows[1]?.schedule.taskId || "",
     }));
   }, [leafRows]);
+
+  useEffect(() => {
+    if (!newTaskFocusId) {
+      return;
+    }
+    const taskName = taskNameRefs.current.get(newTaskFocusId);
+    if (!taskName) {
+      return;
+    }
+    taskName.focus();
+    setNewTaskFocusId(null);
+  }, [newTaskFocusId, workspace.schedules]);
 
   const totalHeight = headerHeight + rows.length * rowHeight + 24;
   const totalWidth = timeline.width;
@@ -104,6 +132,23 @@ export function PlanningWorkspace({
       }
       return nextIds;
     });
+  }
+
+  async function createTask(parentTaskId?: string | null) {
+    const schedule = await onCreateTask({ parentTaskId });
+    setSelectedTaskId(schedule.taskId);
+    setNewTaskFocusId(schedule.taskId);
+  }
+
+  function handleRowKeyDown(
+    event: React.KeyboardEvent<HTMLDivElement>,
+    taskId: string,
+  ) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    setSelectedTaskId(taskId);
   }
 
   function startDrag(
@@ -178,6 +223,22 @@ export function PlanningWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
+            disabled={isSaving}
+            onClick={() => createTask(selectedSchedule?.parentTaskId ?? null)}
+            type="button"
+          >
+            Add Task
+          </button>
+          <button
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
+            disabled={isSaving || !selectedSchedule}
+            onClick={() => createTask(selectedSchedule?.taskId ?? null)}
+            type="button"
+          >
+            Add Child
+          </button>
           {(["day", "week", "month"] as const).map((mode) => (
             <button
               aria-pressed={zoom === mode}
@@ -196,36 +257,73 @@ export function PlanningWorkspace({
         </div>
       </section>
 
-      <section className="grid min-h-[560px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft xl:grid-cols-[560px_minmax(0,1fr)]">
+      <section className="grid min-h-[560px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft xl:grid-cols-[minmax(560px,45%)_minmax(0,1fr)]">
         <div className="overflow-auto border-r border-slate-200">
-          <div className="grid h-11 grid-cols-[68px_1fr_120px_92px_92px_76px_88px] items-center border-b border-slate-200 bg-slate-50 px-3 text-xs font-semibold uppercase text-slate-500">
-            <span>WBS</span>
-            <span>Name</span>
-            <span>Owner</span>
-            <span>Start</span>
-            <span>Finish</span>
-            <span>Duration</span>
-            <span>% Complete</span>
+          <div
+            className="grid h-11 min-w-[980px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
+            style={{
+              gridTemplateColumns: planningGridTemplate,
+              width: planningGridWidth,
+            }}
+          >
+            <span className="h-full border-r border-slate-200 px-3 py-3">
+              WBS
+            </span>
+            <span className="h-full border-r border-slate-200 px-4 py-3">
+              Name
+            </span>
+            <span className="h-full border-r border-slate-200 px-4 py-3">
+              Owner
+            </span>
+            <span className="h-full border-r border-slate-200 px-3 py-3">
+              Start
+            </span>
+            <span className="h-full border-r border-slate-200 px-3 py-3">
+              Finish
+            </span>
+            <span className="h-full border-r border-slate-200 px-3 py-3 text-right">
+              Duration
+            </span>
+            <span className="h-full px-3 py-3 text-right">% Complete</span>
           </div>
           {rows.map(({ depth, schedule, wbs }) => {
             const children = workspace.schedules.some(
               (candidate) => candidate.parentTaskId === schedule.taskId,
             );
+            const title = getTaskTitle(schedule);
             return (
               <div
-                className="grid h-[46px] grid-cols-[68px_1fr_120px_92px_92px_76px_88px] items-center border-b border-slate-100 px-3 text-xs text-slate-700"
+                aria-selected={selectedTaskId === schedule.taskId}
+                className={`grid h-[46px] min-w-[980px] items-center border-b border-slate-100 text-xs text-slate-700 hover:bg-slate-50 ${
+                  selectedTaskId === schedule.taskId
+                    ? "bg-brand/10 ring-1 ring-inset ring-brand/40"
+                    : ""
+                }`}
                 key={schedule.taskId}
+                onClick={() => setSelectedTaskId(schedule.taskId)}
+                onKeyDown={(event) => handleRowKeyDown(event, schedule.taskId)}
+                role="row"
+                style={{
+                  gridTemplateColumns: planningGridTemplate,
+                  width: planningGridWidth,
+                }}
+                tabIndex={0}
               >
-                <span className="font-mono text-slate-500">{wbs}</span>
+                <span className="flex h-full items-center border-r border-slate-100 px-3 font-mono text-slate-500">
+                  {wbs}
+                </span>
                 <div
-                  className="flex min-w-0 items-center gap-2"
-                  style={{ paddingLeft: depth * 14 }}
+                  className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-4"
+                  style={{ paddingLeft: 16 + depth * 14 }}
                 >
                   {children ? (
                     <button
-                      aria-label={`${collapsedIds.has(schedule.taskId) ? "Expand" : "Collapse"} ${schedule.taskTitle}`}
+                      aria-label={`${collapsedIds.has(schedule.taskId) ? "Expand" : "Collapse"} ${title}`}
                       className="text-slate-500"
-                      onClick={() => toggleCollapse(schedule.taskId)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleCollapse(schedule.taskId);
+                      }}
                       type="button"
                     >
                       {collapsedIds.has(schedule.taskId) ? "►" : "▼"}
@@ -240,15 +338,39 @@ export function PlanningWorkspace({
                         ? "♦"
                         : "•"}
                   </span>
-                  <span className="truncate font-medium text-slate-950">
-                    {schedule.taskTitle}
+                  <span
+                    className="truncate font-medium text-slate-950"
+                    ref={(element) => {
+                      if (element) {
+                        taskNameRefs.current.set(schedule.taskId, element);
+                      } else {
+                        taskNameRefs.current.delete(schedule.taskId);
+                      }
+                    }}
+                    tabIndex={-1}
+                    title={title}
+                  >
+                    {title}
                   </span>
                 </div>
-                <span className="truncate">{formatOwner(schedule)}</span>
-                <span>{formatShortDate(schedule.plannedStartDate)}</span>
-                <span>{formatShortDate(schedule.plannedFinishDate)}</span>
-                <span>{schedule.durationDays}d</span>
-                <span>{Number(schedule.percentComplete).toFixed(0)}%</span>
+                <span
+                  className="flex h-full min-w-0 items-center truncate border-r border-slate-100 px-4"
+                  title={formatOwner(schedule)}
+                >
+                  {formatOwner(schedule)}
+                </span>
+                <span className="flex h-full items-center border-r border-slate-100 px-3">
+                  {formatShortDate(schedule.plannedStartDate)}
+                </span>
+                <span className="flex h-full items-center border-r border-slate-100 px-3">
+                  {formatShortDate(schedule.plannedFinishDate)}
+                </span>
+                <span className="flex h-full items-center justify-end border-r border-slate-100 px-3">
+                  {schedule.durationDays}d
+                </span>
+                <span className="flex h-full items-center justify-end px-3">
+                  {Number(schedule.percentComplete).toFixed(0)}%
+                </span>
               </div>
             );
           })}
@@ -308,6 +430,7 @@ export function PlanningWorkspace({
             ) : null}
 
             {rows.map(({ schedule }, index) => {
+              const title = getTaskTitle(schedule);
               const y = headerHeight + index * rowHeight + 12;
               const geometry = getBarGeometry(schedule, timeline);
               const isCritical =
@@ -327,7 +450,7 @@ export function PlanningWorkspace({
                   {geometry ? (
                     schedule.taskKind === "milestone" ? (
                       <rect
-                        aria-label={`Milestone ${schedule.taskTitle}`}
+                        aria-label={`Milestone ${title}`}
                         fill={isCritical ? "#dc2626" : "#0f766e"}
                         height={16}
                         onPointerDown={(event) =>
@@ -342,7 +465,7 @@ export function PlanningWorkspace({
                     ) : (
                       <g>
                         <rect
-                          aria-label={`Move ${schedule.taskTitle}`}
+                          aria-label={`Move ${title}`}
                           fill={
                             schedule.taskKind === "summary"
                               ? "#94a3b8"
@@ -381,7 +504,7 @@ export function PlanningWorkspace({
                         />
                         {schedule.taskKind !== "summary" ? (
                           <rect
-                            aria-label={`Resize ${schedule.taskTitle}`}
+                            aria-label={`Resize ${title}`}
                             fill="#0f172a"
                             height={barHeight}
                             onPointerDown={(event) =>
@@ -474,7 +597,7 @@ export function PlanningWorkspace({
             >
               {leafRows.map((row) => (
                 <option key={row.schedule.taskId} value={row.schedule.taskId}>
-                  {row.wbs} {row.schedule.taskTitle}
+                  {row.wbs} {getTaskTitle(row.schedule)}
                 </option>
               ))}
             </select>
@@ -495,7 +618,7 @@ export function PlanningWorkspace({
             >
               {leafRows.map((row) => (
                 <option key={row.schedule.taskId} value={row.schedule.taskId}>
-                  {row.wbs} {row.schedule.taskTitle}
+                  {row.wbs} {getTaskTitle(row.schedule)}
                 </option>
               ))}
             </select>
@@ -582,7 +705,7 @@ function buildVisibleRows(
     items.sort(
       (left, right) =>
         (left.sequenceNumber ?? 999_999) - (right.sequenceNumber ?? 999_999) ||
-        left.taskTitle.localeCompare(right.taskTitle),
+        getTaskTitle(left).localeCompare(getTaskTitle(right)),
     ),
   );
 
@@ -723,6 +846,19 @@ function formatOwner(schedule: ApiPlanningTaskSchedule) {
   return `${assignee.firstName} ${assignee.lastName}`.trim() || assignee.email;
 }
 
+function getTaskTitle(schedule: ApiPlanningTaskSchedule) {
+  const fallbackTask = schedule.task as
+    | { name?: string | null; title?: string | null }
+    | null
+    | undefined;
+  return (
+    schedule.taskTitle?.trim() ||
+    fallbackTask?.title?.trim() ||
+    fallbackTask?.name?.trim() ||
+    schedule.taskId
+  );
+}
+
 function formatAllocation(allocation: ApiResourceAllocation) {
   const user = allocation.user;
   const name = user
@@ -742,10 +878,8 @@ function allocationColor(percent: number) {
 }
 
 function taskName(taskId: string, schedules: ApiPlanningTaskSchedule[]) {
-  return (
-    schedules.find((schedule) => schedule.taskId === taskId)?.taskTitle ??
-    taskId
-  );
+  const schedule = schedules.find((candidate) => candidate.taskId === taskId);
+  return schedule ? getTaskTitle(schedule) : taskId;
 }
 
 function formatShortDate(value?: string | null) {

@@ -49,15 +49,15 @@ export class AuthorizationPolicyService {
       return true;
     }
 
-    const [ownsProject, membership, assignedTask] = await Promise.all([
-      this.isProjectOwner(projectId, actor.userId),
+    const [governsProject, membership, assignedTask] = await Promise.all([
+      this.isProjectGovernor(projectId, actor.userId),
       this.findMembership(projectId, actor.userId),
       this.shouldExpandProjectVisibilityFromTasks(permissionKeys)
         ? this.findAssignedTask(projectId, actor.userId)
         : Promise.resolve(null),
     ]);
 
-    return Boolean(ownsProject || membership || assignedTask);
+    return Boolean(governsProject || membership || assignedTask);
   }
 
   async canManageProject(
@@ -73,7 +73,11 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(projectId, actor, permissionKeys);
+    return this.canManageProjectWithPermissions(
+      projectId,
+      actor,
+      permissionKeys,
+    );
   }
 
   async canDeleteProject(
@@ -89,7 +93,11 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(projectId, actor, permissionKeys);
+    return this.canManageProjectWithPermissions(
+      projectId,
+      actor,
+      permissionKeys,
+    );
   }
 
   async canManageTask(
@@ -113,7 +121,11 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(projectId, actor, permissionKeys);
+    return this.canManageProjectWithPermissions(
+      projectId,
+      actor,
+      permissionKeys,
+    );
   }
 
   async canManageRaid(
@@ -135,7 +147,11 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(projectId, actor, permissionKeys);
+    return this.canManageProjectWithPermissions(
+      projectId,
+      actor,
+      permissionKeys,
+    );
   }
 
   async canViewPortfolio(actor?: AuthorizationActor): Promise<boolean> {
@@ -189,24 +205,29 @@ export class AuthorizationPolicyService {
       return true;
     }
 
-    const [ownsProject, membership] = await Promise.all([
-      this.isProjectOwner(projectId, actor.userId),
+    const [governsProject, membership] = await Promise.all([
+      this.isProjectGovernor(projectId, actor.userId),
       this.findMembership(projectId, actor.userId),
     ]);
 
     return Boolean(
-      ownsProject ||
-        (membership && projectManagerMembershipRoles.has(membership.role)),
+      governsProject ||
+      (membership && projectManagerMembershipRoles.has(membership.role)),
     );
   }
 
-  private async isProjectOwner(
+  private async isProjectGovernor(
     projectId: string,
     userId: string,
   ): Promise<boolean> {
     const project = await this.projectsRepository.findOne({
       select: { id: true },
-      where: { id: projectId, ownerId: userId },
+      where: [
+        { id: projectId, ownerId: userId },
+        { id: projectId, businessOwnerId: userId },
+        { id: projectId, deliveryLeadId: userId },
+        { id: projectId, executiveSponsorId: userId },
+      ],
     });
 
     return Boolean(project);
@@ -260,6 +281,8 @@ export class AuthorizationPolicyService {
       where: { id: actor.roleId },
     });
 
-    return new Set(role?.permissions?.map((permission) => permission.key) ?? []);
+    return new Set(
+      role?.permissions?.map((permission) => permission.key) ?? [],
+    );
   }
 }

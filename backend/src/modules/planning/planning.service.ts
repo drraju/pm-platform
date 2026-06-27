@@ -12,6 +12,8 @@ import {
 } from '../../common/authz/authorization-policy.service';
 import { PlanningCalculationStatus } from '../../common/enums/planning-calculation-status.enum';
 import { ResourceAllocationUnit } from '../../common/enums/resource-allocation-unit.enum';
+import { TaskKind } from '../../common/enums/task-kind.enum';
+import { TaskStatus } from '../../common/enums/task-status.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
 import { Project } from '../projects/entities/project.entity';
@@ -28,6 +30,7 @@ import { Task } from '../tasks/entities/task.entity';
 import { User } from '../users/entities/user.entity';
 import { CriticalPathDto } from './dto/critical-path.dto';
 import { CreatePortfolioDependencyDto } from './dto/create-portfolio-dependency.dto';
+import { CreatePlanningTaskDto } from './dto/create-planning-task.dto';
 import { CreateResourceAllocationDto } from './dto/create-resource-allocation.dto';
 import { CreateResourceCapacityDto } from './dto/create-resource-capacity.dto';
 import {
@@ -36,6 +39,7 @@ import {
   PlanningWorkspaceSnapshotDto,
 } from './dto/planning-workspace.dto';
 import { UpdatePortfolioDependencyDto } from './dto/update-portfolio-dependency.dto';
+import { UpdatePlanningTaskScheduleDto } from './dto/update-planning-task-schedule.dto';
 import { UpdateResourceAllocationDto } from './dto/update-resource-allocation.dto';
 import { UpdateResourceCapacityDto } from './dto/update-resource-capacity.dto';
 import { PlanningScheduleSnapshot } from './entities/planning-schedule-snapshot.entity';
@@ -283,6 +287,171 @@ export class PlanningService {
       projectId,
       taskIds: latestSchedule?.criticalPathTaskIds ?? [],
     };
+  }
+
+  async updatePlanningTaskSchedule(
+    projectId: string,
+    scheduleId: string,
+    input: UpdatePlanningTaskScheduleDto,
+    actor?: AuthenticatedActor,
+  ): Promise<PlanningTaskSchedule> {
+    await this.ensureCanManageProject(projectId, actor);
+
+    const schedule = await this.findPlanningTaskSchedule(projectId, scheduleId);
+
+    if (input.parentTaskId !== undefined && input.parentTaskId !== null) {
+      await this.findProjectTask(projectId, input.parentTaskId);
+    }
+
+    if (input.ownerId !== undefined && input.ownerId !== null) {
+      await this.ensureUserExists(input.ownerId);
+    }
+
+    Object.assign(schedule, {
+      durationDays: input.durationDays ?? schedule.durationDays,
+      parentTaskId:
+        input.parentTaskId === undefined
+          ? schedule.parentTaskId
+          : input.parentTaskId,
+      percentComplete: input.percentComplete ?? schedule.percentComplete,
+      plannedEndDate:
+        input.plannedFinishDate === undefined
+          ? schedule.plannedEndDate
+          : input.plannedFinishDate,
+      plannedStartDate:
+        input.plannedStartDate === undefined
+          ? schedule.plannedStartDate
+          : input.plannedStartDate,
+      sequenceNumber:
+        input.sequenceNumber === undefined
+          ? schedule.sequenceNumber
+          : input.sequenceNumber,
+      updatedById: actor?.userId,
+    });
+
+    if (schedule.task && input.ownerId !== undefined) {
+      schedule.task.assigneeId = input.ownerId;
+      await this.tasksRepository.save(schedule.task);
+    }
+
+    return this.planningTaskSchedulesRepository.save(schedule);
+  }
+
+  async createPlanningTask(
+    projectId: string,
+    input: CreatePlanningTaskDto,
+    actor?: AuthenticatedActor,
+  ): Promise<PlanningWorkspaceScheduleDto> {
+    await this.ensureCanManageProject(projectId, actor);
+
+    if (input.parentTaskId) {
+      await this.findProjectTask(projectId, input.parentTaskId);
+    }
+
+    const latestSchedule = await this.ensureWorkspaceSnapshot(projectId, actor);
+
+    return this.scheduleSnapshotsRepository.manager.transaction(
+      async (manager) => {
+        const snapshotsRepository = manager.getRepository(
+          PlanningScheduleSnapshot,
+        );
+        const taskSchedulesRepository =
+          manager.getRepository(PlanningTaskSchedule);
+        const tasksRepository = manager.getRepository(Task);
+
+        const snapshot = await snapshotsRepository.findOne({
+          lock: { mode: 'pessimistic_write' },
+          order: { scheduleVersion: 'DESC' },
+          where: { id: latestSchedule.id, projectId },
+        });
+
+        if (!snapshot) {
+          throw new NotFoundException(
+            `Planning schedule ${latestSchedule.id} not found for project ${projectId}`,
+          );
+        }
+
+        const parentTaskId = input.parentTaskId ?? null;
+        const siblingSchedules = await taskSchedulesRepository.find({
+          select: { sequenceNumber: true },
+          where: {
+            parentTaskId: parentTaskId ?? IsNull(),
+            projectId,
+            snapshotId: snapshot.id,
+          },
+        });
+        const sequenceNumber =
+          siblingSchedules.reduce(
+            (maxSequence, schedule) =>
+              Math.max(maxSequence, schedule.sequenceNumber ?? 0),
+            0,
+          ) + 1;
+        const plannedStartDate =
+          snapshot.projectStartDate ?? this.todayDateString();
+        const plannedEndDate = this.shiftDateString(plannedStartDate, 1);
+        const title = input.title?.trim() || 'New Task';
+
+        const task = await tasksRepository.save(
+          tasksRepository.create({
+            createdById: actor?.userId,
+            dueDate: plannedEndDate,
+            parentTaskId,
+            percentComplete: 0,
+            plannedEndDate,
+            plannedStartDate,
+            priority: 'medium',
+            projectId,
+            sequenceNumber,
+            startDate: plannedStartDate,
+            status: TaskStatus.Todo,
+            taskKind: TaskKind.Standard,
+            title,
+            updatedById: actor?.userId,
+          }),
+        );
+
+        const taskSchedule = await taskSchedulesRepository.save(
+          taskSchedulesRepository.create({
+            createdById: actor?.userId,
+            durationDays: 1,
+            isCritical: false,
+            parentTaskId,
+            percentComplete: 0,
+            plannedEndDate,
+            plannedStartDate,
+            projectId,
+            scheduledEndDate: plannedEndDate,
+            scheduledStartDate: plannedStartDate,
+            sequenceNumber,
+            snapshotId: snapshot.id,
+            taskId: task.id,
+            taskKind: TaskKind.Standard,
+            totalFloatDays: null,
+            updatedById: actor?.userId,
+          }),
+        );
+
+        Object.assign(snapshot, {
+          projectCompletionPercent: Number(snapshot.projectCompletionPercent ?? 0),
+          projectFinishDate: this.maxDateString(
+            snapshot.projectFinishDate,
+            plannedEndDate,
+          ),
+          projectStartDate: this.minDateString(
+            snapshot.projectStartDate,
+            plannedStartDate,
+          ),
+          updatedById: actor?.userId,
+        });
+        await snapshotsRepository.save(snapshot);
+
+        return this.toWorkspaceSchedule(
+          Object.assign(taskSchedule, {
+            task: Object.assign(task, { assignee: null }),
+          }),
+        );
+      },
+    );
   }
 
   captureBaseline(
@@ -601,7 +770,15 @@ export class PlanningService {
   private toWorkspaceSchedules(
     latestSchedule: PlanningScheduleSnapshot | null,
   ): PlanningWorkspaceScheduleDto[] {
-    return (latestSchedule?.taskSchedules ?? []).map((taskSchedule) => ({
+    return (latestSchedule?.taskSchedules ?? []).map((taskSchedule) =>
+      this.toWorkspaceSchedule(taskSchedule),
+    );
+  }
+
+  private toWorkspaceSchedule(
+    taskSchedule: PlanningTaskSchedule,
+  ): PlanningWorkspaceScheduleDto {
+    return {
       durationDays: taskSchedule.durationDays ?? 0,
       id: taskSchedule.id,
       isCritical: taskSchedule.isCritical,
@@ -622,7 +799,7 @@ export class PlanningService {
       taskKind: taskSchedule.taskKind,
       taskTitle: taskSchedule.task?.title ?? taskSchedule.taskId,
       totalFloatDays: taskSchedule.totalFloatDays ?? null,
-    }));
+    };
   }
 
   private findEarliestTaskDate(tasks: Task[]): string | null {
@@ -659,6 +836,42 @@ export class PlanningService {
     }
 
     return Math.max(0, Math.round((endTime - startTime) / 86_400_000));
+  }
+
+  private todayDateString(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private shiftDateString(value: string, days: number): string {
+    const date = new Date(`${value}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
+  private minDateString(
+    left?: string | null,
+    right?: string | null,
+  ): string | null {
+    if (!left) {
+      return right ?? null;
+    }
+    if (!right) {
+      return left;
+    }
+    return left < right ? left : right;
+  }
+
+  private maxDateString(
+    left?: string | null,
+    right?: string | null,
+  ): string | null {
+    if (!left) {
+      return right ?? null;
+    }
+    if (!right) {
+      return left;
+    }
+    return left > right ? left : right;
   }
 
   private async ensureProjectVisible(
@@ -814,6 +1027,49 @@ export class PlanningService {
     }
 
     return task;
+  }
+
+  private async findPlanningTaskSchedule(
+    projectId: string,
+    scheduleId: string,
+  ): Promise<PlanningTaskSchedule> {
+    const byScheduleId = await this.planningTaskSchedulesRepository.findOne({
+      relations: { task: { assignee: true } },
+      where: { id: scheduleId, projectId },
+    });
+
+    if (byScheduleId) {
+      return byScheduleId;
+    }
+
+    const latestSchedule = await this.scheduleSnapshotsRepository.findOne({
+      order: { scheduleVersion: 'DESC' },
+      select: { id: true },
+      where: { projectId },
+    });
+
+    if (!latestSchedule) {
+      throw new NotFoundException(
+        `Planning schedule ${scheduleId} not found for project ${projectId}`,
+      );
+    }
+
+    const byTaskId = await this.planningTaskSchedulesRepository.findOne({
+      relations: { task: { assignee: true } },
+      where: {
+        projectId,
+        snapshotId: latestSchedule.id,
+        taskId: scheduleId,
+      },
+    });
+
+    if (!byTaskId) {
+      throw new NotFoundException(
+        `Planning schedule ${scheduleId} not found for project ${projectId}`,
+      );
+    }
+
+    return byTaskId;
   }
 
   private async ensureUserExists(userId: string): Promise<void> {

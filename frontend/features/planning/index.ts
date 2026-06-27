@@ -1,5 +1,6 @@
 export {
   createPlanningDependency,
+  createPlanningTask,
   createPlanningResourceAllocation,
   deletePlanningDependency,
   getPlanningWorkspace,

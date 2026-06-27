@@ -581,6 +581,22 @@ export function updatePlanningTaskSchedule(
   );
 }
 
+export function createPlanningTask(
+  projectId: string,
+  input: {
+    parentTaskId?: string | null;
+    title?: string;
+  },
+) {
+  return apiRequest<ApiPlanningTaskSchedule>(
+    `/planning/projects/${projectId}/tasks`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function createPlanningDependency(
   projectId: string,
   input: {

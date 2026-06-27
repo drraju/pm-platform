@@ -117,23 +117,37 @@ describe('AuthorizationPolicyService', () => {
   let projectMembersRepository: MockRepository<ProjectMember>;
   let tasksRepository: MockRepository<Task>;
   let rolesRepository: MockRepository<Role>;
-  let ownedProjectIds: Set<string>;
+  let projectGovernorAssignments: Set<string>;
   let membershipsByKey: Map<string, ProjectRole>;
   let assignedTaskKeys: Set<string>;
 
   beforeEach(async () => {
-    ownedProjectIds = new Set();
+    projectGovernorAssignments = new Set();
     membershipsByKey = new Map();
     assignedTaskKeys = new Set();
 
     projectsRepository = {
       findOne: jest.fn(({ where }) => {
-        if (
-          where?.id &&
-          where?.ownerId &&
-          ownedProjectIds.has(`${where.id}:${where.ownerId}`)
-        ) {
-          return Promise.resolve({ id: where.id });
+        const whereClauses = Array.isArray(where) ? where : [where];
+        const governorFields = [
+          'ownerId',
+          'businessOwnerId',
+          'deliveryLeadId',
+          'executiveSponsorId',
+        ];
+        const matchingClause = whereClauses.find((clause) =>
+          governorFields.some((field) => {
+            const userId = clause?.[field as keyof typeof clause];
+            return (
+              clause?.id &&
+              userId &&
+              projectGovernorAssignments.has(`${clause.id}:${field}:${userId}`)
+            );
+          }),
+        );
+
+        if (matchingClause?.id) {
+          return Promise.resolve({ id: matchingClause.id });
         }
 
         return Promise.resolve(null);
@@ -150,7 +164,9 @@ describe('AuthorizationPolicyService', () => {
     tasksRepository = {
       findOne: jest.fn(({ where }) => {
         const key = `${where.projectId}:${where.assigneeId}`;
-        return Promise.resolve(assignedTaskKeys.has(key) ? { id: 'task-1' } : null);
+        return Promise.resolve(
+          assignedTaskKeys.has(key) ? { id: 'task-1' } : null,
+        );
       }),
     };
     rolesRepository = {
@@ -192,7 +208,9 @@ describe('AuthorizationPolicyService', () => {
     ['Partner', false],
     ['Customer', false],
   ])('evaluates portfolio access for %s', async (roleName, expected) => {
-    await expect(service.canViewPortfolio(actor(roleName))).resolves.toBe(expected);
+    await expect(service.canViewPortfolio(actor(roleName))).resolves.toBe(
+      expected,
+    );
   });
 
   it.each([
@@ -207,7 +225,9 @@ describe('AuthorizationPolicyService', () => {
     ['Partner', false],
     ['Customer', false],
   ])('evaluates executive access for %s', async (roleName, expected) => {
-    await expect(service.canViewExecutive(actor(roleName))).resolves.toBe(expected);
+    await expect(service.canViewExecutive(actor(roleName))).resolves.toBe(
+      expected,
+    );
   });
 
   it.each([
@@ -216,17 +236,26 @@ describe('AuthorizationPolicyService', () => {
     'Program Manager',
     'Portfolio Manager',
     'Executive',
-  ])('grants all-project visibility to %s through centralized policy', async (roleName) => {
-    await expect(service.canViewProject(projectId, actor(roleName))).resolves.toBe(
-      true,
-    );
-  });
+  ])(
+    'grants all-project visibility to %s through centralized policy',
+    async (roleName) => {
+      await expect(
+        service.canViewProject(projectId, actor(roleName)),
+      ).resolves.toBe(true);
+    },
+  );
 
   it('grants project visibility from membership without role-name logic', async () => {
-    membershipsByKey.set(`${projectId}:user-team-member`, ProjectRole.Contributor);
+    membershipsByKey.set(
+      `${projectId}:user-team-member`,
+      ProjectRole.Contributor,
+    );
 
     await expect(
-      service.canViewProject(projectId, actor('Team Member', 'user-team-member')),
+      service.canViewProject(
+        projectId,
+        actor('Team Member', 'user-team-member'),
+      ),
     ).resolves.toBe(true);
   });
 
@@ -249,7 +278,7 @@ describe('AuthorizationPolicyService', () => {
   it('allows project management for project managers, delivery leads, and owners via policy checks', async () => {
     membershipsByKey.set(`${projectId}:user-pm`, ProjectRole.Manager);
     membershipsByKey.set(`${projectId}:user-dl`, ProjectRole.Manager);
-    ownedProjectIds.add(`${projectId}:user-owner`);
+    projectGovernorAssignments.add(`${projectId}:ownerId:user-owner`);
 
     await expect(
       service.canManageProject(projectId, actor('Project Manager', 'user-pm')),
@@ -258,8 +287,50 @@ describe('AuthorizationPolicyService', () => {
       service.canManageProject(projectId, actor('Delivery Lead', 'user-dl')),
     ).resolves.toBe(true);
     await expect(
-      service.canManageProject(projectId, actor('Project Manager', 'user-owner')),
+      service.canManageProject(
+        projectId,
+        actor('Project Manager', 'user-owner'),
+      ),
     ).resolves.toBe(true);
+  });
+
+  it('allows project management for formal project governance assignments', async () => {
+    projectGovernorAssignments.add(
+      `${projectId}:businessOwnerId:user-business-owner`,
+    );
+    projectGovernorAssignments.add(
+      `${projectId}:deliveryLeadId:user-delivery-lead`,
+    );
+    projectGovernorAssignments.add(
+      `${projectId}:executiveSponsorId:user-executive-sponsor`,
+    );
+
+    await expect(
+      service.canManageProject(
+        projectId,
+        actor('Project Manager', 'user-business-owner'),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageProject(
+        projectId,
+        actor('Delivery Lead', 'user-delivery-lead'),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageProject(
+        projectId,
+        actor('Program Manager', 'user-executive-sponsor'),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('requires project management permissions even for formal governance assignments', async () => {
+    projectGovernorAssignments.add(`${projectId}:executiveSponsorId:user-exec`);
+
+    await expect(
+      service.canManageProject(projectId, actor('Executive', 'user-exec')),
+    ).resolves.toBe(false);
   });
 
   it('restricts project deletion to roles that have explicit delete permission', async () => {
@@ -293,7 +364,10 @@ describe('AuthorizationPolicyService', () => {
   });
 });
 
-function actor(roleName: string, userId = `user-${roleName.toLowerCase()}`): AuthorizationActor {
+function actor(
+  roleName: string,
+  userId = `user-${roleName.toLowerCase()}`,
+): AuthorizationActor {
   return {
     email: `${userId}@example.com`,
     roleId: `role-${roleName}`,

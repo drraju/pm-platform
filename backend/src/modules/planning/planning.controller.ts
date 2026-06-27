@@ -31,13 +31,19 @@ import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { CriticalPathDto } from './dto/critical-path.dto';
 import { CreatePortfolioDependencyDto } from './dto/create-portfolio-dependency.dto';
+import { CreatePlanningTaskDto } from './dto/create-planning-task.dto';
 import { CreateResourceAllocationDto } from './dto/create-resource-allocation.dto';
 import { CreateResourceCapacityDto } from './dto/create-resource-capacity.dto';
-import { PlanningWorkspaceDto } from './dto/planning-workspace.dto';
+import {
+  PlanningWorkspaceDto,
+  PlanningWorkspaceScheduleDto,
+} from './dto/planning-workspace.dto';
+import { UpdatePlanningTaskScheduleDto } from './dto/update-planning-task-schedule.dto';
 import { UpdatePortfolioDependencyDto } from './dto/update-portfolio-dependency.dto';
 import { UpdateResourceAllocationDto } from './dto/update-resource-allocation.dto';
 import { UpdateResourceCapacityDto } from './dto/update-resource-capacity.dto';
 import { PlanningScheduleSnapshot } from './entities/planning-schedule-snapshot.entity';
+import { PlanningTaskSchedule } from './entities/planning-task-schedule.entity';
 import { PortfolioDependency } from './entities/portfolio-dependency.entity';
 import { ResourceAllocation } from './entities/resource-allocation.entity';
 import { ResourceCapacity } from './entities/resource-capacity.entity';
@@ -89,6 +95,40 @@ export class PlanningController {
   ): Promise<PlanningScheduleSnapshot> {
     return this.planningService.requestScheduleRecalculation(
       projectId,
+      request.user,
+    );
+  }
+
+  @Patch('projects/:projectId/task-schedules/:scheduleId')
+  @RequirePermissions(PermissionKey.TaskUpdate)
+  @ApiOperation({ summary: 'Update a planning task schedule row' })
+  @ApiOkResponse({ type: PlanningTaskSchedule })
+  updatePlanningTaskSchedule(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('scheduleId') scheduleId: string,
+    @Body() input: UpdatePlanningTaskScheduleDto,
+  ): Promise<PlanningTaskSchedule> {
+    return this.planningService.updatePlanningTaskSchedule(
+      projectId,
+      scheduleId,
+      input,
+      request.user,
+    );
+  }
+
+  @Post('projects/:projectId/tasks')
+  @RequirePermissions(PermissionKey.TaskCreate)
+  @ApiOperation({ summary: 'Create a task from the planning workspace' })
+  @ApiCreatedResponse({ type: PlanningWorkspaceScheduleDto })
+  createPlanningTask(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Body() input: CreatePlanningTaskDto,
+  ): Promise<PlanningWorkspaceScheduleDto> {
+    return this.planningService.createPlanningTask(
+      projectId,
+      input,
       request.user,
     );
   }

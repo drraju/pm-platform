@@ -6,9 +6,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
 import {
   createPlanningDependency,
+  createPlanningTask,
   deletePlanningDependency,
   getPlanningWorkspace,
   updatePlanningTaskSchedule,
+  type ApiPlanningTaskSchedule,
   type ApiPlanningWorkspace,
 } from "@/features/planning";
 
@@ -92,6 +94,34 @@ function PageContent() {
     }
   }
 
+  async function handleCreateTask(input: {
+    parentTaskId?: string | null;
+  }): Promise<ApiPlanningTaskSchedule> {
+    setError(null);
+    setIsSaving(true);
+    try {
+      const schedule = await createPlanningTask(projectId, input);
+      setWorkspace((currentWorkspace) =>
+        currentWorkspace
+          ? {
+              ...currentWorkspace,
+              schedules: [...currentWorkspace.schedules, schedule],
+            }
+          : currentWorkspace,
+      );
+      return schedule;
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create task",
+      );
+      throw requestError;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function handleDeleteDependency(dependencyId: string) {
     setError(null);
     setIsSaving(true);
@@ -129,6 +159,7 @@ function PageContent() {
         <PlanningWorkspace
           isSaving={isSaving}
           onCreateDependency={handleCreateDependency}
+          onCreateTask={handleCreateTask}
           onDeleteDependency={handleDeleteDependency}
           onUpdateSchedule={handleUpdateSchedule}
           workspace={workspace}

@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class UpdatePlanningTaskScheduleDto {
   @ApiProperty({ format: 'date', required: false })
@@ -18,4 +26,26 @@ export class UpdatePlanningTaskScheduleDto {
   @Min(0)
   @Max(100)
   percentComplete?: number;
+
+  @ApiProperty({ minimum: 0, required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  durationDays?: number | null;
+
+  @ApiProperty({ minimum: 0, required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sequenceNumber?: number | null;
+
+  @ApiProperty({ format: 'uuid', required: false, nullable: true })
+  @IsOptional()
+  @IsUUID()
+  parentTaskId?: string | null;
+
+  @ApiProperty({ format: 'uuid', required: false, nullable: true })
+  @IsOptional()
+  @IsUUID()
+  ownerId?: string | null;
 }

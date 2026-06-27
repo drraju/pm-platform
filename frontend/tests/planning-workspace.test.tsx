@@ -113,6 +113,7 @@ describe("PlanningWorkspace", () => {
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
         onDeleteDependency={vi.fn()}
         onUpdateSchedule={vi.fn()}
         workspace={workspace}
@@ -137,6 +138,7 @@ describe("PlanningWorkspace", () => {
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
         onDeleteDependency={vi.fn()}
         onUpdateSchedule={vi.fn()}
         workspace={workspace}
@@ -150,12 +152,90 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByText("Design schedule")).toBeInTheDocument();
   });
 
+  it("falls back to the task title when the planning title is blank", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={{
+          ...workspace,
+          dependencies: [],
+          resourceAllocations: [],
+          schedules: [
+            {
+              ...workspace.schedules[1],
+              parentTaskId: null,
+              task: {
+                ...workspace.schedules[1].task,
+                title: "Recovered task title",
+              },
+              taskTitle: "",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Recovered task title")).toBeInTheDocument();
+    expect(screen.getByTitle("Recovered task title")).toBeInTheDocument();
+  });
+
+  it("creates a sibling task, renders it immediately, and focuses the name", async () => {
+    const newSchedule = {
+      ...workspace.schedules[1],
+      id: "schedule-4",
+      parentTaskId: "task-1",
+      sequenceNumber: 3,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "task-4",
+        title: "New Task",
+      },
+      taskId: "task-4",
+      taskTitle: "New Task",
+    };
+    const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
+
+    function Harness() {
+      const [currentWorkspace, setCurrentWorkspace] =
+        React.useState(workspace);
+      return (
+        <PlanningWorkspace
+          onCreateDependency={vi.fn()}
+          onCreateTask={async (input) => {
+            const schedule = await onCreateTask(input);
+            setCurrentWorkspace((current) => ({
+              ...current,
+              schedules: [...current.schedules, schedule],
+            }));
+            return schedule;
+          }}
+          onDeleteDependency={vi.fn()}
+          onUpdateSchedule={vi.fn()}
+          workspace={currentWorkspace}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByText("Design schedule"));
+    fireEvent.click(screen.getByRole("button", { name: "Add Task" }));
+
+    expect(onCreateTask).toHaveBeenCalledWith({ parentTaskId: "task-1" });
+    expect(await screen.findByTitle("New Task")).toHaveFocus();
+  });
+
   it("submits dependency creation and deletion", async () => {
     const onCreateDependency = vi.fn().mockResolvedValue(undefined);
+    const onCreateTask = vi.fn();
     const onDeleteDependency = vi.fn().mockResolvedValue(undefined);
     render(
       <PlanningWorkspace
         onCreateDependency={onCreateDependency}
+        onCreateTask={onCreateTask}
         onDeleteDependency={onDeleteDependency}
         onUpdateSchedule={vi.fn()}
         workspace={workspace}
@@ -187,6 +267,7 @@ describe("PlanningWorkspace", () => {
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
         onDeleteDependency={vi.fn()}
         onUpdateSchedule={onUpdateSchedule}
         workspace={workspace}
