@@ -13,7 +13,7 @@
 
 | ID          | Module              | Severity | Status | Description                                                                                                                  |
 | ----------- | ------------------- | -------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| UAT-001     | Planning            | High     | Open   | Dragging/resizing a task attempts a PATCH request to a backend endpoint that does not exist (404).                           |
+| UAT-001     | Planning            | High     | Open   | Dragging/resizing a task attempts a PATCH request to a backend endpoint that does not exist (404).                           | Closed
 | UAT-002     | Planning            | High     | Open   | Planning Workspace is read-only. No inline editing of task properties.                                                       |
 | UAT-003     | Planning            | Medium   | Open   | Zoom controls are missing. Browser zoom breaks the layout instead of scaling the timeline.                                   |
 | UAT-004     | Planning            | Medium   | Open   | Expand/Collapse controls for WBS/summary tasks are missing.                                                                  |
