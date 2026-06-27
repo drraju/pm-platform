@@ -183,7 +183,8 @@ function PageContent() {
           ? true
           : (project.health?.status ?? "GREEN") === healthFilter,
       )
-      .toSorted((left, right) => {
+      .slice()
+      .sort((left, right) => {
         if (sortMode === "health_asc" || sortMode === "health_desc") {
           const leftHealth = healthRank(left.health?.status ?? "GREEN");
           const rightHealth = healthRank(right.health?.status ?? "GREEN");

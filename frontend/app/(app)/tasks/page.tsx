@@ -188,7 +188,8 @@ function PageContent() {
 
         return dueDate >= today && dueDate <= latestUpcomingDate;
       })
-      .toSorted((left, right) => {
+      .slice()
+      .sort((left, right) => {
         const leftTime = left.dueDate
           ? new Date(left.dueDate).getTime()
           : Number.MAX_SAFE_INTEGER;

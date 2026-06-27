@@ -607,8 +607,13 @@ function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {
   const finishes = schedules
     .map((schedule) => schedule.plannedFinishDate)
     .filter((value): value is string => Boolean(value));
-  const min = addDays(parseDate(starts.toSorted()[0] ?? today()), -3);
-  const max = addDays(parseDate(finishes.toSorted().at(-1) ?? today()), 21);
+  const sortedStarts = [...starts].sort();
+  const sortedFinishes = [...finishes].sort();
+  const min = addDays(parseDate(sortedStarts[0] ?? today()), -3);
+  const max = addDays(
+    parseDate(sortedFinishes[sortedFinishes.length - 1] ?? today()),
+    21,
+  );
   const daysPerUnit = zoom === "day" ? 1 : zoom === "week" ? 7 : 30;
   const unitWidth = zoom === "day" ? 34 : zoom === "week" ? 58 : 86;
   const totalDays = Math.max(1, diffDays(formatDate(min), formatDate(max)));

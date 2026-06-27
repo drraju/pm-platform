@@ -437,7 +437,7 @@ export class ProjectsService {
       );
     }
 
-    baseline.tasks = (baseline.tasks ?? []).toSorted((leftTask, rightTask) => {
+    baseline.tasks = [...(baseline.tasks ?? [])].sort((leftTask, rightTask) => {
       const leftSequenceNumber =
         typeof leftTask.sequenceNumber === 'number'
           ? leftTask.sequenceNumber
