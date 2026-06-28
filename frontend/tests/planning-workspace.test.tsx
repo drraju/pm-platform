@@ -1,6 +1,12 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
 import type { ApiPlanningWorkspace } from "@/lib/api/client";
 
@@ -108,7 +114,71 @@ const workspace: ApiPlanningWorkspace = {
   },
 };
 
+const orderingWorkspace: ApiPlanningWorkspace = {
+  ...workspace,
+  criticalPathTaskIds: [],
+  dependencies: [],
+  resourceAllocations: [],
+  schedules: [
+    workspace.schedules[0],
+    workspace.schedules[1],
+    workspace.schedules[2],
+    {
+      ...workspace.schedules[1],
+      id: "schedule-4",
+      isCritical: false,
+      parentTaskId: null,
+      sequenceNumber: 2,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "task-4",
+        title: "Execution",
+      },
+      taskId: "task-4",
+      taskKind: "standard",
+      taskTitle: "Execution",
+    },
+    {
+      ...workspace.schedules[1],
+      id: "schedule-5",
+      isCritical: false,
+      parentTaskId: null,
+      sequenceNumber: 3,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "task-5",
+        title: "Closure",
+      },
+      taskId: "task-5",
+      taskKind: "standard",
+      taskTitle: "Closure",
+    },
+  ],
+};
+
+function dragRow(sourceName: RegExp, targetName: RegExp) {
+  const dataTransfer = {
+    dropEffect: "move",
+    effectAllowed: "move",
+    getData: vi.fn(),
+    setData: vi.fn(),
+  };
+  fireEvent.dragStart(screen.getByRole("row", { name: sourceName }), {
+    dataTransfer,
+  });
+  fireEvent.dragOver(screen.getByRole("row", { name: targetName }), {
+    dataTransfer,
+  });
+  fireEvent.drop(screen.getByRole("row", { name: targetName }), {
+    dataTransfer,
+  });
+}
+
 describe("PlanningWorkspace", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders hierarchy, Gantt, critical path and allocations", () => {
     render(
       <PlanningWorkspace
@@ -366,5 +436,341 @@ describe("PlanningWorkspace", () => {
       plannedFinishDate: "2026-07-12",
       plannedStartDate: "2026-07-08",
     });
+  });
+
+  it("zooms in to a finer timeline scale", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom In" }));
+
+    expect(screen.getByLabelText("Time Scale")).toHaveValue("day");
+  });
+
+  it("zooms out to a broader timeline scale", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom Out" }));
+
+    expect(screen.getByLabelText("Time Scale")).toHaveValue("month");
+  });
+
+  it("switches timeline scale from the selector", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Time Scale"), {
+      target: { value: "quarter" },
+    });
+
+    expect(screen.getByLabelText("Time Scale")).toHaveValue("quarter");
+    expect(screen.getByText(/Q3 2026/)).toBeInTheDocument();
+  });
+
+  it("fits the project to the visible Gantt area", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Fit to Project" }));
+
+    expect(screen.getByLabelText("Time Scale")).toHaveValue("quarter");
+  });
+
+  it("scrolls horizontally to today", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-05T00:00:00Z"));
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const ganttContainer = screen.getByLabelText(
+      "Interactive Gantt timeline",
+    ).parentElement as HTMLDivElement;
+    Object.defineProperty(ganttContainer, "clientWidth", {
+      configurable: true,
+      value: 80,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+
+    expect(screen.getByLabelText("Today marker")).toBeInTheDocument();
+    expect(ganttContainer.scrollLeft).toBeGreaterThan(0);
+    vi.useRealTimers();
+  });
+
+  it("continues saving dragged task dates after changing zoom", async () => {
+    const onUpdateSchedule = vi.fn().mockResolvedValue(undefined);
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom In" }));
+    const bar = screen.getByLabelText("Move Design schedule");
+    fireEvent(
+      bar,
+      new MouseEvent("pointerdown", {
+        bubbles: true,
+        clientX: 100,
+      }),
+    );
+    fireEvent(
+      screen.getByLabelText("Interactive Gantt timeline"),
+      new MouseEvent("pointerup", {
+        bubbles: true,
+        clientX: 134,
+      }),
+    );
+
+    expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
+      plannedFinishDate: "2026-07-06",
+      plannedStartDate: "2026-07-02",
+    });
+  });
+
+  it("adds a top-level task at the end of the top-level task list", async () => {
+    const newSchedule = {
+      ...orderingWorkspace.schedules[3],
+      id: "schedule-6",
+      sequenceNumber: 4,
+      task: {
+        ...orderingWorkspace.schedules[3].task,
+        id: "task-6",
+        title: "New Task",
+      },
+      taskId: "task-6",
+      taskTitle: "New Task",
+    };
+    const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
+
+    function Harness() {
+      const [currentWorkspace, setCurrentWorkspace] =
+        React.useState(orderingWorkspace);
+      return (
+        <PlanningWorkspace
+          onCreateDependency={vi.fn()}
+          onCreateTask={async (input) => {
+            const schedule = await onCreateTask(input);
+            setCurrentWorkspace((current) => ({
+              ...current,
+              schedules: [...current.schedules, schedule],
+            }));
+            return schedule;
+          }}
+          onDeleteDependency={vi.fn()}
+          onUpdateSchedule={vi.fn()}
+          workspace={currentWorkspace}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Task" }));
+
+    expect(onCreateTask).toHaveBeenCalledWith({ parentTaskId: null });
+    expect(await screen.findByRole("row", { name: /4 New Task/ })).toBeInTheDocument();
+    expect(screen.getByTitle("New Task")).toHaveFocus();
+  });
+
+  it("adds a child as the last child and expands the parent", async () => {
+    const newSchedule = {
+      ...orderingWorkspace.schedules[1],
+      id: "schedule-6",
+      parentTaskId: "task-1",
+      sequenceNumber: 3,
+      task: {
+        ...orderingWorkspace.schedules[1].task,
+        id: "task-6",
+        title: "New Task",
+      },
+      taskId: "task-6",
+      taskTitle: "New Task",
+    };
+    const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
+
+    function Harness() {
+      const [currentWorkspace, setCurrentWorkspace] =
+        React.useState(orderingWorkspace);
+      return (
+        <PlanningWorkspace
+          onCreateDependency={vi.fn()}
+          onCreateTask={async (input) => {
+            const schedule = await onCreateTask(input);
+            setCurrentWorkspace((current) => ({
+              ...current,
+              schedules: [...current.schedules, schedule],
+            }));
+            return schedule;
+          }}
+          onDeleteDependency={vi.fn()}
+          onUpdateSchedule={vi.fn()}
+          workspace={currentWorkspace}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Child" }));
+
+    expect(onCreateTask).toHaveBeenCalledWith({ parentTaskId: "task-1" });
+    expect(await screen.findByRole("row", { name: /1\.3 New Task/ })).toBeInTheDocument();
+    expect(screen.getByTitle("New Task")).toHaveFocus();
+  });
+
+  it("updates local row order and WBS when a row is reordered", async () => {
+    const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
+      Promise.resolve({
+        ...orderingWorkspace.schedules.find(
+          (schedule) => schedule.taskId === taskId,
+        ),
+        ...input,
+      }),
+    );
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={orderingWorkspace}
+      />,
+    );
+
+    dragRow(/3 Closure/, /1 Planning/);
+
+    expect(screen.getByRole("row", { name: /1 Closure/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /2\.1 Design schedule/ })).toBeInTheDocument();
+  });
+
+  it("persists row reorder sequence changes immediately", async () => {
+    const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
+      Promise.resolve({
+        ...orderingWorkspace.schedules.find(
+          (schedule) => schedule.taskId === taskId,
+        ),
+        ...input,
+      }),
+    );
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={orderingWorkspace}
+      />,
+    );
+
+    dragRow(/3 Closure/, /1 Planning/);
+
+    await waitFor(() => expect(onUpdateSchedule).toHaveBeenCalledTimes(3));
+    expect(onUpdateSchedule).toHaveBeenCalledWith("task-5", {
+      parentTaskId: null,
+      sequenceNumber: 1,
+    });
+    expect(onUpdateSchedule).toHaveBeenCalledWith("task-1", {
+      parentTaskId: null,
+      sequenceNumber: 2,
+    });
+    expect(onUpdateSchedule).toHaveBeenCalledWith("task-4", {
+      parentTaskId: null,
+      sequenceNumber: 3,
+    });
+  });
+
+  it("preserves ordering after a refreshed workspace is rendered", async () => {
+    const onUpdateSchedule = vi.fn();
+
+    function Harness() {
+      const [currentWorkspace, setCurrentWorkspace] =
+        React.useState(orderingWorkspace);
+      const [refreshKey, setRefreshKey] = React.useState(0);
+      return (
+        <>
+          <button onClick={() => setRefreshKey((key) => key + 1)} type="button">
+            Refresh planning
+          </button>
+          <PlanningWorkspace
+            key={refreshKey}
+            onCreateDependency={vi.fn()}
+            onCreateTask={vi.fn()}
+            onDeleteDependency={vi.fn()}
+            onUpdateSchedule={async (taskId, input) => {
+              const originalSchedule = currentWorkspace.schedules.find(
+                (schedule) => schedule.taskId === taskId,
+              );
+              const updatedSchedule = {
+                ...originalSchedule,
+                ...input,
+              } as ApiPlanningWorkspace["schedules"][number];
+              onUpdateSchedule(taskId, input);
+              setCurrentWorkspace((current) => ({
+                ...current,
+                schedules: current.schedules.map((schedule) =>
+                  schedule.taskId === taskId ? updatedSchedule : schedule,
+                ),
+              }));
+              return updatedSchedule;
+            }}
+            workspace={currentWorkspace}
+          />
+        </>
+      );
+    }
+
+    render(<Harness />);
+
+    dragRow(/3 Closure/, /1 Planning/);
+    await waitFor(() => expect(onUpdateSchedule).toHaveBeenCalledTimes(3));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh planning" }));
+
+    expect(screen.getByRole("row", { name: /1 Closure/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /3 Execution/ })).toBeInTheDocument();
   });
 });

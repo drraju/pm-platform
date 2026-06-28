@@ -55,9 +55,11 @@ function PageContent() {
     input: {
       durationDays?: number | null;
       ownerId?: string | null;
+      parentTaskId?: string | null;
       percentComplete?: number;
       plannedFinishDate?: string | null;
       plannedStartDate?: string | null;
+      sequenceNumber?: number | null;
       status?: NonNullable<ApiPlanningTaskSchedule["status"]>;
       taskTitle?: string;
     },

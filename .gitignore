@@ -19,8 +19,12 @@ yarn-error.log*
 # Environment
 .env
 .env.local
-.env.production 
+.env.uat
+.env.production
 .env.*.local
+
+# Allow template
+!.env.example
 
 # Editors and OS
 .DS_Store

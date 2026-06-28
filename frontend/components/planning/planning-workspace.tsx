@@ -8,7 +8,7 @@ import type {
   ApiTaskDependency,
 } from "@/lib/api/client";
 
-type ZoomMode = "day" | "week" | "month";
+type ZoomMode = "day" | "week" | "month" | "quarter";
 type DragMode = "move" | "resize-end";
 type EditableField =
   | "durationDays"
@@ -41,9 +41,11 @@ type PlanningWorkspaceProps = {
     input: {
       durationDays?: number | null;
       ownerId?: string | null;
+      parentTaskId?: string | null;
       percentComplete?: number;
       plannedFinishDate?: string | null;
       plannedStartDate?: string | null;
+      sequenceNumber?: number | null;
       status?: NonNullable<ApiPlanningTaskSchedule["status"]>;
       taskTitle?: string;
     },
@@ -61,6 +63,11 @@ type DragState = {
   mode: DragMode;
   originX: number;
   schedule: ApiPlanningTaskSchedule;
+};
+
+type RowDragState = {
+  parentTaskId: string | null;
+  taskId: string;
 };
 
 const rowHeight = 46;
@@ -86,6 +93,13 @@ const statusOptions: NonNullable<ApiPlanningTaskSchedule["status"]>[] = [
   "blocked",
   "done",
 ];
+const zoomModes: ZoomMode[] = ["day", "week", "month", "quarter"];
+const zoomLabels: Record<ZoomMode, string> = {
+  day: "Day",
+  week: "Week",
+  month: "Month",
+  quarter: "Quarter",
+};
 
 export function PlanningWorkspace({
   isSaving = false,
@@ -96,6 +110,7 @@ export function PlanningWorkspace({
   workspace,
 }: PlanningWorkspaceProps) {
   const [zoom, setZoom] = useState<ZoomMode>("week");
+  const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskFocusId, setNewTaskFocusId] = useState<string | null>(null);
@@ -107,20 +122,27 @@ export function PlanningWorkspace({
     successorTaskId: "",
   });
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [rowDragState, setRowDragState] = useState<RowDragState | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const ganttScrollRef = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const taskNameRefs = useRef(new Map<string, HTMLSpanElement>());
 
+  useEffect(() => {
+    setLocalSchedules(workspace.schedules);
+  }, [workspace.schedules]);
+
   const rows = useMemo(
-    () => buildVisibleRows(workspace.schedules, collapsedIds),
-    [collapsedIds, workspace.schedules],
+    () => buildVisibleRows(localSchedules, collapsedIds),
+    [collapsedIds, localSchedules],
   );
   const leafRows = useMemo(
     () => rows.filter((row) => row.schedule.taskKind !== "summary"),
     [rows],
   );
   const timeline = useMemo(
-    () => buildTimeline(workspace.schedules, zoom),
-    [workspace.schedules, zoom],
+    () => buildTimeline(localSchedules, zoom),
+    [localSchedules, zoom],
   );
   const allocationsByTaskId = useMemo(
     () => groupAllocations(workspace.resourceAllocations),
@@ -154,11 +176,16 @@ export function PlanningWorkspace({
       return;
     }
     taskName.focus();
+    rowRefs.current.get(newTaskFocusId)?.scrollIntoView?.({
+      block: "nearest",
+    });
     setNewTaskFocusId(null);
-  }, [newTaskFocusId, workspace.schedules]);
+  }, [newTaskFocusId, localSchedules]);
 
   const totalHeight = headerHeight + rows.length * rowHeight + 24;
   const totalWidth = timeline.width;
+  const canZoomIn = zoom !== zoomModes[0];
+  const canZoomOut = zoom !== zoomModes[zoomModes.length - 1];
 
   function toggleCollapse(taskId: string) {
     setCollapsedIds((currentIds) => {
@@ -174,6 +201,20 @@ export function PlanningWorkspace({
 
   async function createTask(parentTaskId?: string | null) {
     const schedule = await onCreateTask({ parentTaskId });
+    setLocalSchedules((currentSchedules) =>
+      currentSchedules.some(
+        (currentSchedule) => currentSchedule.taskId === schedule.taskId,
+      )
+        ? currentSchedules
+        : [...currentSchedules, schedule],
+    );
+    if (parentTaskId) {
+      setCollapsedIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.delete(parentTaskId);
+        return nextIds;
+      });
+    }
     setSelectedTaskId(schedule.taskId);
     setNewTaskFocusId(schedule.taskId);
   }
@@ -206,7 +247,7 @@ export function PlanningWorkspace({
     if (!editingCell) {
       return;
     }
-    const schedule = workspace.schedules.find(
+    const schedule = localSchedules.find(
       (candidate) => candidate.taskId === editingCell.taskId,
     );
     if (!schedule) {
@@ -327,6 +368,115 @@ export function PlanningWorkspace({
     await onCreateDependency(dependencyDraft);
   }
 
+  function startRowDrag(
+    event: React.DragEvent<HTMLDivElement>,
+    schedule: ApiPlanningTaskSchedule,
+  ) {
+    if (editingCell) {
+      event.preventDefault();
+      return;
+    }
+    setSelectedTaskId(schedule.taskId);
+    setRowDragState({
+      parentTaskId: schedule.parentTaskId ?? null,
+      taskId: schedule.taskId,
+    });
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", schedule.taskId);
+  }
+
+  function handleRowDragOver(
+    event: React.DragEvent<HTMLDivElement>,
+    targetSchedule: ApiPlanningTaskSchedule,
+  ) {
+    if (
+      !rowDragState ||
+      rowDragState.taskId === targetSchedule.taskId ||
+      rowDragState.parentTaskId !== (targetSchedule.parentTaskId ?? null)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  async function dropRow(
+    event: React.DragEvent<HTMLDivElement>,
+    targetSchedule: ApiPlanningTaskSchedule,
+  ) {
+    event.preventDefault();
+    if (
+      !rowDragState ||
+      rowDragState.taskId === targetSchedule.taskId ||
+      rowDragState.parentTaskId !== (targetSchedule.parentTaskId ?? null)
+    ) {
+      setRowDragState(null);
+      return;
+    }
+
+    const reorder = reorderSchedulesWithinParent(
+      localSchedules,
+      rowDragState.taskId,
+      targetSchedule.taskId,
+    );
+    setRowDragState(null);
+    if (!reorder) {
+      return;
+    }
+
+    setLocalSchedules(reorder.schedules);
+    await Promise.all(
+      reorder.changedSchedules.map((schedule) =>
+        onUpdateSchedule(schedule.taskId, {
+          parentTaskId: schedule.parentTaskId ?? null,
+          sequenceNumber: schedule.sequenceNumber ?? null,
+        }),
+      ),
+    );
+  }
+
+  function changeZoom(direction: "in" | "out") {
+    setZoom((currentZoom) => {
+      const currentIndex = zoomModes.indexOf(currentZoom);
+      const nextIndex =
+        direction === "in"
+          ? Math.max(0, currentIndex - 1)
+          : Math.min(zoomModes.length - 1, currentIndex + 1);
+      return zoomModes[nextIndex];
+    });
+  }
+
+  function fitToProject() {
+    const viewportWidth = ganttScrollRef.current?.clientWidth || 900;
+    const nextZoom =
+      [...zoomModes]
+        .reverse()
+        .find(
+          (mode) =>
+            buildTimeline(localSchedules, mode).width <= viewportWidth,
+        ) ?? "quarter";
+    setZoom(nextZoom);
+    window.setTimeout(() => {
+      const scrollContainer = ganttScrollRef.current;
+      if (scrollContainer) {
+        scrollContainer.scrollLeft = 0;
+      }
+    }, 0);
+  }
+
+  function scrollToToday() {
+    const todayX = timeline.todayX;
+    if (todayX === null) {
+      return;
+    }
+    const scrollContainer = ganttScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+    const viewportWidth = scrollContainer.clientWidth || 900;
+    scrollContainer.scrollLeft = Math.max(0, todayX - viewportWidth / 2);
+  }
+
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
@@ -340,7 +490,7 @@ export function PlanningWorkspace({
             {workspace.snapshot.projectFinishDate ?? "Unscheduled"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
             disabled={isSaving}
@@ -357,21 +507,56 @@ export function PlanningWorkspace({
           >
             Add Child
           </button>
-          {(["day", "week", "month"] as const).map((mode) => (
-            <button
-              aria-pressed={zoom === mode}
-              className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${
-                zoom === mode
-                  ? "border-brand bg-brand text-white"
-                  : "border-slate-300 bg-white text-slate-700"
-              }`}
-              key={mode}
-              onClick={() => setZoom(mode)}
-              type="button"
-            >
-              {mode[0].toUpperCase() + mode.slice(1)}
-            </button>
-          ))}
+          <span className="mx-1 h-7 border-l border-slate-200" />
+          <button
+            aria-label="Zoom Out"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+            disabled={!canZoomOut}
+            onClick={() => changeZoom("out")}
+            title="Zoom Out"
+            type="button"
+          >
+            -
+          </button>
+          <button
+            aria-label="Zoom In"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+            disabled={!canZoomIn}
+            onClick={() => changeZoom("in")}
+            title="Zoom In"
+            type="button"
+          >
+            +
+          </button>
+          <button
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
+            onClick={fitToProject}
+            type="button"
+          >
+            Fit to Project
+          </button>
+          <button
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
+            onClick={scrollToToday}
+            type="button"
+          >
+            Today
+          </button>
+          <label className="sr-only" htmlFor="planning-time-scale">
+            Time Scale
+          </label>
+          <select
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
+            id="planning-time-scale"
+            onChange={(event) => setZoom(event.target.value as ZoomMode)}
+            value={zoom}
+          >
+            {zoomModes.map((mode) => (
+              <option key={mode} value={mode}>
+                {zoomLabels[mode]}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
@@ -408,21 +593,34 @@ export function PlanningWorkspace({
             </span>
           </div>
           {rows.map(({ depth, schedule, wbs }) => {
-            const children = workspace.schedules.some(
+            const children = localSchedules.some(
               (candidate) => candidate.parentTaskId === schedule.taskId,
             );
             const title = getTaskTitle(schedule);
             return (
               <div
+                aria-label={`Planning row ${wbs} ${title}`}
                 aria-selected={selectedTaskId === schedule.taskId}
                 className={`grid h-[46px] min-w-[1100px] items-center border-b border-slate-100 text-xs text-slate-700 hover:bg-slate-50 ${
                   selectedTaskId === schedule.taskId
                     ? "bg-brand/10 ring-1 ring-inset ring-brand/40"
                     : ""
                 }`}
+                draggable={!editingCell}
                 key={schedule.taskId}
                 onClick={() => setSelectedTaskId(schedule.taskId)}
+                onDragEnd={() => setRowDragState(null)}
+                onDragOver={(event) => handleRowDragOver(event, schedule)}
+                onDragStart={(event) => startRowDrag(event, schedule)}
+                onDrop={(event) => dropRow(event, schedule)}
                 onKeyDown={(event) => handleRowKeyDown(event, schedule.taskId)}
+                ref={(element) => {
+                  if (element) {
+                    rowRefs.current.set(schedule.taskId, element);
+                  } else {
+                    rowRefs.current.delete(schedule.taskId);
+                  }
+                }}
                 role="row"
                 style={{
                   gridTemplateColumns: planningGridTemplate,
@@ -430,8 +628,14 @@ export function PlanningWorkspace({
                 }}
                 tabIndex={0}
               >
-                <span className="flex h-full items-center border-r border-slate-100 px-3 font-mono text-slate-500">
-                  {wbs}
+                <span
+                  className="flex h-full cursor-move items-center border-r border-slate-100 px-3 font-mono text-slate-500"
+                  title="Drag to reorder"
+                >
+                  <span aria-hidden className="mr-2 text-slate-400">
+                    ::
+                  </span>
+                  <span>{wbs}</span>
                 </span>
                 <div
                   className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-4"
@@ -597,7 +801,7 @@ export function PlanningWorkspace({
           })}
         </div>
 
-        <div className="overflow-auto">
+        <div className="overflow-auto" ref={ganttScrollRef}>
           <svg
             aria-label="Interactive Gantt timeline"
             className="block"
@@ -640,6 +844,7 @@ export function PlanningWorkspace({
             ))}
             {timeline.todayX !== null ? (
               <line
+                aria-label="Today marker"
                 stroke="#ef4444"
                 strokeDasharray="4 4"
                 strokeWidth={2}
@@ -886,8 +1091,8 @@ export function PlanningWorkspace({
                 key={dependency.id}
               >
                 <span>
-                  {taskName(dependency.predecessorTaskId, workspace.schedules)}{" "}
-                  → {taskName(dependency.successorTaskId, workspace.schedules)}{" "}
+                  {taskName(dependency.predecessorTaskId, localSchedules)} →{" "}
+                  {taskName(dependency.successorTaskId, localSchedules)}{" "}
                   · {dependency.dependencyType}
                 </span>
                 <button
@@ -1185,21 +1390,96 @@ function buildEditPayload(editingCell: EditingCell): Parameters<
   return { status: value as NonNullable<ApiPlanningTaskSchedule["status"]> };
 }
 
+function reorderSchedulesWithinParent(
+  schedules: ApiPlanningTaskSchedule[],
+  draggedTaskId: string,
+  targetTaskId: string,
+) {
+  const dragged = schedules.find((schedule) => schedule.taskId === draggedTaskId);
+  const target = schedules.find((schedule) => schedule.taskId === targetTaskId);
+  if (!dragged || !target) {
+    return null;
+  }
+  const parentTaskId = dragged.parentTaskId ?? null;
+  if (parentTaskId !== (target.parentTaskId ?? null)) {
+    return null;
+  }
+
+  const sourceIndex = new Map(
+    schedules.map((schedule, index) => [schedule.taskId, index]),
+  );
+  const orderedSiblings = schedules
+    .filter((schedule) => (schedule.parentTaskId ?? null) === parentTaskId)
+    .sort((left, right) => compareScheduleOrder(left, right, sourceIndex));
+  const draggedIndex = orderedSiblings.findIndex(
+    (schedule) => schedule.taskId === draggedTaskId,
+  );
+  const targetIndex = orderedSiblings.findIndex(
+    (schedule) => schedule.taskId === targetTaskId,
+  );
+  if (draggedIndex < 0 || targetIndex < 0) {
+    return null;
+  }
+
+  const [draggedSchedule] = orderedSiblings.splice(draggedIndex, 1);
+  const insertionIndex = draggedIndex < targetIndex ? targetIndex : targetIndex;
+  orderedSiblings.splice(insertionIndex, 0, draggedSchedule);
+
+  const updatedByTaskId = new Map<string, ApiPlanningTaskSchedule>();
+  orderedSiblings.forEach((schedule, index) => {
+    updatedByTaskId.set(schedule.taskId, {
+      ...schedule,
+      sequenceNumber: index + 1,
+    });
+  });
+  const nextSchedules = schedules.map(
+    (schedule) => updatedByTaskId.get(schedule.taskId) ?? schedule,
+  );
+  const changedSchedules = orderedSiblings
+    .map((schedule) => updatedByTaskId.get(schedule.taskId) ?? schedule)
+    .filter(
+      (schedule) =>
+        schedule.sequenceNumber !==
+        schedules.find((candidate) => candidate.taskId === schedule.taskId)
+          ?.sequenceNumber,
+    );
+
+  return {
+    changedSchedules,
+    schedules: nextSchedules,
+  };
+}
+
+function compareScheduleOrder(
+  left: ApiPlanningTaskSchedule,
+  right: ApiPlanningTaskSchedule,
+  sourceIndex: Map<string, number>,
+) {
+  const leftSequence =
+    typeof left.sequenceNumber === "number" ? left.sequenceNumber : 999_999;
+  const rightSequence =
+    typeof right.sequenceNumber === "number" ? right.sequenceNumber : 999_999;
+  return (
+    leftSequence - rightSequence ||
+    (sourceIndex.get(left.taskId) ?? 999_999) -
+      (sourceIndex.get(right.taskId) ?? 999_999)
+  );
+}
+
 function buildVisibleRows(
   schedules: ApiPlanningTaskSchedule[],
   collapsedIds: Set<string>,
 ) {
+  const sourceIndex = new Map(
+    schedules.map((schedule, index) => [schedule.taskId, index]),
+  );
   const byParentId = new Map<string | null, ApiPlanningTaskSchedule[]>();
   schedules.forEach((schedule) => {
     const key = schedule.parentTaskId ?? null;
     byParentId.set(key, [...(byParentId.get(key) ?? []), schedule]);
   });
   byParentId.forEach((items) =>
-    items.sort(
-      (left, right) =>
-        (left.sequenceNumber ?? 999_999) - (right.sequenceNumber ?? 999_999) ||
-        getTaskTitle(left).localeCompare(getTaskTitle(right)),
-    ),
+    items.sort((left, right) => compareScheduleOrder(left, right, sourceIndex)),
   );
 
   const rows: VisibleRow[] = [];
@@ -1217,6 +1497,7 @@ function buildVisibleRows(
 }
 
 function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {
+  const currentDate = today();
   const starts = schedules
     .map((schedule) => schedule.plannedStartDate)
     .filter((value): value is string => Boolean(value));
@@ -1225,13 +1506,24 @@ function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {
     .filter((value): value is string => Boolean(value));
   const sortedStarts = [...starts].sort();
   const sortedFinishes = [...finishes].sort();
-  const min = addDays(parseDate(sortedStarts[0] ?? today()), -3);
+  const earliestDate =
+    [sortedStarts[0], currentDate]
+      .filter((value): value is string => Boolean(value))
+      .sort()[0] ?? currentDate;
+  const latestDate =
+    [sortedFinishes[sortedFinishes.length - 1], currentDate]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? currentDate;
+  const min = addDays(parseDate(earliestDate), -3);
   const max = addDays(
-    parseDate(sortedFinishes[sortedFinishes.length - 1] ?? today()),
+    parseDate(latestDate),
     21,
   );
-  const daysPerUnit = zoom === "day" ? 1 : zoom === "week" ? 7 : 30;
-  const unitWidth = zoom === "day" ? 34 : zoom === "week" ? 58 : 86;
+  const daysPerUnit =
+    zoom === "day" ? 1 : zoom === "week" ? 7 : zoom === "month" ? 30 : 90;
+  const unitWidth =
+    zoom === "day" ? 34 : zoom === "week" ? 58 : zoom === "month" ? 86 : 120;
   const totalDays = Math.max(1, diffDays(formatDate(min), formatDate(max)));
   const units = Math.ceil(totalDays / daysPerUnit);
   const ticks = Array.from({ length: units + 1 }).map((_, index) => {
@@ -1240,7 +1532,9 @@ function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {
       date: formatDate(date),
       isWeekend: date.getUTCDay() === 0 || date.getUTCDay() === 6,
       label:
-        zoom === "month"
+        zoom === "quarter"
+          ? `Q${Math.floor(date.getUTCMonth() / 3) + 1} ${date.getUTCFullYear()}`
+          : zoom === "month"
           ? date.toLocaleDateString("en", { month: "short", timeZone: "UTC" })
           : date.toLocaleDateString("en", {
               day: "2-digit",

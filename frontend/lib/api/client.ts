@@ -570,9 +570,11 @@ export function updatePlanningTaskSchedule(
   input: {
     durationDays?: number | null;
     ownerId?: string | null;
+    parentTaskId?: string | null;
     percentComplete?: number;
     plannedFinishDate?: string | null;
     plannedStartDate?: string | null;
+    sequenceNumber?: number | null;
     status?: ApiTask["status"];
     taskTitle?: string;
   },
