@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApiPlanningTaskSchedule,
   ApiPlanningWorkspace,
+  ApiProjectMember,
   ApiResourceAllocation,
   ApiTaskDependency,
 } from "@/lib/api/client";
@@ -50,6 +51,7 @@ type PlanningWorkspaceProps = {
       taskTitle?: string;
     },
   ) => Promise<ApiPlanningTaskSchedule>;
+  projectMembers?: ApiProjectMember[];
   workspace: ApiPlanningWorkspace;
 };
 
@@ -107,6 +109,7 @@ export function PlanningWorkspace({
   onCreateTask,
   onDeleteDependency,
   onUpdateSchedule,
+  projectMembers = [],
   workspace,
 }: PlanningWorkspaceProps) {
   const [zoom, setZoom] = useState<ZoomMode>("week");
@@ -155,7 +158,10 @@ export function PlanningWorkspace({
         : null,
     [rows, selectedTaskId],
   );
-  const ownerOptions = useMemo(() => buildOwnerOptions(workspace), [workspace]);
+  const ownerOptions = useMemo(
+    () => buildOwnerOptions(workspace, projectMembers),
+    [projectMembers, workspace],
+  );
 
   useEffect(() => {
     setDependencyDraft((currentDraft) => ({
@@ -271,6 +277,23 @@ export function PlanningWorkspace({
     if (moveDirection > 0) {
       moveToNextEditableCell(currentTaskId, currentField);
     }
+  }
+
+  async function commitEditValue(
+    schedule: ApiPlanningTaskSchedule,
+    field: EditableField,
+    value: string,
+  ) {
+    const nextEdit = { field, taskId: schedule.taskId, value };
+    const validation = validateEdit(schedule, nextEdit);
+    if (validation) {
+      setEditError(validation);
+      return;
+    }
+
+    setEditingCell(null);
+    setEditError(null);
+    await onUpdateSchedule(schedule.taskId, buildEditPayload(nextEdit));
   }
 
   function cancelEdit() {
@@ -707,6 +730,9 @@ export function PlanningWorkspace({
                       current ? { ...current, value } : current,
                     )
                   }
+                  onCommitValue={(value) =>
+                    void commitEditValue(schedule, "ownerId", value)
+                  }
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "ownerId")}
                   ownerOptions={ownerOptions}
@@ -722,6 +748,9 @@ export function PlanningWorkspace({
                     setEditingCell((current) =>
                       current ? { ...current, value } : current,
                     )
+                  }
+                  onCommitValue={(value) =>
+                    void commitEditValue(schedule, "status", value)
                   }
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "plannedStartDate")}
@@ -1131,6 +1160,7 @@ function EditableGridCell({
   field,
   onBlur,
   onChange,
+  onCommitValue,
   onKeyDown,
   onStartEdit,
   ownerOptions,
@@ -1143,6 +1173,7 @@ function EditableGridCell({
   field: EditableField;
   onBlur: () => void;
   onChange: (value: string) => void;
+  onCommitValue?: (value: string) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   onStartEdit: () => void;
   ownerOptions: OwnerOption[];
@@ -1163,6 +1194,7 @@ function EditableGridCell({
           field={field}
           onBlur={onBlur}
           onChange={onChange}
+          onCommitValue={onCommitValue}
           onKeyDown={onKeyDown}
           ownerOptions={ownerOptions}
           value={editingCell?.value ?? ""}
@@ -1179,6 +1211,7 @@ function InlineEditor({
   field,
   onBlur,
   onChange,
+  onCommitValue,
   onKeyDown,
   ownerOptions,
   value,
@@ -1187,6 +1220,7 @@ function InlineEditor({
   field: EditableField;
   onBlur: () => void;
   onChange: (value: string) => void;
+  onCommitValue?: (value: string) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   ownerOptions: OwnerOption[];
   value: string;
@@ -1205,7 +1239,10 @@ function InlineEditor({
     return (
       <select
         {...commonProps}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          onCommitValue?.(event.target.value);
+        }}
         value={value}
       >
         <option value="">Unassigned</option>
@@ -1222,7 +1259,10 @@ function InlineEditor({
     return (
       <select
         {...commonProps}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          onCommitValue?.(event.target.value);
+        }}
         value={value}
       >
         {statusOptions.map((status) => (
@@ -1265,8 +1305,26 @@ function isEditing(
   return editingCell?.taskId === taskId && editingCell.field === field;
 }
 
-function buildOwnerOptions(workspace: ApiPlanningWorkspace): OwnerOption[] {
+function buildOwnerOptions(
+  workspace: ApiPlanningWorkspace,
+  projectMembers: ApiProjectMember[],
+): OwnerOption[] {
   const owners = new Map<string, OwnerOption>();
+  projectMembers.forEach((member) => {
+    owners.set(member.userId, {
+      id: member.userId,
+      label: member.user
+        ? `${member.user.firstName} ${member.user.lastName}`.trim() ||
+          member.user.email ||
+          member.userId
+      : member.userId,
+    });
+  });
+  if (projectMembers.length > 0) {
+    return [...owners.values()].sort((left, right) =>
+      left.label.localeCompare(right.label),
+    );
+  }
   workspace.schedules.forEach((schedule) => {
     const assignee = schedule.task?.assignee;
     if (assignee?.id) {

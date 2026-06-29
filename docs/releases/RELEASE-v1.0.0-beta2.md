@@ -92,6 +92,17 @@ This release is intended for controlled beta testing with internal users and sel
 | Reports | Add report builder/export workflows after dashboard reporting stabilizes. |
 | AI Project Manager | Explore AI-assisted planning, risk detection, status summarization, and delivery recommendations. |
 
+Sprint 3 Story 1
+Project Workspace
+Project Navigation
+Project Header
+Project Tabs
+Sprint 3 Story 2
+Team Management
+Task Assignment
+RAID Assignment
+Shared Project Members
+Task Filters
 ## Related Documents
 
 - [UAT v1.0.0-beta2 Test Guide](UAT-v1.0.0-beta2-Test-Guide.md)

@@ -1,9 +1,10 @@
 "use client";
 
+import React from "react";
 import { Suspense, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { PageHeader } from "@/components/layout/page-header";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
+import { ProjectLayout, ProjectLayoutLoadingState } from "@/components/project";
 import {
   createPlanningDependency,
   createPlanningTask,
@@ -13,6 +14,7 @@ import {
   type ApiPlanningTaskSchedule,
   type ApiPlanningWorkspace,
 } from "@/features/planning";
+import { useProjectMembers } from "@/hooks/use-project-members";
 
 export default function ProjectPlanningPage() {
   return (
@@ -29,6 +31,11 @@ function PageContent() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const {
+    error: memberError,
+    isLoading: areMembersLoading,
+    members,
+  } = useProjectMembers(projectId, workspace?.project.members ?? []);
 
   async function loadWorkspace() {
     setError(null);
@@ -161,40 +168,38 @@ function PageContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        description="Plan the project schedule, dependencies, critical path, and resource load without mutating task records directly."
-        eyebrow="Enterprise Planning Engine"
-        title="Planning Workspace"
-      />
-
+    <ProjectLayout
+      activeTab="planning"
+      project={workspace?.project ?? { id: projectId, name: "Planning Workspace", status: "active" }}
+    >
       {error ? (
         <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </section>
       ) : null}
+      {memberError ? (
+        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {memberError}
+        </section>
+      ) : null}
 
-      {isLoading ? <PageLoading /> : null}
+      {isLoading || areMembersLoading ? <PageLoading /> : null}
 
-      {!isLoading && workspace ? (
+      {!isLoading && !areMembersLoading && workspace ? (
         <PlanningWorkspace
           isSaving={isSaving}
           onCreateDependency={handleCreateDependency}
           onCreateTask={handleCreateTask}
           onDeleteDependency={handleDeleteDependency}
           onUpdateSchedule={handleUpdateSchedule}
+          projectMembers={members}
           workspace={workspace}
         />
       ) : null}
-    </div>
+    </ProjectLayout>
   );
 }
 
 function PageLoading() {
-  return (
-    <div className="space-y-4">
-      <div className="h-16 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-      <div className="h-[560px] animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-    </div>
-  );
+  return <ProjectLayoutLoadingState />;
 }

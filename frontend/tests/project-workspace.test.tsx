@@ -412,6 +412,95 @@ describe("Project workspace components", () => {
     expect(onDeleteTask).toHaveBeenCalledWith("task-1");
   });
 
+  it("autosaves inline task assignment, status, progress, and comments", () => {
+    const onUpdateTask = vi.fn();
+    const members = [
+      {
+        id: "member-1",
+        role: "manager",
+        user: {
+          email: "ava.patel@example.com",
+          firstName: "Ava",
+          id: "user-1",
+          lastName: "Patel",
+          status: "active",
+        },
+        userId: "user-1",
+      },
+      {
+        id: "member-2",
+        role: "contributor",
+        user: {
+          email: "li.chen@example.com",
+          firstName: "Li",
+          id: "user-2",
+          lastName: "Chen",
+          status: "active",
+        },
+        userId: "user-2",
+      },
+    ];
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        canManageTasks
+        canReassignTasks
+        members={members}
+        onUpdateTask={onUpdateTask}
+        tasks={[
+          {
+            assigneeId: "user-1",
+            id: "task-1",
+            percentComplete: 20,
+            priority: "medium",
+            projectId: "project-1",
+            remarks: "Draft",
+            status: "todo",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    const taskRow = screen.getByText("Prepare release plan").closest("tr");
+    expect(taskRow).not.toBeNull();
+
+    fireEvent.change(
+      within(taskRow as HTMLElement).getByLabelText("Assigned To"),
+      { target: { value: "user-2" } },
+    );
+    fireEvent.change(
+      within(taskRow as HTMLElement).getByLabelText("Status Prepare release plan"),
+      { target: { value: "in_progress" } },
+    );
+    fireEvent.change(
+      within(taskRow as HTMLElement).getByLabelText("Progress Prepare release plan"),
+      { target: { value: "55" } },
+    );
+    fireEvent.blur(
+      within(taskRow as HTMLElement).getByLabelText("Progress Prepare release plan"),
+    );
+    fireEvent.change(
+      within(taskRow as HTMLElement).getByLabelText("Comments Prepare release plan"),
+      { target: { value: "Ready for review" } },
+    );
+    fireEvent.blur(
+      within(taskRow as HTMLElement).getByLabelText("Comments Prepare release plan"),
+    );
+
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", { assigneeId: "user-2" });
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      status: "in_progress",
+    });
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      percentComplete: 55,
+    });
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      remarks: "Ready for review",
+    });
+  });
+
   it("treats phases as read-only planning containers in the editor", () => {
     render(
       <ProjectWorkspaceTasks

@@ -11,6 +11,7 @@ import {
 import type {
   ApiAssignableUser,
   ApiProject,
+  ApiProjectMember,
   ApiRaidItem,
 } from "@/lib/api/client";
 
@@ -38,6 +39,7 @@ type RaidManagementProps = {
     input: Partial<RaidMutationInput>,
   ) => Promise<void> | void;
   permissions: RaidPermissions;
+  projectMembers?: ApiProjectMember[];
   projects: ApiProject[];
   title: string;
   users: ApiAssignableUser[];
@@ -81,6 +83,7 @@ export function RaidManagement({
   onDelete,
   onUpdate,
   permissions,
+  projectMembers = [],
   projects,
   title,
   users,
@@ -88,11 +91,43 @@ export function RaidManagement({
   const [editingItem, setEditingItem] = useState<ApiRaidItem | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deletingItem, setDeletingItem] = useState<ApiRaidItem | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [severityFilter, setSeverityFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const canCreate = permissions.canCreate && Boolean(onCreate);
+  const ownerUsers = useMemo(
+    () =>
+      projectMembers.length > 0
+        ? projectMembers.map((member) => ({
+            email: member.user?.email ?? "",
+            firstName: member.user?.firstName ?? "",
+            id: member.userId,
+            lastName: member.user?.lastName ?? "",
+            displayName:
+              member.user?.displayName ??
+              `${member.user?.firstName ?? ""} ${member.user?.lastName ?? ""}`.trim(),
+            role: member.user?.role ?? null,
+            status: member.user?.status,
+          }))
+        : users,
+    [projectMembers, users],
+  );
 
   const visibleItems = useMemo(
-    () => (fixedType ? items.filter((item) => item.type === fixedType) : items),
-    [fixedType, items],
+    () =>
+      (fixedType ? items.filter((item) => item.type === fixedType) : items).filter(
+        (item) => {
+          const severity = getSeverityValue(item);
+          return (
+            (ownerFilter === "all" ||
+              (ownerFilter === "unassigned" && !item.ownerId) ||
+              item.ownerId === ownerFilter) &&
+            (statusFilter === "all" || item.status === statusFilter) &&
+            (severityFilter === "all" || severity === severityFilter)
+          );
+        },
+      ),
+    [fixedType, items, ownerFilter, severityFilter, statusFilter],
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -148,8 +183,57 @@ export function RaidManagement({
         </div>
       </div>
 
+      <div className="mt-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Owner
+          <select
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+            onChange={(event) => setOwnerFilter(event.target.value)}
+            value={ownerFilter}
+          >
+            <option value="all">All owners</option>
+            <option value="unassigned">Unassigned</option>
+            {ownerUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                {formatUserName(user)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Status
+          <select
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+            onChange={(event) => setStatusFilter(event.target.value)}
+            value={statusFilter}
+          >
+            <option value="all">All statuses</option>
+            {getStatusFilterOptions(fixedType, items).map((status) => (
+              <option key={status} value={status}>
+                {formatLabel(status)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Severity
+          <select
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+            onChange={(event) => setSeverityFilter(event.target.value)}
+            value={severityFilter}
+          >
+            <option value="all">All severities</option>
+            {levelOptions.map((level) => (
+              <option key={level} value={level}>
+                {formatLabel(level)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <div className="mt-5 overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-[980px] divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               {!fixedType ? <th className="px-3 py-3">Type</th> : null}
@@ -157,6 +241,7 @@ export function RaidManagement({
               <th className="px-3 py-3">Title</th>
               <th className="px-3 py-3">Owner</th>
               <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Priority</th>
               <th className="px-3 py-3">Detail</th>
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
@@ -164,14 +249,14 @@ export function RaidManagement({
           <tbody className="divide-y divide-slate-100">
             {isLoading ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={7}>
+                <td className="px-3 py-5 text-slate-500" colSpan={8}>
                   Loading RAID items...
                 </td>
               </tr>
             ) : null}
             {!isLoading && visibleItems.length === 0 ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={7}>
+                <td className="px-3 py-5 text-slate-500" colSpan={8}>
                   {emptyMessage}
                 </td>
               </tr>
@@ -208,6 +293,9 @@ export function RaidManagement({
                       </td>
                       <td className="px-3 py-3 capitalize text-slate-600">
                         {formatLabel(item.status)}
+                      </td>
+                      <td className="px-3 py-3 capitalize text-slate-600">
+                        {formatLabel(getSeverityValue(item))}
                       </td>
                       <td className="px-3 py-3 text-slate-600">
                         {formatDetail(item)}
@@ -255,7 +343,7 @@ export function RaidManagement({
           onAddComment={onAddComment}
           onSubmit={handleSubmit}
           projects={projects}
-          users={users}
+          users={ownerUsers}
         />
       ) : null}
 
@@ -441,6 +529,12 @@ function RaidItemDialog({
               ))}
             </select>
           </label>
+          <SelectField
+            defaultValue={item ? getSeverityValue(item) : "medium"}
+            label="Priority"
+            name="severity"
+            options={levelOptions}
+          />
           </ModalFormGrid>
         </ModalFormSection>
 
@@ -707,6 +801,34 @@ function formDataToRaidInput(
     dependsOn: stringOrUndefined(formData.get("dependsOn")),
     dueDate: stringOrUndefined(formData.get("dueDate")),
   };
+}
+
+function getSeverityValue(item: ApiRaidItem) {
+  return (
+    item.severity ??
+    item.priority ??
+    item.impact ??
+    item.probability ??
+    "medium"
+  );
+}
+
+function getStatusFilterOptions(
+  fixedType: RaidType | undefined,
+  items: ApiRaidItem[],
+) {
+  const configuredStatuses = fixedType ? statusOptions(fixedType) : [];
+  const itemStatuses = items.map((item) => item.status).filter(Boolean);
+  return Array.from(new Set([...configuredStatuses, ...itemStatuses]));
+}
+
+function formatUserName(user: ApiAssignableUser) {
+  return (
+    user.displayName ||
+    `${user.firstName} ${user.lastName}`.trim() ||
+    user.email ||
+    user.id
+  );
 }
 
 function isOwnOnly(permissions: RaidPermissions) {

@@ -5,6 +5,12 @@ import { useParams } from "next/navigation";
 import React from "react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import {
+  ProjectLayout,
+  ProjectLayoutLoadingState,
+  ProjectOverviewPlaceholders,
+  ProjectSummary,
+} from "@/components/project";
 import { ProjectHealthCard } from "@/components/projects/project-health-card";
 import { ProjectWorkspaceBaselines } from "@/components/projects/project-workspace-baselines";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
@@ -563,16 +569,7 @@ export default function ProjectWorkspacePage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          description="Loading project workspace details."
-          eyebrow="Project workspace"
-          title="Project"
-        />
-        <ProjectWorkspaceLoadingState />
-      </div>
-    );
+    return <ProjectLayoutLoadingState />;
   }
 
   if (!project) {
@@ -597,6 +594,19 @@ export default function ProjectWorkspacePage() {
   const issues = project.issues ?? [];
   const assumptions = project.assumptions ?? [];
   const dependencies = project.dependencies ?? [];
+  const memberUsers = members
+    .filter((member) => member.user)
+    .map((member) => ({
+      email: member.user?.email ?? "",
+      firstName: member.user?.firstName ?? "",
+      id: member.userId,
+      lastName: member.user?.lastName ?? "",
+      displayName:
+        member.user?.displayName ??
+        `${member.user?.firstName ?? ""} ${member.user?.lastName ?? ""}`.trim(),
+      role: member.user?.role ?? null,
+      status: member.user?.status,
+    }));
   const permissions = getProjectWorkspacePermissions({
     authMe: sessionProfile,
     permissionKeys,
@@ -609,15 +619,12 @@ export default function ProjectWorkspacePage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        description={project.description || "No project description has been added."}
-        eyebrow="Project workspace"
-        title={project.name}
-      />
-
+    <ProjectLayout activeTab="overview" project={project}>
       {error ? <ErrorMessage message={error} /> : null}
       {toast ? <ToastMessage toast={toast} /> : null}
+
+      <ProjectSummary project={project} />
+      <ProjectOverviewPlaceholders />
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
         <ProjectWorkspaceOverview project={project} />
@@ -762,9 +769,10 @@ export default function ProjectWorkspacePage() {
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
               permissions={raidPermissions}
+              projectMembers={members}
               projects={[project]}
               title="Risks"
-              users={users}
+              users={memberUsers}
             />
           ) : null}
           {activeWorkspaceTab === "issue" ? (
@@ -781,9 +789,10 @@ export default function ProjectWorkspacePage() {
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
               permissions={raidPermissions}
+              projectMembers={members}
               projects={[project]}
               title="Issues"
-              users={users}
+              users={memberUsers}
             />
           ) : null}
           {activeWorkspaceTab === "assumption" ? (
@@ -800,9 +809,10 @@ export default function ProjectWorkspacePage() {
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
               permissions={raidPermissions}
+              projectMembers={members}
               projects={[project]}
               title="Assumptions"
-              users={users}
+              users={memberUsers}
             />
           ) : null}
           {activeWorkspaceTab === "dependency" ? (
@@ -819,14 +829,15 @@ export default function ProjectWorkspacePage() {
               onDelete={raidPermissions.canDelete ? handleDeleteRaidItem : undefined}
               onUpdate={raidPermissions.canUpdate ? handleUpdateRaidItem : undefined}
               permissions={raidPermissions}
+              projectMembers={members}
               projects={[project]}
               title="Dependencies"
-              users={users}
+              users={memberUsers}
             />
           ) : null}
         </div>
       </section>
-    </div>
+    </ProjectLayout>
   );
 }
 
@@ -1000,34 +1011,6 @@ function getRaidCollectionKey(type: RaidType) {
     case "dependency":
       return "dependencies";
   }
-}
-
-function ProjectWorkspaceLoadingState() {
-  return (
-    <div className="space-y-6">
-      <section className="h-40 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            className="h-32 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
-            key={index}
-          />
-        ))}
-      </section>
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="h-72 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-        <div className="h-72 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-      </section>
-      <section className="grid gap-6 xl:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            className="h-72 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
-            key={index}
-          />
-        ))}
-      </section>
-    </div>
-  );
 }
 
 function ErrorMessage({ message }: { message: string }) {

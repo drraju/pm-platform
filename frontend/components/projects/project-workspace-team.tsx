@@ -93,10 +93,12 @@ export function ProjectWorkspaceTeam({
       ) : null}
 
       <div className="mt-5 overflow-x-auto">
-        <div className="hidden grid-cols-[1fr_1.2fr_0.8fr_auto] border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+        <div className="hidden min-w-[860px] grid-cols-[1fr_1.2fr_0.8fr_0.7fr_0.8fr_auto] border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
           <span>Name</span>
           <span>Email</span>
-          <span>Project Role</span>
+          <span>Role</span>
+          <span>Status</span>
+          <span>Date Added</span>
           <span>Actions</span>
         </div>
         {members.length === 0 ? (
@@ -104,7 +106,7 @@ export function ProjectWorkspaceTeam({
         ) : null}
         {members.map((member) => (
           <article
-            className="grid gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 md:grid-cols-[1fr_1.2fr_0.8fr_auto] md:items-center"
+            className="grid min-w-[860px] gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 md:grid-cols-[1fr_1.2fr_0.8fr_0.7fr_0.8fr_auto] md:items-center"
             key={member.id}
           >
             <div>
@@ -127,7 +129,7 @@ export function ProjectWorkspaceTeam({
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
-                Project Role
+                Role
               </p>
               {onUpdateMember ? (
                 <select
@@ -151,6 +153,22 @@ export function ProjectWorkspaceTeam({
               )}
             </div>
             <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
+                Status
+              </p>
+              <span className="capitalize text-slate-600">
+                {formatLabel(member.user?.status ?? "active")}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
+                Date Added
+              </p>
+              <span className="text-slate-600">
+                {formatDate(member.createdAt)}
+              </span>
+            </div>
+            <div>
               {onRemoveMember ? (
                 <button
                   className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -171,4 +189,16 @@ export function ProjectWorkspaceTeam({
 
 function formatLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function formatDate(value?: string) {
+  if (!value) {
+    return "Not recorded";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }

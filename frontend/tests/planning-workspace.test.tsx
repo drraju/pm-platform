@@ -204,6 +204,50 @@ describe("PlanningWorkspace", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses current project members in the assignment dropdown and autosaves selection", async () => {
+    const onUpdateSchedule = vi.fn().mockResolvedValue(workspace.schedules[1]);
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        projectMembers={[
+          {
+            id: "member-2",
+            role: "contributor",
+            user: {
+              email: "bob@example.com",
+              firstName: "Bob",
+              id: "user-2",
+              lastName: "Stone",
+              status: "active",
+            },
+            userId: "user-2",
+          },
+        ]}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByText("Alice Ng"));
+    const ownerSelect = screen
+      .getByRole("option", { name: "Bob Stone" })
+      .closest("select");
+    expect(ownerSelect).not.toBeNull();
+    expect(screen.getByRole("option", { name: "Bob Stone" })).toBeInTheDocument();
+    fireEvent.change(ownerSelect as HTMLSelectElement, {
+      target: { value: "user-2" },
+    });
+
+    await waitFor(() => {
+      expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
+        ownerId: "user-2",
+      });
+    });
+  });
+
   it("collapses and expands summary rows", () => {
     render(
       <PlanningWorkspace

@@ -81,6 +81,8 @@ export type ApiProjectMember = {
   projectId?: string;
   userId: string;
   role: string;
+  createdAt?: string;
+  updatedAt?: string;
   user?: {
     id: string;
     email: string;

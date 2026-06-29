@@ -7,7 +7,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import ProjectDocumentsPage from "@/app/(app)/projects/[id]/documents/page";
 import ProjectsPage from "@/app/(app)/projects/page";
+import ProjectPlanningPage from "@/app/(app)/projects/[id]/planning/page";
+import ProjectRaidPage from "@/app/(app)/projects/[id]/raid/page";
+import ProjectTasksPage from "@/app/(app)/projects/[id]/tasks/page";
 import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
 
 const projectMocks = vi.hoisted(() => ({
@@ -67,7 +71,16 @@ const projectMocks = vi.hoisted(() => ({
       },
     ],
     status: "active",
-    tasks: [],
+    tasks: [
+      {
+        id: "task-1",
+        percentComplete: 42,
+        priority: "high",
+        projectId,
+        status: "in_progress",
+        title: "Build workspace navigation",
+      },
+    ],
   })),
   getProjects: vi.fn(async () => [
     {
@@ -105,6 +118,31 @@ const projectMocks = vi.hoisted(() => ({
   updateProjectMember: vi.fn(),
 }));
 
+const planningMocks = vi.hoisted(() => ({
+  createPlanningDependency: vi.fn(),
+  createPlanningTask: vi.fn(),
+  deletePlanningDependency: vi.fn(),
+  getPlanningWorkspace: vi.fn(async (projectId: string) => ({
+    criticalPathTaskIds: [],
+    dependencies: [],
+    project: {
+      id: projectId,
+      name: "Selected Project Workspace",
+      status: "active",
+    },
+    resourceAllocations: [],
+    schedules: [],
+    snapshot: {
+      criticalPathTaskIds: [],
+      id: "snapshot-1",
+      projectCompletionPercent: 0,
+      projectId,
+      versionNumber: 1,
+    },
+  })),
+  updatePlanningTaskSchedule: vi.fn(),
+}));
+
 const navigationMocks = vi.hoisted(() => ({
   push: vi.fn((href: string) => {
     window.history.pushState({}, "", href);
@@ -117,11 +155,12 @@ vi.mock("next/link", () => ({
     children,
     href,
     className,
+    ...props
   }: {
     children: React.ReactNode;
     href: string;
     className?: string;
-  }) => (
+  } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
     <a
       className={className}
       href={href}
@@ -129,6 +168,7 @@ vi.mock("next/link", () => ({
         event.preventDefault();
         window.history.pushState({}, "", href);
       }}
+      {...props}
     >
       {children}
     </a>
@@ -164,7 +204,12 @@ vi.mock("@/features/auth", () => ({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({
-    id: window.location.pathname.split("/").filter(Boolean).at(-1) ?? "",
+    id:
+      window.location.pathname
+        .split("/")
+        .filter(Boolean)
+        .at(window.location.pathname.split("/").filter(Boolean).indexOf("projects") + 1) ??
+      "",
   }),
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -175,6 +220,14 @@ vi.mock("next/navigation", () => ({
       window.dispatchEvent(new PopStateEvent("popstate"));
     },
   }),
+}));
+
+vi.mock("@/features/planning", () => ({
+  createPlanningDependency: planningMocks.createPlanningDependency,
+  createPlanningTask: planningMocks.createPlanningTask,
+  deletePlanningDependency: planningMocks.deletePlanningDependency,
+  getPlanningWorkspace: planningMocks.getPlanningWorkspace,
+  updatePlanningTaskSchedule: planningMocks.updatePlanningTaskSchedule,
 }));
 
 vi.mock("@/features/projects", () => ({
@@ -208,6 +261,7 @@ describe("Projects List navigation", () => {
     navigationMocks.push.mockClear();
     projectMocks.getProject.mockClear();
     projectMocks.getProjects.mockClear();
+    planningMocks.getPlanningWorkspace.mockClear();
   });
 
   it("navigates to Project Workspace when a project row is clicked", async () => {
@@ -251,6 +305,97 @@ describe("Projects List navigation", () => {
     expect(screen.getByText("Vendor API remains available")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /dependencies/i }));
     expect(screen.getByText("IAM approval")).toBeInTheDocument();
+  });
+
+  it("renders Project Workspace tabs with the current tab highlighted", async () => {
+    window.history.pushState({}, "", "/projects/project-123");
+
+    render(<ProjectWorkspacePage />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /Selected Project Workspace/i,
+      }),
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("tab", { name: "Planning" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/planning",
+    );
+    expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/tasks",
+    );
+    expect(screen.getByRole("tab", { name: "RAID" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/raid",
+    );
+    expect(screen.getByText("Recent activity")).toBeInTheDocument();
+  });
+
+  it("loads the Planning route inside the Project Workspace", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+
+    render(<ProjectPlanningPage />);
+
+    await waitFor(() => {
+      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledWith(
+        "project-123",
+      );
+    });
+    expect(screen.getByRole("tab", { name: "Planning" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      await screen.findByText("Selected Project Workspace planning workspace"),
+    ).toBeInTheDocument();
+  });
+
+  it("loads the project Tasks route", async () => {
+    window.history.pushState({}, "", "/projects/project-123/tasks");
+
+    render(<ProjectTasksPage />);
+
+    expect(await screen.findByText("Build workspace navigation")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("loads the project RAID route", async () => {
+    window.history.pushState({}, "", "/projects/project-123/raid");
+
+    render(<ProjectRaidPage />);
+
+    expect(await screen.findByText("Supplier onboarding delay")).toBeInTheDocument();
+    expect(screen.getByText("Integration outage")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "RAID" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("loads a professional placeholder for future workspace modules", async () => {
+    window.history.pushState({}, "", "/projects/project-123/documents");
+
+    render(<ProjectDocumentsPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Documents" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This module will be available in an upcoming release."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("navigates to Project Workspace when the Open button is clicked", async () => {

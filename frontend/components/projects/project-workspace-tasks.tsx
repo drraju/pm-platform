@@ -172,16 +172,34 @@ export function ProjectWorkspaceTasks({
   const [form, setForm] = React.useState<TaskFormState>(() => createEmptyTaskForm());
   const [formError, setFormError] = React.useState<string | null>(null);
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = React.useState("all");
+  const [priorityFilter, setPriorityFilter] = React.useState("all");
+  const [inlineError, setInlineError] = React.useState<string | null>(null);
   const knownSummaryTaskIdsRef = React.useRef<Set<string>>(new Set());
 
   const canCreateTask = (canManageTasks || canCreateTasks) && Boolean(onCreateTask);
   const hasFullEditAccess = canManageTasks || canEditTasks;
   const hasDeleteAccess = canManageTasks || canDeleteTasks;
   const hasReassignAccess = canManageTasks || canReassignTasks;
-  const visibleTasks =
-    statusFilter === "all"
-      ? tasks
-      : tasks.filter((task) => task.status === statusFilter);
+  const [localStatusFilter, setLocalStatusFilter] =
+    React.useState<"all" | ApiTask["status"]>(statusFilter);
+
+  React.useEffect(() => {
+    setLocalStatusFilter(statusFilter);
+  }, [statusFilter]);
+
+  const visibleTasks = tasks.filter((task) => {
+    const matchesStatus =
+      localStatusFilter === "all" || task.status === localStatusFilter;
+    const matchesAssignee =
+      assigneeFilter === "all" ||
+      (assigneeFilter === "unassigned" && !task.assigneeId) ||
+      task.assigneeId === assigneeFilter;
+    const matchesPriority =
+      priorityFilter === "all" || task.priority === priorityFilter;
+
+    return matchesStatus && matchesAssignee && matchesPriority;
+  });
   const hierarchy = buildTaskHierarchy(visibleTasks, expandedTaskIds);
 
   React.useEffect(() => {
@@ -280,6 +298,26 @@ export function ProjectWorkspaceTasks({
     }
   }
 
+  async function updateInlineTask(
+    task: ApiTask,
+    input: TaskOperationInput,
+  ) {
+    if (!onUpdateTask) {
+      return;
+    }
+
+    setInlineError(null);
+    try {
+      await onUpdateTask(task.id, input);
+    } catch (requestError) {
+      setInlineError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update task",
+      );
+    }
+  }
+
   const editableParentOptions = getParentOptions(tasks, hierarchy.wbsByTaskId, selectedTask);
   const taskFieldAccess = getTaskFieldAccess({
     currentUserId,
@@ -331,27 +369,84 @@ export function ProjectWorkspaceTasks({
       </div>
 
       <div className="mt-5 overflow-x-auto">
-        <table className="min-w-[1200px] divide-y divide-slate-200 text-sm">
+        {inlineError ? (
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {inlineError}
+          </div>
+        ) : null}
+        <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Assigned To
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+              onChange={(event) => setAssigneeFilter(event.target.value)}
+              value={assigneeFilter}
+            >
+              <option value="all">All assignees</option>
+              <option value="unassigned">Unassigned</option>
+              {members.map((member) => (
+                <option key={member.id} value={member.userId}>
+                  {formatMemberName(member)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Status
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+              onChange={(event) =>
+                setLocalStatusFilter(event.target.value as "all" | ApiTask["status"])
+              }
+              value={localStatusFilter}
+            >
+              <option value="all">All statuses</option>
+              {taskStatuses.map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Priority
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+              onChange={(event) => setPriorityFilter(event.target.value)}
+              value={priorityFilter}
+            >
+              <option value="all">All priorities</option>
+              {priorities.map((priority) => (
+                <option className="capitalize" key={priority} value={priority}>
+                  {priority}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <table className="min-w-[1480px] divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-3">WBS</th>
-              <th className="px-3 py-3">Plan Item</th>
+              <th className="px-3 py-3">Task Name</th>
               <th className="px-3 py-3">Assignee</th>
+              <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Priority</th>
+              <th className="px-3 py-3">Progress</th>
               <th className="px-3 py-3">Planned Start</th>
               <th className="px-3 py-3">Planned End</th>
               <th className="px-3 py-3">Actual Start</th>
               <th className="px-3 py-3">Actual End</th>
               <th className="px-3 py-3">Est. Hours</th>
               <th className="px-3 py-3">Remaining</th>
-              <th className="px-3 py-3">% Complete</th>
-              <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Comments</th>
               <th className="px-3 py-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {hierarchy.rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={12}>
+                <td className="px-3 py-5 text-slate-500" colSpan={14}>
                   No plan items yet.
                 </td>
               </tr>
@@ -399,18 +494,15 @@ export function ProjectWorkspaceTasks({
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p
-                            className={`font-semibold ${
-                              isSummary
-                                ? "text-amber-950"
-                                : isMilestone
-                                  ? "text-sky-950"
-                                  : "text-slate-950"
-                            }`}
-                          >
-                            {isMilestone ? "◆ " : ""}
-                            {task.title}
-                          </p>
+                          <InlineTextInput
+                            ariaLabel={`Task Name ${task.title}`}
+                            disabled={!canEditRow}
+                            displayValue={`${isMilestone ? "◆ " : ""}${task.title}`}
+                            value={task.title}
+                            onCommit={(title) =>
+                              updateInlineTask(task, { title: title.trim() })
+                            }
+                          />
                           <span
                             className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
                               isSummary
@@ -437,19 +529,104 @@ export function ProjectWorkspaceTasks({
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {isSummary ? "Not assignable" : formatAssignee(task)}
+                    {isSummary ? (
+                      "Not assignable"
+                    ) : !hasReassignAccess && !canEditRow ? (
+                      formatAssignee(task)
+                    ) : (
+                      <InlineAssigneeSelect
+                        disabled={!hasReassignAccess && !canEditRow}
+                        members={members}
+                        onCommit={(assigneeId) =>
+                          updateInlineTask(task, { assigneeId })
+                        }
+                        value={task.assigneeId ?? ""}
+                      />
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 capitalize text-slate-600">
+                    {isSummary ? (
+                      formatTaskStatus(task)
+                    ) : (
+                      <InlineSelect
+                        disabled={!canEditRow}
+                        label={`Status ${task.title}`}
+                        onCommit={(status) =>
+                          updateInlineTask(task, { status: status as ApiTask["status"] })
+                        }
+                        options={taskStatuses}
+                        value={task.status}
+                      />
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 capitalize text-slate-600">
+                    {isSummary ? (
+                      "—"
+                    ) : (
+                      <InlineSelect
+                        disabled={!canEditRow}
+                        label={`Priority ${task.title}`}
+                        onCommit={(priority) => updateInlineTask(task, { priority })}
+                        options={priorities.map((priority) => ({
+                          label: formatLabel(priority),
+                          value: priority,
+                        }))}
+                        value={task.priority}
+                      />
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatDate(getDisplayedStartDate(task), "No plan")}
+                    <InlineNumberInput
+                      ariaLabel={`Progress ${task.title}`}
+                      disabled={isSummary || !canEditRow}
+                      max={100}
+                      min={0}
+                      onCommit={(percentComplete) =>
+                        updateInlineTask(task, { percentComplete })
+                      }
+                      suffix="%"
+                      value={getDisplayedPercentComplete(task)}
+                    />
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatDate(getDisplayedEndDate(task), "No plan")}
+                    <InlineDateInput
+                      ariaLabel={`Start ${task.title}`}
+                      disabled={!canEditRow}
+                      onCommit={(plannedStartDate) =>
+                        updateInlineTask(task, { plannedStartDate })
+                      }
+                      value={getDisplayedStartDate(task)}
+                    />
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatDate(task.actualStartDate, "Not started")}
+                    <InlineDateInput
+                      ariaLabel={`Finish ${task.title}`}
+                      disabled={!canEditRow}
+                      onCommit={(plannedEndDate) =>
+                        updateInlineTask(task, { plannedEndDate })
+                      }
+                      value={getDisplayedEndDate(task)}
+                    />
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatDate(task.actualEndDate, "Not finished")}
+                    <InlineDateInput
+                      ariaLabel={`Actual Start ${task.title}`}
+                      disabled={isSummary || !canEditRow}
+                      onCommit={(actualStartDate) =>
+                        updateInlineTask(task, { actualStartDate })
+                      }
+                      value={task.actualStartDate}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                    <InlineDateInput
+                      ariaLabel={`Actual End ${task.title}`}
+                      disabled={isSummary || !canEditRow}
+                      onCommit={(actualEndDate) =>
+                        updateInlineTask(task, { actualEndDate })
+                      }
+                      value={task.actualEndDate}
+                    />
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     {isSummary ? "—" : formatNumber(task.estimatedHours)}
@@ -457,11 +634,15 @@ export function ProjectWorkspaceTasks({
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     {isSummary ? "—" : formatNumber(task.remainingHours)}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    {formatPercent(getDisplayedPercentComplete(task))}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 capitalize text-slate-600">
-                    {formatTaskStatus(task)}
+                  <td className="min-w-56 px-3 py-3 text-slate-600">
+                    <InlineTextInput
+                      ariaLabel={`Comments ${task.title}`}
+                      disabled={isSummary || !canEditRow}
+                      value={task.remarks ?? ""}
+                      onCommit={(remarks) =>
+                        updateInlineTask(task, { remarks: remarks.trim() || null })
+                      }
+                    />
                   </td>
                   <td className="px-3 py-3">
                     {canEditRow || canDeleteRow || canAddChild || hasReassignAccess ? (
@@ -887,6 +1068,11 @@ function TaskAssigneeSelect({
   onChange: (assigneeId: string) => void;
   value: string;
 }) {
+  if (disabled) {
+    const member = members.find((candidate) => candidate.userId === value);
+    return <span>{member ? formatMemberName(member) : "Unassigned"}</span>;
+  }
+
   return (
     <label className="block text-sm font-medium text-slate-700">
       Assignee
@@ -906,6 +1092,218 @@ function TaskAssigneeSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+function InlineAssigneeSelect({
+  disabled,
+  members,
+  onCommit,
+  value,
+}: {
+  disabled: boolean;
+  members: ApiProjectMember[];
+  onCommit: (assigneeId: string | null) => void;
+  value: string;
+}) {
+  if (disabled) {
+    const member = members.find((candidate) => candidate.userId === value);
+    return <span>{member ? formatMemberName(member) : "Unassigned"}</span>;
+  }
+
+  return (
+    <select
+      aria-label="Assigned To"
+      className="w-full min-w-36 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:border-transparent disabled:bg-transparent disabled:px-0"
+      disabled={disabled}
+      onChange={(event) => onCommit(event.target.value || null)}
+      value={value}
+    >
+      <option value="">Unassigned</option>
+      {members.map((member) => (
+        <option key={member.id} value={member.userId}>
+          {formatMemberName(member)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function InlineSelect({
+  disabled,
+  label,
+  onCommit,
+  options,
+  value,
+}: {
+  disabled: boolean;
+  label: string;
+  onCommit: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  value: string;
+}) {
+  if (disabled) {
+    return (
+      <span>
+        {options.find((option) => option.value === value)?.label ??
+          formatLabel(value)}
+      </span>
+    );
+  }
+
+  return (
+    <select
+      aria-label={label}
+      className="w-full min-w-32 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:border-transparent disabled:bg-transparent disabled:px-0"
+      disabled={disabled}
+      onChange={(event) => onCommit(event.target.value)}
+      value={value}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function InlineTextInput({
+  ariaLabel,
+  disabled,
+  displayValue,
+  onCommit,
+  value,
+}: {
+  ariaLabel: string;
+  disabled: boolean;
+  displayValue?: string;
+  onCommit: (value: string) => void;
+  value: string;
+}) {
+  const [draft, setDraft] = React.useState(value);
+
+  React.useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  if (disabled) {
+    return (
+      <span className="font-medium text-slate-950">
+        {displayValue || value || "—"}
+      </span>
+    );
+  }
+
+  return (
+    <span className="block">
+      <span className="sr-only">{displayValue || value}</span>
+      <input
+        aria-label={ariaLabel}
+        className="w-full min-w-44 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-950 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:border-transparent disabled:bg-transparent disabled:px-0"
+        disabled={disabled}
+        onBlur={() => {
+          if (draft !== value && draft.trim()) {
+            onCommit(draft);
+          }
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        value={draft}
+      />
+    </span>
+  );
+}
+
+function InlineNumberInput({
+  ariaLabel,
+  disabled,
+  max,
+  min,
+  onCommit,
+  suffix,
+  value,
+}: {
+  ariaLabel: string;
+  disabled: boolean;
+  max: number;
+  min: number;
+  onCommit: (value: number) => void;
+  suffix?: string;
+  value: number;
+}) {
+  const [draft, setDraft] = React.useState(String(value));
+
+  React.useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  if (disabled) {
+    return <span>{suffix ? `${value}${suffix}` : value}</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        aria-label={ariaLabel}
+        className="w-20 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:border-transparent disabled:bg-transparent disabled:px-0"
+        disabled={disabled}
+        max={max}
+        min={min}
+        onBlur={() => {
+          const nextValue = Number(draft);
+          if (
+            Number.isFinite(nextValue) &&
+            nextValue >= min &&
+            nextValue <= max &&
+            nextValue !== value
+          ) {
+            onCommit(nextValue);
+          }
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        type="number"
+        value={draft}
+      />
+      {suffix ? <span className="text-xs text-slate-500">{suffix}</span> : null}
+    </div>
+  );
+}
+
+function InlineDateInput({
+  ariaLabel,
+  disabled,
+  onCommit,
+  value,
+}: {
+  ariaLabel: string;
+  disabled: boolean;
+  onCommit: (value: string | null) => void;
+  value?: string | null;
+}) {
+  const [draft, setDraft] = React.useState(value ?? "");
+
+  React.useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  if (disabled) {
+    return <span>{formatDate(value, "Not set")}</span>;
+  }
+
+  return (
+    <input
+      aria-label={ariaLabel}
+      className="w-36 rounded-sm border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:border-transparent disabled:bg-transparent disabled:px-0"
+      disabled={disabled}
+      onBlur={() => {
+        if (draft !== (value ?? "")) {
+          onCommit(draft || null);
+        }
+      }}
+      onChange={(event) => setDraft(event.target.value)}
+      type="date"
+      value={draft}
+    />
   );
 }
 
@@ -1275,6 +1673,14 @@ function formatAssignee(task: ApiTask) {
   return task.assignee
     ? `${task.assignee.firstName} ${task.assignee.lastName}`
     : "Unassigned";
+}
+
+function formatMemberName(member: ApiProjectMember) {
+  return member.user
+    ? `${member.user.firstName} ${member.user.lastName}`.trim() ||
+        member.user.email ||
+        member.userId
+    : member.userId;
 }
 
 function formatTaskKindBadge(value: NonNullable<ApiTask["taskKind"]>) {

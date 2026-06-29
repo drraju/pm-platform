@@ -74,6 +74,52 @@ describe("RaidManagement", () => {
     });
   });
 
+  it("limits owner choices to the current project team when members are provided", () => {
+    render(
+      <RaidManagement
+        emptyMessage="No risks yet."
+        fixedProjectId="project-1"
+        fixedType="risk"
+        items={[]}
+        onCreate={vi.fn()}
+        permissions={permissions}
+        projectMembers={[
+          {
+            id: "member-2",
+            role: "contributor",
+            user: {
+              email: "team@example.com",
+              firstName: "Team",
+              id: "user-2",
+              lastName: "Member",
+              status: "active",
+            },
+            userId: "user-2",
+          },
+        ]}
+        projects={projects}
+        title="Risks"
+        users={[
+          ...users,
+          {
+            email: "outsider@example.com",
+            firstName: "Outside",
+            id: "user-out",
+            lastName: "User",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /create risk/i }));
+
+    const ownerSelect = within(screen.getByRole("dialog")).getByLabelText(/owner/i);
+    expect(within(ownerSelect).getByRole("option", { name: "Team Member" })).toBeInTheDocument();
+    expect(
+      within(ownerSelect).queryByRole("option", { name: "Outside User" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("edits an issue", async () => {
     const onUpdate = vi.fn();
 
