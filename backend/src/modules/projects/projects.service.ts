@@ -16,6 +16,7 @@ import { ProjectRole } from '../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
 import { CreateProjectBaselineDto } from './dto/create-project-baseline.dto';
@@ -78,6 +79,7 @@ export class ProjectsService {
     private readonly projectHealthService: ProjectHealthService,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
+    private readonly schedulingFoundationService: SchedulingFoundationService,
   ) {}
 
   async create(
@@ -265,14 +267,18 @@ export class ProjectsService {
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
     await this.ensureCanManageProject(projectId, actor);
-    await this.validateTaskPlanningFields(projectId, createProjectTaskDto);
+    const normalizedInput =
+      this.schedulingFoundationService.normalizeTaskMutation(
+        createProjectTaskDto,
+      );
+    await this.validateTaskPlanningFields(projectId, normalizedInput);
     await this.validateAssigneeMembership(
       projectId,
-      createProjectTaskDto.assigneeId,
+      normalizedInput.assigneeId,
     );
 
     const task = this.tasksRepository.create({
-      ...this.withNormalizedProgress(createProjectTaskDto),
+      ...this.withNormalizedProgress(normalizedInput),
       projectId,
     });
 
@@ -289,12 +295,17 @@ export class ProjectsService {
     await this.ensureProjectExists(projectId);
     const task = await this.findProjectTask(projectId, taskId);
     await this.ensureCanUpdateTask(task, updateProjectTaskDto, actor);
-    await this.validateTaskPlanningFields(projectId, updateProjectTaskDto, task);
+    const normalizedInput =
+      this.schedulingFoundationService.normalizeTaskMutation(
+        updateProjectTaskDto,
+        task,
+      );
+    await this.validateTaskPlanningFields(projectId, normalizedInput, task);
     await this.validateAssigneeMembership(
       projectId,
-      updateProjectTaskDto.assigneeId,
+      normalizedInput.assigneeId,
     );
-    Object.assign(task, this.withNormalizedProgress(updateProjectTaskDto), { projectId });
+    Object.assign(task, this.withNormalizedProgress(normalizedInput), { projectId });
 
     const savedTask = await this.tasksRepository.save(task);
     return this.decorateTask(savedTask);
@@ -742,24 +753,20 @@ export class ProjectsService {
     input: Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
     existingTask?: Task,
   ) {
-    const effectiveTaskKind = input.taskKind ?? existingTask?.taskKind ?? TaskKind.Standard;
+    const effectiveTaskKind = this.schedulingFoundationService.normalizeTaskKind(
+      input,
+      existingTask?.taskKind ?? TaskKind.Standard,
+    );
     const effectiveParentTaskId =
       typeof input.parentTaskId !== 'undefined'
         ? input.parentTaskId
         : existingTask?.parentTaskId;
 
-    this.validateMilestoneDates(
-      effectiveTaskKind,
-      input.plannedStartDate ?? existingTask?.plannedStartDate,
-      input.plannedEndDate ?? existingTask?.plannedEndDate,
-    );
-    this.validatePhaseMutations(effectiveTaskKind, input);
-
     if (
       existingTask &&
-      input.taskKind &&
-      input.taskKind !== TaskKind.Summary &&
-      input.taskKind !== existingTask.taskKind
+      (input.taskKind || input.taskType) &&
+      effectiveTaskKind !== TaskKind.Summary &&
+      effectiveTaskKind !== existingTask.taskKind
     ) {
       await this.ensureTaskHasNoChildren(projectId, existingTask.id);
     }
@@ -860,51 +867,6 @@ export class ProjectsService {
       throw new BadRequestException(
         'Only leaf tasks and milestones can be dependency endpoints',
       );
-    }
-  }
-
-  private validateMilestoneDates(
-    taskKind: TaskKind,
-    plannedStartDate?: string | null,
-    plannedEndDate?: string | null,
-  ) {
-    if (
-      taskKind === TaskKind.Milestone &&
-      plannedStartDate &&
-      plannedEndDate &&
-      plannedStartDate !== plannedEndDate
-    ) {
-      throw new BadRequestException(
-        'Milestones must have matching planned start and end dates',
-      );
-    }
-  }
-
-  private validatePhaseMutations(
-    taskKind: TaskKind,
-    input: Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
-  ) {
-    if (taskKind !== TaskKind.Summary) {
-      return;
-    }
-
-    if (input.assigneeId) {
-      throw new BadRequestException('Phases cannot be assigned to a user');
-    }
-
-    if (typeof input.status !== 'undefined') {
-      throw new BadRequestException('Phase status is calculated from child work');
-    }
-
-    if (typeof input.percentComplete !== 'undefined') {
-      throw new BadRequestException('Phase progress is calculated from child work');
-    }
-
-    if (
-      typeof input.estimatedHours !== 'undefined' ||
-      typeof input.remainingHours !== 'undefined'
-    ) {
-      throw new BadRequestException('Phases cannot store effort values');
     }
   }
 

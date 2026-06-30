@@ -5,6 +5,8 @@ import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { TaskType } from '../../../common/enums/task-type.enum';
+import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { Task } from '../entities/task.entity';
@@ -55,6 +57,7 @@ describe('TasksService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         TasksService,
+        SchedulingFoundationService,
         {
           provide: getRepositoryToken(Task),
           useValue: tasksRepository,
@@ -129,6 +132,26 @@ describe('TasksService', () => {
     });
   });
 
+  it('creates a task from the new taskType DTO shape while storing the compatible taskKind', async () => {
+    const result = await service.create({
+      projectId,
+      taskType: TaskType.Task,
+      title: 'Build data migration plan',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Build data migration plan',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: taskId,
+        taskKind: TaskKind.Standard,
+      }),
+    );
+  });
+
   it('rejects child task creation under a non-summary parent', async () => {
     tasksRepository.findOne?.mockResolvedValueOnce({
       id: 'parent-task-id',
@@ -147,7 +170,7 @@ describe('TasksService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('rejects milestone creation when planned dates do not match', async () => {
+  it('rejects milestone creation when planned dates are explicitly conflicting', async () => {
     await expect(
       service.create({
         plannedEndDate: '2026-07-03',
@@ -157,6 +180,23 @@ describe('TasksService', () => {
         title: 'Go-live',
       }),
     ).rejects.toThrow('Milestones must have matching planned start and end dates');
+  });
+
+  it('normalizes milestone creation when only the planned start date is supplied', async () => {
+    await service.create({
+      plannedStartDate: '2026-07-01',
+      projectId,
+      taskType: TaskType.Milestone,
+      title: 'Go-live',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plannedEndDate: '2026-07-01',
+        plannedStartDate: '2026-07-01',
+        taskKind: TaskKind.Milestone,
+      }),
+    );
   });
 
   it('lists all tasks with project and assignee relations', async () => {
@@ -269,7 +309,7 @@ describe('TasksService', () => {
     });
   });
 
-  it('rejects assigning a phase to a user', async () => {
+  it('rejects assigning a summary task to a user', async () => {
     await expect(
       service.create({
         assigneeId: userId,
@@ -277,10 +317,10 @@ describe('TasksService', () => {
         taskKind: TaskKind.Summary,
         title: 'Planning Phase',
       }),
-    ).rejects.toThrow('Phases cannot be assigned to a user');
+    ).rejects.toThrow('Summary tasks cannot be assigned to a user');
   });
 
-  it('rejects manually completing a phase', async () => {
+  it('rejects manually completing a summary task', async () => {
     tasksRepository.findOne?.mockResolvedValue({
       id: taskId,
       projectId,
@@ -292,7 +332,7 @@ describe('TasksService', () => {
       service.update(taskId, {
         status: TaskStatus.Done,
       }),
-    ).rejects.toThrow('Phase status is calculated from child work');
+    ).rejects.toThrow('Summary task status is calculated from child work');
   });
 
   it('gets one task with project and assignee relations', async () => {

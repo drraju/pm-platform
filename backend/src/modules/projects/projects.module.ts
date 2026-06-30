@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { HealthModule } from '../health/health.module';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
@@ -30,7 +31,7 @@ import { ProjectsService } from './projects.service';
     ]),
   ],
   controllers: [ProjectsController],
-  providers: [ProjectsService, ProjectVisibilityService],
+  providers: [SchedulingFoundationService, ProjectsService, ProjectVisibilityService],
   exports: [ProjectsService, ProjectVisibilityService],
 })
 export class ProjectsModule {}

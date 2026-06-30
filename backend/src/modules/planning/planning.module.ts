@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthzModule } from '../../common/authz/authz.module';
+import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectsModule } from '../projects/projects.module';
 import { Project } from '../projects/entities/project.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -31,7 +32,7 @@ import { PlanningService } from './planning.service';
     ]),
   ],
   controllers: [PlanningController],
-  providers: [PlanningService],
+  providers: [SchedulingFoundationService, PlanningService],
   exports: [PlanningService],
 })
 export class PlanningModule {}

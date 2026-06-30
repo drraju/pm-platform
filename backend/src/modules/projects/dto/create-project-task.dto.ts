@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { TaskType } from '../../../common/enums/task-type.enum';
 
 export class CreateProjectTaskDto {
   @ApiProperty()
@@ -52,6 +53,21 @@ export class CreateProjectTaskDto {
   @IsOptional()
   @IsEnum(TaskKind)
   taskKind?: TaskKind;
+
+  @ApiProperty({ enum: TaskType, default: TaskType.Task, required: false })
+  @IsOptional()
+  @IsEnum(TaskType)
+  taskType?: TaskType;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  summaryCategory?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  milestoneCategory?: string | null;
 
   @ApiProperty({ default: 0, maximum: 100, minimum: 0, required: false })
   @IsOptional()

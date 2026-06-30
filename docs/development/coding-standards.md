@@ -1,89 +1,66 @@
 # Coding Standards
 
-## Purpose
-
-Define coding standards for PM Platform application and documentation work.
-
-## Scope
-
-This document covers TypeScript, NestJS, Next.js, clean architecture, validation, testing, accessibility, and documentation expectations.
-
-## Audience
-
-Backend engineers, frontend engineers, QA engineers, reviewers, and technical leads.
-
-## Overview
-
-PM Platform should remain modular, testable, and enterprise-ready. Code should favor clear domain boundaries, explicit validation, predictable APIs, reusable UI components, and tests that protect critical workflows.
-
-## Contents
-
-### General Standards
-
-- Use TypeScript consistently.
-- Prefer explicit types at public boundaries.
-- Keep functions focused and named by intent.
-- Avoid hidden side effects in read operations.
-- Keep documentation current when behavior changes.
-- Follow existing repository patterns before introducing new abstractions.
-
-### Backend Standards
+## Naming Conventions
 
 | Area | Standard |
 | --- | --- |
-| Controllers | Thin request routing, DTO binding, and response delegation. |
-| Services | Business logic, validation, orchestration, and transaction boundaries. |
-| DTOs | Class-validator decorators for all request inputs. |
-| Entities | Clear TypeORM mappings with explicit relationships. |
-| Authorization | Use guards and project-scoped policy services. |
-| Errors | Use NestJS exception types consistently. |
+| TypeScript types | PascalCase |
+| React components | PascalCase |
+| Hooks | `useSomething` |
+| Backend services | `DomainService` |
+| DTOs | `CreateXDto`, `UpdateXDto`, `XResponseDto` |
+| Database columns | snake_case |
+| API fields | camelCase |
 
-### Frontend Standards
+## Folder Structure
 
-| Area | Standard |
-| --- | --- |
-| Pages | Route-level composition and data loading. |
-| Components | Reusable domain components with typed props. |
-| API | Use shared API client and feature exports. |
-| Accessibility | Use semantic controls, labels, focus states, and keyboard alternatives. |
-| Layout | Prefer dense, operational UI for enterprise workflows. |
-| State | Keep local state close to the component unless shared state is required. |
+Frontend code should group reusable UI under `components`, API contracts under `lib/api`, and domain helpers under `features` or dedicated hooks. Backend code should keep NestJS modules cohesive with controller, service, DTO, entity, and tests in the owning module.
 
-### Clean Architecture Expectations
+## Components
 
-```text
-UI/API boundary
-  -> application service
-  -> domain validation
-  -> persistence abstraction
-  -> database
-```
+- Keep components focused on presentation and interaction.
+- Extract shared controls when two or more modules need the same behavior.
+- Avoid duplicating domain rules in multiple components.
+- Use accessible labels for interactive controls.
 
-### Testing Standards
+## Hooks
 
-- Add service unit tests for business rules.
-- Add frontend component tests for user interactions.
-- Add integration tests for API contracts and authorization.
-- Add regression tests for defects.
-- Include performance coverage for large planning datasets.
+Hooks should encapsulate reusable client-side state, data loading, and derived view models. Hooks should not hide backend validation rules.
 
-### Documentation Standards
+## Backend Modules
 
-- Use Markdown that renders correctly on GitHub.
-- Prefer tables for matrices and comparisons.
-- Use ASCII diagrams for architecture.
-- Link related documents.
-- Maintain revision history.
+Each module owns a clear domain boundary. Services contain business rules. Controllers should remain thin and route-oriented.
 
-## Related Documents
+## DTOs
 
-- [Branching Strategy](branching-strategy.md)
-- [Testing Strategy](testing.md)
-- [Backend Architecture](../architecture/backend.md)
-- [Frontend Architecture](../architecture/frontend.md)
+DTOs define public contracts and validation. Avoid accepting broad untyped objects. Use enums for controlled values and explicit nullable fields where clearing values is supported.
 
-## Revision History
+## Services
 
-| Date | Version | Author | Notes |
-| --- | --- | --- | --- |
-| 2026-06-25 | 0.1 | Codex | Created coding standards framework. |
+Services own business rules, authorization collaboration, validation, and persistence orchestration. Scheduling rules belong in Planning, not in UI or reporting.
+
+## Repositories
+
+Use repositories for persistence access. Keep query behavior close to the service that owns the domain.
+
+## Testing
+
+- Unit test domain rules.
+- Integration test API and persistence boundaries.
+- Frontend test user-visible workflows.
+- Add regression tests for UAT findings.
+
+## Comments
+
+Use comments for non-obvious decisions, edge cases, and domain constraints. Do not comment self-explanatory assignments.
+
+## Documentation
+
+Architecture-affecting changes require updates to architecture docs or ADRs. Product behavior changes require user or release documentation.
+
+## Architecture Rules
+
+- Backend is the final authority for validation.
+- Frontend must prevent invalid inputs where possible.
+- Do not create parallel models for the same concept.
+- Prefer typed domain helpers over ad hoc string manipulation.

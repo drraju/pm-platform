@@ -7,6 +7,8 @@ import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { TaskType } from '../../../common/enums/task-type.enum';
+import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { ProjectHealthStatus } from '../../health/dto/project-health.dto';
 import { ProjectHealthService } from '../../health/project-health.service';
 import { ProjectBaselineTask } from '../entities/project-baseline-task.entity';
@@ -123,6 +125,7 @@ describe('ProjectsService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         ProjectsService,
+        SchedulingFoundationService,
         {
           provide: getRepositoryToken(Project),
           useValue: projectsRepository,
@@ -756,7 +759,40 @@ describe('ProjectsService', () => {
     });
   });
 
-  it('rejects assigning a phase to a project member', async () => {
+  it('creates a project task from taskType while storing the compatible taskKind', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+
+    await service.createProjectTask(projectId, {
+      taskType: TaskType.Task,
+      title: 'Prepare cutover checklist',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+  });
+
+  it('normalizes project milestone dates when only start is supplied', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+
+    await service.createProjectTask(projectId, {
+      plannedStartDate: '2026-07-01',
+      taskType: TaskType.Milestone,
+      title: 'Go-live',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plannedEndDate: '2026-07-01',
+        plannedStartDate: '2026-07-01',
+        taskKind: TaskKind.Milestone,
+      }),
+    );
+  });
+
+  it('rejects assigning a summary task to a project member', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
 
     await expect(
@@ -765,7 +801,7 @@ describe('ProjectsService', () => {
         taskKind: TaskKind.Summary,
         title: 'Planning Phase',
       }),
-    ).rejects.toThrow('Phases cannot be assigned to a user');
+    ).rejects.toThrow('Summary tasks cannot be assigned to a user');
   });
 
   it('rejects project task creation when the assignee does not exist', async () => {
@@ -882,7 +918,7 @@ describe('ProjectsService', () => {
     );
   });
 
-  it('rejects manually completing a project phase', async () => {
+  it('rejects manually completing a project summary task', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne?.mockResolvedValue({
       id: taskId,
@@ -895,7 +931,7 @@ describe('ProjectsService', () => {
       service.updateProjectTask(projectId, taskId, {
         status: TaskStatus.Done,
       }),
-    ).rejects.toThrow('Phase status is calculated from child work');
+    ).rejects.toThrow('Summary task status is calculated from child work');
   });
 
   it('rejects setting a project task as its own parent', async () => {

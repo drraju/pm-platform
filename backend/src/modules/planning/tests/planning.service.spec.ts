@@ -5,7 +5,10 @@ import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { PlanningCalculationStatus } from '../../../common/enums/planning-calculation-status.enum';
 import { ResourceAllocationUnit } from '../../../common/enums/resource-allocation-unit.enum';
+import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { TaskType } from '../../../common/enums/task-type.enum';
+import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { ProjectBaseline } from '../../projects/entities/project-baseline.entity';
 import { Project } from '../../projects/entities/project.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
@@ -167,6 +170,7 @@ describe('PlanningService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         PlanningService,
+        SchedulingFoundationService,
         {
           provide: getRepositoryToken(PlanningScheduleSnapshot),
           useValue: scheduleSnapshotsRepository,
@@ -288,6 +292,7 @@ describe('PlanningService', () => {
           task,
           taskId,
           taskKind: 'standard',
+          taskType: 'task',
           taskTitle: 'Design schedule',
           totalFloatDays: 0,
         },
@@ -690,6 +695,67 @@ describe('PlanningService', () => {
     );
   });
 
+  it('normalizes milestone schedule edits before persistence', async () => {
+    const schedule = {
+      durationDays: 0,
+      id: 'milestone-schedule-row-id',
+      percentComplete: 0,
+      plannedEndDate: '2026-07-05',
+      plannedStartDate: '2026-07-05',
+      projectId,
+      task: {
+        id: taskId,
+        plannedEndDate: '2026-07-05',
+        plannedStartDate: '2026-07-05',
+        projectId,
+        taskKind: TaskKind.Milestone,
+      } as Task,
+      taskId,
+      taskKind: TaskKind.Milestone,
+    } as PlanningTaskSchedule;
+
+    planningTaskSchedulesRepository.findOne?.mockResolvedValue(schedule);
+    planningTaskSchedulesRepository.save?.mockResolvedValue(schedule);
+
+    await service.updatePlanningTaskSchedule(
+      projectId,
+      'milestone-schedule-row-id',
+      { plannedStartDate: '2026-07-12' },
+      actor,
+    );
+
+    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        durationDays: 0,
+        plannedEndDate: '2026-07-12',
+        plannedStartDate: '2026-07-12',
+      }),
+    );
+  });
+
+  it('rejects manual summary schedule edits', async () => {
+    planningTaskSchedulesRepository.findOne?.mockResolvedValue({
+      durationDays: 4,
+      id: 'summary-schedule-row-id',
+      plannedEndDate: '2026-07-05',
+      plannedStartDate: '2026-07-01',
+      projectId,
+      task: { id: taskId, projectId, taskKind: TaskKind.Summary } as Task,
+      taskId,
+      taskKind: TaskKind.Summary,
+    } as PlanningTaskSchedule);
+
+    await expect(
+      service.updatePlanningTaskSchedule(
+        projectId,
+        'summary-schedule-row-id',
+        { durationDays: 7 },
+        actor,
+      ),
+    ).rejects.toThrow('Summary task schedule is calculated from child work');
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+  });
+
   it('rejects inline edits with a finish date before the start date', async () => {
     planningTaskSchedulesRepository.findOne?.mockResolvedValue({
       durationDays: 4,
@@ -799,6 +865,65 @@ describe('PlanningService', () => {
         plannedFinishDate: '2026-07-02',
         plannedStartDate: '2026-07-01',
         taskTitle: 'New Task',
+      }),
+    );
+  });
+
+  it('creates a planning milestone through taskType while preserving taskKind compatibility', async () => {
+    const snapshot = {
+      id: 'snapshot-id',
+      projectCompletionPercent: 25,
+      projectFinishDate: '2026-07-10',
+      projectId,
+      projectStartDate: '2026-07-01',
+      scheduleVersion: 1,
+    } as PlanningScheduleSnapshot;
+
+    scheduleSnapshotsRepository.findOne
+      ?.mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot);
+    planningTaskSchedulesRepository.find?.mockResolvedValue([]);
+    planningTaskSchedulesRepository.save?.mockResolvedValue({
+      durationDays: 0,
+      id: 'schedule-row-new',
+      isCritical: false,
+      parentTaskId: null,
+      percentComplete: 0,
+      plannedEndDate: '2026-07-01',
+      plannedStartDate: '2026-07-01',
+      projectId,
+      sequenceNumber: 1,
+      snapshotId: 'snapshot-id',
+      taskId,
+      taskKind: TaskKind.Milestone,
+    });
+
+    const schedule = await service.createPlanningTask(
+      projectId,
+      { taskType: TaskType.Milestone, title: 'Release drop' },
+      actor,
+    );
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plannedEndDate: '2026-07-01',
+        plannedStartDate: '2026-07-01',
+        taskKind: TaskKind.Milestone,
+      }),
+    );
+    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        durationDays: 0,
+        plannedEndDate: '2026-07-01',
+        plannedStartDate: '2026-07-01',
+        taskKind: TaskKind.Milestone,
+      }),
+    );
+    expect(schedule).toEqual(
+      expect.objectContaining({
+        durationDays: 0,
+        taskKind: TaskKind.Milestone,
+        taskType: TaskType.Milestone,
       }),
     );
   });

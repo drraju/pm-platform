@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   ApiPlanningTaskSchedule,
   ApiPlanningWorkspace,
@@ -102,6 +102,8 @@ const zoomLabels: Record<ZoomMode, string> = {
   month: "Month",
   quarter: "Quarter",
 };
+const toolbarButtonClassName =
+  "rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function PlanningWorkspace({
   isSaving = false,
@@ -128,6 +130,7 @@ export function PlanningWorkspace({
   const [rowDragState, setRowDragState] = useState<RowDragState | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const ganttScrollRef = useRef<HTMLDivElement | null>(null);
+  const dependencySectionRef = useRef<HTMLElement | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const taskNameRefs = useRef(new Map<string, HTMLSpanElement>());
 
@@ -139,9 +142,13 @@ export function PlanningWorkspace({
     () => buildVisibleRows(localSchedules, collapsedIds),
     [collapsedIds, localSchedules],
   );
+  const summaryTaskIds = useMemo(
+    () => getSummaryTaskIds(localSchedules),
+    [localSchedules],
+  );
   const leafRows = useMemo(
-    () => rows.filter((row) => row.schedule.taskKind !== "summary"),
-    [rows],
+    () => rows.filter((row) => !summaryTaskIds.has(row.schedule.taskId)),
+    [rows, summaryTaskIds],
   );
   const timeline = useMemo(
     () => buildTimeline(localSchedules, zoom),
@@ -173,7 +180,7 @@ export function PlanningWorkspace({
     }));
   }, [leafRows]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!newTaskFocusId) {
       return;
     }
@@ -192,6 +199,13 @@ export function PlanningWorkspace({
   const totalWidth = timeline.width;
   const canZoomIn = zoom !== zoomModes[0];
   const canZoomOut = zoom !== zoomModes[zoomModes.length - 1];
+  const milestoneCount = useMemo(
+    () =>
+      localSchedules.filter((schedule) => schedule.taskKind === "milestone")
+        .length,
+    [localSchedules],
+  );
+  const hasSummaryTasks = summaryTaskIds.size > 0;
 
   function toggleCollapse(taskId: string) {
     setCollapsedIds((currentIds) => {
@@ -203,6 +217,14 @@ export function PlanningWorkspace({
       }
       return nextIds;
     });
+  }
+
+  function expandAll() {
+    setCollapsedIds(new Set());
+  }
+
+  function collapseAll() {
+    setCollapsedIds(new Set(summaryTaskIds));
   }
 
   async function createTask(parentTaskId?: string | null) {
@@ -227,13 +249,42 @@ export function PlanningWorkspace({
 
   function handleRowKeyDown(
     event: React.KeyboardEvent<HTMLDivElement>,
-    taskId: string,
+    schedule: ApiPlanningTaskSchedule,
+    hasChildren: boolean,
   ) {
+    if (event.key === "ArrowLeft" && hasChildren) {
+      event.preventDefault();
+      setSelectedTaskId(schedule.taskId);
+      setCollapsedIds((currentIds) => {
+        if (currentIds.has(schedule.taskId)) {
+          return currentIds;
+        }
+        const nextIds = new Set(currentIds);
+        nextIds.add(schedule.taskId);
+        return nextIds;
+      });
+      return;
+    }
+
+    if (event.key === "ArrowRight" && hasChildren) {
+      event.preventDefault();
+      setSelectedTaskId(schedule.taskId);
+      setCollapsedIds((currentIds) => {
+        if (!currentIds.has(schedule.taskId)) {
+          return currentIds;
+        }
+        const nextIds = new Set(currentIds);
+        nextIds.delete(schedule.taskId);
+        return nextIds;
+      });
+      return;
+    }
+
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
     event.preventDefault();
-    setSelectedTaskId(taskId);
+    setSelectedTaskId(schedule.taskId);
   }
 
   function startEditing(
@@ -500,93 +551,161 @@ export function PlanningWorkspace({
     scrollContainer.scrollLeft = Math.max(0, todayX - viewportWidth / 2);
   }
 
+  function scrollToDependencies() {
+    dependencySectionRef.current?.scrollIntoView({ block: "nearest" });
+  }
+
   return (
-    <div className="space-y-4">
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3 shadow-soft">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-950">
-            {workspace.project.name} planning workspace
-          </h2>
-          <p className="text-xs text-slate-500">
-            Schedule v{workspace.snapshot.versionNumber} ·{" "}
-            {workspace.snapshot.projectStartDate ?? "Unscheduled"} to{" "}
-            {workspace.snapshot.projectFinishDate ?? "Unscheduled"}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
-            disabled={isSaving}
-            onClick={() => createTask(selectedSchedule?.parentTaskId ?? null)}
-            type="button"
-          >
-            Add Task
-          </button>
-          <button
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
-            disabled={isSaving || !selectedSchedule}
-            onClick={() => createTask(selectedSchedule?.taskId ?? null)}
-            type="button"
-          >
-            Add Child
-          </button>
-          <span className="mx-1 h-7 border-l border-slate-200" />
-          <button
-            aria-label="Zoom Out"
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
-            disabled={!canZoomOut}
-            onClick={() => changeZoom("out")}
-            title="Zoom Out"
-            type="button"
-          >
-            -
-          </button>
-          <button
-            aria-label="Zoom In"
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
-            disabled={!canZoomIn}
-            onClick={() => changeZoom("in")}
-            title="Zoom In"
-            type="button"
-          >
-            +
-          </button>
-          <button
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
-            onClick={fitToProject}
-            type="button"
-          >
-            Fit to Project
-          </button>
-          <button
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
-            onClick={scrollToToday}
-            type="button"
-          >
-            Today
-          </button>
-          <label className="sr-only" htmlFor="planning-time-scale">
-            Time Scale
-          </label>
-          <select
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
-            id="planning-time-scale"
-            onChange={(event) => setZoom(event.target.value as ZoomMode)}
-            value={zoom}
-          >
-            {zoomModes.map((mode) => (
-              <option key={mode} value={mode}>
-                {zoomLabels[mode]}
-              </option>
-            ))}
-          </select>
+    <div className="flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
+      <section
+        aria-label="Planning toolbar"
+        className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 p-3 backdrop-blur"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-950">
+              {workspace.project.name} planning workspace
+            </h2>
+            <p className="text-xs text-slate-500">
+              Schedule v{workspace.snapshot.versionNumber} ·{" "}
+              {workspace.snapshot.projectStartDate ?? "Unscheduled"} to{" "}
+              {workspace.snapshot.projectFinishDate ?? "Unscheduled"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <ToolbarGroup label="Tasks">
+              <button
+                className={toolbarButtonClassName}
+                disabled={isSaving}
+                onClick={() => createTask(selectedSchedule?.parentTaskId ?? null)}
+                type="button"
+              >
+                Add Task
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled={isSaving || !selectedSchedule}
+                onClick={() => createTask(selectedSchedule?.taskId ?? null)}
+                type="button"
+              >
+                Add Child
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled
+                title="Phase creation is handled outside this UX polish story."
+                type="button"
+              >
+                Add Phase
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled
+                title="Milestone creation is outside this UX polish story."
+                type="button"
+              >
+                Add Milestone
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled
+                title="Task deletion is outside this UX polish story."
+                type="button"
+              >
+                Delete
+              </button>
+            </ToolbarGroup>
+            <ToolbarGroup label="Schedule">
+              <button
+                className={toolbarButtonClassName}
+                onClick={scrollToDependencies}
+                type="button"
+              >
+                Dependencies
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                onClick={scrollToToday}
+                type="button"
+              >
+                Today
+              </button>
+            </ToolbarGroup>
+            <ToolbarGroup label="Zoom">
+              <button
+                aria-label="Zoom Out"
+                className={toolbarButtonClassName}
+                disabled={!canZoomOut}
+                onClick={() => changeZoom("out")}
+                title="Zoom Out"
+                type="button"
+              >
+                -
+              </button>
+              <button
+                aria-label="Zoom In"
+                className={toolbarButtonClassName}
+                disabled={!canZoomIn}
+                onClick={() => changeZoom("in")}
+                title="Zoom In"
+                type="button"
+              >
+                +
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                onClick={fitToProject}
+                type="button"
+              >
+                Fit to Project
+              </button>
+            </ToolbarGroup>
+            <ToolbarGroup label="View">
+              <button
+                className={toolbarButtonClassName}
+                disabled={!hasSummaryTasks}
+                onClick={expandAll}
+                type="button"
+              >
+                Expand All
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled={!hasSummaryTasks}
+                onClick={collapseAll}
+                type="button"
+              >
+                Collapse All
+              </button>
+              <label className="sr-only" htmlFor="planning-time-scale">
+                Time Scale
+              </label>
+              <select
+                className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700"
+                id="planning-time-scale"
+                onChange={(event) => setZoom(event.target.value as ZoomMode)}
+                value={zoom}
+              >
+                {zoomModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {zoomLabels[mode]}
+                  </option>
+                ))}
+              </select>
+              <KeyboardHelp />
+            </ToolbarGroup>
+          </div>
         </div>
       </section>
 
-      <section className="grid min-h-[560px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft xl:grid-cols-[minmax(560px,45%)_minmax(0,1fr)]">
-        <div className="overflow-auto border-r border-slate-200">
+      <section
+        aria-label="Scrollable planning workspace"
+        className="min-h-0 flex-1 overflow-auto bg-white"
+      >
+        <div className="grid min-h-[560px] xl:grid-cols-[minmax(560px,45%)_minmax(0,1fr)]">
+        <div className="overflow-visible border-r border-slate-200">
           <div
-            className="grid h-11 min-w-[1100px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
+            className="sticky top-0 z-10 grid h-11 min-w-[1100px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
             style={{
               gridTemplateColumns: planningGridTemplate,
               width: planningGridWidth,
@@ -616,7 +735,7 @@ export function PlanningWorkspace({
             </span>
           </div>
           {rows.map(({ depth, schedule, wbs }) => {
-            const children = localSchedules.some(
+            const hasChildren = localSchedules.some(
               (candidate) => candidate.parentTaskId === schedule.taskId,
             );
             const title = getTaskTitle(schedule);
@@ -626,7 +745,7 @@ export function PlanningWorkspace({
                 aria-selected={selectedTaskId === schedule.taskId}
                 className={`grid h-[46px] min-w-[1100px] items-center border-b border-slate-100 text-xs text-slate-700 hover:bg-slate-50 ${
                   selectedTaskId === schedule.taskId
-                    ? "bg-brand/10 ring-1 ring-inset ring-brand/40"
+                    ? "bg-brand/10 shadow-[inset_3px_0_0_#0f766e] ring-1 ring-inset ring-brand/30"
                     : ""
                 }`}
                 draggable={!editingCell}
@@ -636,7 +755,9 @@ export function PlanningWorkspace({
                 onDragOver={(event) => handleRowDragOver(event, schedule)}
                 onDragStart={(event) => startRowDrag(event, schedule)}
                 onDrop={(event) => dropRow(event, schedule)}
-                onKeyDown={(event) => handleRowKeyDown(event, schedule.taskId)}
+                onKeyDown={(event) =>
+                  handleRowKeyDown(event, schedule, hasChildren)
+                }
                 ref={(element) => {
                   if (element) {
                     rowRefs.current.set(schedule.taskId, element);
@@ -662,12 +783,12 @@ export function PlanningWorkspace({
                 </span>
                 <div
                   className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-4"
-                  style={{ paddingLeft: 16 + depth * 14 }}
+                  style={{ paddingLeft: 16 + depth * 18 }}
                 >
-                  {children ? (
+                  {hasChildren ? (
                     <button
                       aria-label={`${collapsedIds.has(schedule.taskId) ? "Expand" : "Collapse"} ${title}`}
-                      className="text-slate-500"
+                      className="inline-flex h-5 w-5 items-center justify-center text-slate-500"
                       onClick={(event) => {
                         event.stopPropagation();
                         toggleCollapse(schedule.taskId);
@@ -680,7 +801,7 @@ export function PlanningWorkspace({
                     <span className="w-3" />
                   )}
                   <span aria-hidden>
-                    {schedule.taskKind === "summary"
+                    {hasChildren
                       ? "►"
                       : schedule.taskKind === "milestone"
                         ? "♦"
@@ -828,9 +949,15 @@ export function PlanningWorkspace({
               </div>
             );
           })}
+          {rows.length === 0 ? (
+            <div className="min-w-[1100px] px-4 py-12 text-center text-sm text-slate-500">
+              <p className="font-semibold text-slate-700">No Tasks</p>
+              <p className="mt-1">Add a task to start building the project WBS.</p>
+            </div>
+          ) : null}
         </div>
 
-        <div className="overflow-auto" ref={ganttScrollRef}>
+        <div className="overflow-x-auto overflow-y-visible" ref={ganttScrollRef}>
           <svg
             aria-label="Interactive Gantt timeline"
             className="block"
@@ -1032,9 +1159,12 @@ export function PlanningWorkspace({
             </defs>
           </svg>
         </div>
-      </section>
+      </div>
 
-      <section className="grid gap-4 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[1fr_1fr]">
+      <section
+        className="m-3 grid gap-4 rounded-md border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr]"
+        ref={dependencySectionRef}
+      >
         <form className="grid gap-3 sm:grid-cols-4" onSubmit={submitDependency}>
           <label className="block">
             <span className="text-xs font-semibold uppercase text-slate-500">
@@ -1137,6 +1267,15 @@ export function PlanningWorkspace({
           )}
         </div>
       </section>
+      </section>
+
+      <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+        <span>{localSchedules.length} Tasks</span>
+        <span>{summaryTaskIds.size} Summary Tasks</span>
+        <span>{milestoneCount} Milestones</span>
+        <span>Zoom: {zoomLabels[zoom]}</span>
+        <span>Visible Tasks: {rows.length}</span>
+      </footer>
     </div>
   );
 }
@@ -1145,6 +1284,54 @@ function getPointerClientX(event: React.PointerEvent<SVGElement>) {
   const nativeClientX = (event.nativeEvent as PointerEvent | MouseEvent)
     .clientX;
   return Number.isFinite(event.clientX) ? event.clientX : nativeClientX;
+}
+
+function ToolbarGroup({
+  children,
+  label,
+}: {
+  children: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3 first:border-l-0 first:pl-0">
+      <span className="mr-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function KeyboardHelp() {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <span className="relative">
+      <button
+        aria-expanded={isOpen}
+        aria-label="Keyboard help"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        ?
+      </button>
+      {isOpen ? (
+        <span className="absolute right-0 top-9 z-30 w-64 rounded-md border border-slate-200 bg-white p-3 text-left text-xs text-slate-600 shadow-lg">
+          <span className="block font-semibold text-slate-900">
+            Keyboard Shortcuts
+          </span>
+          <span className="mt-2 block">Arrow Left: collapse summary task</span>
+          <span className="block">Arrow Right: expand summary task</span>
+          <span className="block">Enter or Space: select row</span>
+          <span className="block">Enter: save inline edit</span>
+          <span className="block">Escape: cancel inline edit</span>
+          <span className="block">Tab: save and move to next editable cell</span>
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 type OwnerOption = {
@@ -1552,6 +1739,16 @@ function buildVisibleRows(
   };
   visit(null, 0, []);
   return rows;
+}
+
+function getSummaryTaskIds(schedules: ApiPlanningTaskSchedule[]) {
+  const summaryTaskIds = new Set<string>();
+  schedules.forEach((schedule) => {
+    if (schedule.parentTaskId) {
+      summaryTaskIds.add(schedule.parentTaskId);
+    }
+  });
+  return summaryTaskIds;
 }
 
 function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {

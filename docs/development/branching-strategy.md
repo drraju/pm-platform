@@ -2,91 +2,62 @@
 
 ## Purpose
 
-Define the branch model, naming conventions, merge expectations, and release branch process for PM Platform.
+The branching strategy supports controlled enterprise delivery while keeping feature development simple.
 
-## Scope
+## Branches
 
-This document covers Git workflow for feature development, release stabilization, hotfixes, reviews, and documentation changes.
+| Branch | Purpose |
+| --- | --- |
+| `main` | Stable integration branch; deployable after validation |
+| `release/*` | Release stabilization, UAT fixes, final documentation |
+| `feature/*` | Isolated feature development |
+| `hotfix/*` | Urgent production or UAT fixes |
 
-## Audience
-
-Engineers, QA engineers, release managers, product owners, and technical reviewers.
-
-## Overview
-
-PM Platform should use a simple trunk-oriented workflow with short-lived feature branches and explicit release branches when stabilization is required. Branches should be small, reviewable, and tied to a clearly described product or engineering objective.
-
-## Contents
-
-### Branch Model
+## Feature Flow
 
 ```text
-main
-|-- develop
-|-- release/v1.1.1-planning-engine
-|-- feature/planning-cpm-validation
-|-- fix/planning-cycle-race
-`-- docs/documentation-framework
+feature/* -> pull request -> main -> release/* -> tag -> deployment
 ```
 
-### Branch Types
-
-| Branch | Purpose | Example |
-| --- | --- | --- |
-| `main` | Stable release-ready branch. | `main` |
-| `develop` | Integration branch when parallel feature work requires staging. | `develop` |
-| `feature/*` | New product or technical capability. | `feature/resource-capacity-grid` |
-| `fix/*` | Defect correction. | `fix/planning-dependency-validation` |
-| `docs/*` | Documentation-only change. | `docs/product-roadmap-refresh` |
-| `release/*` | Stabilization branch for a named release. | `release/v1.1.1-planning-engine` |
-| `hotfix/*` | Urgent production correction. | `hotfix/login-session-expiry` |
-
-### Commit Conventions
-
-Use concise imperative commit messages:
+## Hotfix Flow
 
 ```text
-docs: add planning engine stabilization guide
-fix: prevent circular planning dependencies
-test: add planning workspace large schedule coverage
+hotfix/* -> review -> main -> release branch if active -> tag
 ```
 
-Recommended prefixes:
+## Tagging
 
-- `feat`
-- `fix`
-- `docs`
-- `test`
-- `refactor`
-- `chore`
-- `build`
+Tags should match release documentation and deployment artifacts. Use semantic versioning where practical, with beta labels for UAT releases.
 
-### Pull Request Process
+## Versioning
 
-1. Keep the PR scoped to one logical change.
-2. Include context, screenshots where UI changes exist, and test evidence.
-3. Link related product, architecture, or release documents.
-4. Request review from the owning area.
-5. Resolve comments with follow-up commits rather than force-pushing during active review unless agreed.
+Version numbers should communicate compatibility and release intent:
 
-### Release Workflow
+- Major: breaking platform release.
+- Minor: feature release.
+- Patch: bug fix or hardening.
+- Beta suffix: customer/UAT candidate.
 
-1. Create a `release/*` branch from the integration branch.
-2. Freeze major functionality.
-3. Run backend, frontend, and integration test suites.
-4. Update release notes.
-5. Merge to `main`.
-6. Tag the release.
+## Release Notes
 
-## Related Documents
+Release notes must include:
 
-- [Coding Standards](coding-standards.md)
-- [Testing Strategy](testing.md)
-- [Deployment Workflow](deployment.md)
-- [Product Roadmap](../product/product-roadmap.md)
+- Scope.
+- Features.
+- Fixes.
+- Migration notes.
+- Known issues.
+- Test results.
 
-## Revision History
+## Deployment Flow
 
-| Date | Version | Author | Notes |
-| --- | --- | --- | --- |
-| 2026-06-25 | 0.1 | Codex | Created branching strategy framework. |
+1. Merge approved changes.
+2. Run build and tests.
+3. Prepare release notes.
+4. Tag release.
+5. Deploy to UAT.
+6. Validate smoke tests.
+
+## Rollback
+
+Rollback requires a known good release tag and database backup compatibility. Migration risk must be reviewed before deployment.

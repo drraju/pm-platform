@@ -11,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { TaskType } from '../../../common/enums/task-type.enum';
 
 export class UpdatePlanningTaskScheduleDto {
   @ApiProperty({ required: false })
@@ -61,4 +62,19 @@ export class UpdatePlanningTaskScheduleDto {
   @IsOptional()
   @IsUUID()
   ownerId?: string | null;
+
+  @ApiProperty({ enum: TaskType, required: false })
+  @IsOptional()
+  @IsEnum(TaskType)
+  taskType?: TaskType;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  summaryCategory?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  milestoneCategory?: string | null;
 }

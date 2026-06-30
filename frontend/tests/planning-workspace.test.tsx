@@ -156,6 +156,83 @@ const orderingWorkspace: ApiPlanningWorkspace = {
   ],
 };
 
+const nestedWorkspace: ApiPlanningWorkspace = {
+  ...workspace,
+  criticalPathTaskIds: [],
+  dependencies: [],
+  resourceAllocations: [],
+  schedules: [
+    {
+      ...workspace.schedules[0],
+      id: "nested-schedule-1",
+      parentTaskId: null,
+      sequenceNumber: 1,
+      taskId: "phase-1",
+      taskTitle: "Phase 1",
+    },
+    {
+      ...workspace.schedules[0],
+      id: "nested-schedule-2",
+      parentTaskId: "phase-1",
+      sequenceNumber: 1,
+      taskId: "development",
+      taskTitle: "Development",
+    },
+    {
+      ...workspace.schedules[1],
+      id: "nested-schedule-3",
+      parentTaskId: "development",
+      sequenceNumber: 1,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "backend",
+        title: "Backend",
+      },
+      taskId: "backend",
+      taskTitle: "Backend",
+    },
+    {
+      ...workspace.schedules[1],
+      id: "nested-schedule-4",
+      parentTaskId: "development",
+      sequenceNumber: 2,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "frontend",
+        title: "Frontend",
+      },
+      taskId: "frontend",
+      taskTitle: "Frontend",
+    },
+    {
+      ...workspace.schedules[1],
+      id: "nested-schedule-5",
+      parentTaskId: "phase-1",
+      sequenceNumber: 2,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "testing",
+        title: "Testing",
+      },
+      taskId: "testing",
+      taskTitle: "Testing",
+    },
+    {
+      ...workspace.schedules[1],
+      id: "nested-schedule-6",
+      parentTaskId: null,
+      sequenceNumber: 2,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "phase-2",
+        title: "Phase 2",
+      },
+      taskId: "phase-2",
+      taskTitle: "Phase 2",
+    },
+  ],
+};
+
 function dragRow(sourceName: RegExp, targetName: RegExp) {
   const dataTransfer = {
     dropEffect: "move",
@@ -204,6 +281,64 @@ describe("PlanningWorkspace", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the toolbar sticky and the planning workspace independently scrollable", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const toolbar = screen.getByLabelText("Planning toolbar");
+    expect(toolbar).toHaveClass("sticky");
+    expect(
+      screen.getByLabelText("Scrollable planning workspace"),
+    ).toHaveClass("overflow-auto");
+
+    expect(
+      within(toolbar).getByRole("button", { name: "Add Task" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("button", { name: "Add Child" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("button", { name: "Dependencies" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("button", { name: "Fit to Project" }),
+    ).toBeInTheDocument();
+    expect(within(toolbar).getByLabelText("Time Scale")).toBeInTheDocument();
+  });
+
+  it("expands and collapses all summary tasks from the toolbar", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={nestedWorkspace}
+      />,
+    );
+
+    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse All" }));
+
+    expect(screen.getByRole("row", { name: /1 Phase 1/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /2 Phase 2/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /Development/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Visible Tasks: 2")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand All" }));
+
+    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
+    expect(screen.getByText("Visible Tasks: 6")).toBeInTheDocument();
+  });
+
   it("uses current project members in the assignment dropdown and autosaves selection", async () => {
     const onUpdateSchedule = vi.fn().mockResolvedValue(workspace.schedules[1]);
 
@@ -231,7 +366,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    fireEvent.doubleClick(screen.getByText("Alice Ng"));
+    fireEvent.doubleClick(screen.getByTitle("Alice Ng"));
     const ownerSelect = screen
       .getByRole("option", { name: "Bob Stone" })
       .closest("select");
@@ -264,6 +399,78 @@ describe("PlanningWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /expand planning/i }));
     expect(screen.getByText("Design schedule")).toBeInTheDocument();
+  });
+
+  it("supports nested WBS collapse and expand without changing numbering", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={nestedWorkspace}
+      />,
+    );
+
+    expect(screen.getByRole("row", { name: /1 Phase 1/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /1\.1 Development/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /1\.2 Testing/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse development/i }));
+    expect(screen.queryByRole("row", { name: /1\.1\.1 Backend/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /1\.2 Testing/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse phase 1/i }));
+    expect(screen.queryByRole("row", { name: /1\.1 Development/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /1\.2 Testing/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /2 Phase 2/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /expand phase 1/i }));
+    expect(screen.getByRole("row", { name: /1\.1 Development/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /1\.1\.1 Backend/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /expand development/i }));
+    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
+  });
+
+  it("does not render expand or collapse controls for leaf tasks", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const leafRow = screen.getByRole("row", { name: /1\.1 Design schedule/ });
+    expect(
+      within(leafRow).queryByRole("button", { name: /collapse design schedule/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(leafRow).queryByRole("button", { name: /expand design schedule/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("supports ArrowLeft and ArrowRight on focused summary rows", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
+    fireEvent.keyDown(summaryRow, { key: "ArrowLeft" });
+    expect(screen.queryByRole("row", { name: /1\.1 Design schedule/ })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(summaryRow, { key: "ArrowRight" });
+    expect(screen.getByRole("row", { name: /1\.1 Design schedule/ })).toBeInTheDocument();
   });
 
   it("falls back to the task title when the planning title is blank", () => {
@@ -731,6 +938,43 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByRole("row", { name: /2\.1 Design schedule/ })).toBeInTheDocument();
   });
 
+  it("keeps collapsed summary branches draggable without orphaning descendants", async () => {
+    const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
+      Promise.resolve({
+        ...orderingWorkspace.schedules.find(
+          (schedule) => schedule.taskId === taskId,
+        ),
+        ...input,
+      }),
+    );
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={orderingWorkspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    expect(screen.queryByRole("row", { name: /1\.1 Design schedule/ })).not.toBeInTheDocument();
+
+    dragRow(/1 Planning/, /3 Closure/);
+
+    expect(screen.getByRole("row", { name: /1 Execution/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /2 Closure/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /3 Planning/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /3\.1 Design schedule/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /expand planning/i }));
+    expect(screen.getByRole("row", { name: /3\.1 Design schedule/ })).toBeInTheDocument();
+    expect(onUpdateSchedule).not.toHaveBeenCalledWith(
+      "task-2",
+      expect.objectContaining({ parentTaskId: null }),
+    );
+  });
+
   it("persists row reorder sequence changes immediately", async () => {
     const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
       Promise.resolve({
@@ -816,5 +1060,34 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByRole("row", { name: /1 Closure/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /3 Execution/ })).toBeInTheDocument();
+  });
+
+  it("resets expansion state when the planning workspace remounts", () => {
+    function Harness() {
+      const [refreshKey, setRefreshKey] = React.useState(0);
+      return (
+        <>
+          <button onClick={() => setRefreshKey((key) => key + 1)} type="button">
+            Remount planning
+          </button>
+          <PlanningWorkspace
+            key={refreshKey}
+            onCreateDependency={vi.fn()}
+            onCreateTask={vi.fn()}
+            onDeleteDependency={vi.fn()}
+            onUpdateSchedule={vi.fn()}
+            workspace={workspace}
+          />
+        </>
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    expect(screen.queryByRole("row", { name: /1\.1 Design schedule/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remount planning" }));
+    expect(screen.getByRole("row", { name: /1\.1 Design schedule/ })).toBeInTheDocument();
   });
 });

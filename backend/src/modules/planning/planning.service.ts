@@ -15,6 +15,7 @@ import { ResourceAllocationUnit } from '../../common/enums/resource-allocation-u
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
+import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
 import { Project } from '../projects/entities/project.entity';
 import {
@@ -75,6 +76,7 @@ export class PlanningService {
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectsService: ProjectsService,
+    private readonly schedulingFoundationService: SchedulingFoundationService,
   ) {}
 
   async getWorkspace(
@@ -240,7 +242,7 @@ export class PlanningService {
 
             return {
               createdById: actor?.userId,
-              durationDays: this.calculateDurationDays(
+              durationDays: this.schedulingFoundationService.calculateDurationDays(
                 plannedStartDate,
                 plannedEndDate,
               ),
@@ -307,48 +309,26 @@ export class PlanningService {
       await this.ensureUserExists(input.ownerId);
     }
 
-    const plannedStartDate =
-      input.plannedStartDate === undefined
-        ? schedule.plannedStartDate
-        : input.plannedStartDate;
-    const plannedEndDate =
-      input.plannedFinishDate === undefined
-        ? schedule.plannedEndDate
-        : input.plannedFinishDate;
-    const durationDays =
-      input.durationDays === undefined
-        ? input.plannedStartDate !== undefined ||
-          input.plannedFinishDate !== undefined
-          ? this.calculateDurationDays(plannedStartDate, plannedEndDate)
-          : schedule.durationDays
-        : input.durationDays;
-    const nextPlannedEndDate =
-      input.plannedFinishDate === undefined &&
-      input.durationDays !== undefined &&
-      input.durationDays !== null &&
-      plannedStartDate
-        ? this.shiftDateString(plannedStartDate, input.durationDays)
-        : plannedEndDate;
-
-    if (
-      plannedStartDate &&
-      nextPlannedEndDate &&
-      nextPlannedEndDate < plannedStartDate
-    ) {
-      throw new BadRequestException(
-        'Planned finish date cannot be before planned start date',
+    const taskKind = this.schedulingFoundationService.normalizeTaskKind(
+      { taskKind: schedule.taskKind ?? schedule.task?.taskKind },
+      TaskKind.Standard,
+    );
+    const normalizedSchedule =
+      this.schedulingFoundationService.normalizeScheduleMutation(
+        taskKind,
+        input,
+        schedule,
       );
-    }
 
     Object.assign(schedule, {
-      durationDays,
+      durationDays: normalizedSchedule.durationDays,
       parentTaskId:
         input.parentTaskId === undefined
           ? schedule.parentTaskId
           : input.parentTaskId,
       percentComplete: input.percentComplete ?? schedule.percentComplete,
-      plannedEndDate: nextPlannedEndDate,
-      plannedStartDate,
+      plannedEndDate: normalizedSchedule.plannedEndDate,
+      plannedStartDate: normalizedSchedule.plannedStartDate,
       sequenceNumber:
         input.sequenceNumber === undefined
           ? schedule.sequenceNumber
@@ -375,9 +355,9 @@ export class PlanningService {
         }
         schedule.task.title = nextTitle;
       }
-      schedule.task.dueDate = nextPlannedEndDate;
-      schedule.task.plannedEndDate = nextPlannedEndDate;
-      schedule.task.plannedStartDate = plannedStartDate;
+      schedule.task.dueDate = normalizedSchedule.plannedEndDate;
+      schedule.task.plannedEndDate = normalizedSchedule.plannedEndDate;
+      schedule.task.plannedStartDate = normalizedSchedule.plannedStartDate;
       schedule.task.percentComplete = Number(schedule.percentComplete ?? 0);
       await this.tasksRepository.save(schedule.task);
     }
@@ -439,9 +419,30 @@ export class PlanningService {
               Math.max(maxSequence, schedule.sequenceNumber ?? 0),
             0,
           ) + 1;
+        const taskKind = this.schedulingFoundationService.normalizeTaskKind(
+          input,
+          TaskKind.Standard,
+        );
         const plannedStartDate =
-          snapshot.projectStartDate ?? this.todayDateString();
-        const plannedEndDate = this.shiftDateString(plannedStartDate, 1);
+          taskKind === TaskKind.Summary
+            ? null
+            : snapshot.projectStartDate ?? this.todayDateString();
+        const plannedEndDate =
+          taskKind === TaskKind.Milestone
+            ? plannedStartDate
+            : taskKind === TaskKind.Summary || !plannedStartDate
+              ? null
+              : this.schedulingFoundationService.shiftDateString(
+                  plannedStartDate,
+                  1,
+                );
+        const durationDays =
+          taskKind === TaskKind.Milestone
+            ? 0
+            : this.schedulingFoundationService.calculateDurationDays(
+                plannedStartDate,
+                plannedEndDate,
+              );
         const title = input.title?.trim() || 'New Task';
 
         const task = await tasksRepository.save(
@@ -457,7 +458,7 @@ export class PlanningService {
             sequenceNumber,
             startDate: plannedStartDate,
             status: TaskStatus.Todo,
-            taskKind: TaskKind.Standard,
+            taskKind,
             title,
             updatedById: actor?.userId,
           }),
@@ -466,7 +467,7 @@ export class PlanningService {
         const taskSchedule = await taskSchedulesRepository.save(
           taskSchedulesRepository.create({
             createdById: actor?.userId,
-            durationDays: 1,
+            durationDays,
             isCritical: false,
             parentTaskId,
             percentComplete: 0,
@@ -478,7 +479,7 @@ export class PlanningService {
             sequenceNumber,
             snapshotId: snapshot.id,
             taskId: task.id,
-            taskKind: TaskKind.Standard,
+            taskKind,
             totalFloatDays: null,
             updatedById: actor?.userId,
           }),
@@ -851,6 +852,9 @@ export class PlanningService {
       task: taskSchedule.task ?? null,
       taskId: taskSchedule.taskId,
       taskKind: taskSchedule.taskKind,
+      taskType: this.schedulingFoundationService.toTaskType(
+        taskSchedule.taskKind,
+      ),
       taskTitle: taskSchedule.task?.title ?? taskSchedule.taskId,
       totalFloatDays: taskSchedule.totalFloatDays ?? null,
     };
@@ -874,32 +878,8 @@ export class PlanningService {
     return dates[dates.length - 1] ?? null;
   }
 
-  private calculateDurationDays(
-    plannedStartDate?: string | null,
-    plannedEndDate?: string | null,
-  ): number | null {
-    if (!plannedStartDate || !plannedEndDate) {
-      return null;
-    }
-
-    const startTime = new Date(`${plannedStartDate}T00:00:00Z`).getTime();
-    const endTime = new Date(`${plannedEndDate}T00:00:00Z`).getTime();
-
-    if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-      return null;
-    }
-
-    return Math.max(0, Math.round((endTime - startTime) / 86_400_000));
-  }
-
   private todayDateString(): string {
     return new Date().toISOString().slice(0, 10);
-  }
-
-  private shiftDateString(value: string, days: number): string {
-    const date = new Date(`${value}T00:00:00Z`);
-    date.setUTCDate(date.getUTCDate() + days);
-    return date.toISOString().slice(0, 10);
   }
 
   private minDateString(

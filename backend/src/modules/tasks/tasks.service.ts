@@ -13,6 +13,7 @@ import {
 } from '../../common/authz/authorization-policy.service';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import {
   ProjectVisibilityActor,
@@ -45,6 +46,7 @@ export class TasksService {
     private readonly projectMembersRepository: Repository<ProjectMember>,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
+    private readonly schedulingFoundationService: SchedulingFoundationService,
   ) {}
 
   async create(
@@ -52,13 +54,15 @@ export class TasksService {
     actor?: AuthenticatedActor,
   ): Promise<Task> {
     await this.ensureCanManageProject(createTaskDto.projectId, actor);
-    await this.validatePlanningFields(createTaskDto.projectId, createTaskDto);
+    const normalizedInput =
+      this.schedulingFoundationService.normalizeTaskMutation(createTaskDto);
+    await this.validatePlanningFields(createTaskDto.projectId, normalizedInput);
     await this.validateAssigneeMembership(
       createTaskDto.projectId,
-      createTaskDto.assigneeId,
+      normalizedInput.assigneeId,
     );
     const task = await this.tasksRepository.save(
-      this.tasksRepository.create(this.withNormalizedProgress(createTaskDto)),
+      this.tasksRepository.create(this.withNormalizedProgress(normalizedInput)),
     );
     return this.decorateTask(task);
   }
@@ -156,16 +160,21 @@ export class TasksService {
   ): Promise<Task> {
     const task = await this.findOne(id, actor);
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
+    const normalizedInput =
+      this.schedulingFoundationService.normalizeTaskMutation(
+        updateTaskDto,
+        task,
+      );
     await this.validatePlanningFields(
-      updateTaskDto.projectId ?? task.projectId,
-      updateTaskDto,
+      normalizedInput.projectId ?? task.projectId,
+      normalizedInput,
       task,
     );
     await this.validateAssigneeMembership(
-      updateTaskDto.projectId ?? task.projectId,
-      updateTaskDto.assigneeId,
+      normalizedInput.projectId ?? task.projectId,
+      normalizedInput.assigneeId,
     );
-    Object.assign(task, this.withNormalizedProgress(updateTaskDto));
+    Object.assign(task, this.withNormalizedProgress(normalizedInput));
     const savedTask = await this.tasksRepository.save(task);
     return this.decorateTask(savedTask);
   }
@@ -251,24 +260,20 @@ export class TasksService {
     input: Partial<CreateTaskDto | UpdateTaskDto>,
     existingTask?: Task,
   ): Promise<void> {
-    const effectiveTaskKind = input.taskKind ?? existingTask?.taskKind ?? TaskKind.Standard;
+    const effectiveTaskKind = this.schedulingFoundationService.normalizeTaskKind(
+      input,
+      existingTask?.taskKind ?? TaskKind.Standard,
+    );
     const effectiveParentTaskId =
       typeof input.parentTaskId !== 'undefined'
         ? input.parentTaskId
         : existingTask?.parentTaskId;
 
-    this.validateMilestoneDates(
-      effectiveTaskKind,
-      input.plannedStartDate ?? existingTask?.plannedStartDate,
-      input.plannedEndDate ?? existingTask?.plannedEndDate,
-    );
-    this.validatePhaseMutations(effectiveTaskKind, input);
-
     if (
       existingTask &&
-      input.taskKind &&
-      input.taskKind !== TaskKind.Summary &&
-      input.taskKind !== existingTask.taskKind
+      (input.taskKind || input.taskType) &&
+      effectiveTaskKind !== TaskKind.Summary &&
+      effectiveTaskKind !== existingTask.taskKind
     ) {
       await this.ensureTaskHasNoChildren(existingTask.id);
     }
@@ -296,51 +301,6 @@ export class TasksService {
 
     if (existingTask) {
       await this.ensureNoHierarchyCycle(existingTask.id, parentTask.id);
-    }
-  }
-
-  private validateMilestoneDates(
-    taskKind: TaskKind,
-    plannedStartDate?: string | null,
-    plannedEndDate?: string | null,
-  ) {
-    if (
-      taskKind === TaskKind.Milestone &&
-      plannedStartDate &&
-      plannedEndDate &&
-      plannedStartDate !== plannedEndDate
-    ) {
-      throw new BadRequestException(
-        'Milestones must have matching planned start and end dates',
-      );
-    }
-  }
-
-  private validatePhaseMutations(
-    taskKind: TaskKind,
-    input: Partial<CreateTaskDto | UpdateTaskDto>,
-  ) {
-    if (taskKind !== TaskKind.Summary) {
-      return;
-    }
-
-    if (input.assigneeId) {
-      throw new BadRequestException('Phases cannot be assigned to a user');
-    }
-
-    if (typeof input.status !== 'undefined') {
-      throw new BadRequestException('Phase status is calculated from child work');
-    }
-
-    if (typeof input.percentComplete !== 'undefined') {
-      throw new BadRequestException('Phase progress is calculated from child work');
-    }
-
-    if (
-      typeof input.estimatedHours !== 'undefined' ||
-      typeof input.remainingHours !== 'undefined'
-    ) {
-      throw new BadRequestException('Phases cannot store effort values');
     }
   }
 

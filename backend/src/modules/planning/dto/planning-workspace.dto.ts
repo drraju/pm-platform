@@ -55,6 +55,9 @@ export class PlanningWorkspaceScheduleDto {
   @ApiProperty()
   taskKind: string;
 
+  @ApiProperty()
+  taskType: string;
+
   @ApiProperty({ required: false, nullable: true })
   ownerId?: string | null;
 

@@ -47,6 +47,77 @@ describe("Project workspace components", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
+  it("renders the overview task hierarchy without flattening the WBS", () => {
+    render(
+      <ProjectWorkspaceOverview
+        project={{
+          description: "Upgrade customer-facing platform capabilities.",
+          id: "project-1",
+          members: [],
+          name: "Customer Experience Platform Upgrade",
+          status: "active",
+          tasks: [
+            {
+              id: "phase-1",
+              priority: "medium",
+              projectId: "project-1",
+              sequenceNumber: 1,
+              status: "todo",
+              taskKind: "summary",
+              title: "Planning",
+            },
+            {
+              assignee: {
+                email: "li.chen@example.com",
+                firstName: "Li",
+                id: "user-1",
+                lastName: "Chen",
+                status: "active",
+              },
+              id: "task-1",
+              parentTaskId: "phase-1",
+              priority: "high",
+              projectId: "project-1",
+              sequenceNumber: 1,
+              status: "in_progress",
+              title: "Requirements",
+            },
+            {
+              id: "summary-2",
+              parentTaskId: "phase-1",
+              priority: "medium",
+              projectId: "project-1",
+              sequenceNumber: 2,
+              status: "todo",
+              taskKind: "summary",
+              title: "Development",
+            },
+            {
+              id: "task-2",
+              parentTaskId: "summary-2",
+              priority: "medium",
+              projectId: "project-1",
+              sequenceNumber: 1,
+              status: "todo",
+              title: "Backend",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Work Breakdown Structure")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("1.1")).toBeInTheDocument();
+    expect(screen.getByText("1.2")).toBeInTheDocument();
+    expect(screen.getByText("1.2.1")).toBeInTheDocument();
+    expect(screen.getByText("▸ Planning")).toBeInTheDocument();
+    expect(screen.getByText("Requirements")).toBeInTheDocument();
+    expect(screen.getByText("▸ Development")).toBeInTheDocument();
+    expect(screen.getByText("Backend")).toBeInTheDocument();
+    expect(screen.getByText("Li Chen")).toBeInTheDocument();
+  });
+
   it("renders summary metrics", () => {
     render(
       <ProjectWorkspaceSummary
