@@ -86,6 +86,7 @@ export class PlanningService {
     await this.ensureProjectVisible(projectId, actor);
 
     const latestSchedule = await this.ensureWorkspaceSnapshot(projectId, actor);
+    await this.persistSummaryRollups(latestSchedule, actor);
 
     const [project, dependencies, resourceAllocations] = await Promise.all([
       this.projectsRepository.findOne({
@@ -247,6 +248,7 @@ export class PlanningService {
                 plannedEndDate,
               ),
               isCritical: false,
+              milestoneCategory: task.milestoneCategory ?? null,
               parentTaskId: task.parentTaskId,
               percentComplete: task.percentComplete ?? 0,
               plannedEndDate,
@@ -256,6 +258,7 @@ export class PlanningService {
               scheduledStartDate: plannedStartDate,
               sequenceNumber: task.sequenceNumber,
               snapshotId: snapshot.id,
+              task,
               taskId: task.id,
               taskKind: task.taskKind,
               totalFloatDays: null,
@@ -263,6 +266,16 @@ export class PlanningService {
             };
           }),
         );
+        const { changedSummaries } =
+          this.schedulingFoundationService.rollupSummarySchedules(taskSchedules);
+        if (changedSummaries.length > 0) {
+          const summaryTasks = changedSummaries
+            .map((schedule) => schedule.task)
+            .filter((task): task is Task => Boolean(task));
+          if (summaryTasks.length > 0) {
+            await tasksRepository.save(summaryTasks);
+          }
+        }
 
         const savedTaskSchedules =
           taskSchedules.length > 0
@@ -322,6 +335,7 @@ export class PlanningService {
 
     Object.assign(schedule, {
       durationDays: normalizedSchedule.durationDays,
+      milestoneCategory: normalizedSchedule.milestoneCategory,
       parentTaskId:
         input.parentTaskId === undefined
           ? schedule.parentTaskId
@@ -340,7 +354,12 @@ export class PlanningService {
       schedule.task &&
       (input.ownerId !== undefined ||
         input.status !== undefined ||
-        input.taskTitle !== undefined)
+        input.taskTitle !== undefined ||
+        input.milestoneCategory !== undefined ||
+        input.plannedStartDate !== undefined ||
+        input.plannedFinishDate !== undefined ||
+        input.durationDays !== undefined ||
+        input.percentComplete !== undefined)
     ) {
       if (input.ownerId !== undefined) {
         schedule.task.assigneeId = input.ownerId;
@@ -356,6 +375,7 @@ export class PlanningService {
         schedule.task.title = nextTitle;
       }
       schedule.task.dueDate = normalizedSchedule.plannedEndDate;
+      schedule.task.milestoneCategory = normalizedSchedule.milestoneCategory;
       schedule.task.plannedEndDate = normalizedSchedule.plannedEndDate;
       schedule.task.plannedStartDate = normalizedSchedule.plannedStartDate;
       schedule.task.percentComplete = Number(schedule.percentComplete ?? 0);
@@ -365,6 +385,7 @@ export class PlanningService {
     const savedSchedule = await this.planningTaskSchedulesRepository.save(
       schedule,
     );
+    await this.rollupSnapshotById(projectId, savedSchedule.snapshotId, actor);
     return this.toWorkspaceSchedule(
       Object.assign(savedSchedule, { task: schedule.task }),
     );
@@ -423,6 +444,11 @@ export class PlanningService {
           input,
           TaskKind.Standard,
         );
+        const normalizedTaskInput =
+          this.schedulingFoundationService.normalizeTaskMutation({
+            milestoneCategory: input.milestoneCategory,
+            taskKind,
+          });
         const plannedStartDate =
           taskKind === TaskKind.Summary
             ? null
@@ -449,6 +475,7 @@ export class PlanningService {
           tasksRepository.create({
             createdById: actor?.userId,
             dueDate: plannedEndDate,
+            milestoneCategory: normalizedTaskInput.milestoneCategory,
             parentTaskId,
             percentComplete: 0,
             plannedEndDate,
@@ -469,6 +496,7 @@ export class PlanningService {
             createdById: actor?.userId,
             durationDays,
             isCritical: false,
+            milestoneCategory: normalizedTaskInput.milestoneCategory,
             parentTaskId,
             percentComplete: 0,
             plannedEndDate,
@@ -484,6 +512,34 @@ export class PlanningService {
             updatedById: actor?.userId,
           }),
         );
+        const snapshotSchedules = [
+          ...(latestSchedule.taskSchedules ?? []),
+          Object.assign(taskSchedule, {
+            task: Object.assign(task, { assignee: null }),
+          }),
+        ];
+        const { changedSummaries } =
+          this.schedulingFoundationService.rollupSummarySchedules(
+            snapshotSchedules,
+          );
+        const persistedSummaryChanges = changedSummaries.filter(
+          (schedule) => schedule.taskId !== taskSchedule.taskId,
+        );
+        if (persistedSummaryChanges.length > 0) {
+          persistedSummaryChanges.forEach((summary) => {
+            summary.updatedById = actor?.userId;
+            if (summary.task) {
+              summary.task.updatedById = actor?.userId;
+            }
+          });
+          await taskSchedulesRepository.save(persistedSummaryChanges);
+          const summaryTasks = persistedSummaryChanges
+            .map((schedule) => schedule.task)
+            .filter((task): task is Task => Boolean(task));
+          if (summaryTasks.length > 0) {
+            await tasksRepository.save(summaryTasks);
+          }
+        }
 
         Object.assign(snapshot, {
           projectCompletionPercent: Number(snapshot.projectCompletionPercent ?? 0),
@@ -829,6 +885,54 @@ export class PlanningService {
     );
   }
 
+  private async rollupSnapshotById(
+    projectId: string,
+    snapshotId: string,
+    actor?: AuthenticatedActor,
+  ) {
+    const snapshot = await this.scheduleSnapshotsRepository.findOne({
+      relations: { taskSchedules: { task: { assignee: true } } },
+      where: { id: snapshotId, projectId },
+    });
+
+    if (!snapshot) {
+      return;
+    }
+
+    await this.persistSummaryRollups(snapshot, actor);
+  }
+
+  private async persistSummaryRollups(
+    snapshot: PlanningScheduleSnapshot,
+    actor?: AuthenticatedActor,
+  ) {
+    const taskSchedules = snapshot.taskSchedules ?? [];
+    if (taskSchedules.length === 0) {
+      return;
+    }
+
+    const { changedSummaries } =
+      this.schedulingFoundationService.rollupSummarySchedules(taskSchedules);
+    if (changedSummaries.length === 0) {
+      return;
+    }
+
+    changedSummaries.forEach((summary) => {
+      summary.updatedById = actor?.userId;
+      if (summary.task) {
+        summary.task.updatedById = actor?.userId;
+      }
+    });
+
+    await this.planningTaskSchedulesRepository.save(changedSummaries);
+    const summaryTasks = changedSummaries
+      .map((summary) => summary.task)
+      .filter((task): task is Task => Boolean(task));
+    if (summaryTasks.length > 0) {
+      await this.tasksRepository.save(summaryTasks);
+    }
+  }
+
   private toWorkspaceSchedule(
     taskSchedule: PlanningTaskSchedule,
   ): PlanningWorkspaceScheduleDto {
@@ -855,6 +959,10 @@ export class PlanningService {
       taskType: this.schedulingFoundationService.toTaskType(
         taskSchedule.taskKind,
       ),
+      milestoneCategory:
+        taskSchedule.milestoneCategory ??
+        taskSchedule.task?.milestoneCategory ??
+        null,
       taskTitle: taskSchedule.task?.title ?? taskSchedule.taskId,
       totalFloatDays: taskSchedule.totalFloatDays ?? null,
     };

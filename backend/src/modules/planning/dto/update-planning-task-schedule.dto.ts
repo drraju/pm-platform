@@ -10,6 +10,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
 
@@ -73,8 +74,8 @@ export class UpdatePlanningTaskScheduleDto {
   @IsString()
   summaryCategory?: string | null;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ enum: MilestoneCategory, required: false })
   @IsOptional()
   @IsString()
-  milestoneCategory?: string | null;
+  milestoneCategory?: MilestoneCategory | string | null;
 }

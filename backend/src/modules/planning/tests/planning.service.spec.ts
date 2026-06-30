@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { PlanningCalculationStatus } from '../../../common/enums/planning-calculation-status.enum';
 import { ResourceAllocationUnit } from '../../../common/enums/resource-allocation-unit.enum';
+import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
@@ -280,6 +281,7 @@ describe('PlanningService', () => {
           durationDays: 4,
           id: 'schedule-row-id',
           isCritical: true,
+          milestoneCategory: null,
           ownerId: userId,
           parentTaskId: null,
           percentComplete: 50,
@@ -460,9 +462,9 @@ describe('PlanningService', () => {
     expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith([
       expect.objectContaining({
         parentTaskId: null,
-        percentComplete: 50,
-        plannedEndDate: '2026-07-10',
-        plannedStartDate: '2026-07-01',
+        percentComplete: 100,
+        plannedEndDate: '2026-07-05',
+        plannedStartDate: '2026-07-02',
         sequenceNumber: 1,
         taskId: 'summary-task-id',
         taskKind: 'summary',
@@ -481,6 +483,13 @@ describe('PlanningService', () => {
     expect(workspace.snapshot.projectFinishDate).toBe('2026-07-10');
     expect(workspace.snapshot.projectCompletionPercent).toBe(75);
     expect(workspace.schedules).toHaveLength(2);
+    expect(workspace.schedules[0]).toEqual(
+      expect.objectContaining({
+        percentComplete: 100,
+        plannedFinishDate: '2026-07-05',
+        plannedStartDate: '2026-07-02',
+      }),
+    );
   });
 
   it('propagates initialization failures so the transaction rolls back', async () => {
@@ -699,12 +708,14 @@ describe('PlanningService', () => {
     const schedule = {
       durationDays: 0,
       id: 'milestone-schedule-row-id',
+      milestoneCategory: MilestoneCategory.Standard,
       percentComplete: 0,
       plannedEndDate: '2026-07-05',
       plannedStartDate: '2026-07-05',
       projectId,
       task: {
         id: taskId,
+        milestoneCategory: MilestoneCategory.Standard,
         plannedEndDate: '2026-07-05',
         plannedStartDate: '2026-07-05',
         projectId,
@@ -720,13 +731,24 @@ describe('PlanningService', () => {
     await service.updatePlanningTaskSchedule(
       projectId,
       'milestone-schedule-row-id',
-      { plannedStartDate: '2026-07-12' },
+      {
+        milestoneCategory: MilestoneCategory.GoLive,
+        plannedStartDate: '2026-07-12',
+      },
       actor,
     );
 
     expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         durationDays: 0,
+        milestoneCategory: MilestoneCategory.GoLive,
+        plannedEndDate: '2026-07-12',
+        plannedStartDate: '2026-07-12',
+      }),
+    );
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        milestoneCategory: MilestoneCategory.GoLive,
         plannedEndDate: '2026-07-12',
         plannedStartDate: '2026-07-12',
       }),
@@ -887,6 +909,7 @@ describe('PlanningService', () => {
       durationDays: 0,
       id: 'schedule-row-new',
       isCritical: false,
+      milestoneCategory: MilestoneCategory.Release,
       parentTaskId: null,
       percentComplete: 0,
       plannedEndDate: '2026-07-01',
@@ -900,7 +923,11 @@ describe('PlanningService', () => {
 
     const schedule = await service.createPlanningTask(
       projectId,
-      { taskType: TaskType.Milestone, title: 'Release drop' },
+      {
+        milestoneCategory: MilestoneCategory.Release,
+        taskType: TaskType.Milestone,
+        title: 'Release drop',
+      },
       actor,
     );
 
@@ -908,12 +935,14 @@ describe('PlanningService', () => {
       expect.objectContaining({
         plannedEndDate: '2026-07-01',
         plannedStartDate: '2026-07-01',
+        milestoneCategory: MilestoneCategory.Release,
         taskKind: TaskKind.Milestone,
       }),
     );
     expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         durationDays: 0,
+        milestoneCategory: MilestoneCategory.Release,
         plannedEndDate: '2026-07-01',
         plannedStartDate: '2026-07-01',
         taskKind: TaskKind.Milestone,
@@ -922,6 +951,7 @@ describe('PlanningService', () => {
     expect(schedule).toEqual(
       expect.objectContaining({
         durationDays: 0,
+        milestoneCategory: MilestoneCategory.Release,
         taskKind: TaskKind.Milestone,
         taskType: TaskType.Milestone,
       }),

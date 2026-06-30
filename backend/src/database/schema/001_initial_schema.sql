@@ -97,6 +97,13 @@ CREATE TABLE tasks (
   priority VARCHAR(50) NOT NULL DEFAULT 'medium',
   remarks TEXT,
   task_kind VARCHAR(20) NOT NULL DEFAULT 'standard' CHECK (task_kind IN ('standard', 'summary', 'milestone')),
+  milestone_category VARCHAR(30) CHECK (
+    (
+      task_kind = 'milestone'
+      AND milestone_category IN ('standard', 'release', 'drop', 'go_live', 'decision')
+    )
+    OR milestone_category IS NULL
+  ),
   percent_complete INTEGER NOT NULL DEFAULT 0 CHECK (percent_complete >= 0 AND percent_complete <= 100),
   sequence_number INTEGER,
   start_date DATE,

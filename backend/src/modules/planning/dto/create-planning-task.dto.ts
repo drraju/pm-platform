@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
 
 export class CreatePlanningTaskDto {
@@ -23,8 +24,8 @@ export class CreatePlanningTaskDto {
   @IsString()
   summaryCategory?: string | null;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ enum: MilestoneCategory, required: false })
   @IsOptional()
   @IsString()
-  milestoneCategory?: string | null;
+  milestoneCategory?: MilestoneCategory | string | null;
 }

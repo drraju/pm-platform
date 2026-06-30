@@ -1,5 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { AuditableEntity } from '../../../common/entities/auditable.entity';
+import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { Project } from '../../projects/entities/project.entity';
 import { Task } from '../../tasks/entities/task.entity';
@@ -21,6 +22,13 @@ export class PlanningTaskSchedule extends AuditableEntity {
 
   @Column({ name: 'task_kind', type: 'varchar', default: TaskKind.Standard })
   taskKind: TaskKind;
+
+  @Column({
+    name: 'milestone_category',
+    type: 'varchar',
+    nullable: true,
+  })
+  milestoneCategory?: MilestoneCategory | null;
 
   @Column({ name: 'planned_start_date', type: 'date', nullable: true })
   plannedStartDate?: string | null;
