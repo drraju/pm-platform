@@ -91,6 +91,7 @@ const workspace: ApiPlanningWorkspace = {
       durationDays: 0,
       id: "schedule-3",
       isCritical: false,
+      milestoneCategory: "release",
       parentTaskId: "task-1",
       percentComplete: 0,
       plannedFinishDate: "2026-07-06",
@@ -233,6 +234,53 @@ const nestedWorkspace: ApiPlanningWorkspace = {
   ],
 };
 
+const milestoneCategoryWorkspace: ApiPlanningWorkspace = {
+  ...workspace,
+  dependencies: [],
+  resourceAllocations: [],
+  schedules: [
+    {
+      ...workspace.schedules[2],
+      milestoneCategory: "standard",
+      parentTaskId: null,
+      taskId: "standard-ms",
+      taskTitle: "Standard checkpoint",
+    },
+    {
+      ...workspace.schedules[2],
+      milestoneCategory: "release",
+      parentTaskId: null,
+      sequenceNumber: 2,
+      taskId: "release-ms",
+      taskTitle: "Release checkpoint",
+    },
+    {
+      ...workspace.schedules[2],
+      milestoneCategory: "drop",
+      parentTaskId: null,
+      sequenceNumber: 3,
+      taskId: "drop-ms",
+      taskTitle: "Drop checkpoint",
+    },
+    {
+      ...workspace.schedules[2],
+      milestoneCategory: "go_live",
+      parentTaskId: null,
+      sequenceNumber: 4,
+      taskId: "go-live-ms",
+      taskTitle: "Go Live checkpoint",
+    },
+    {
+      ...workspace.schedules[2],
+      milestoneCategory: "decision",
+      parentTaskId: null,
+      sequenceNumber: 5,
+      taskId: "decision-ms",
+      taskTitle: "Decision checkpoint",
+    },
+  ],
+};
+
 function dragRow(sourceName: RegExp, targetName: RegExp) {
   const dataTransfer = {
     dropEffect: "move",
@@ -249,6 +297,10 @@ function dragRow(sourceName: RegExp, targetName: RegExp) {
   fireEvent.drop(screen.getByRole("row", { name: targetName }), {
     dataTransfer,
   });
+}
+
+function openAddMenu() {
+  fireEvent.click(screen.getByRole("button", { name: "Add" }));
 }
 
 describe("PlanningWorkspace", () => {
@@ -281,6 +333,66 @@ describe("PlanningWorkspace", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders task, summary, milestone and category affordances", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getAllByText("Type").length).toBeGreaterThan(0);
+    const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
+    const taskRow = screen.getByRole("row", { name: /1\.1 Design schedule/ });
+    const milestoneRow = screen.getByRole("row", { name: /1\.2 Gate approved/ });
+
+    expect(within(summaryRow).getByText("Summary")).toBeInTheDocument();
+    expect(within(summaryRow).getByText("Calculated")).toBeInTheDocument();
+    expect(within(taskRow).getByText("Task")).toBeInTheDocument();
+    expect(within(milestoneRow).getByText("Release")).toBeInTheDocument();
+    expect(within(milestoneRow).getByText("Same date")).toBeInTheDocument();
+  });
+
+  it("renders all milestone category badges", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={milestoneCategoryWorkspace}
+      />,
+    );
+
+    expect(screen.getByText("Milestone")).toBeInTheDocument();
+    expect(screen.getByText("Release")).toBeInTheDocument();
+    expect(screen.getByText("Drop")).toBeInTheDocument();
+    expect(screen.getByText("Go Live")).toBeInTheDocument();
+    expect(screen.getByText("Decision")).toBeInTheDocument();
+  });
+
+  it("keeps calculated summary schedule fields read-only", () => {
+    const onUpdateSchedule = vi.fn();
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={workspace}
+      />,
+    );
+
+    const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
+    fireEvent.doubleClick(within(summaryRow).getByText("20%"));
+
+    expect(screen.queryByDisplayValue("20")).not.toBeInTheDocument();
+    expect(onUpdateSchedule).not.toHaveBeenCalled();
+  });
+
   it("keeps the toolbar sticky and the planning workspace independently scrollable", () => {
     render(
       <PlanningWorkspace
@@ -298,12 +410,15 @@ describe("PlanningWorkspace", () => {
       screen.getByLabelText("Scrollable planning workspace"),
     ).toHaveClass("overflow-auto");
 
+    const addButton = within(toolbar).getByRole("button", { name: "Add" });
+    expect(addButton).toHaveAttribute("aria-haspopup", "menu");
+    fireEvent.click(addButton);
+    expect(within(toolbar).getByRole("menuitem", { name: "Task" })).toBeInTheDocument();
     expect(
-      within(toolbar).getByRole("button", { name: "Add Task" }),
-    ).toBeInTheDocument();
-    expect(
-      within(toolbar).getByRole("button", { name: "Add Child" }),
-    ).toBeInTheDocument();
+      within(toolbar).getByRole("menuitem", { name: "Child Task" }),
+    ).toBeDisabled();
+    expect(within(toolbar).getByRole("menuitem", { name: "Summary" })).toBeInTheDocument();
+    expect(within(toolbar).getByRole("menuitem", { name: "Release" })).toBeInTheDocument();
     expect(
       within(toolbar).getByRole("button", { name: "Dependencies" }),
     ).toBeInTheDocument();
@@ -311,6 +426,47 @@ describe("PlanningWorkspace", () => {
       within(toolbar).getByRole("button", { name: "Fit to Project" }),
     ).toBeInTheDocument();
     expect(within(toolbar).getByLabelText("Time Scale")).toBeInTheDocument();
+  });
+
+  it("enables child creation only for selected summary rows", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
+    openAddMenu();
+    expect(screen.getByRole("menuitem", { name: "Child Task" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("row", { name: /1\.2 Gate approved/ }));
+    openAddMenu();
+    expect(screen.getByRole("menuitem", { name: "Child Task" })).toBeDisabled();
+  });
+
+  it("shows milestone state instead of editable progress and workflow status", () => {
+    const onUpdateSchedule = vi.fn();
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={workspace}
+      />,
+    );
+
+    const milestoneRow = screen.getByRole("row", { name: /1\.2 Gate approved/ });
+    expect(within(milestoneRow).getAllByText("Pending")).toHaveLength(2);
+
+    fireEvent.doubleClick(within(milestoneRow).getAllByText("Pending")[0]);
+    expect(screen.queryByDisplayValue("0")).not.toBeInTheDocument();
+    expect(onUpdateSchedule).not.toHaveBeenCalled();
   });
 
   it("expands and collapses all summary tasks from the toolbar", () => {
@@ -543,9 +699,13 @@ describe("PlanningWorkspace", () => {
     render(<Harness />);
 
     fireEvent.click(screen.getByText("Design schedule"));
-    fireEvent.click(screen.getByRole("button", { name: "Add Task" }));
+    openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
 
-    expect(onCreateTask).toHaveBeenCalledWith({ parentTaskId: "task-1" });
+    expect(onCreateTask).toHaveBeenCalledWith({
+      parentTaskId: "task-1",
+      taskType: "task",
+    });
     expect(await screen.findByTitle("New Task")).toHaveFocus();
   });
 
@@ -619,6 +779,34 @@ describe("PlanningWorkspace", () => {
 
     expect(screen.getByText("Progress must be between 0 and 100.")).toBeInTheDocument();
     expect(onUpdateSchedule).not.toHaveBeenCalled();
+  });
+
+  it("edits milestone rows with a single date editor", async () => {
+    const onUpdateSchedule = vi.fn().mockResolvedValue(workspace.schedules[2]);
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={workspace}
+      />,
+    );
+
+    const milestoneRow = screen.getByRole("row", { name: /Gate approved/ });
+    fireEvent.doubleClick(within(milestoneRow).getByText("07-06"));
+    fireEvent.change(screen.getByDisplayValue("2026-07-06"), {
+      target: { value: "2026-07-08" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("2026-07-08"), {
+      key: "Enter",
+    });
+
+    await waitFor(() => {
+      expect(onUpdateSchedule).toHaveBeenCalledWith("task-3", {
+        plannedStartDate: "2026-07-08",
+      });
+    });
   });
 
   it("submits dependency creation and deletion", async () => {
@@ -857,9 +1045,13 @@ describe("PlanningWorkspace", () => {
 
     render(<Harness />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Task" }));
+    openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
 
-    expect(onCreateTask).toHaveBeenCalledWith({ parentTaskId: null });
+    expect(onCreateTask).toHaveBeenCalledWith({
+      parentTaskId: null,
+      taskType: "task",
+    });
     expect(await screen.findByRole("row", { name: /4 New Task/ })).toBeInTheDocument();
     expect(screen.getByTitle("New Task")).toHaveFocus();
   });
@@ -905,9 +1097,13 @@ describe("PlanningWorkspace", () => {
 
     fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Child" }));
+    openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Child Task" }));
 
-    expect(onCreateTask).toHaveBeenCalledWith({ parentTaskId: "task-1" });
+    expect(onCreateTask).toHaveBeenCalledWith({
+      parentTaskId: "task-1",
+      taskType: "task",
+    });
     expect(await screen.findByRole("row", { name: /1\.3 New Task/ })).toBeInTheDocument();
     expect(screen.getByTitle("New Task")).toHaveFocus();
   });
@@ -936,6 +1132,28 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByRole("row", { name: /1 Closure/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2\.1 Design schedule/ })).toBeInTheDocument();
+  });
+
+  it("rejects row drops onto milestones with a friendly validation message", async () => {
+    const onUpdateSchedule = vi.fn();
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={orderingWorkspace}
+      />,
+    );
+
+    dragRow(/3 Closure/, /1\.2 Gate approved/);
+
+    expect(
+      screen.getByText(
+        "Milestones are scheduling events and cannot contain child tasks.",
+      ),
+    ).toBeInTheDocument();
+    expect(onUpdateSchedule).not.toHaveBeenCalled();
   });
 
   it("keeps collapsed summary branches draggable without orphaning descendants", async () => {

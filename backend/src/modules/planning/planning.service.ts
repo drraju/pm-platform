@@ -315,7 +315,7 @@ export class PlanningService {
     const schedule = await this.findPlanningTaskSchedule(projectId, scheduleId);
 
     if (input.parentTaskId !== undefined && input.parentTaskId !== null) {
-      await this.findProjectTask(projectId, input.parentTaskId);
+      await this.ensureTaskCanContainChildren(projectId, input.parentTaskId);
     }
 
     if (input.ownerId !== undefined && input.ownerId !== null) {
@@ -399,7 +399,7 @@ export class PlanningService {
     await this.ensureCanManageProject(projectId, actor);
 
     if (input.parentTaskId) {
-      await this.findProjectTask(projectId, input.parentTaskId);
+      await this.ensureTaskCanContainChildren(projectId, input.parentTaskId);
     }
 
     const latestSchedule = await this.ensureWorkspaceSnapshot(projectId, actor);
@@ -1159,13 +1159,25 @@ export class PlanningService {
     taskId: string,
   ): Promise<Task> {
     const task = await this.tasksRepository.findOne({
-      select: { id: true, projectId: true },
+      select: { id: true, projectId: true, taskKind: true },
       where: { id: taskId, projectId },
     });
     if (!task) {
       throw new NotFoundException(
         `Task ${taskId} not found for project ${projectId}`,
       );
+    }
+
+    return task;
+  }
+
+  private async ensureTaskCanContainChildren(
+    projectId: string,
+    taskId: string,
+  ): Promise<Task> {
+    const task = await this.findProjectTask(projectId, taskId);
+    if (task.taskKind !== TaskKind.Summary) {
+      throw new BadRequestException('Only summary tasks can contain child tasks');
     }
 
     return task;

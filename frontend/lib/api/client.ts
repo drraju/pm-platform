@@ -111,6 +111,7 @@ export type ApiTask = {
   priority: string;
   remarks?: string | null;
   taskKind?: "standard" | "summary" | "milestone";
+  milestoneCategory?: ApiMilestoneCategory | null;
   percentComplete?: number;
   sequenceNumber?: number | null;
   startDate?: string | null;
@@ -137,6 +138,14 @@ export type ApiTask = {
   } | null;
 };
 
+export type ApiTaskType = "task" | "summary" | "milestone";
+export type ApiMilestoneCategory =
+  | "standard"
+  | "release"
+  | "drop"
+  | "go_live"
+  | "decision";
+
 export type ApiTaskDependency = {
   id: string;
   predecessorTaskId: string;
@@ -158,6 +167,8 @@ export type ApiPlanningTaskSchedule = {
   taskTitle: string;
   status?: ApiTask["status"] | null;
   taskKind: "standard" | "summary" | "milestone";
+  taskType?: ApiTaskType;
+  milestoneCategory?: ApiMilestoneCategory | null;
   ownerId?: string | null;
   plannedStartDate?: string | null;
   plannedFinishDate?: string | null;
@@ -571,6 +582,7 @@ export function updatePlanningTaskSchedule(
   taskId: string,
   input: {
     durationDays?: number | null;
+    milestoneCategory?: ApiMilestoneCategory | null;
     ownerId?: string | null;
     parentTaskId?: string | null;
     percentComplete?: number;
@@ -593,7 +605,9 @@ export function updatePlanningTaskSchedule(
 export function createPlanningTask(
   projectId: string,
   input: {
+    milestoneCategory?: ApiMilestoneCategory;
     parentTaskId?: string | null;
+    taskType?: ApiTaskType;
     title?: string;
   },
 ) {

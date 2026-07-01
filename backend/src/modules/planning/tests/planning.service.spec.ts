@@ -603,6 +603,7 @@ describe('PlanningService', () => {
     tasksRepository.findOne?.mockResolvedValue({
       id: 'parent-task-id',
       projectId,
+      taskKind: TaskKind.Summary,
     });
     usersRepository.findOne?.mockResolvedValue({ id: 'new-owner-id' });
     planningTaskSchedulesRepository.save?.mockResolvedValue(schedule);
@@ -621,7 +622,7 @@ describe('PlanningService', () => {
     );
 
     expect(tasksRepository.findOne).toHaveBeenCalledWith({
-      select: { id: true, projectId: true },
+      select: { id: true, projectId: true, taskKind: true },
       where: { id: 'parent-task-id', projectId },
     });
     expect(usersRepository.findOne).toHaveBeenCalledWith({
@@ -755,6 +756,38 @@ describe('PlanningService', () => {
     );
   });
 
+  it('rejects reparenting a planning row under a milestone', async () => {
+    const schedule = {
+      durationDays: 4,
+      id: 'schedule-row-id',
+      parentTaskId: null,
+      percentComplete: 25,
+      plannedEndDate: '2026-07-05',
+      plannedStartDate: '2026-07-01',
+      projectId,
+      task: { id: taskId, projectId, taskKind: TaskKind.Standard } as Task,
+      taskId,
+      taskKind: TaskKind.Standard,
+    } as PlanningTaskSchedule;
+
+    planningTaskSchedulesRepository.findOne?.mockResolvedValue(schedule);
+    tasksRepository.findOne?.mockResolvedValue({
+      id: 'milestone-parent-id',
+      projectId,
+      taskKind: TaskKind.Milestone,
+    });
+
+    await expect(
+      service.updatePlanningTaskSchedule(
+        projectId,
+        'schedule-row-id',
+        { parentTaskId: 'milestone-parent-id' },
+        actor,
+      ),
+    ).rejects.toThrow('Only summary tasks can contain child tasks');
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+  });
+
   it('rejects manual summary schedule edits', async () => {
     planningTaskSchedulesRepository.findOne?.mockResolvedValue({
       durationDays: 4,
@@ -816,6 +849,7 @@ describe('PlanningService', () => {
     tasksRepository.findOne?.mockResolvedValue({
       id: 'parent-task-id',
       projectId,
+      taskKind: TaskKind.Summary,
     });
     planningTaskSchedulesRepository.find?.mockResolvedValue([
       { sequenceNumber: 1 },
@@ -844,7 +878,7 @@ describe('PlanningService', () => {
 
     expect(scheduleSnapshotsRepository.manager.transaction).toHaveBeenCalled();
     expect(tasksRepository.findOne).toHaveBeenCalledWith({
-      select: { id: true, projectId: true },
+      select: { id: true, projectId: true, taskKind: true },
       where: { id: 'parent-task-id', projectId },
     });
     expect(tasksRepository.save).toHaveBeenCalledWith(
@@ -956,6 +990,34 @@ describe('PlanningService', () => {
         taskType: TaskType.Milestone,
       }),
     );
+  });
+
+  it('rejects creating a planning task under a milestone', async () => {
+    const snapshot = {
+      id: 'snapshot-id',
+      projectCompletionPercent: 25,
+      projectFinishDate: '2026-07-10',
+      projectId,
+      projectStartDate: '2026-07-01',
+      scheduleVersion: 1,
+    } as PlanningScheduleSnapshot;
+
+    scheduleSnapshotsRepository.findOne?.mockResolvedValue(snapshot);
+    tasksRepository.findOne?.mockResolvedValue({
+      id: 'milestone-parent-id',
+      projectId,
+      taskKind: TaskKind.Milestone,
+    });
+
+    await expect(
+      service.createPlanningTask(
+        projectId,
+        { parentTaskId: 'milestone-parent-id' },
+        actor,
+      ),
+    ).rejects.toThrow('Only summary tasks can contain child tasks');
+    expect(tasksRepository.save).not.toHaveBeenCalled();
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
 
   it('rejects planning task creation without project manager access', async () => {

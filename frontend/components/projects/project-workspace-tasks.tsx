@@ -547,6 +547,8 @@ export function ProjectWorkspaceTasks({
                   <td className="whitespace-nowrap px-3 py-3 capitalize text-slate-600">
                     {isSummary ? (
                       formatTaskStatus(task)
+                    ) : isMilestone ? (
+                      getMilestoneState(task)
                     ) : (
                       <InlineSelect
                         disabled={!canEditRow}
@@ -576,17 +578,21 @@ export function ProjectWorkspaceTasks({
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
-                    <InlineNumberInput
-                      ariaLabel={`Progress ${task.title}`}
-                      disabled={isSummary || !canEditRow}
-                      max={100}
-                      min={0}
-                      onCommit={(percentComplete) =>
-                        updateInlineTask(task, { percentComplete })
-                      }
-                      suffix="%"
-                      value={getDisplayedPercentComplete(task)}
-                    />
+                    {isMilestone ? (
+                      <span>{getMilestoneState(task)}</span>
+                    ) : (
+                      <InlineNumberInput
+                        ariaLabel={`Progress ${task.title}`}
+                        disabled={isSummary || !canEditRow}
+                        max={100}
+                        min={0}
+                        onCommit={(percentComplete) =>
+                          updateInlineTask(task, { percentComplete })
+                        }
+                        suffix="%"
+                        value={getDisplayedPercentComplete(task)}
+                      />
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     <InlineDateInput
@@ -848,26 +854,38 @@ export function ProjectWorkspaceTasks({
                       value={form.assigneeId}
                     />
 
-                    <label className="block text-sm font-medium text-slate-700">
-                      Status
-                      <select
-                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
-                        onChange={(event) =>
-                          updateForm({
-                            ...form,
-                            status: event.target.value as ApiTask["status"],
-                          })
-                        }
-                        value={form.status}
-                      >
-                        {taskStatuses.map((status) => (
-                          <option key={status.value} value={status.value}>
-                            {status.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    {isMilestoneForm(form) ? (
+                      <label className="block text-sm font-medium text-slate-700">
+                        Milestone State
+                        <span className="mt-2 block rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal text-slate-700">
+                          {getMilestoneState({
+                            percentComplete: Number(form.percentComplete || 0),
+                            status: form.status,
+                          })}
+                        </span>
+                      </label>
+                    ) : (
+                      <label className="block text-sm font-medium text-slate-700">
+                        Status
+                        <select
+                          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                          disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                          onChange={(event) =>
+                            updateForm({
+                              ...form,
+                              status: event.target.value as ApiTask["status"],
+                            })
+                          }
+                          value={form.status}
+                        >
+                          {taskStatuses.map((status) => (
+                            <option key={status.value} value={status.value}>
+                              {status.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
 
                     <label className="block text-sm font-medium text-slate-700">
                       Priority
@@ -975,20 +993,22 @@ export function ProjectWorkspaceTasks({
                       />
                     </label>
 
-                    <label className="block text-sm font-medium text-slate-700">
-                      Percent Complete
-                      <input
-                        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
-                        max={100}
-                        min={0}
-                        onChange={(event) =>
-                          updateForm({ ...form, percentComplete: event.target.value })
-                        }
-                        type="number"
-                        value={form.percentComplete}
-                      />
-                    </label>
+                    {!isMilestoneForm(form) ? (
+                      <label className="block text-sm font-medium text-slate-700">
+                        Percent Complete
+                        <input
+                          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
+                          disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                          max={100}
+                          min={0}
+                          onChange={(event) =>
+                            updateForm({ ...form, percentComplete: event.target.value })
+                          }
+                          type="number"
+                          value={form.percentComplete}
+                        />
+                      </label>
+                    ) : null}
                   </>
                 ) : null}
 
@@ -1669,6 +1689,10 @@ function isPhaseForm(form: TaskFormState) {
   return form.taskKind === "summary";
 }
 
+function isMilestoneForm(form: TaskFormState) {
+  return form.taskKind === "milestone";
+}
+
 function formatAssignee(task: ApiTask) {
   return task.assignee
     ? `${task.assignee.firstName} ${task.assignee.lastName}`
@@ -1739,6 +1763,14 @@ function formatTaskStatus(task: ApiTask) {
   }
 
   return "not started";
+}
+
+function getMilestoneState(
+  task: Pick<ApiTask, "percentComplete" | "status">,
+) {
+  return task.status === "done" || Number(task.percentComplete ?? 0) >= 100
+    ? "Reached"
+    : "Pending";
 }
 
 function formatDate(value?: string | null, emptyLabel = "None") {

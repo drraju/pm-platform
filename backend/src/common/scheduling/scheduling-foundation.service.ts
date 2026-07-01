@@ -109,6 +109,7 @@ export class SchedulingFoundationService {
     }
     this.validateTaskTypeTransition(taskKind, existingTask);
     this.validateSummaryTaskMutation(taskKind, normalizedInput);
+    this.validateMilestoneTaskMutation(taskKind, normalizedInput);
     this.normalizeMilestoneTaskDates(taskKind, normalizedInput, existingTask);
 
     return normalizedInput;
@@ -169,6 +170,7 @@ export class SchedulingFoundationService {
   ) {
     const normalizedTaskKind = this.mapTaskKind(taskKind);
     this.validateSummaryScheduleMutation(normalizedTaskKind, input);
+    this.validateMilestoneScheduleMutation(normalizedTaskKind, input);
     const milestoneCategory = this.normalizeMilestoneCategoryForKind(
       normalizedTaskKind,
       input.milestoneCategory,
@@ -488,6 +490,48 @@ export class SchedulingFoundationService {
     if (typeof input.status !== 'undefined') {
       throw new BadRequestException(
         'Summary task status is calculated from child work',
+      );
+    }
+  }
+
+  private validateMilestoneTaskMutation(
+    taskKind: TaskKind,
+    input: Partial<TaskMutationInput>,
+  ) {
+    if (taskKind !== TaskKind.Milestone) {
+      return;
+    }
+
+    if (typeof input.percentComplete !== 'undefined') {
+      throw new BadRequestException(
+        'Milestone progress is determined by scheduling state',
+      );
+    }
+
+    if (typeof input.status !== 'undefined') {
+      throw new BadRequestException(
+        'Milestone status is determined by scheduling state',
+      );
+    }
+  }
+
+  private validateMilestoneScheduleMutation(
+    taskKind: TaskKind,
+    input: ScheduleMutationInput,
+  ) {
+    if (taskKind !== TaskKind.Milestone) {
+      return;
+    }
+
+    if (typeof input.percentComplete !== 'undefined') {
+      throw new BadRequestException(
+        'Milestone progress is determined by scheduling state',
+      );
+    }
+
+    if (typeof input.status !== 'undefined') {
+      throw new BadRequestException(
+        'Milestone status is determined by scheduling state',
       );
     }
   }

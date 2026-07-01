@@ -4,9 +4,11 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import type {
   ApiPlanningTaskSchedule,
   ApiPlanningWorkspace,
+  ApiMilestoneCategory,
   ApiProjectMember,
   ApiResourceAllocation,
   ApiTaskDependency,
+  ApiTaskType,
 } from "@/lib/api/client";
 
 type ZoomMode = "day" | "week" | "month" | "quarter";
@@ -34,7 +36,9 @@ type PlanningWorkspaceProps = {
     successorTaskId: string;
   }) => Promise<void>;
   onCreateTask: (input: {
+    milestoneCategory?: ApiMilestoneCategory;
     parentTaskId?: string | null;
+    taskType?: ApiTaskType;
   }) => Promise<ApiPlanningTaskSchedule>;
   onDeleteDependency: (dependencyId: string) => Promise<void>;
   onUpdateSchedule: (
@@ -74,8 +78,8 @@ type RowDragState = {
 
 const rowHeight = 46;
 const planningGridTemplate =
-  "70px minmax(260px,320px) 160px 120px 120px 90px 100px 120px";
-const planningGridWidth = 1100;
+  "70px 150px minmax(280px,360px) 160px 120px 120px 90px 100px 120px";
+const planningGridWidth = 1260;
 const headerHeight = 44;
 const resourceHeight = 18;
 const barHeight = 16;
@@ -104,6 +108,16 @@ const zoomLabels: Record<ZoomMode, string> = {
 };
 const toolbarButtonClassName =
   "rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const milestoneCategories: Array<{
+  category: ApiMilestoneCategory;
+  label: string;
+}> = [
+  { category: "standard", label: "Standard" },
+  { category: "release", label: "Release" },
+  { category: "drop", label: "Drop" },
+  { category: "go_live", label: "Go Live" },
+  { category: "decision", label: "Decision" },
+];
 
 export function PlanningWorkspace({
   isSaving = false,
@@ -121,6 +135,8 @@ export function PlanningWorkspace({
   const [newTaskFocusId, setNewTaskFocusId] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const [hierarchyError, setHierarchyError] = useState<string | null>(null);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [dependencyDraft, setDependencyDraft] = useState({
     dependencyType: "FS" as "FS" | "SS" | "FF",
     predecessorTaskId: "",
@@ -206,6 +222,7 @@ export function PlanningWorkspace({
     [localSchedules],
   );
   const hasSummaryTasks = summaryTaskIds.size > 0;
+  const canCreateChildForSelection = selectedSchedule?.taskKind === "summary";
 
   function toggleCollapse(taskId: string) {
     setCollapsedIds((currentIds) => {
@@ -227,8 +244,13 @@ export function PlanningWorkspace({
     setCollapsedIds(new Set(summaryTaskIds));
   }
 
-  async function createTask(parentTaskId?: string | null) {
-    const schedule = await onCreateTask({ parentTaskId });
+  async function createTask(input: {
+    milestoneCategory?: ApiMilestoneCategory;
+    parentTaskId?: string | null;
+    taskType?: ApiTaskType;
+  } = {}) {
+    setHierarchyError(null);
+    const schedule = await onCreateTask(input);
     setLocalSchedules((currentSchedules) =>
       currentSchedules.some(
         (currentSchedule) => currentSchedule.taskId === schedule.taskId,
@@ -236,6 +258,7 @@ export function PlanningWorkspace({
         ? currentSchedules
         : [...currentSchedules, schedule],
     );
+    const parentTaskId = input.parentTaskId ?? null;
     if (parentTaskId) {
       setCollapsedIds((currentIds) => {
         const nextIds = new Set(currentIds);
@@ -245,6 +268,7 @@ export function PlanningWorkspace({
     }
     setSelectedTaskId(schedule.taskId);
     setNewTaskFocusId(schedule.taskId);
+    setIsAddMenuOpen(false);
   }
 
   function handleRowKeyDown(
@@ -291,7 +315,11 @@ export function PlanningWorkspace({
     schedule: ApiPlanningTaskSchedule,
     field: EditableField,
   ) {
+    if (isReadOnlyField(schedule, field)) {
+      return;
+    }
     setSelectedTaskId(schedule.taskId);
+    setHierarchyError(null);
     setEditError(null);
     setEditingCell({
       field,
@@ -451,6 +479,7 @@ export function PlanningWorkspace({
       return;
     }
     setSelectedTaskId(schedule.taskId);
+    setHierarchyError(null);
     setRowDragState({
       parentTaskId: schedule.parentTaskId ?? null,
       taskId: schedule.taskId,
@@ -463,6 +492,16 @@ export function PlanningWorkspace({
     event: React.DragEvent<HTMLDivElement>,
     targetSchedule: ApiPlanningTaskSchedule,
   ) {
+    if (
+      rowDragState &&
+      rowDragState.taskId !== targetSchedule.taskId &&
+      targetSchedule.taskKind === "milestone"
+    ) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "none";
+      return;
+    }
+
     if (
       !rowDragState ||
       rowDragState.taskId === targetSchedule.taskId ||
@@ -479,6 +518,18 @@ export function PlanningWorkspace({
     targetSchedule: ApiPlanningTaskSchedule,
   ) {
     event.preventDefault();
+    if (
+      rowDragState &&
+      rowDragState.taskId !== targetSchedule.taskId &&
+      targetSchedule.taskKind === "milestone"
+    ) {
+      setHierarchyError(
+        "Milestones are scheduling events and cannot contain child tasks.",
+      );
+      setRowDragState(null);
+      return;
+    }
+
     if (
       !rowDragState ||
       rowDragState.taskId === targetSchedule.taskId ||
@@ -574,38 +625,79 @@ export function PlanningWorkspace({
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <ToolbarGroup label="Tasks">
-              <button
-                className={toolbarButtonClassName}
-                disabled={isSaving}
-                onClick={() => createTask(selectedSchedule?.parentTaskId ?? null)}
-                type="button"
-              >
-                Add Task
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                disabled={isSaving || !selectedSchedule}
-                onClick={() => createTask(selectedSchedule?.taskId ?? null)}
-                type="button"
-              >
-                Add Child
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                disabled
-                title="Phase creation is handled outside this UX polish story."
-                type="button"
-              >
-                Add Phase
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                disabled
-                title="Milestone creation is outside this UX polish story."
-                type="button"
-              >
-                Add Milestone
-              </button>
+              <span className="relative">
+                <button
+                  aria-expanded={isAddMenuOpen}
+                  aria-haspopup="menu"
+                  className={toolbarButtonClassName}
+                  disabled={isSaving}
+                  onClick={() => setIsAddMenuOpen((isOpen) => !isOpen)}
+                  type="button"
+                >
+                  Add <span aria-hidden>▾</span>
+                </button>
+                {isAddMenuOpen ? (
+                  <span
+                    className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                    role="menu"
+                  >
+                    <AddMenuButton
+                      icon={<TaskTypeIcon taskKind="standard" />}
+                      label="Task"
+                      onClick={() =>
+                        void createTask({
+                          parentTaskId: selectedSchedule?.parentTaskId ?? null,
+                          taskType: "task",
+                        })
+                      }
+                    />
+                    <AddMenuButton
+                      disabled={!canCreateChildForSelection}
+                      icon={<TaskTypeIcon taskKind="standard" />}
+                      label="Child Task"
+                      title={
+                        selectedSchedule
+                          ? "Only summary tasks can contain child tasks."
+                          : "Select a summary task to add child work."
+                      }
+                      onClick={() =>
+                        void createTask({
+                          parentTaskId: selectedSchedule?.taskId ?? null,
+                          taskType: "task",
+                        })
+                      }
+                    />
+                    <AddMenuButton
+                      icon={<TaskTypeIcon taskKind="summary" />}
+                      label="Summary"
+                      onClick={() =>
+                        void createTask({
+                          parentTaskId: selectedSchedule?.parentTaskId ?? null,
+                          taskType: "summary",
+                        })
+                      }
+                    />
+                    <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
+                      Milestone
+                    </span>
+                    {milestoneCategories.map(({ category, label }) => (
+                      <AddMenuButton
+                        icon={<MilestoneCategoryIcon category={category} />}
+                        key={category}
+                        label={label}
+                        onClick={() =>
+                          void createTask({
+                            milestoneCategory: category,
+                            parentTaskId:
+                              selectedSchedule?.parentTaskId ?? null,
+                            taskType: "milestone",
+                          })
+                        }
+                      />
+                    ))}
+                  </span>
+                ) : null}
+              </span>
               <button
                 className={toolbarButtonClassName}
                 disabled
@@ -696,6 +788,14 @@ export function PlanningWorkspace({
             </ToolbarGroup>
           </div>
         </div>
+        {hierarchyError ? (
+          <div
+            className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+            role="alert"
+          >
+            {hierarchyError}
+          </div>
+        ) : null}
       </section>
 
       <section
@@ -705,7 +805,7 @@ export function PlanningWorkspace({
         <div className="grid min-h-[560px] xl:grid-cols-[minmax(560px,45%)_minmax(0,1fr)]">
         <div className="overflow-visible border-r border-slate-200">
           <div
-            className="sticky top-0 z-10 grid h-11 min-w-[1100px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
+            className="sticky top-0 z-10 grid h-11 min-w-[1260px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
             style={{
               gridTemplateColumns: planningGridTemplate,
               width: planningGridWidth,
@@ -715,13 +815,16 @@ export function PlanningWorkspace({
               WBS
             </span>
             <span className="h-full border-r border-slate-200 px-4 py-3">
+              Type
+            </span>
+            <span className="h-full border-r border-slate-200 px-4 py-3">
               Name
             </span>
             <span className="h-full border-r border-slate-200 px-4 py-3">
               Owner
             </span>
             <span className="h-full border-r border-slate-200 px-3 py-3">
-              Start
+              Start / Date
             </span>
             <span className="h-full border-r border-slate-200 px-3 py-3">
               Finish
@@ -739,18 +842,29 @@ export function PlanningWorkspace({
               (candidate) => candidate.parentTaskId === schedule.taskId,
             );
             const title = getTaskTitle(schedule);
+            const isSummary = schedule.taskKind === "summary";
+            const isMilestone = schedule.taskKind === "milestone";
             return (
               <div
                 aria-label={`Planning row ${wbs} ${title}`}
                 aria-selected={selectedTaskId === schedule.taskId}
-                className={`grid h-[46px] min-w-[1100px] items-center border-b border-slate-100 text-xs text-slate-700 hover:bg-slate-50 ${
+                className={`grid h-[46px] min-w-[1260px] items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
+                  isSummary
+                    ? "bg-slate-50 font-semibold text-slate-800"
+                    : isMilestone
+                      ? "bg-white text-slate-700"
+                      : ""
+                } ${
                   selectedTaskId === schedule.taskId
                     ? "bg-brand/10 shadow-[inset_3px_0_0_#0f766e] ring-1 ring-inset ring-brand/30"
                     : ""
                 }`}
                 draggable={!editingCell}
                 key={schedule.taskId}
-                onClick={() => setSelectedTaskId(schedule.taskId)}
+                onClick={() => {
+                  setSelectedTaskId(schedule.taskId);
+                  setHierarchyError(null);
+                }}
                 onDragEnd={() => setRowDragState(null)}
                 onDragOver={(event) => handleRowDragOver(event, schedule)}
                 onDragStart={(event) => startRowDrag(event, schedule)}
@@ -781,6 +895,9 @@ export function PlanningWorkspace({
                   </span>
                   <span>{wbs}</span>
                 </span>
+                <div className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-3">
+                  <TypeBadge schedule={schedule} />
+                </div>
                 <div
                   className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-4"
                   style={{ paddingLeft: 16 + depth * 18 }}
@@ -800,15 +917,11 @@ export function PlanningWorkspace({
                   ) : (
                     <span className="w-3" />
                   )}
-                  <span aria-hidden>
-                    {hasChildren
-                      ? "►"
-                      : schedule.taskKind === "milestone"
-                        ? "♦"
-                        : "•"}
-                  </span>
+                  <TaskTypeIcon taskKind={schedule.taskKind} />
                   <span
-                    className="truncate font-medium text-slate-950"
+                    className={`truncate text-slate-950 ${
+                      isSummary ? "font-bold" : "font-medium"
+                    }`}
                     onDoubleClick={() => startEditing(schedule, "taskTitle")}
                     ref={(element) => {
                       if (element) {
@@ -838,6 +951,14 @@ export function PlanningWorkspace({
                       title
                     )}
                   </span>
+                  {isSummary ? (
+                    <span
+                      className="shrink-0 rounded-sm border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600"
+                      title="Calculated from child tasks."
+                    >
+                      Calculated
+                    </span>
+                  ) : null}
                 </div>
                 <EditableGridCell
                   align="left"
@@ -857,10 +978,11 @@ export function PlanningWorkspace({
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "ownerId")}
                   ownerOptions={ownerOptions}
+                  readOnly={isReadOnlyField(schedule, "ownerId")}
                   schedule={schedule}
                 />
                 <EditableGridCell
-                  displayValue={formatShortDate(schedule.plannedStartDate)}
+                  displayValue={formatDateCell(schedule, "plannedStartDate")}
                   editingCell={editingCell}
                   editError={editError}
                   field="plannedStartDate"
@@ -876,10 +998,11 @@ export function PlanningWorkspace({
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "plannedStartDate")}
                   ownerOptions={ownerOptions}
+                  readOnly={isReadOnlyField(schedule, "plannedStartDate")}
                   schedule={schedule}
                 />
                 <EditableGridCell
-                  displayValue={formatShortDate(schedule.plannedFinishDate)}
+                  displayValue={formatDateCell(schedule, "plannedFinishDate")}
                   editingCell={editingCell}
                   editError={editError}
                   field="plannedFinishDate"
@@ -894,6 +1017,7 @@ export function PlanningWorkspace({
                     startEditing(schedule, "plannedFinishDate")
                   }
                   ownerOptions={ownerOptions}
+                  readOnly={isReadOnlyField(schedule, "plannedFinishDate")}
                   schedule={schedule}
                 />
                 <EditableGridCell
@@ -911,11 +1035,16 @@ export function PlanningWorkspace({
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "durationDays")}
                   ownerOptions={ownerOptions}
+                  readOnly={isReadOnlyField(schedule, "durationDays")}
                   schedule={schedule}
                 />
                 <EditableGridCell
                   align="right"
-                  displayValue={`${Number(schedule.percentComplete).toFixed(0)}%`}
+                  displayValue={
+                    isMilestone
+                      ? getMilestoneState(schedule)
+                      : `${Number(schedule.percentComplete).toFixed(0)}%`
+                  }
                   editingCell={editingCell}
                   editError={editError}
                   field="percentComplete"
@@ -928,10 +1057,15 @@ export function PlanningWorkspace({
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "percentComplete")}
                   ownerOptions={ownerOptions}
+                  readOnly={isReadOnlyField(schedule, "percentComplete")}
                   schedule={schedule}
                 />
                 <EditableGridCell
-                  displayValue={formatStatus(schedule.status)}
+                  displayValue={
+                    isMilestone
+                      ? getMilestoneState(schedule)
+                      : formatStatus(schedule.status)
+                  }
                   editingCell={editingCell}
                   editError={editError}
                   field="status"
@@ -944,13 +1078,14 @@ export function PlanningWorkspace({
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "status")}
                   ownerOptions={ownerOptions}
+                  readOnly={isReadOnlyField(schedule, "status")}
                   schedule={schedule}
                 />
               </div>
             );
           })}
           {rows.length === 0 ? (
-            <div className="min-w-[1100px] px-4 py-12 text-center text-sm text-slate-500">
+            <div className="min-w-[1260px] px-4 py-12 text-center text-sm text-slate-500">
               <p className="font-semibold text-slate-700">No Tasks</p>
               <p className="mt-1">Add a task to start building the project WBS.</p>
             </div>
@@ -1033,7 +1168,7 @@ export function PlanningWorkspace({
                     schedule.taskKind === "milestone" ? (
                       <rect
                         aria-label={`Milestone ${title}`}
-                        fill={isCritical ? "#dc2626" : "#0f766e"}
+                        fill={getMilestoneFill(schedule, isCritical)}
                         height={16}
                         onPointerDown={(event) =>
                           startDrag(event, schedule, "move")
@@ -1050,13 +1185,13 @@ export function PlanningWorkspace({
                           aria-label={`Move ${title}`}
                           fill={
                             schedule.taskKind === "summary"
-                              ? "#94a3b8"
+                              ? "#64748b"
                               : isCritical
                                 ? "#dc2626"
                                 : "#0f766e"
                           }
                           height={barHeight}
-                          opacity={schedule.taskKind === "summary" ? 0.75 : 1}
+                          opacity={schedule.taskKind === "summary" ? 0.65 : 1}
                           onPointerDown={(event) =>
                             startDrag(event, schedule, "move")
                           }
@@ -1074,7 +1209,7 @@ export function PlanningWorkspace({
                         <rect
                           fill="#ccfbf1"
                           height={barHeight}
-                          opacity={0.75}
+                          opacity={schedule.taskKind === "summary" ? 0.35 : 0.75}
                           rx={3}
                           width={Math.max(
                             0,
@@ -1303,6 +1438,208 @@ function ToolbarGroup({
   );
 }
 
+function AddMenuButton({
+  disabled = false,
+  icon,
+  label,
+  onClick,
+  title,
+}: {
+  disabled?: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  title?: string;
+}) {
+  return (
+    <button
+      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={disabled}
+      onClick={onClick}
+      role="menuitem"
+      title={title}
+      type="button"
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function TypeBadge({ schedule }: { schedule: ApiPlanningTaskSchedule }) {
+  const typeLabel = getTypeLabel(schedule);
+  const tooltip = getTypeTooltip(schedule);
+
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-bold uppercase ${
+        schedule.taskKind === "summary"
+          ? "border-slate-300 bg-slate-100 text-slate-700"
+          : schedule.taskKind === "milestone"
+            ? "border-amber-200 bg-amber-50 text-amber-800"
+            : "border-teal-200 bg-teal-50 text-teal-800"
+      }`}
+      title={tooltip}
+    >
+      {schedule.taskKind === "milestone" ? (
+        <MilestoneCategoryIcon category={getMilestoneCategory(schedule)} />
+      ) : (
+        <TaskTypeIcon taskKind={schedule.taskKind} />
+      )}
+      <span className="truncate">{typeLabel}</span>
+    </span>
+  );
+}
+
+function TaskTypeIcon({
+  taskKind,
+}: {
+  taskKind: ApiPlanningTaskSchedule["taskKind"];
+}) {
+  if (taskKind === "summary") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-slate-600"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M3 7.5h7l1.6 2H21v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V7.5Z"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+        />
+        <path
+          d="M3 7.5V6a1.5 1.5 0 0 1 1.5-1.5h5l1.6 2H21"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+        />
+      </svg>
+    );
+  }
+
+  if (taskKind === "milestone") {
+    return <MilestoneCategoryIcon category="standard" />;
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4 shrink-0 text-teal-700"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M7 7h10M7 12h10M7 17h6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+      <rect
+        height="18"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        width="14"
+        x="5"
+        y="3"
+      />
+    </svg>
+  );
+}
+
+function MilestoneCategoryIcon({
+  category,
+}: {
+  category: ApiMilestoneCategory;
+}) {
+  if (category === "release") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-indigo-700"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M12 3c3.2 1.8 5.1 4.6 5.8 8.4l-5.8 5.8-5.8-5.8C6.9 7.6 8.8 4.8 12 3Z"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+        />
+        <path d="M9 18l-3 3M15 18l3 3M12 8.5h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+    );
+  }
+
+  if (category === "drop") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-sky-700"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7Z"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+        />
+        <path d="m4 8.5 8 4.5 8-4.5M12 13v7" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+
+  if (category === "go_live") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-emerald-700"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path d="M6 21V4" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        <path
+          d="M6 5h10l-1.5 3L16 11H6"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+        />
+      </svg>
+    );
+  }
+
+  if (category === "decision") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-purple-700"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path d="m5 13 4 4L19 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+        <path d="M4 20h16" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4 shrink-0 text-amber-700"
+      fill="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 3.5 20.5 12 12 20.5 3.5 12 12 3.5Z" />
+    </svg>
+  );
+}
+
 function KeyboardHelp() {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -1351,6 +1688,7 @@ function EditableGridCell({
   onKeyDown,
   onStartEdit,
   ownerOptions,
+  readOnly = false,
   schedule,
 }: {
   align?: "left" | "right";
@@ -1364,18 +1702,20 @@ function EditableGridCell({
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   onStartEdit: () => void;
   ownerOptions: OwnerOption[];
+  readOnly?: boolean;
   schedule: ApiPlanningTaskSchedule;
 }) {
   const editing = isEditing(editingCell, schedule.taskId, field);
+  const title = readOnly ? getReadOnlyTooltip(schedule, field) : displayValue;
   return (
     <span
       className={`flex h-full min-w-0 items-center border-r border-slate-100 px-3 ${
         align === "right" ? "justify-end text-right" : ""
-      }`}
-      onDoubleClick={onStartEdit}
-      title={displayValue}
+      } ${readOnly ? "cursor-not-allowed bg-slate-50 text-slate-500" : ""}`}
+      onDoubleClick={readOnly ? undefined : onStartEdit}
+      title={title}
     >
-      {editing ? (
+      {editing && !readOnly ? (
         <InlineEditor
           error={editError}
           field={field}
@@ -1564,6 +1904,64 @@ function getEditableValue(
   return schedule.status ?? schedule.task?.status ?? "todo";
 }
 
+function isReadOnlyField(
+  schedule: ApiPlanningTaskSchedule,
+  field: EditableField,
+) {
+  if (schedule.taskKind === "summary") {
+    return field !== "taskTitle";
+  }
+  if (
+    schedule.taskKind === "milestone" &&
+    (field === "plannedFinishDate" ||
+      field === "durationDays" ||
+      field === "percentComplete" ||
+      field === "status")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function getReadOnlyTooltip(
+  schedule: ApiPlanningTaskSchedule,
+  field: EditableField,
+) {
+  if (schedule.taskKind === "summary") {
+    return "Calculated from child tasks.";
+  }
+  if (schedule.taskKind === "milestone" && field === "plannedFinishDate") {
+    return "Zero-duration scheduling event.";
+  }
+  if (schedule.taskKind === "milestone" && field === "durationDays") {
+    return "Milestones always have zero duration.";
+  }
+  if (schedule.taskKind === "milestone" && field === "percentComplete") {
+    return "Milestone completion is determined by scheduling state.";
+  }
+  if (schedule.taskKind === "milestone" && field === "status") {
+    return "Milestones use event state instead of task workflow status.";
+  }
+  return "";
+}
+
+function formatDateCell(
+  schedule: ApiPlanningTaskSchedule,
+  field: "plannedStartDate" | "plannedFinishDate",
+) {
+  if (schedule.taskKind === "milestone" && field === "plannedStartDate") {
+    return formatShortDate(schedule.plannedStartDate);
+  }
+  if (schedule.taskKind === "milestone" && field === "plannedFinishDate") {
+    return "Same date";
+  }
+  return formatShortDate(
+    field === "plannedStartDate"
+      ? schedule.plannedStartDate
+      : schedule.plannedFinishDate,
+  );
+}
+
 function validateEdit(
   schedule: ApiPlanningTaskSchedule,
   editingCell: EditingCell,
@@ -1579,20 +1977,22 @@ function validateEdit(
     if (value && Number.isNaN(parseDate(value).getTime())) {
       return "Enter a valid date.";
     }
-    const plannedStartDate =
-      editingCell.field === "plannedStartDate"
-        ? value
-        : schedule.plannedStartDate;
-    const plannedFinishDate =
-      editingCell.field === "plannedFinishDate"
-        ? value
-        : schedule.plannedFinishDate;
-    if (
-      plannedStartDate &&
-      plannedFinishDate &&
-      plannedFinishDate < plannedStartDate
-    ) {
-      return "Finish cannot be before start.";
+    if (schedule.taskKind !== "milestone") {
+      const plannedStartDate =
+        editingCell.field === "plannedStartDate"
+          ? value
+          : schedule.plannedStartDate;
+      const plannedFinishDate =
+        editingCell.field === "plannedFinishDate"
+          ? value
+          : schedule.plannedFinishDate;
+      if (
+        plannedStartDate &&
+        plannedFinishDate &&
+        plannedFinishDate < plannedStartDate
+      ) {
+        return "Finish cannot be before start.";
+      }
     }
   }
   if (editingCell.field === "durationDays") {
@@ -1902,6 +2302,56 @@ function formatStatus(value?: string | null) {
   return labels[value] ?? value;
 }
 
+function getMilestoneState(schedule: ApiPlanningTaskSchedule) {
+  return schedule.status === "done" || Number(schedule.percentComplete ?? 0) >= 100
+    ? "Reached"
+    : "Pending";
+}
+
+function getMilestoneCategory(
+  schedule: Pick<ApiPlanningTaskSchedule, "milestoneCategory" | "task">,
+): ApiMilestoneCategory {
+  return (
+    schedule.milestoneCategory ??
+    schedule.task?.milestoneCategory ??
+    "standard"
+  );
+}
+
+function getMilestoneCategoryLabel(category: ApiMilestoneCategory) {
+  const labels: Record<ApiMilestoneCategory, string> = {
+    decision: "Decision",
+    drop: "Drop",
+    go_live: "Go Live",
+    release: "Release",
+    standard: "Standard",
+  };
+  return labels[category];
+}
+
+function getTypeLabel(schedule: ApiPlanningTaskSchedule) {
+  if (schedule.taskKind === "summary") {
+    return "Summary";
+  }
+  if (schedule.taskKind === "milestone") {
+    const category = getMilestoneCategory(schedule);
+    return category === "standard"
+      ? "Milestone"
+      : getMilestoneCategoryLabel(category);
+  }
+  return "Task";
+}
+
+function getTypeTooltip(schedule: ApiPlanningTaskSchedule) {
+  if (schedule.taskKind === "summary") {
+    return "A summary task groups work and derives its schedule from child tasks.";
+  }
+  if (schedule.taskKind !== "milestone") {
+    return "Task";
+  }
+  return "A milestone represents an event in the project schedule. Milestones cannot contain child work items.";
+}
+
 function getTaskTitle(schedule: ApiPlanningTaskSchedule) {
   const fallbackTask = schedule.task as
     | { name?: string | null; title?: string | null }
@@ -1931,6 +2381,23 @@ function allocationColor(percent: number) {
     return "#f59e0b";
   }
   return "#22c55e";
+}
+
+function getMilestoneFill(
+  schedule: ApiPlanningTaskSchedule,
+  isCritical: boolean,
+) {
+  if (isCritical) {
+    return "#dc2626";
+  }
+  const colors: Record<ApiMilestoneCategory, string> = {
+    decision: "#7c3aed",
+    drop: "#0369a1",
+    go_live: "#047857",
+    release: "#4338ca",
+    standard: "#b45309",
+  };
+  return colors[getMilestoneCategory(schedule)];
 }
 
 function taskName(taskId: string, schedules: ApiPlanningTaskSchedule[]) {

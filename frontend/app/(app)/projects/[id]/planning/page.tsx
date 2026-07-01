@@ -11,8 +11,10 @@ import {
   deletePlanningDependency,
   getPlanningWorkspace,
   updatePlanningTaskSchedule,
+  type ApiMilestoneCategory,
   type ApiPlanningTaskSchedule,
   type ApiPlanningWorkspace,
+  type ApiTaskType,
 } from "@/features/planning";
 import { useProjectMembers } from "@/hooks/use-project-members";
 
@@ -61,6 +63,7 @@ function PageContent() {
     taskId: string,
     input: {
       durationDays?: number | null;
+      milestoneCategory?: ApiMilestoneCategory | null;
       ownerId?: string | null;
       parentTaskId?: string | null;
       percentComplete?: number;
@@ -123,7 +126,9 @@ function PageContent() {
   }
 
   async function handleCreateTask(input: {
+    milestoneCategory?: ApiMilestoneCategory;
     parentTaskId?: string | null;
+    taskType?: ApiTaskType;
   }): Promise<ApiPlanningTaskSchedule> {
     setError(null);
     setIsSaving(true);

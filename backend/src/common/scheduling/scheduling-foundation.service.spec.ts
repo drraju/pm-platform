@@ -145,6 +145,25 @@ describe('SchedulingFoundationService', () => {
     ).toThrow('Milestone duration cannot be negative');
   });
 
+  it('rejects manual milestone progress changes', () => {
+    expect(() =>
+      service.normalizeScheduleMutation(
+        TaskKind.Milestone,
+        { percentComplete: 100 },
+        {},
+      ),
+    ).toThrow('Milestone progress is determined by scheduling state');
+  });
+
+  it('rejects manual milestone workflow status changes', () => {
+    expect(() =>
+      service.normalizeTaskMutation({
+        status: TaskStatus.Done,
+        taskType: TaskType.Milestone,
+      }),
+    ).toThrow('Milestone status is determined by scheduling state');
+  });
+
   it('rejects manual summary schedule changes', () => {
     expect(() =>
       service.normalizeScheduleMutation(
