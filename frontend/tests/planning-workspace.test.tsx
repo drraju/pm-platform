@@ -406,9 +406,11 @@ describe("PlanningWorkspace", () => {
 
     const toolbar = screen.getByLabelText("Planning toolbar");
     expect(toolbar).toHaveClass("sticky");
+    const scrollableWorkspace = screen.getByLabelText("Scrollable planning workspace");
+    expect(scrollableWorkspace).toHaveClass("overflow-auto");
     expect(
-      screen.getByLabelText("Scrollable planning workspace"),
-    ).toHaveClass("overflow-auto");
+      screen.getByLabelText("Interactive Gantt timeline").parentElement,
+    ).not.toHaveClass("overflow-x-auto");
 
     const addButton = within(toolbar).getByRole("button", { name: "Add" });
     expect(addButton).toHaveAttribute("aria-haspopup", "menu");
@@ -957,18 +959,22 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const ganttContainer = screen.getByLabelText(
-      "Interactive Gantt timeline",
-    ).parentElement as HTMLDivElement;
-    Object.defineProperty(ganttContainer, "clientWidth", {
+    const scrollableWorkspace = screen.getByLabelText(
+      "Scrollable planning workspace",
+    ) as HTMLElement;
+    Object.defineProperty(scrollableWorkspace, "clientWidth", {
       configurable: true,
-      value: 80,
+      value: 1400,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
 
     expect(screen.getByLabelText("Today marker")).toBeInTheDocument();
-    expect(ganttContainer.scrollLeft).toBeGreaterThan(0);
+    expect(scrollableWorkspace.scrollLeft).toBeGreaterThan(0);
+    expect(
+      screen.getByLabelText("Interactive Gantt timeline").parentElement
+        ?.scrollLeft ?? 0,
+    ).toBe(0);
     vi.useRealTimers();
   });
 

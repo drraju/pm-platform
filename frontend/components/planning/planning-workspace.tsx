@@ -145,7 +145,7 @@ export function PlanningWorkspace({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [rowDragState, setRowDragState] = useState<RowDragState | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const ganttScrollRef = useRef<HTMLDivElement | null>(null);
+  const workspaceScrollRef = useRef<HTMLElement | null>(null);
   const dependencySectionRef = useRef<HTMLElement | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const taskNameRefs = useRef(new Map<string, HTMLSpanElement>());
@@ -572,7 +572,10 @@ export function PlanningWorkspace({
   }
 
   function fitToProject() {
-    const viewportWidth = ganttScrollRef.current?.clientWidth || 900;
+    const viewportWidth = Math.max(
+      0,
+      (workspaceScrollRef.current?.clientWidth || 900) - planningGridWidth,
+    );
     const nextZoom =
       [...zoomModes]
         .reverse()
@@ -582,7 +585,7 @@ export function PlanningWorkspace({
         ) ?? "quarter";
     setZoom(nextZoom);
     window.setTimeout(() => {
-      const scrollContainer = ganttScrollRef.current;
+      const scrollContainer = workspaceScrollRef.current;
       if (scrollContainer) {
         scrollContainer.scrollLeft = 0;
       }
@@ -594,12 +597,18 @@ export function PlanningWorkspace({
     if (todayX === null) {
       return;
     }
-    const scrollContainer = ganttScrollRef.current;
+    const scrollContainer = workspaceScrollRef.current;
     if (!scrollContainer) {
       return;
     }
-    const viewportWidth = scrollContainer.clientWidth || 900;
-    scrollContainer.scrollLeft = Math.max(0, todayX - viewportWidth / 2);
+    const viewportWidth = Math.max(
+      0,
+      (scrollContainer.clientWidth || 900) - planningGridWidth,
+    );
+    scrollContainer.scrollLeft = Math.max(
+      0,
+      planningGridWidth + todayX - viewportWidth / 2,
+    );
   }
 
   function scrollToDependencies() {
@@ -801,8 +810,15 @@ export function PlanningWorkspace({
       <section
         aria-label="Scrollable planning workspace"
         className="min-h-0 flex-1 overflow-auto bg-white"
+        ref={workspaceScrollRef}
       >
-        <div className="grid min-h-[560px] xl:grid-cols-[minmax(560px,45%)_minmax(0,1fr)]">
+        <div
+          className="grid min-h-[560px]"
+          style={{
+            gridTemplateColumns: `${planningGridWidth}px ${totalWidth}px`,
+            width: planningGridWidth + totalWidth,
+          }}
+        >
         <div className="overflow-visible border-r border-slate-200">
           <div
             className="sticky top-0 z-10 grid h-11 min-w-[1260px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
@@ -1092,7 +1108,7 @@ export function PlanningWorkspace({
           ) : null}
         </div>
 
-        <div className="overflow-x-auto overflow-y-visible" ref={ganttScrollRef}>
+        <div className="overflow-visible">
           <svg
             aria-label="Interactive Gantt timeline"
             className="block"
