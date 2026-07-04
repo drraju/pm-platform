@@ -45,8 +45,13 @@ const workspace: ApiPlanningWorkspace = {
   schedules: [
     {
       durationDays: 9,
+      earlyFinish: null,
+      earlyStart: null,
+      freeFloatDays: null,
       id: "schedule-1",
       isCritical: false,
+      lateFinish: null,
+      lateStart: null,
       parentTaskId: null,
       percentComplete: 20,
       plannedFinishDate: "2026-07-10",
@@ -57,11 +62,17 @@ const workspace: ApiPlanningWorkspace = {
       taskId: "task-1",
       taskKind: "summary",
       taskTitle: "Planning",
+      totalFloatDays: null,
     },
     {
       durationDays: 4,
+      earlyFinish: 4,
+      earlyStart: 0,
+      freeFloatDays: 0,
       id: "schedule-2",
       isCritical: true,
+      lateFinish: 4,
+      lateStart: 0,
       parentTaskId: "task-1",
       percentComplete: 50,
       plannedFinishDate: "2026-07-05",
@@ -86,11 +97,17 @@ const workspace: ApiPlanningWorkspace = {
       taskId: "task-2",
       taskKind: "standard",
       taskTitle: "Design schedule",
+      totalFloatDays: 0,
     },
     {
       durationDays: 0,
+      earlyFinish: 5,
+      earlyStart: 5,
+      freeFloatDays: 0,
       id: "schedule-3",
       isCritical: false,
+      lateFinish: 5,
+      lateStart: 5,
       milestoneCategory: "release",
       parentTaskId: "task-1",
       percentComplete: 0,
@@ -102,6 +119,7 @@ const workspace: ApiPlanningWorkspace = {
       taskId: "task-3",
       taskKind: "milestone",
       taskTitle: "Gate approved",
+      totalFloatDays: 0,
     },
   ],
   snapshot: {
@@ -366,6 +384,10 @@ function openAddMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
 }
 
+function openAddChildMenu() {
+  fireEvent.click(screen.getByRole("button", { name: /Add Child/ }));
+}
+
 function setViewportWidth(width: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -519,7 +541,7 @@ describe("PlanningWorkspace", () => {
     fireEvent.click(addButton);
     expect(within(toolbar).getByRole("menuitem", { name: "Task" })).toBeInTheDocument();
     expect(
-      within(toolbar).getByRole("menuitem", { name: "Child Task" }),
+      within(toolbar).getByRole("button", { name: /Add Child/ }),
     ).toBeDisabled();
     expect(within(toolbar).getByRole("menuitem", { name: "Summary" })).toBeInTheDocument();
     expect(within(toolbar).getByRole("menuitem", { name: "Release" })).toBeInTheDocument();
@@ -711,6 +733,88 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByLabelText("Scrollable timeline pane")).toBeInTheDocument();
   });
 
+  it("shows float columns from the View menu and keeps summary schedule values blank", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.queryByText("ES")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^View/ }));
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Show Float Columns/ }),
+    );
+
+    expect(screen.getByText("ES")).toBeInTheDocument();
+    expect(screen.getByText("EF")).toBeInTheDocument();
+    expect(screen.getByText("LS")).toBeInTheDocument();
+    expect(screen.getByText("LF")).toBeInTheDocument();
+    expect(screen.getByText("Total Float")).toBeInTheDocument();
+    expect(screen.getByText("Free Float")).toBeInTheDocument();
+    expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Planning ES blank")).toBeInTheDocument();
+    expect(screen.getByLabelText("Planning Total Float blank")).toBeInTheDocument();
+    expect(screen.getByLabelText("Design schedule Total Float 0d")).toBeInTheDocument();
+    expect(screen.getByLabelText("Design schedule Critical yes")).toBeInTheDocument();
+    expect(screen.getByLabelText("Gate approved ES 5")).toBeInTheDocument();
+    expect(window.localStorage.getItem("pm-platform.planningWorkspace.showFloatColumns")).toBe(
+      "true",
+    );
+  });
+
+  it("supports individual float columns from the Columns menu", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    showColumns("Total Float", "Free Float", "Critical");
+
+    expect(screen.getByText("Total Float")).toBeInTheDocument();
+    expect(screen.getByText("Free Float")).toBeInTheDocument();
+    expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Design schedule Free Float 0d")).toBeInTheDocument();
+  });
+
+  it("filters Gantt bars when Show Critical Path is enabled", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByLabelText("Move Planning")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move Design schedule")).toBeInTheDocument();
+    expect(screen.getByLabelText("Milestone Gate approved")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^View/ }));
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Show Critical Path/ }),
+    );
+
+    expect(screen.getByLabelText("Move Planning")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move Design schedule")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Milestone Gate approved")).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("pm-platform.planningWorkspace.showCriticalPath")).toBe(
+      "true",
+    );
+  });
+
   it("uses default columns on laptop-sized viewports even when optional columns are saved", () => {
     window.localStorage.setItem(
       "pm-platform.planningWorkspace.visibleColumns",
@@ -735,7 +839,127 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByLabelText("Owner")).toBeDisabled();
   });
 
-  it("enables child creation only for selected summary rows", () => {
+  it("enables Add Child only for selected summary rows and explains disabled states", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
+      "title",
+      "Select a Summary task to add child work.",
+    );
+
+    fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
+    expect(screen.getByRole("button", { name: /Add Child/ })).toBeEnabled();
+    openAddChildMenu();
+    expect(screen.getByRole("menuitem", { name: "Task" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Summary" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Standard" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Release" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Drop" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Go Live" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Decision" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("row", { name: /1\.2 Gate approved/ }));
+    expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
+      "title",
+      "Milestones are scheduling events and cannot contain child items.",
+    );
+
+    fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
+    expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
+      "title",
+      "This item is an executable task. Convert it to a Summary if you want to organize child work.",
+    );
+  });
+
+  it("creates multiple children beneath the selected summary without changing selection", async () => {
+    const onCreateTask = vi
+      .fn()
+      .mockResolvedValueOnce({
+        durationDays: 1,
+        id: "schedule-child-1",
+        isCritical: false,
+        parentTaskId: "task-1",
+        percentComplete: 0,
+        plannedFinishDate: null,
+        plannedStartDate: null,
+        projectId: "project-1",
+        sequenceNumber: 3,
+        snapshotId: "snapshot-1",
+        taskId: "child-1",
+        taskKind: "standard",
+        taskTitle: "New child task",
+      })
+      .mockResolvedValueOnce({
+        durationDays: 0,
+        id: "schedule-child-2",
+        isCritical: false,
+        milestoneCategory: "release",
+        parentTaskId: "task-1",
+        percentComplete: 0,
+        plannedFinishDate: null,
+        plannedStartDate: null,
+        projectId: "project-1",
+        sequenceNumber: 4,
+        snapshotId: "snapshot-1",
+        taskId: "child-2",
+        taskKind: "milestone",
+        taskTitle: "New release milestone",
+      });
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={onCreateTask}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
+    fireEvent.click(summaryRow);
+    openAddChildMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+
+    await waitFor(() => {
+      expect(onCreateTask).toHaveBeenCalledWith({
+        parentTaskId: "task-1",
+        taskType: "task",
+      });
+    });
+    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    openAddChildMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Release" }));
+
+    await waitFor(() => {
+      expect(onCreateTask).toHaveBeenLastCalledWith({
+        milestoneCategory: "release",
+        parentTaskId: "task-1",
+        taskType: "milestone",
+      });
+    });
+    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("preserves selected summary when expanding and collapsing children", () => {
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
@@ -747,13 +971,17 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
-    openAddMenu();
-    expect(screen.getByRole("menuitem", { name: "Child Task" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    fireEvent.click(screen.getByRole("row", { name: /1\.2 Gate approved/ }));
-    openAddMenu();
-    expect(screen.getByRole("menuitem", { name: "Child Task" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /expand planning/i }));
+    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("shows milestone state instead of editable progress and workflow status", () => {
@@ -1567,15 +1795,18 @@ describe("PlanningWorkspace", () => {
 
     fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
-    openAddMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Child Task" }));
+    openAddChildMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
 
     expect(onCreateTask).toHaveBeenCalledWith({
       parentTaskId: "task-1",
       taskType: "task",
     });
     expect(await screen.findByRole("row", { name: /1\.3 New Task/ })).toBeInTheDocument();
-    expect(screen.getByTitle("New Task")).toHaveFocus();
+    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("updates local row order and WBS when a row is reordered", async () => {
@@ -1620,7 +1851,7 @@ describe("PlanningWorkspace", () => {
 
     expect(
       screen.getByText(
-        "Milestones are scheduling events and cannot contain child tasks.",
+        "Milestones are scheduling events and cannot contain child items.",
       ),
     ).toBeInTheDocument();
     expect(onUpdateSchedule).not.toHaveBeenCalled();

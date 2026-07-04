@@ -42,12 +42,22 @@ export function ProjectSummary({ project }: ProjectSummaryProps) {
   );
 }
 
-export function ProjectWorkspacePlaceholder({ title }: { title: string }) {
+export function ProjectWorkspacePlaceholder({
+  description,
+  title,
+}: {
+  description?: string;
+  title: string;
+}) {
   return (
     <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
       <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+      <p className="mt-2 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+        Coming in Future Release
+      </p>
       <p className="mt-2 text-sm text-slate-500">
-        This module will be available in an upcoming release.
+        {description ??
+          "This workspace module is reserved for a future release and is intentionally read-only for now."}
       </p>
     </section>
   );

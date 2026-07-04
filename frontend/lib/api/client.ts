@@ -175,7 +175,12 @@ export type ApiPlanningTaskSchedule = {
   durationDays: number;
   percentComplete: number;
   sequenceNumber?: number | null;
+  earlyStart?: number | null;
+  earlyFinish?: number | null;
+  lateStart?: number | null;
+  lateFinish?: number | null;
   totalFloatDays?: number | null;
+  freeFloatDays?: number | null;
   isCritical: boolean;
   task?: ApiTask | null;
 };

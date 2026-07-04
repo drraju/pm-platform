@@ -66,6 +66,46 @@ No frontend component, report, or downstream module should independently calcula
 
 This ensures a single source of truth for scheduling across the platform.
 
+## Planning API Scheduling Integration
+
+The Planning Workspace API is the first consumer of the Scheduling Engine
+orchestrator.
+
+When the workspace is requested, `PlanningService` calls
+`PlanningScheduleEngineService.analyze(...)` with the current planning task
+schedules and project task dependencies. The returned `ScheduleAnalysis` is
+merged into each workspace schedule row.
+
+Calculated response fields include:
+
+- `earlyStart`
+- `earlyFinish`
+- `lateStart`
+- `lateFinish`
+- `totalFloatDays`
+- `freeFloatDays`
+- `isCritical`
+
+These values are calculated at request time. They are not persisted by this API
+integration story.
+
+Summary rows remain rollup rows:
+
+- `taskType` remains `summary`.
+- Rollup dates continue to come from summary rollup logic.
+- Scheduling analysis fields are returned as `null`.
+- `isCritical` is returned as `false`.
+
+Milestones are executable scheduling events:
+
+- Duration is `0`.
+- ES equals EF.
+- LS equals LF.
+- Float and critical fields are returned like task rows.
+
+Existing Planning Workspace fields remain backward compatible. The API only adds
+calculated scheduling fields.
+
 ## Planning Hierarchy
 
 ```text

@@ -273,6 +273,58 @@ Critical activities form the Critical Path.
 
 ---
 
+# CP-5 Critical Path Identification
+
+CP-5 implements Critical activity identification as an internal in-memory
+Planning Engine layer.
+
+Purpose:
+
+- Consume validated graph, forward pass, backward pass, and float results.
+- Return `isCritical` for executable activities.
+- Keep Summary tasks as rollup objects.
+- Support Milestones as zero-duration executable events.
+
+Algorithm:
+
+1. Build and validate the planning graph.
+2. Calculate ES and EF with the Forward Pass.
+3. Calculate LS and LF with the Backward Pass.
+4. Calculate Total Float and Free Float with the Float Engine.
+5. Mark executable activities critical when `Total Float == 0`.
+6. Mark executable activities non-critical when `Total Float > 0`.
+7. Skip Summary tasks.
+
+Examples:
+
+- Linear chain: every task has Total Float `0`, so every executable activity is
+  critical.
+- Parallel equal-duration paths: both paths have Total Float `0`, so multiple
+  critical paths are possible.
+- Parallel unequal-duration paths: shorter branch activities have positive
+  float and are non-critical.
+- Milestone chain: a milestone with Total Float `0` is critical.
+- Disconnected schedules: only activities on chains ending at the project finish
+  have Total Float `0`; shorter disconnected chains are non-critical.
+
+Limitations:
+
+- CP-5 does not persist `isCritical`.
+- CP-5 does not expose API fields.
+- CP-5 does not update Planning Workspace UI.
+- CP-5 does not calculate calendars, baselines, resource leveling, or schedule
+  propagation.
+
+Future enhancements:
+
+- Persist critical flags into schedule snapshots.
+- Expose read-only critical fields through Planning APIs.
+- Render critical task and milestone styling in the Gantt view.
+- Add calendar-aware criticality.
+- Add lead/lag, constraints, and cross-project critical path support.
+
+---
+
 # Critical Path
 
 The Critical Path is the longest dependency chain through the project.
@@ -590,3 +642,23 @@ Multiple Critical Paths
 AI Schedule Optimisation
 
 Monte Carlo Analysis
+
+v2
+
+Purpose
+Terminology
+Scheduling assumptions
+Forward pass
+Backward pass
+Total Float
+Free Float
+Critical Path identification
+Multiple critical paths
+Milestone handling
+Summary task handling
+Dependency types (FS, SS, FF; SF legacy compatibility)
+Future calendar support
+Future resource leveling (explicitly out of scope)
+Performance considerations
+UI representation
+Testing strategy

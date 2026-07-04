@@ -17,14 +17,67 @@ import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-te
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 
 describe("Project workspace components", () => {
-  it("renders the overview with team size", () => {
+  it("renders the executive overview dashboard", () => {
     render(
       <ProjectWorkspaceOverview
         project={{
           description: "Upgrade customer-facing platform capabilities.",
           id: "project-1",
+          assumptions: [
+            {
+              id: "assumption-1",
+              projectId: "project-1",
+              status: "open",
+              title: "Vendor contract will be approved",
+              type: "assumption",
+            },
+            {
+              id: "decision-1",
+              projectId: "project-1",
+              status: "approved",
+              title: "Decision: Use phased rollout",
+              type: "assumption",
+            },
+          ],
+          businessOwner: {
+            email: "bo@example.com",
+            firstName: "Maya",
+            id: "business-owner-1",
+            lastName: "Singh",
+            status: "active",
+          },
+          dependencies: [
+            {
+              id: "dependency-1",
+              projectId: "project-1",
+              status: "open",
+              title: "Security review",
+              type: "dependency",
+            },
+          ],
+          issues: [
+            {
+              id: "issue-1",
+              projectId: "project-1",
+              status: "closed",
+              title: "Environment outage",
+              type: "issue",
+            },
+          ],
           members: [
-            { id: "member-1", role: "manager", userId: "user-1" },
+            {
+              createdAt: "2026-05-02",
+              id: "member-1",
+              role: "manager",
+              user: {
+                email: "ava.patel@example.com",
+                firstName: "Ava",
+                id: "user-1",
+                lastName: "Patel",
+                status: "active",
+              },
+              userId: "user-1",
+            },
             { id: "member-2", role: "contributor", userId: "user-2" },
           ],
           name: "Customer Experience Platform Upgrade",
@@ -35,20 +88,186 @@ describe("Project workspace components", () => {
             lastName: "Patel",
             status: "active",
           },
+          risks: [
+            {
+              id: "risk-1",
+              projectId: "project-1",
+              status: "open",
+              title: "Supplier delay",
+              type: "risk",
+            },
+          ],
+          startDate: "2026-05-01",
           status: "at_risk",
+          targetEndDate: "2026-12-15",
+          tasks: [
+            {
+              actualEndDate: "2026-05-10",
+              id: "task-1",
+              percentComplete: 100,
+              priority: "medium",
+              projectId: "project-1",
+              status: "done",
+              title: "Complete discovery",
+            },
+            {
+              assignee: {
+                email: "li.chen@example.com",
+                firstName: "Li",
+                id: "user-2",
+                lastName: "Chen",
+                status: "active",
+              },
+              id: "milestone-1",
+              milestoneCategory: "release",
+              plannedEndDate: "2026-09-15",
+              priority: "high",
+              projectId: "project-1",
+              status: "todo",
+              taskKind: "milestone",
+              title: "Beta Release",
+            },
+            {
+              id: "milestone-2",
+              milestoneCategory: "go_live",
+              plannedEndDate: "2026-11-20",
+              priority: "high",
+              projectId: "project-1",
+              status: "todo",
+              taskKind: "milestone",
+              title: "Go Live",
+            },
+          ],
         }}
       />,
     );
 
+    expect(screen.getByText("Executive Overview")).toBeInTheDocument();
     expect(screen.getByText("Project Name")).toBeInTheDocument();
     expect(
-      screen.getByText("Customer Experience Platform Upgrade"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Team Size")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+      screen.getAllByText("Customer Experience Platform Upgrade"),
+    ).toHaveLength(2);
+    expect(screen.getByText("Project Manager")).toBeInTheDocument();
+    expect(screen.getByText("Business Owner")).toBeInTheDocument();
+    expect(screen.getByText("Maya Singh")).toBeInTheDocument();
+    expect(screen.getByText("Timeline Snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
+    expect(screen.getByText("Upcoming Milestones")).toBeInTheDocument();
+    expect(screen.getByText("RAID Summary")).toBeInTheDocument();
+    expect(screen.getByText("Team Summary")).toBeInTheDocument();
+    expect(screen.getByText("Quick Actions")).toBeInTheDocument();
+    expect(screen.getByText("Beta Release")).toBeInTheDocument();
+    expect(screen.getByText("Supplier delay")).toBeInTheDocument();
+    expect(screen.getByText("Workload")).toBeInTheDocument();
+    expect(screen.getAllByText("Reserved")).toHaveLength(2);
   });
 
-  it("renders the overview task hierarchy without flattening the WBS", () => {
+  it("keeps executive dashboard widgets compact with capped visible rows", () => {
+    render(
+      <ProjectWorkspaceOverview
+        project={{
+          assumptions: [
+            {
+              id: "assumption-1",
+              projectId: "project-1",
+              status: "open",
+              title: "Vendor approval assumption",
+              type: "assumption",
+            },
+          ],
+          dependencies: [
+            {
+              id: "dependency-1",
+              projectId: "project-1",
+              status: "open",
+              title: "Security dependency",
+              type: "dependency",
+            },
+          ],
+          id: "project-1",
+          issues: [
+            {
+              id: "issue-1",
+              projectId: "project-1",
+              status: "open",
+              title: "Integration issue",
+              type: "issue",
+            },
+          ],
+          members: [],
+          name: "Customer Experience Platform Upgrade",
+          risks: [
+            {
+              id: "risk-1",
+              projectId: "project-1",
+              status: "open",
+              title: "Supplier delay",
+              type: "risk",
+            },
+          ],
+          status: "active",
+          tasks: [
+            {
+              actualEndDate: "2026-05-13",
+              id: "done-1",
+              priority: "medium",
+              projectId: "project-1",
+              status: "done",
+              title: "Activity One",
+            },
+            {
+              actualEndDate: "2026-05-12",
+              id: "done-2",
+              priority: "medium",
+              projectId: "project-1",
+              status: "done",
+              title: "Activity Two",
+            },
+            {
+              actualEndDate: "2026-05-11",
+              id: "done-3",
+              priority: "medium",
+              projectId: "project-1",
+              status: "done",
+              title: "Activity Three",
+            },
+            ...Array.from({ length: 6 }).map((_, index) => ({
+              id: `milestone-${index + 1}`,
+              plannedEndDate: `2026-06-${String(index + 1).padStart(2, "0")}`,
+              priority: "high",
+              projectId: "project-1",
+              status: "todo" as const,
+              taskKind: "milestone" as const,
+              title: `Milestone ${index + 1}`,
+            })),
+          ],
+        }}
+      />,
+    );
+
+    const activityPanel = screen.getByText("Recent Activity").closest("section");
+    const milestonePanel = screen.getByText("Upcoming Milestones").closest("section");
+    const raidPanel = screen.getByText("Recent RAID").closest("section");
+
+    expect(activityPanel).toHaveClass("h-[210px]");
+    expect(milestonePanel).toHaveClass("h-[210px]");
+    expect(raidPanel).toHaveClass("h-[210px]");
+    expect(screen.getByText("View All Activity")).toHaveAttribute(
+      "href",
+      "/projects/project-1/reports",
+    );
+    expect(screen.getByText("Activity One")).toBeInTheDocument();
+    expect(screen.getByText("Activity Two")).toBeInTheDocument();
+    expect(screen.queryByText("Activity Three")).not.toBeInTheDocument();
+    expect(screen.getByText("Milestone 5")).toBeInTheDocument();
+    expect(screen.queryByText("Milestone 6")).not.toBeInTheDocument();
+    expect(screen.getByText("Supplier delay")).toBeInTheDocument();
+    expect(screen.getByText("Integration issue")).toBeInTheDocument();
+    expect(screen.getByText("Vendor approval assumption")).toBeInTheDocument();
+    expect(screen.queryByText("Security dependency")).not.toBeInTheDocument();
+  });
+
+  it("removes duplicate project summary and planning widgets from overview", () => {
     render(
       <ProjectWorkspaceOverview
         project={{
@@ -107,16 +326,73 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByText("Work Breakdown Structure")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByText("1.1")).toBeInTheDocument();
-    expect(screen.getByText("1.2")).toBeInTheDocument();
-    expect(screen.getByText("1.2.1")).toBeInTheDocument();
-    expect(screen.getByText("▸ Planning")).toBeInTheDocument();
-    expect(screen.getByText("Requirements")).toBeInTheDocument();
-    expect(screen.getByText("▸ Development")).toBeInTheDocument();
-    expect(screen.getByText("Backend")).toBeInTheDocument();
-    expect(screen.getByText("Li Chen")).toBeInTheDocument();
+    expect(screen.queryByText("Project Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Work Breakdown Structure")).not.toBeInTheDocument();
+    expect(screen.queryByText("Plan Items")).not.toBeInTheDocument();
+    expect(screen.queryByText("Phases")).not.toBeInTheDocument();
+  });
+
+  it("links KPI cards and quick actions to owning modules", () => {
+    render(
+      <ProjectWorkspaceOverview
+        project={{
+          dependencies: [],
+          id: "project-1",
+          issues: [],
+          members: [],
+          name: "Customer Experience Platform Upgrade",
+          risks: [],
+          status: "active",
+          tasks: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Open Tasks")).toHaveAttribute(
+      "href",
+      "/projects/project-1/tasks",
+    );
+    expect(screen.getByLabelText("Open Risks")).toHaveAttribute(
+      "href",
+      "/projects/project-1/raid",
+    );
+    expect(screen.getByLabelText("Open Team Members")).toHaveAttribute(
+      "href",
+      "/projects/project-1/team",
+    );
+    expect(
+      screen.getAllByRole("link", { name: "Open Planning" })[0],
+    ).toHaveAttribute("href", "/projects/project-1/planning");
+    expect(screen.getAllByRole("link", { name: "Open Tasks" })[0]).toHaveAttribute(
+      "href",
+      "/projects/project-1/tasks",
+    );
+    expect(screen.getAllByRole("link", { name: "Open RAID" })[0]).toHaveAttribute(
+      "href",
+      "/projects/project-1/raid",
+    );
+    expect(
+      screen.getAllByRole("link", { name: "Open Reports" })[0],
+    ).toHaveAttribute("href", "/projects/project-1/reports");
+  });
+
+  it("renders the overview in responsive dashboard regions", () => {
+    const { container } = render(
+      <ProjectWorkspaceOverview
+        project={{
+          id: "project-1",
+          members: [],
+          name: "Customer Experience Platform Upgrade",
+          status: "active",
+          tasks: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Project KPIs")).toHaveClass("grid");
+    expect(container.querySelector(".xl\\:grid-cols-3")).toBeInTheDocument();
+    expect(container.querySelector(".sm\\:grid-cols-2")).toBeInTheDocument();
   });
 
   it("renders summary metrics", () => {
@@ -142,7 +418,7 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByText("Phases")).toBeInTheDocument();
+    expect(screen.getByText("Summaries")).toBeInTheDocument();
     expect(screen.getByText("Tasks")).toBeInTheDocument();
     expect(screen.getByText("Milestones")).toBeInTheDocument();
   });
@@ -168,10 +444,10 @@ describe("Project workspace components", () => {
 
     expect(screen.getByText("Completion")).toBeInTheDocument();
     expect(screen.getByText("0%")).toBeInTheDocument();
-    expect(screen.getByText("Phases").nextSibling).toHaveTextContent("0");
+    expect(screen.getByText("Summaries").nextSibling).toHaveTextContent("0");
     expect(screen.getByText("Tasks").nextSibling).toHaveTextContent("0");
     expect(screen.getByText("Milestones").nextSibling).toHaveTextContent("0");
-    expect(screen.getByText("Plan Items").nextSibling).toHaveTextContent("0");
+    expect(screen.getByText("Planning Items").nextSibling).toHaveTextContent("0");
   });
 
   it("renders project health status and reasons", () => {
@@ -388,7 +664,7 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/description/i), {
       target: { value: "Create the launch working group." },
     });
-    fireEvent.change(within(dialog).getByLabelText(/plan item type/i), {
+    fireEvent.change(within(dialog).getByRole("combobox", { name: /type/i }), {
       target: { value: "standard" },
     });
     fireEvent.change(within(dialog).getByLabelText(/^assignee$/i), {
@@ -600,14 +876,53 @@ describe("Project workspace components", () => {
     });
   });
 
-  it("treats phases as read-only planning containers in the editor", () => {
+  it("keeps the Tasks module focused on execution instead of planning structure", () => {
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        canReassignTasks
+        dependencies={[
+          {
+            dependencyType: "FS",
+            id: "dependency-1",
+            lagDays: 0,
+            predecessorTaskId: "task-1",
+            successorTaskId: "task-2",
+          },
+        ]}
+        mode="execution"
+        onUpdateTask={vi.fn()}
+        tasks={[
+          {
+            id: "task-1",
+            plannedEndDate: "2026-06-30",
+            plannedStartDate: "2026-06-01",
+            priority: "high",
+            projectId: "project-1",
+            status: "todo",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create task/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dependencies" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Start Prepare release plan")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Finish Prepare release plan")).not.toBeInTheDocument();
+    expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Jun 30, 2026")).toBeInTheDocument();
+  });
+
+  it("treats summaries as read-only planning containers in the editor", () => {
     render(
       <ProjectWorkspaceTasks
         canManageTasks
         tasks={[
           {
             childTaskCount: 2,
-            description: "Phase container.",
+            description: "Summary container.",
             id: "summary-1",
             phaseEndDate: "2026-06-28",
             phaseProgress: 50,
@@ -725,7 +1040,7 @@ describe("Project workspace components", () => {
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("1.1")).toBeInTheDocument();
     expect(screen.getByText("1.2")).toBeInTheDocument();
-    expect(screen.getByText("[PHASE]")).toBeInTheDocument();
+    expect(screen.getByText("[SUMMARY]")).toBeInTheDocument();
     expect(screen.getByText("[MILESTONE]")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
@@ -737,7 +1052,7 @@ describe("Project workspace components", () => {
     expect(screen.getByText("◆ Approval checkpoint")).toBeInTheDocument();
   });
 
-  it("creates child tasks from phase rows and supports phase and milestone shortcuts", () => {
+  it("creates child tasks from summary rows and supports summary and milestone shortcuts", () => {
     const onCreateTask = vi.fn();
 
     render(
@@ -760,7 +1075,7 @@ describe("Project workspace components", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: /create phase/i }),
+      screen.getByRole("button", { name: /create summary/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /create milestone/i }),
@@ -768,7 +1083,7 @@ describe("Project workspace components", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /child task/i }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByLabelText(/parent phase/i)).toHaveValue("summary-1");
+    expect(within(dialog).getByLabelText(/parent summary/i)).toHaveValue("summary-1");
     fireEvent.change(within(dialog).getByLabelText(/title/i), {
       target: { value: "Define scope" },
     });

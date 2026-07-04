@@ -160,3 +160,302 @@ Permissions are enforced on the backend. The frontend uses permissions to hide d
 - Resource and workload planning.
 - Change requests.
 - AI project manager briefing panel.
+
+Project Workspace Information Architecture v2
+1. Overview
+
+Purpose:
+
+Executive project dashboard.
+
+Contains:
+
+Project Health
+Overall Progress
+Schedule Status
+Project Manager
+Business Owner
+Start / Finish Dates
+Recent Activity
+Upcoming Milestones
+Recent RAID
+KPI Cards
+Tasks
+Milestones
+Risks
+Issues
+Dependencies
+Team Size
+
+No editing.
+
+No planning.
+
+No task creation.
+
+2. Planning
+
+Purpose:
+
+Single scheduling authority.
+
+Contains:
+
+WBS
+Gantt
+Timeline
+Dependencies
+Milestones
+Summary Tasks
+Schedule Editing
+Zoom
+Baselines (future)
+Critical Path (future)
+
+Only place where users create:
+
+Task
+Summary
+Milestone
+3. Tasks
+
+Purpose:
+
+Execution management.
+
+Contains:
+
+List
+Table
+Kanban
+Filters
+Bulk Update
+Assignment
+Comments
+
+No scheduling.
+
+No Gantt.
+
+4. RAID
+
+Everything related to:
+
+Risks
+Assumptions
+Issues
+Decisions
+5. Team
+
+Everything resource related.
+
+6. Documents
+
+Project documentation.
+
+7. Reports
+
+Dashboards
+
+Exports
+
+Analytics
+
+Design Principle
+Every capability in the product must have exactly one authoritative location. Users should never wonder which screen they should use to perform an action.
+
+Overview
+    Read-only Executive Dashboard
+
+Planning
+    Scheduling Engine UI
+
+Tasks
+    Daily Work Execution
+
+RAID
+    Governance
+
+Team
+    Resource Assignment
+
+Documents
+    Knowledge Repository
+
+Reports
+    Analytics & Export
+
+Overview Dashboard v2
+The Overview Dashboard provides a real-time executive summary of the project. It is intended for Project Managers, Program Managers, Sponsors, Executives, Customers, and Delivery Leads. It contains no planning or task editing capabilities.
+
+Layout
+
+Design it in this order.
+
+Section 1 — Project Health Card
+
+Display:
+
+Project Name
+Current Status
+Health (Green/Amber/Red)
+Overall Progress
+Schedule Status
+Budget Status (future)
+Start Date
+Planned Finish
+Forecast Finish (future)
+Project Manager
+Business Owner
+Section 2 — KPI Cards
+
+Display six cards:
+
+Tasks
+
+Milestones
+
+Risks
+
+Issues
+
+Dependencies
+
+Team Members
+
+Each card should display:
+
+Total
+Open
+Closed (where applicable)
+
+Clicking a card should navigate to the relevant module.
+
+Example:
+
+Tasks
+
+↓
+
+Opens Tasks module
+Section 3 — Timeline Snapshot
+
+Small read-only timeline showing:
+
+Current Date
+Next Milestone
+Upcoming Release
+Go Live
+Project Completion
+
+No editing.
+
+Section 4 — Recent Activity
+
+Latest 10 activities.
+
+Examples:
+
+Task Created
+Task Completed
+Milestone Reached
+Risk Added
+Issue Closed
+Team Member Added
+Section 5 — Upcoming Milestones
+
+Display next 5 milestones.
+
+Columns:
+
+Milestone
+Date
+Owner
+Status
+Section 6 — RAID Summary
+
+Show:
+
+Open Risks
+
+Open Issues
+
+Assumptions
+
+Decisions
+
+Each links to RAID.
+
+Section 7 — Team Summary
+
+Show:
+
+Total Team Members
+Active Tasks
+Workload (future)
+Availability (future)
+Section 8 — Quick Actions
+
+Buttons only.
+
+Examples:
+
+Open Planning
+
+Open Tasks
+
+Open RAID
+
+Open Reports
+
+No creation buttons.
+
+Project Workspace
+
+Overview
+│
+├── Executive Dashboard
+│
+Planning
+│
+├── Scheduling
+├── WBS
+├── Gantt
+└── Dependencies
+│
+Tasks
+│
+├── List
+├── Kanban
+└── Execution
+│
+RAID
+│
+├── Risks
+├── Issues
+├── Assumptions
+└── Decisions
+│
+Team
+│
+Documents
+│
+Reports
+
+Architecture
+      ↓
+UX Design
+      ↓
+Codex Implementation
+      ↓
+Local Testing
+      ↓
+Ubuntu UAT
+      ↓
+Bug Fixes
+      ↓
+Commit
+      ↓
+Architecture Review
+      ↓
+Next Story

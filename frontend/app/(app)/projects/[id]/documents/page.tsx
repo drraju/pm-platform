@@ -37,7 +37,10 @@ export default function ProjectDocumentsPage() {
       activeTab="documents"
       project={project ?? { id: projectId, name: "Project Documents", status: "active" }}
     >
-      <ProjectWorkspacePlaceholder title="Documents" />
+      <ProjectWorkspacePlaceholder
+        description="Project document management and Google Drive linking will live here in a future release. Use this tab as the reserved home for project files."
+        title="Documents"
+      />
     </ProjectLayout>
   );
 }

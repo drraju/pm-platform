@@ -128,10 +128,10 @@ export default function ProjectTasksPage() {
       <ProjectWorkspaceTasks
         dependencies={dependencies}
         canEditTasks
-        canManageTasks
         canReassignTasks
         isSaving={isSaving}
         members={members}
+        mode="execution"
         onUpdateTask={handleUpdateTask}
         tasks={project?.tasks ?? []}
       />

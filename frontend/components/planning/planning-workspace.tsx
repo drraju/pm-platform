@@ -15,7 +15,13 @@ type ZoomMode = "day" | "week" | "month" | "quarter";
 type DragMode = "move" | "resize-end";
 type PlanningViewMode = "split" | "grid" | "timeline";
 type GridColumnId =
+  | "critical"
   | "durationDays"
+  | "earlyFinish"
+  | "earlyStart"
+  | "freeFloatDays"
+  | "lateFinish"
+  | "lateStart"
   | "ownerId"
   | "percentComplete"
   | "plannedFinishDate"
@@ -23,6 +29,7 @@ type GridColumnId =
   | "priority"
   | "status"
   | "taskTitle"
+  | "totalFloatDays"
   | "wbs";
 type EditableField =
   | "durationDays"
@@ -130,6 +137,8 @@ const toolbarButtonClassName =
   "rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 const preferenceKeys = {
   columns: "pm-platform.planningWorkspace.visibleColumns",
+  showCriticalPath: "pm-platform.planningWorkspace.showCriticalPath",
+  showFloatColumns: "pm-platform.planningWorkspace.showFloatColumns",
   splitWidth: "pm-platform.planningWorkspace.splitWidth",
   viewMode: "pm-platform.planningWorkspace.viewMode",
   zoom: "pm-platform.planningWorkspace.zoom",
@@ -192,11 +201,68 @@ const gridColumns: GridColumnDefinition[] = [
     label: "Duration",
     minWidth: 84,
   },
+  {
+    align: "right",
+    defaultVisible: false,
+    id: "earlyStart",
+    label: "ES",
+    minWidth: 64,
+  },
+  {
+    align: "right",
+    defaultVisible: false,
+    id: "earlyFinish",
+    label: "EF",
+    minWidth: 64,
+  },
+  {
+    align: "right",
+    defaultVisible: false,
+    id: "lateStart",
+    label: "LS",
+    minWidth: 64,
+  },
+  {
+    align: "right",
+    defaultVisible: false,
+    id: "lateFinish",
+    label: "LF",
+    minWidth: 64,
+  },
+  {
+    align: "right",
+    defaultVisible: false,
+    id: "totalFloatDays",
+    label: "Total Float",
+    minWidth: 104,
+  },
+  {
+    align: "right",
+    defaultVisible: false,
+    id: "freeFloatDays",
+    label: "Free Float",
+    minWidth: 98,
+  },
+  {
+    defaultVisible: false,
+    id: "critical",
+    label: "Critical",
+    minWidth: 92,
+  },
 ];
 const defaultGridColumnIds = gridColumns
   .filter((column) => column.defaultVisible)
   .map((column) => column.id);
 const optionalGridColumns = gridColumns.filter((column) => !column.defaultVisible);
+const floatColumnIds: GridColumnId[] = [
+  "earlyStart",
+  "earlyFinish",
+  "lateStart",
+  "lateFinish",
+  "totalFloatDays",
+  "freeFloatDays",
+  "critical",
+];
 const milestoneCategories: Array<{
   category: ApiMilestoneCategory;
   label: string;
@@ -225,9 +291,20 @@ export function PlanningWorkspace({
   const [viewMode, setViewMode] = useState<PlanningViewMode>(() =>
     readViewModePreference(),
   );
+  const [showCriticalPath, setShowCriticalPath] = useState(() =>
+    readBooleanPreference(preferenceKeys.showCriticalPath),
+  );
+  const [showFloatColumns, setShowFloatColumns] = useState(() =>
+    readBooleanPreference(preferenceKeys.showFloatColumns),
+  );
   const [visibleOptionalColumnIds, setVisibleOptionalColumnIds] = useState<
     GridColumnId[]
-  >(() => readVisibleColumnPreference());
+  >(() => {
+    const savedColumns = readVisibleColumnPreference();
+    return readBooleanPreference(preferenceKeys.showFloatColumns)
+      ? mergeColumnIds(savedColumns, floatColumnIds)
+      : savedColumns;
+  });
   const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
@@ -239,6 +316,7 @@ export function PlanningWorkspace({
   const [editError, setEditError] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const [isAddChildMenuOpen, setIsAddChildMenuOpen] = useState(false);
   const [dependencyDraft, setDependencyDraft] = useState({
     dependencyType: "FS" as "FS" | "SS" | "FF",
     predecessorTaskId: "",
@@ -295,6 +373,14 @@ export function PlanningWorkspace({
   }, [viewMode]);
 
   useEffect(() => {
+    writePreference(preferenceKeys.showCriticalPath, String(showCriticalPath));
+  }, [showCriticalPath]);
+
+  useEffect(() => {
+    writePreference(preferenceKeys.showFloatColumns, String(showFloatColumns));
+  }, [showFloatColumns]);
+
+  useEffect(() => {
     writePreference(preferenceKeys.zoom, zoom);
   }, [zoom]);
 
@@ -321,7 +407,8 @@ export function PlanningWorkspace({
   const selectedSchedule = useMemo(
     () =>
       selectedTaskId
-        ? rows.find((row) => row.schedule.taskId === selectedTaskId)?.schedule
+        ? rows.find((row) => row.schedule.taskId === selectedTaskId)
+            ?.schedule ?? null
         : null,
     [rows, selectedTaskId],
   );
@@ -386,6 +473,7 @@ export function PlanningWorkspace({
   );
   const hasSummaryTasks = summaryTaskIds.size > 0;
   const canCreateChildForSelection = selectedSchedule?.taskKind === "summary";
+  const addChildTooltip = getAddChildTooltip(selectedSchedule);
 
   useLayoutEffect(() => {
     const pendingScroll = pendingTimelineScrollRef.current;
@@ -428,12 +516,19 @@ export function PlanningWorkspace({
   }
 
   async function createTask(input: {
+    focusCreatedTask?: boolean;
+    keepSelectedTaskId?: string | null;
     milestoneCategory?: ApiMilestoneCategory;
     parentTaskId?: string | null;
     taskType?: ApiTaskType;
   } = {}) {
     setHierarchyError(null);
-    const schedule = await onCreateTask(input);
+    const {
+      focusCreatedTask = true,
+      keepSelectedTaskId,
+      ...createInput
+    } = input;
+    const schedule = await onCreateTask(createInput);
     setLocalSchedules((currentSchedules) =>
       currentSchedules.some(
         (currentSchedule) => currentSchedule.taskId === schedule.taskId,
@@ -441,7 +536,7 @@ export function PlanningWorkspace({
         ? currentSchedules
         : [...currentSchedules, schedule],
     );
-    const parentTaskId = input.parentTaskId ?? null;
+    const parentTaskId = createInput.parentTaskId ?? null;
     if (parentTaskId) {
       setCollapsedIds((currentIds) => {
         const nextIds = new Set(currentIds);
@@ -449,9 +544,12 @@ export function PlanningWorkspace({
         return nextIds;
       });
     }
-    setSelectedTaskId(schedule.taskId);
-    setNewTaskFocusId(schedule.taskId);
+    setSelectedTaskId(keepSelectedTaskId ?? schedule.taskId);
+    if (focusCreatedTask) {
+      setNewTaskFocusId(schedule.taskId);
+    }
     setIsAddMenuOpen(false);
+    setIsAddChildMenuOpen(false);
   }
 
   function handleRowKeyDown(
@@ -707,7 +805,7 @@ export function PlanningWorkspace({
       targetSchedule.taskKind === "milestone"
     ) {
       setHierarchyError(
-        "Milestones are scheduling events and cannot contain child tasks.",
+        "Milestones are scheduling events and cannot contain child items.",
       );
       setRowDragState(null);
       return;
@@ -810,8 +908,21 @@ export function PlanningWorkspace({
     );
   }
 
+  function toggleFloatColumns() {
+    setShowFloatColumns((isVisible) => {
+      const nextIsVisible = !isVisible;
+      setVisibleOptionalColumnIds((currentIds) =>
+        nextIsVisible
+          ? mergeColumnIds(currentIds, floatColumnIds)
+          : currentIds.filter((columnId) => !floatColumnIds.includes(columnId)),
+      );
+      return nextIsVisible;
+    });
+  }
+
   function restoreDefaultColumns() {
     setVisibleOptionalColumnIds([]);
+    setShowFloatColumns(false);
   }
 
   function startSplitterDrag(event: React.PointerEvent<HTMLButtonElement>) {
@@ -867,6 +978,7 @@ export function PlanningWorkspace({
     title: string,
   ) {
     const { depth, schedule, wbs } = row;
+    const isCritical = isScheduleCritical(schedule);
     if (column.id === "wbs") {
       return (
         <span
@@ -948,9 +1060,17 @@ export function PlanningWorkspace({
           {isSummary ? (
             <span
               className="shrink-0 rounded-sm border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600"
-              title="Calculated from child tasks."
+              title="Calculated from child work."
             >
               Calculated
+            </span>
+          ) : null}
+          {!isSummary && isCritical ? (
+            <span
+              className="shrink-0 rounded-sm border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
+              title="This task has zero total float."
+            >
+              Critical
             </span>
           ) : null}
         </div>
@@ -1063,6 +1183,60 @@ export function PlanningWorkspace({
       );
     }
 
+    if (
+      column.id === "earlyStart" ||
+      column.id === "earlyFinish" ||
+      column.id === "lateStart" ||
+      column.id === "lateFinish"
+    ) {
+      const displayValue = formatScheduleOffset(schedule, column.id);
+      return (
+        <span
+          aria-label={`${title} ${column.label} ${displayValue || "blank"}`}
+          className="flex h-full min-w-0 items-center justify-end border-r border-slate-100 px-3 text-right"
+          key={column.id}
+          title={displayValue || "Summary schedule values are calculated from descendants."}
+        >
+          <span className="truncate">{displayValue}</span>
+        </span>
+      );
+    }
+
+    if (column.id === "totalFloatDays" || column.id === "freeFloatDays") {
+      const displayValue = formatFloatCell(schedule, column.id);
+      return (
+        <span
+          aria-label={`${title} ${column.label} ${displayValue || "blank"}`}
+          className="flex h-full min-w-0 items-center justify-end border-r border-slate-100 px-3 text-right"
+          key={column.id}
+          title={
+            column.id === "totalFloatDays"
+              ? "The amount of time this task may slip before affecting project completion."
+              : "The amount of time this task may slip before delaying its successor."
+          }
+        >
+          <span className="truncate">{displayValue}</span>
+        </span>
+      );
+    }
+
+    if (column.id === "critical") {
+      return (
+        <span
+          aria-label={`${title} Critical ${!isSummary && isCritical ? "yes" : "blank"}`}
+          className="flex h-full min-w-0 items-center border-r border-slate-100 px-3"
+          key={column.id}
+          title="This task has zero total float."
+        >
+          {!isSummary && isCritical ? (
+            <span className="rounded-sm border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700">
+              Critical
+            </span>
+          ) : null}
+        </span>
+      );
+    }
+
     const displayValue =
       column.id === "priority"
         ? formatPriority(schedule)
@@ -1077,6 +1251,12 @@ export function PlanningWorkspace({
       >
         <span className="truncate">{displayValue}</span>
       </span>
+    );
+  }
+
+  function isScheduleCritical(schedule: ApiPlanningTaskSchedule) {
+    return (
+      schedule.isCritical || workspace.criticalPathTaskIds.includes(schedule.taskId)
     );
   }
 
@@ -1126,22 +1306,6 @@ export function PlanningWorkspace({
                       }
                     />
                     <AddMenuButton
-                      disabled={!canCreateChildForSelection}
-                      icon={<TaskTypeIcon taskKind="standard" />}
-                      label="Child Task"
-                      title={
-                        selectedSchedule
-                          ? "Only summary tasks can contain child tasks."
-                          : "Select a summary task to add child work."
-                      }
-                      onClick={() =>
-                        void createTask({
-                          parentTaskId: selectedSchedule?.taskId ?? null,
-                          taskType: "task",
-                        })
-                      }
-                    />
-                    <AddMenuButton
                       icon={<TaskTypeIcon taskKind="summary" />}
                       label="Summary"
                       onClick={() =>
@@ -1167,6 +1331,75 @@ export function PlanningWorkspace({
                             taskType: "milestone",
                           })
                         }
+                      />
+                    ))}
+                  </span>
+                ) : null}
+              </span>
+              <span className="relative">
+                <button
+                  aria-expanded={isAddChildMenuOpen}
+                  aria-haspopup="menu"
+                  className={toolbarButtonClassName}
+                  disabled={!canCreateChildForSelection || isSaving}
+                  onClick={() => setIsAddChildMenuOpen((isOpen) => !isOpen)}
+                  title={addChildTooltip}
+                  type="button"
+                >
+                  Add Child <span aria-hidden>▾</span>
+                </button>
+                {isAddChildMenuOpen ? (
+                  <span
+                    className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                    role="menu"
+                  >
+                    <AddMenuButton
+                      icon={<TaskTypeIcon taskKind="standard" />}
+                      label="Task"
+                      onClick={() => {
+                        if (selectedSchedule) {
+                          void createTask({
+                            focusCreatedTask: false,
+                            keepSelectedTaskId: selectedSchedule.taskId,
+                            parentTaskId: selectedSchedule.taskId,
+                            taskType: "task",
+                          });
+                        }
+                      }}
+                    />
+                    <AddMenuButton
+                      icon={<TaskTypeIcon taskKind="summary" />}
+                      label="Summary"
+                      onClick={() => {
+                        if (selectedSchedule) {
+                          void createTask({
+                            focusCreatedTask: false,
+                            keepSelectedTaskId: selectedSchedule.taskId,
+                            parentTaskId: selectedSchedule.taskId,
+                            taskType: "summary",
+                          });
+                        }
+                      }}
+                    />
+                    <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
+                      Milestone
+                    </span>
+                    {milestoneCategories.map(({ category, label }) => (
+                      <AddMenuButton
+                        icon={<MilestoneCategoryIcon category={category} />}
+                        key={category}
+                        label={label}
+                        onClick={() => {
+                          if (selectedSchedule) {
+                            void createTask({
+                              focusCreatedTask: false,
+                              keepSelectedTaskId: selectedSchedule.taskId,
+                              milestoneCategory: category,
+                              parentTaskId: selectedSchedule.taskId,
+                              taskType: "milestone",
+                            });
+                          }
+                        }}
                       />
                     ))}
                   </span>
@@ -1265,6 +1498,27 @@ export function PlanningWorkspace({
                         <span aria-hidden>{viewMode === mode ? "*" : ""}</span>
                       </button>
                     ))}
+                    <span className="my-1 block border-t border-slate-100" />
+                    <button
+                      aria-checked={showCriticalPath}
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={() => setShowCriticalPath((isVisible) => !isVisible)}
+                      role="menuitemcheckbox"
+                      type="button"
+                    >
+                      <span>Show Critical Path</span>
+                      <span aria-hidden>{showCriticalPath ? "*" : ""}</span>
+                    </button>
+                    <button
+                      aria-checked={showFloatColumns}
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={toggleFloatColumns}
+                      role="menuitemcheckbox"
+                      type="button"
+                    >
+                      <span>Show Float Columns</span>
+                      <span aria-hidden>{showFloatColumns ? "*" : ""}</span>
+                    </button>
                   </span>
                 ) : null}
               </span>
@@ -1566,9 +1820,12 @@ export function PlanningWorkspace({
               const title = getTaskTitle(schedule);
               const y = headerHeight + index * rowHeight + 12;
               const geometry = getBarGeometry(schedule, timeline);
-              const isCritical =
-                schedule.isCritical ||
-                workspace.criticalPathTaskIds.includes(schedule.taskId);
+              const isCritical = isScheduleCritical(schedule);
+              const shouldRenderScheduleBar =
+                !showCriticalPath ||
+                schedule.taskKind === "summary" ||
+                (schedule.taskKind === "milestone" && isCritical) ||
+                (schedule.taskKind === "standard" && isCritical);
               const allocations =
                 allocationsByTaskId.get(schedule.taskId) ?? [];
               return (
@@ -1580,7 +1837,7 @@ export function PlanningWorkspace({
                     y1={headerHeight + (index + 1) * rowHeight}
                     y2={headerHeight + (index + 1) * rowHeight}
                   />
-                  {geometry ? (
+                  {geometry && shouldRenderScheduleBar ? (
                     schedule.taskKind === "milestone" ? (
                       <rect
                         aria-label={`Milestone ${title}`}
@@ -1606,6 +1863,8 @@ export function PlanningWorkspace({
                                 ? "#dc2626"
                                 : "#0f766e"
                           }
+                          stroke={isCritical ? "#7f1d1d" : "none"}
+                          strokeWidth={isCritical ? 2 : 0}
                           height={barHeight}
                           opacity={schedule.taskKind === "summary" ? 0.65 : 1}
                           onPointerDown={(event) =>
@@ -1652,7 +1911,7 @@ export function PlanningWorkspace({
                       </g>
                     )
                   ) : null}
-                  {allocations.map((allocation, allocationIndex) => {
+                  {shouldRenderScheduleBar ? allocations.map((allocation, allocationIndex) => {
                     const allocationY =
                       y + barHeight + 3 + allocationIndex * resourceHeight;
                     return (
@@ -1678,7 +1937,7 @@ export function PlanningWorkspace({
                         </text>
                       </g>
                     );
-                  })}
+                  }) : null}
                 </g>
               );
             })}
@@ -1897,6 +2156,10 @@ function readViewModePreference(): PlanningViewMode {
     : "split";
 }
 
+function readBooleanPreference(key: string) {
+  return readPreference(key) === "true";
+}
+
 function readVisibleColumnPreference(): GridColumnId[] {
   const value = readPreference(preferenceKeys.columns);
   if (!value) {
@@ -1908,6 +2171,13 @@ function readVisibleColumnPreference(): GridColumnId[] {
     .filter((columnId): columnId is GridColumnId =>
       optionalColumnIds.has(columnId as GridColumnId),
     );
+}
+
+function mergeColumnIds(
+  currentColumnIds: GridColumnId[],
+  nextColumnIds: GridColumnId[],
+) {
+  return [...new Set([...currentColumnIds, ...nextColumnIds])];
 }
 
 function getPointerClientX(event: React.PointerEvent<SVGElement>) {
@@ -2437,7 +2707,7 @@ function getReadOnlyTooltip(
   field: EditableField,
 ) {
   if (schedule.taskKind === "summary") {
-    return "Calculated from child tasks.";
+    return "Calculated from child work.";
   }
   if (schedule.taskKind === "milestone" && field === "plannedFinishDate") {
     return "Zero-duration scheduling event.";
@@ -2469,6 +2739,28 @@ function formatDateCell(
       ? schedule.plannedStartDate
       : schedule.plannedFinishDate,
   );
+}
+
+function formatScheduleOffset(
+  schedule: ApiPlanningTaskSchedule,
+  field: "earlyStart" | "earlyFinish" | "lateStart" | "lateFinish",
+) {
+  if (schedule.taskKind === "summary") {
+    return "";
+  }
+  const value = schedule[field];
+  return typeof value === "number" ? String(value) : "";
+}
+
+function formatFloatCell(
+  schedule: ApiPlanningTaskSchedule,
+  field: "totalFloatDays" | "freeFloatDays",
+) {
+  if (schedule.taskKind === "summary") {
+    return "";
+  }
+  const value = schedule[field];
+  return typeof value === "number" ? `${value}d` : "";
 }
 
 function validateEdit(
@@ -2870,12 +3162,25 @@ function getTypeLabel(schedule: ApiPlanningTaskSchedule) {
 
 function getTypeTooltip(schedule: ApiPlanningTaskSchedule) {
   if (schedule.taskKind === "summary") {
-    return "A summary task groups work and derives its schedule from child tasks.";
+    return "A Summary groups work and derives its schedule from child work.";
   }
   if (schedule.taskKind !== "milestone") {
     return "Task";
   }
   return "A milestone represents an event in the project schedule. Milestones cannot contain child work items.";
+}
+
+function getAddChildTooltip(schedule: ApiPlanningTaskSchedule | null) {
+  if (!schedule) {
+    return "Select a Summary task to add child work.";
+  }
+  if (schedule.taskKind === "summary") {
+    return "Add child work under the selected Summary.";
+  }
+  if (schedule.taskKind === "milestone") {
+    return "Milestones are scheduling events and cannot contain child items.";
+  }
+  return "This item is an executable task. Convert it to a Summary if you want to organize child work.";
 }
 
 function getTaskTitle(schedule: ApiPlanningTaskSchedule) {

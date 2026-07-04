@@ -37,7 +37,10 @@ export default function ProjectReportsPage() {
       activeTab="reports"
       project={project ?? { id: projectId, name: "Project Reports", status: "active" }}
     >
-      <ProjectWorkspacePlaceholder title="Reports" />
+      <ProjectWorkspacePlaceholder
+        description="Project reporting will live here in a future release. Executive metrics remain read-only on Overview until dedicated reports are available."
+        title="Reports"
+      />
     </ProjectLayout>
   );
 }

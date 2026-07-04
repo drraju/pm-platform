@@ -297,14 +297,24 @@ describe("Projects List navigation", () => {
         name: /Selected Project Workspace/i,
       }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /risks/i }));
-    expect(screen.getByText("Supplier onboarding delay")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /issues/i }));
-    expect(screen.getByText("Integration outage")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /assumptions/i }));
-    expect(screen.getByText("Vendor API remains available")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /dependencies/i }));
-    expect(screen.getByText("IAM approval")).toBeInTheDocument();
+    expect(screen.getByText("Executive Overview")).toBeInTheDocument();
+    expect(screen.getAllByText("Supplier onboarding delay").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByRole("link", { name: "Open Risks" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/raid",
+    );
+    expect(screen.getByRole("link", { name: "Open Issues" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/raid",
+    );
+    expect(
+      screen.getByRole("link", { name: "Open Dependencies" }),
+    ).toHaveAttribute("href", "/projects/project-123/raid");
+    expect(
+      screen.getByRole("link", { name: "Assumptions 1" }),
+    ).toHaveAttribute("href", "/projects/project-123/raid");
   });
 
   it("renders Project Workspace tabs with the current tab highlighted", async () => {
@@ -334,7 +344,7 @@ describe("Projects List navigation", () => {
       "href",
       "/projects/project-123/raid",
     );
-    expect(screen.getByText("Recent activity")).toBeInTheDocument();
+    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
   });
 
   it("loads the Planning route inside the Project Workspace", async () => {
@@ -389,8 +399,9 @@ describe("Projects List navigation", () => {
     expect(
       await screen.findByRole("heading", { name: "Documents" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Coming in Future Release")).toBeInTheDocument();
     expect(
-      screen.getByText("This module will be available in an upcoming release."),
+      screen.getByText(/Project document management and Google Drive linking/),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute(
       "aria-current",

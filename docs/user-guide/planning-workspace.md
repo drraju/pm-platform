@@ -40,6 +40,42 @@ Use the Planning Workspace to inspect and adjust a project schedule. The current
 8. Delete dependencies where corrections are required.
 9. Review critical path highlights and resource allocation overlays.
 
+### Critical Path Visualization
+
+The Planning Workspace can visualize calculated Scheduling Engine results.
+
+Use the View menu to enable **Show Critical Path**. When enabled:
+
+- Critical task bars remain visible with distinct red styling.
+- Summary bars remain visible for WBS context.
+- Non-critical task bars are hidden from the Gantt timeline.
+- Milestones remain visible only when they are critical.
+
+The grid remains available so users can still review the full WBS while focusing
+the timeline on critical work.
+
+### Float Columns
+
+Schedule analysis columns are hidden by default. Use either the Columns menu or
+the View menu option **Show Float Columns** to display:
+
+- ES
+- EF
+- LS
+- LF
+- Total Float
+- Free Float
+- Critical
+
+Summary rows are rollup rows, so schedule analysis values are blank. Milestones
+display schedule analysis values normally.
+
+Tooltips explain the float fields:
+
+- Total Float: time the task may slip before affecting project completion.
+- Free Float: time the task may slip before delaying its successor.
+- Critical: zero total float.
+
 ### Screenshots
 
 Placeholder:
@@ -58,7 +94,7 @@ Placeholder:
 | Gantt bar is missing | Confirm planned start and finish dates exist. |
 | Summary task cannot be dragged | Summary rows are containers and should roll up from children. |
 | Dependency cannot be created | Confirm the predecessor and successor are valid non-summary tasks and do not create a cycle. |
-| Critical path looks unexpected | Full CPM stabilization is planned for v1.1.1. |
+| Critical path looks unexpected | Confirm dependencies and durations are correct; critical flags come from calculated total float. |
 | Large schedule feels slow | Virtualization and lazy loading are planned improvements. |
 
 ### FAQ

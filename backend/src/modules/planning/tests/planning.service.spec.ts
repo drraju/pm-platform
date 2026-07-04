@@ -23,6 +23,12 @@ import { PortfolioDependency } from '../entities/portfolio-dependency.entity';
 import { ResourceAllocation } from '../entities/resource-allocation.entity';
 import { ResourceCapacity } from '../entities/resource-capacity.entity';
 import { ResourceWorkloadSnapshot } from '../entities/resource-workload-snapshot.entity';
+import { PlanningBackwardPassService } from '../planning-backward-pass.service';
+import { PlanningCriticalPathService } from '../planning-critical-path.service';
+import { PlanningFloatService } from '../planning-float.service';
+import { PlanningForwardPassService } from '../planning-forward-pass.service';
+import { PlanningGraphBuilderService } from '../planning-graph-builder.service';
+import { PlanningScheduleEngineService } from '../planning-schedule-engine.service';
 import { PlanningService } from '../planning.service';
 
 type MockRepository<T extends object = object> = Partial<
@@ -55,6 +61,7 @@ describe('PlanningService', () => {
     canViewProject: jest.Mock;
     getVisibleProjectIds: jest.Mock;
   };
+  let planningScheduleEngineService: PlanningScheduleEngineService;
   let projectsService: {
     captureProjectBaseline: jest.Mock;
     createProjectTaskDependency: jest.Mock;
@@ -172,6 +179,12 @@ describe('PlanningService', () => {
       providers: [
         PlanningService,
         SchedulingFoundationService,
+        PlanningBackwardPassService,
+        PlanningCriticalPathService,
+        PlanningFloatService,
+        PlanningForwardPassService,
+        PlanningGraphBuilderService,
+        PlanningScheduleEngineService,
         {
           provide: getRepositoryToken(PlanningScheduleSnapshot),
           useValue: scheduleSnapshotsRepository,
@@ -224,6 +237,7 @@ describe('PlanningService', () => {
     }).compile();
 
     service = moduleRef.get(PlanningService);
+    planningScheduleEngineService = moduleRef.get(PlanningScheduleEngineService);
   });
 
   it('aggregates the planning workspace from thin API contracts', async () => {
@@ -236,7 +250,6 @@ describe('PlanningService', () => {
       sequenceNumber: 1,
       title: 'Design schedule',
     } as Task;
-    const dependency = { id: 'dependency-id' } as TaskDependency;
     const allocation = { id: 'allocation-id' } as ResourceAllocation;
     const schedule = {
       criticalPathTaskIds: [taskId],
@@ -267,20 +280,25 @@ describe('PlanningService', () => {
     } as PlanningScheduleSnapshot;
 
     projectsRepository.findOne?.mockResolvedValue(project);
-    projectsService.findProjectTaskDependencies.mockResolvedValue([dependency]);
+    projectsService.findProjectTaskDependencies.mockResolvedValue([]);
     resourceAllocationsRepository.find?.mockResolvedValue([allocation]);
     scheduleSnapshotsRepository.findOne?.mockResolvedValue(schedule);
 
     await expect(service.getWorkspace(projectId, actor)).resolves.toEqual({
       criticalPathTaskIds: [taskId],
-      dependencies: [dependency],
+      dependencies: [],
       project,
       resourceAllocations: [allocation],
       schedules: [
         {
           durationDays: 4,
+          earlyFinish: 4,
+          earlyStart: 0,
+          freeFloatDays: 0,
           id: 'schedule-row-id',
           isCritical: true,
+          lateFinish: 4,
+          lateStart: 0,
           milestoneCategory: null,
           ownerId: userId,
           parentTaskId: null,
@@ -310,6 +328,190 @@ describe('PlanningService', () => {
         versionNumber: 2,
       },
     });
+  });
+
+  it('returns calculated schedule analysis fields in the planning workspace', async () => {
+    const project = { id: projectId, name: 'ERP Modernization' } as Project;
+    const summaryTask = {
+      id: 'summary-task-id',
+      parentTaskId: null,
+      projectId,
+      sequenceNumber: 1,
+      taskKind: TaskKind.Summary,
+      title: 'Implementation',
+    } as Task;
+    const shortTask = {
+      id: 'short-task-id',
+      parentTaskId: 'summary-task-id',
+      projectId,
+      sequenceNumber: 2,
+      taskKind: TaskKind.Standard,
+      title: 'Short path',
+    } as Task;
+    const longTask = {
+      id: 'long-task-id',
+      parentTaskId: 'summary-task-id',
+      projectId,
+      sequenceNumber: 3,
+      taskKind: TaskKind.Standard,
+      title: 'Long path',
+    } as Task;
+    const milestoneTask = {
+      id: 'milestone-task-id',
+      parentTaskId: 'summary-task-id',
+      projectId,
+      sequenceNumber: 4,
+      taskKind: TaskKind.Milestone,
+      title: 'Go Live',
+    } as Task;
+    const schedule = {
+      criticalPathTaskIds: [],
+      id: 'snapshot-id',
+      projectCompletionPercent: 25,
+      projectId,
+      scheduleVersion: 2,
+      taskSchedules: [
+        {
+          durationDays: 5,
+          id: 'summary-schedule-id',
+          isCritical: true,
+          parentTaskId: null,
+          percentComplete: 50,
+          plannedEndDate: '2026-07-05',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 1,
+          snapshotId: 'snapshot-id',
+          task: summaryTask,
+          taskId: 'summary-task-id',
+          taskKind: TaskKind.Summary,
+          totalFloatDays: 0,
+        },
+        {
+          durationDays: 2,
+          id: 'short-schedule-id',
+          isCritical: false,
+          parentTaskId: 'summary-task-id',
+          percentComplete: 0,
+          plannedEndDate: '2026-07-02',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 2,
+          snapshotId: 'snapshot-id',
+          task: shortTask,
+          taskId: 'short-task-id',
+          taskKind: TaskKind.Standard,
+          totalFloatDays: null,
+        },
+        {
+          durationDays: 5,
+          id: 'long-schedule-id',
+          isCritical: false,
+          parentTaskId: 'summary-task-id',
+          percentComplete: 0,
+          plannedEndDate: '2026-07-05',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 3,
+          snapshotId: 'snapshot-id',
+          task: longTask,
+          taskId: 'long-task-id',
+          taskKind: TaskKind.Standard,
+          totalFloatDays: null,
+        },
+        {
+          durationDays: 0,
+          id: 'milestone-schedule-id',
+          isCritical: false,
+          parentTaskId: 'summary-task-id',
+          percentComplete: 0,
+          plannedEndDate: '2026-07-05',
+          plannedStartDate: '2026-07-05',
+          projectId,
+          sequenceNumber: 4,
+          snapshotId: 'snapshot-id',
+          task: milestoneTask,
+          taskId: 'milestone-task-id',
+          taskKind: TaskKind.Milestone,
+          totalFloatDays: null,
+        },
+      ],
+    } as PlanningScheduleSnapshot;
+    const analyzeSpy = jest.spyOn(planningScheduleEngineService, 'analyze');
+
+    projectsRepository.findOne?.mockResolvedValue(project);
+    projectsService.findProjectTaskDependencies.mockResolvedValue([
+      {
+        dependencyType: 'FS',
+        id: 'short-to-milestone',
+        predecessorTaskId: 'short-task-id',
+        successorTaskId: 'milestone-task-id',
+      },
+      {
+        dependencyType: 'FS',
+        id: 'long-to-milestone',
+        predecessorTaskId: 'long-task-id',
+        successorTaskId: 'milestone-task-id',
+      },
+    ] as TaskDependency[]);
+    resourceAllocationsRepository.find?.mockResolvedValue([]);
+    scheduleSnapshotsRepository.findOne?.mockResolvedValue(schedule);
+
+    const workspace = await service.getWorkspace(projectId, actor);
+
+    expect(analyzeSpy).toHaveBeenCalledTimes(1);
+    expect(workspace.criticalPathTaskIds).toEqual([
+      'long-task-id',
+      'milestone-task-id',
+    ]);
+    expect(workspace.schedules).toEqual([
+      expect.objectContaining({
+        earlyFinish: null,
+        earlyStart: null,
+        freeFloatDays: null,
+        isCritical: false,
+        lateFinish: null,
+        lateStart: null,
+        plannedFinishDate: '2026-07-05',
+        plannedStartDate: '2026-07-01',
+        taskId: 'summary-task-id',
+        taskType: 'summary',
+        totalFloatDays: null,
+      }),
+      expect.objectContaining({
+        earlyFinish: 2,
+        earlyStart: 0,
+        freeFloatDays: 3,
+        isCritical: false,
+        lateFinish: 5,
+        lateStart: 3,
+        taskId: 'short-task-id',
+        taskType: 'task',
+        totalFloatDays: 3,
+      }),
+      expect.objectContaining({
+        earlyFinish: 5,
+        earlyStart: 0,
+        freeFloatDays: 0,
+        isCritical: true,
+        lateFinish: 5,
+        lateStart: 0,
+        taskId: 'long-task-id',
+        taskType: 'task',
+        totalFloatDays: 0,
+      }),
+      expect.objectContaining({
+        earlyFinish: 5,
+        earlyStart: 5,
+        freeFloatDays: 0,
+        isCritical: true,
+        lateFinish: 5,
+        lateStart: 5,
+        taskId: 'milestone-task-id',
+        taskType: 'milestone',
+        totalFloatDays: 0,
+      }),
+    ]);
   });
 
   it('creates the initial planning schedule on first Planning open', async () => {

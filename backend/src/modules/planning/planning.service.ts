@@ -49,6 +49,12 @@ import { PortfolioDependency } from './entities/portfolio-dependency.entity';
 import { ResourceAllocation } from './entities/resource-allocation.entity';
 import { ResourceCapacity } from './entities/resource-capacity.entity';
 import { ResourceWorkloadSnapshot } from './entities/resource-workload-snapshot.entity';
+import {
+  PlanningScheduleEngineError,
+  PlanningScheduleEngineService,
+  ScheduleAnalysis,
+  ScheduleAnalysisNode,
+} from './planning-schedule-engine.service';
 
 type AuthenticatedActor = AuthorizationActor;
 
@@ -77,6 +83,7 @@ export class PlanningService {
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectsService: ProjectsService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
+    private readonly planningScheduleEngineService: PlanningScheduleEngineService,
   ) {}
 
   async getWorkspace(
@@ -105,10 +112,16 @@ export class PlanningService {
     }
 
     const snapshot = this.toWorkspaceSnapshot(projectId, latestSchedule);
-    const schedules = this.toWorkspaceSchedules(latestSchedule);
+    const scheduleAnalysis = this.analyzeWorkspaceSchedule(
+      latestSchedule,
+      dependencies,
+    );
+    const schedules = this.toWorkspaceSchedules(latestSchedule, scheduleAnalysis);
 
     return {
-      criticalPathTaskIds: snapshot.criticalPathTaskIds,
+      criticalPathTaskIds: schedules
+        .filter((schedule) => schedule.isCritical)
+        .map((schedule) => schedule.taskId),
       dependencies,
       project,
       resourceAllocations,
@@ -877,11 +890,58 @@ export class PlanningService {
     };
   }
 
+  private analyzeWorkspaceSchedule(
+    latestSchedule: PlanningScheduleSnapshot | null,
+    dependencies: TaskDependency[],
+  ): ScheduleAnalysis | null {
+    const taskSchedules = latestSchedule?.taskSchedules ?? [];
+    if (taskSchedules.length === 0) {
+      return null;
+    }
+
+    try {
+      return this.planningScheduleEngineService.analyze({
+        dependencies: dependencies.map((dependency) => ({
+          dependencyType: dependency.dependencyType,
+          id: dependency.id,
+          predecessorTaskId: dependency.predecessorTaskId,
+          successorTaskId: dependency.successorTaskId,
+        })),
+        tasks: taskSchedules.map((taskSchedule) => ({
+          durationDays: taskSchedule.durationDays ?? 0,
+          parentTaskId:
+            taskSchedule.parentTaskId ??
+            taskSchedule.task?.parentTaskId ??
+            null,
+          taskId: taskSchedule.taskId,
+          taskKind: taskSchedule.taskKind,
+        })),
+      });
+    } catch (error) {
+      if (error instanceof PlanningScheduleEngineError) {
+        throw new BadRequestException({
+          errors: error.issues,
+          message: error.message,
+        });
+      }
+
+      throw error;
+    }
+  }
+
   private toWorkspaceSchedules(
     latestSchedule: PlanningScheduleSnapshot | null,
+    scheduleAnalysis: ScheduleAnalysis | null = null,
   ): PlanningWorkspaceScheduleDto[] {
+    const analysisByTaskId = new Map(
+      scheduleAnalysis?.nodes.map((node) => [node.taskId, node]) ?? [],
+    );
+
     return (latestSchedule?.taskSchedules ?? []).map((taskSchedule) =>
-      this.toWorkspaceSchedule(taskSchedule),
+      this.toWorkspaceSchedule(
+        taskSchedule,
+        analysisByTaskId.get(taskSchedule.taskId) ?? null,
+      ),
     );
   }
 
@@ -935,11 +995,17 @@ export class PlanningService {
 
   private toWorkspaceSchedule(
     taskSchedule: PlanningTaskSchedule,
+    analysisNode: ScheduleAnalysisNode | null = null,
   ): PlanningWorkspaceScheduleDto {
     return {
       durationDays: taskSchedule.durationDays ?? 0,
+      earlyFinish: analysisNode?.earlyFinish ?? null,
+      earlyStart: analysisNode?.earlyStart ?? null,
+      freeFloatDays: analysisNode?.freeFloat ?? null,
       id: taskSchedule.id,
-      isCritical: taskSchedule.isCritical,
+      isCritical: analysisNode?.isCritical ?? false,
+      lateFinish: analysisNode?.lateFinish ?? null,
+      lateStart: analysisNode?.lateStart ?? null,
       ownerId: taskSchedule.task?.assigneeId ?? null,
       parentTaskId:
         taskSchedule.parentTaskId ?? taskSchedule.task?.parentTaskId ?? null,
@@ -964,7 +1030,7 @@ export class PlanningService {
         taskSchedule.task?.milestoneCategory ??
         null,
       taskTitle: taskSchedule.task?.title ?? taskSchedule.taskId,
-      totalFloatDays: taskSchedule.totalFloatDays ?? null,
+      totalFloatDays: analysisNode?.totalFloat ?? null,
     };
   }
 

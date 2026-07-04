@@ -24,7 +24,7 @@ export function ProjectWorkspaceSummary({
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <SummaryCard
         href={onSelectMetric ? "#plan" : undefined}
-        label="Phases"
+        label="Summaries"
         onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
         value={summary.phases}
       />
@@ -44,7 +44,7 @@ export function ProjectWorkspaceSummary({
       />
       <SummaryCard
         href={onSelectMetric ? "#plan" : undefined}
-        label="Plan Items"
+        label="Planning Items"
         onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
         value={summary.phases + summary.tasks + summary.milestones}
         tone="danger"

@@ -80,7 +80,22 @@ export class PlanningWorkspaceScheduleDto {
   sequenceNumber?: number | null;
 
   @ApiProperty({ required: false, nullable: true })
+  earlyStart?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  earlyFinish?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  lateStart?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  lateFinish?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
   totalFloatDays?: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  freeFloatDays?: number | null;
 
   @ApiProperty()
   isCritical: boolean;

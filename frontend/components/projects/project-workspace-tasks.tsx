@@ -42,6 +42,7 @@ type ProjectWorkspaceTasksProps = {
   dependencies?: ApiTaskDependency[];
   isSaving?: boolean;
   members?: ApiProjectMember[];
+  mode?: "execution" | "planning";
   onCreateDependency?: (input: {
     dependencyType: ApiTaskDependency["dependencyType"];
     lagDays?: number;
@@ -135,8 +136,8 @@ const taskKinds: Array<{
     value: "standard",
   },
   {
-    description: "Phase container for child tasks and checkpoints.",
-    label: "Phase",
+    description: "Summary container for child tasks and milestones.",
+    label: "Summary",
     value: "summary",
   },
   {
@@ -157,6 +158,7 @@ export function ProjectWorkspaceTasks({
   dependencies = [],
   isSaving = false,
   members = [],
+  mode = "planning",
   onCreateDependency,
   onCreateTask,
   onDeleteDependency,
@@ -177,8 +179,11 @@ export function ProjectWorkspaceTasks({
   const [inlineError, setInlineError] = React.useState<string | null>(null);
   const knownSummaryTaskIdsRef = React.useRef<Set<string>>(new Set());
 
-  const canCreateTask = (canManageTasks || canCreateTasks) && Boolean(onCreateTask);
-  const hasFullEditAccess = canManageTasks || canEditTasks;
+  const isPlanningMode = mode === "planning";
+  const canCreateTask =
+    isPlanningMode && (canManageTasks || canCreateTasks) && Boolean(onCreateTask);
+  const hasFullEditAccess = isPlanningMode && (canManageTasks || canEditTasks);
+  const hasExecutionEditAccess = !isPlanningMode && canEditTasks;
   const hasDeleteAccess = canManageTasks || canDeleteTasks;
   const hasReassignAccess = canManageTasks || canReassignTasks;
   const [localStatusFilter, setLocalStatusFilter] =
@@ -322,6 +327,7 @@ export function ProjectWorkspaceTasks({
   const taskFieldAccess = getTaskFieldAccess({
     currentUserId,
     dialogMode,
+    hasExecutionEditAccess,
     hasFullEditAccess,
     hasReassignAccess,
     selectedTask,
@@ -331,9 +337,13 @@ export function ProjectWorkspaceTasks({
     <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">Plan</h2>
+          <h2 className="text-lg font-semibold text-slate-950">
+            {isPlanningMode ? "Plan" : "Tasks"}
+          </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Hierarchical project planning with enterprise-style phases, tasks, milestones, and calculated rollups.
+            {isPlanningMode
+              ? "Hierarchical project planning with summaries, tasks, milestones, and calculated rollups."
+              : "Track execution status, ownership, progress, actual dates, effort, and comments for approved project tasks."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -354,7 +364,7 @@ export function ProjectWorkspaceTasks({
                 onClick={() => openCreateDialog({ kind: "summary" })}
                 type="button"
               >
-                Create Phase
+                Create Summary
               </button>
               <button
                 className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 transition hover:bg-sky-100"
@@ -447,7 +457,7 @@ export function ProjectWorkspaceTasks({
             {hierarchy.rows.length === 0 ? (
               <tr>
                 <td className="px-3 py-5 text-slate-500" colSpan={14}>
-                  No plan items yet.
+                  {isPlanningMode ? "No plan items yet." : "No tasks yet."}
                 </td>
               </tr>
             ) : null}
@@ -457,7 +467,11 @@ export function ProjectWorkspaceTasks({
               const isMilestone = task.taskKind === "milestone";
               const isExpanded = expandedTaskIds.includes(task.id);
               const canUpdateOwnTask = task.assigneeId === currentUserId && Boolean(onUpdateTask);
-              const canEditRow = hasFullEditAccess || canUpdateOwnTask;
+              const canEditRow =
+                hasFullEditAccess || hasExecutionEditAccess || canUpdateOwnTask;
+              const canEditPlanningFields = hasFullEditAccess;
+              const canEditExecutionFields =
+                hasFullEditAccess || hasExecutionEditAccess || canUpdateOwnTask;
               const canDeleteRow = hasDeleteAccess && Boolean(onDeleteTask);
               const canAddChild = canCreateTask && isSummary;
               const rowClassName = isSummary
@@ -496,7 +510,7 @@ export function ProjectWorkspaceTasks({
                         <div className="flex flex-wrap items-center gap-2">
                           <InlineTextInput
                             ariaLabel={`Task Name ${task.title}`}
-                            disabled={!canEditRow}
+                            disabled={!canEditPlanningFields}
                             displayValue={`${isMilestone ? "◆ " : ""}${task.title}`}
                             value={task.title}
                             onCommit={(title) =>
@@ -531,11 +545,11 @@ export function ProjectWorkspaceTasks({
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     {isSummary ? (
                       "Not assignable"
-                    ) : !hasReassignAccess && !canEditRow ? (
+                    ) : !hasReassignAccess && !canEditPlanningFields ? (
                       formatAssignee(task)
                     ) : (
                       <InlineAssigneeSelect
-                        disabled={!hasReassignAccess && !canEditRow}
+                        disabled={!hasReassignAccess && !canEditPlanningFields}
                         members={members}
                         onCommit={(assigneeId) =>
                           updateInlineTask(task, { assigneeId })
@@ -551,7 +565,7 @@ export function ProjectWorkspaceTasks({
                       getMilestoneState(task)
                     ) : (
                       <InlineSelect
-                        disabled={!canEditRow}
+                        disabled={!canEditExecutionFields}
                         label={`Status ${task.title}`}
                         onCommit={(status) =>
                           updateInlineTask(task, { status: status as ApiTask["status"] })
@@ -566,7 +580,7 @@ export function ProjectWorkspaceTasks({
                       "—"
                     ) : (
                       <InlineSelect
-                        disabled={!canEditRow}
+                        disabled={!canEditPlanningFields}
                         label={`Priority ${task.title}`}
                         onCommit={(priority) => updateInlineTask(task, { priority })}
                         options={priorities.map((priority) => ({
@@ -583,7 +597,7 @@ export function ProjectWorkspaceTasks({
                     ) : (
                       <InlineNumberInput
                         ariaLabel={`Progress ${task.title}`}
-                        disabled={isSummary || !canEditRow}
+                        disabled={isSummary || !canEditExecutionFields}
                         max={100}
                         min={0}
                         onCommit={(percentComplete) =>
@@ -597,7 +611,7 @@ export function ProjectWorkspaceTasks({
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     <InlineDateInput
                       ariaLabel={`Start ${task.title}`}
-                      disabled={!canEditRow}
+                      disabled={!canEditPlanningFields}
                       onCommit={(plannedStartDate) =>
                         updateInlineTask(task, { plannedStartDate })
                       }
@@ -607,7 +621,7 @@ export function ProjectWorkspaceTasks({
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     <InlineDateInput
                       ariaLabel={`Finish ${task.title}`}
-                      disabled={!canEditRow}
+                      disabled={!canEditPlanningFields}
                       onCommit={(plannedEndDate) =>
                         updateInlineTask(task, { plannedEndDate })
                       }
@@ -617,7 +631,7 @@ export function ProjectWorkspaceTasks({
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     <InlineDateInput
                       ariaLabel={`Actual Start ${task.title}`}
-                      disabled={isSummary || !canEditRow}
+                      disabled={isSummary || !canEditExecutionFields}
                       onCommit={(actualStartDate) =>
                         updateInlineTask(task, { actualStartDate })
                       }
@@ -627,7 +641,7 @@ export function ProjectWorkspaceTasks({
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     <InlineDateInput
                       ariaLabel={`Actual End ${task.title}`}
-                      disabled={isSummary || !canEditRow}
+                      disabled={isSummary || !canEditExecutionFields}
                       onCommit={(actualEndDate) =>
                         updateInlineTask(task, { actualEndDate })
                       }
@@ -643,7 +657,7 @@ export function ProjectWorkspaceTasks({
                   <td className="min-w-56 px-3 py-3 text-slate-600">
                     <InlineTextInput
                       ariaLabel={`Comments ${task.title}`}
-                      disabled={isSummary || !canEditRow}
+                      disabled={isSummary || !canEditExecutionFields}
                       value={task.remarks ?? ""}
                       onCommit={(remarks) =>
                         updateInlineTask(task, { remarks: remarks.trim() || null })
@@ -711,8 +725,10 @@ export function ProjectWorkspaceTasks({
         <AppModal
           description={
             dialogMode === "reassign"
-              ? "Move this plan item to another project team member."
-              : "Capture phase hierarchy, planning dates, effort, and ownership in one place."
+              ? "Move this task to another project team member."
+              : isPlanningMode
+                ? "Capture summary hierarchy, planning dates, effort, and ownership in one place."
+                : "Update task execution details without changing schedule structure."
           }
           footer={
             <>
@@ -744,10 +760,12 @@ export function ProjectWorkspaceTasks({
                 dialogMode === "reassign"
                   ? "Only assignee changes are available in this mode."
                   : isPhaseForm(form)
-                    ? "Phases are planning containers. Progress and rolled-up dates are calculated from descendant work."
-                    : "Use canonical planning fields for the current project plan. WBS is derived from hierarchy and ordering, and phase numbering stays presentation-only."
+                    ? "Summaries are planning containers. Progress and rolled-up dates are calculated from descendant work."
+                    : isPlanningMode
+                      ? "Use canonical planning fields for the current project plan. WBS is derived from hierarchy and ordering."
+                      : "Use this view for execution updates only. Schedule structure remains owned by Planning."
               }
-              title="Plan Item Detail"
+              title={isPlanningMode ? "Planning Detail" : "Task Execution Detail"}
             >
               {formError ? (
                 <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -759,7 +777,7 @@ export function ProjectWorkspaceTasks({
                 {!shouldHideStructuralFields(dialogMode, form) ? (
                   <>
                     <label className="block text-sm font-medium text-slate-700">
-                      Plan Item Type
+                      Type
                       <select
                         className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
                         disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
@@ -786,7 +804,7 @@ export function ProjectWorkspaceTasks({
                     </label>
 
                     <label className="block text-sm font-medium text-slate-700">
-                      Parent Phase
+                      Parent Summary
                       <select
                         className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
                         disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
@@ -941,7 +959,7 @@ export function ProjectWorkspaceTasks({
                       Actual Start
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
                         onChange={(event) =>
                           updateForm({ ...form, actualStartDate: event.target.value })
                         }
@@ -957,7 +975,7 @@ export function ProjectWorkspaceTasks({
                         onChange={(event) =>
                           updateForm({ ...form, actualEndDate: event.target.value })
                         }
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
                         type="date"
                         value={form.actualEndDate}
                       />
@@ -1055,24 +1073,28 @@ export function ProjectWorkspaceTasks({
           }
           labelledById="delete-task-dialog-title"
           onClose={() => setTaskPendingDelete(null)}
-          title="Delete Plan Item"
+          title={isPlanningMode ? "Delete Planning Item" : "Delete Task"}
           widthClassName="max-w-md"
         >
           <p className="mt-2 text-sm text-slate-600">
-            Delete "{taskPendingDelete.title}" from the project plan?
+            {isPlanningMode
+              ? `Delete "${taskPendingDelete.title}" from the project plan?`
+              : `Delete "${taskPendingDelete.title}" from the task list?`}
           </p>
         </AppModal>
       ) : null}
 
-      <ProjectTaskDependencyPanel
-        canManageDependencies={canManageDependencies}
-        dependencies={dependencies}
-        isSaving={isSaving}
-        onCreateDependency={onCreateDependency}
-        onDeleteDependency={onDeleteDependency}
-        onUpdateDependency={onUpdateDependency}
-        tasks={tasks}
-      />
+      {isPlanningMode ? (
+        <ProjectTaskDependencyPanel
+          canManageDependencies={canManageDependencies}
+          dependencies={dependencies}
+          isSaving={isSaving}
+          onCreateDependency={onCreateDependency}
+          onDeleteDependency={onDeleteDependency}
+          onUpdateDependency={onUpdateDependency}
+          tasks={tasks}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1435,12 +1457,14 @@ function sortTasks(tasks: ApiTask[]) {
 function getTaskFieldAccess({
   currentUserId,
   dialogMode,
+  hasExecutionEditAccess,
   hasFullEditAccess,
   hasReassignAccess,
   selectedTask,
 }: {
   currentUserId: string | null;
   dialogMode: DialogMode | null;
+  hasExecutionEditAccess: boolean;
   hasFullEditAccess: boolean;
   hasReassignAccess: boolean;
   selectedTask: ApiTask | null;
@@ -1479,7 +1503,8 @@ function getTaskFieldAccess({
   }
 
   const canUpdateOwnTask =
-    Boolean(currentUserId) && selectedTask?.assigneeId === currentUserId;
+    (Boolean(currentUserId) && selectedTask?.assigneeId === currentUserId) ||
+    hasExecutionEditAccess;
 
   return {
     assignee: canUpdateOwnTask || hasReassignAccess,
@@ -1661,7 +1686,7 @@ function getDialogTitle(
 ) {
   if (dialogMode === "create") {
     if (form.taskKind === "summary") {
-      return "Create Phase";
+      return "Create Summary";
     }
 
     if (form.taskKind === "milestone") {
@@ -1672,10 +1697,10 @@ function getDialogTitle(
   }
 
   if (dialogMode === "reassign") {
-    return "Reassign Plan Item";
+    return "Reassign Task";
   }
 
-  return hasFullEditAccess ? "Edit Plan Item" : "Update Task Progress";
+  return hasFullEditAccess ? "Edit Planning Item" : "Update Task Progress";
 }
 
 function shouldHideStructuralFields(
@@ -1709,7 +1734,7 @@ function formatMemberName(member: ApiProjectMember) {
 
 function formatTaskKindBadge(value: NonNullable<ApiTask["taskKind"]>) {
   if (value === "summary") {
-    return "[PHASE]";
+    return "[SUMMARY]";
   }
 
   if (value === "milestone") {

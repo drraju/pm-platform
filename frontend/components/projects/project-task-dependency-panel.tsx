@@ -140,7 +140,7 @@ export function ProjectTaskDependencyPanel({
         <div>
           <h3 className="text-base font-semibold text-slate-950">Dependencies</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Manage scheduling links between leaf tasks and milestones using the Phase 2 dependency model.
+            Manage scheduling links between leaf tasks and milestones.
           </p>
         </div>
         <div className="flex items-center gap-2">
