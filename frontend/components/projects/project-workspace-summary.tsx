@@ -11,10 +11,9 @@ type ProjectWorkspaceSummaryProps = {
 
 export function ProjectWorkspaceSummary({
   onSelectMetric,
-  taskCounts,
   tasks,
 }: ProjectWorkspaceSummaryProps) {
-  const planningCounts = taskCounts ?? countPlanningItems(tasks);
+  const planningCounts = countPlanningItems(tasks);
   const summary = {
     milestones: planningCounts.milestones,
     phases: planningCounts.phases,

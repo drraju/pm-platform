@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { TaskDependencyType } from '../enums/task-dependency-type.enum';
 import { MilestoneCategory } from '../enums/milestone-category.enum';
 import { TaskKind } from '../enums/task-kind.enum';
 import { TaskStatus } from '../enums/task-status.enum';
@@ -50,6 +56,32 @@ type RollupSchedule = {
   taskKind?: TaskKind | string | null;
 };
 
+type DependencyEndpoint = {
+  deletedAt?: Date | string | null;
+  id: string;
+  taskKind?: TaskKind | string | null;
+};
+
+type DependencyEdge = {
+  id?: string | null;
+  predecessorTaskId: string;
+  successorTaskId: string;
+};
+
+type DependencyValidationInput = {
+  dependencyType: TaskDependencyType | string;
+  predecessorTaskId: string;
+  successorTaskId: string;
+};
+
+type DependencyValidationContext = {
+  dependencies: DependencyEdge[];
+  existingDependencyId?: string | null;
+  predecessorTask?: DependencyEndpoint | null;
+  projectId: string;
+  successorTask?: DependencyEndpoint | null;
+};
+
 export type SummaryRollupResult<T extends RollupSchedule> = {
   changedSummaries: T[];
   schedules: T[];
@@ -57,6 +89,12 @@ export type SummaryRollupResult<T extends RollupSchedule> = {
 
 @Injectable()
 export class SchedulingFoundationService {
+  private readonly supportedDependencyMutationTypes = new Set<string>([
+    TaskDependencyType.FinishToStart,
+    TaskDependencyType.StartToStart,
+    TaskDependencyType.FinishToFinish,
+  ]);
+
   normalizeTaskKind(input: TaskTypeInput, fallback = TaskKind.Standard): TaskKind {
     if (input.taskKind) {
       return this.mapTaskKind(input.taskKind);
@@ -347,6 +385,58 @@ export class SchedulingFoundationService {
       changedSummaries,
       schedules,
     };
+  }
+
+  validateTaskDependency(
+    input: DependencyValidationInput,
+    context: DependencyValidationContext,
+  ) {
+    this.validateDependencyType(input.dependencyType);
+
+    if (input.predecessorTaskId === input.successorTaskId) {
+      throw new BadRequestException(
+        'A task dependency cannot reference the same task twice',
+      );
+    }
+
+    this.validateDependencyEndpoint(
+      input.predecessorTaskId,
+      context.predecessorTask,
+      context.projectId,
+      'predecessor',
+    );
+    this.validateDependencyEndpoint(
+      input.successorTaskId,
+      context.successorTask,
+      context.projectId,
+      'successor',
+    );
+
+    const activeDependencies = context.dependencies.filter(
+      (dependency) => dependency.id !== context.existingDependencyId,
+    );
+    const duplicateDependency = activeDependencies.find(
+      (dependency) =>
+        dependency.predecessorTaskId === input.predecessorTaskId &&
+        dependency.successorTaskId === input.successorTaskId,
+    );
+    if (duplicateDependency) {
+      throw new ConflictException(
+        'An active dependency already exists between these tasks',
+      );
+    }
+
+    if (
+      this.createsDependencyCycle(
+        activeDependencies,
+        input.predecessorTaskId,
+        input.successorTaskId,
+      )
+    ) {
+      throw new BadRequestException(
+        'Task dependencies cannot contain circular relationships',
+      );
+    }
   }
 
   private normalizeMilestoneTaskDates(
@@ -716,6 +806,74 @@ export class SchedulingFoundationService {
         'Planned finish date cannot be before planned start date',
       );
     }
+  }
+
+  private validateDependencyType(dependencyType: TaskDependencyType | string) {
+    if (this.supportedDependencyMutationTypes.has(dependencyType)) {
+      return;
+    }
+
+    throw new BadRequestException(
+      `Unsupported dependency type ${dependencyType}`,
+    );
+  }
+
+  private validateDependencyEndpoint(
+    taskId: string,
+    task: DependencyEndpoint | null | undefined,
+    projectId: string,
+    role: 'predecessor' | 'successor',
+  ) {
+    if (!task || task.deletedAt) {
+      throw new NotFoundException(
+        `Task ${taskId} not found for project ${projectId}`,
+      );
+    }
+
+    if (this.mapTaskKind(task.taskKind ?? TaskKind.Standard) === TaskKind.Summary) {
+      throw new BadRequestException(
+        `Summary tasks cannot be dependency ${role} endpoints`,
+      );
+    }
+  }
+
+  private createsDependencyCycle(
+    dependencies: DependencyEdge[],
+    predecessorTaskId: string,
+    successorTaskId: string,
+  ) {
+    const successorsByTaskId = new Map<string, string[]>();
+
+    for (const dependency of dependencies) {
+      successorsByTaskId.set(dependency.predecessorTaskId, [
+        ...(successorsByTaskId.get(dependency.predecessorTaskId) ?? []),
+        dependency.successorTaskId,
+      ]);
+    }
+
+    successorsByTaskId.set(predecessorTaskId, [
+      ...(successorsByTaskId.get(predecessorTaskId) ?? []),
+      successorTaskId,
+    ]);
+
+    const visited = new Set<string>();
+    const stack = [successorTaskId];
+
+    while (stack.length > 0) {
+      const currentTaskId = stack.pop();
+      if (!currentTaskId || visited.has(currentTaskId)) {
+        continue;
+      }
+
+      if (currentTaskId === predecessorTaskId) {
+        return true;
+      }
+
+      visited.add(currentTaskId);
+      stack.push(...(successorsByTaskId.get(currentTaskId) ?? []));
+    }
+
+    return false;
   }
 
   private mapTaskKind(value: TaskKind | string): TaskKind {

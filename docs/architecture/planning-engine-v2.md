@@ -178,7 +178,7 @@ Average progress is not enterprise-grade for large plans and should only be used
 | FS | Finish-to-Start |
 | SS | Start-to-Start |
 | FF | Finish-to-Finish |
-| SF | Start-to-Finish |
+| SF | Start-to-Finish; deprecated for new mutations and retained only for stored-data compatibility |
 
 Planned future dependency features:
 
@@ -187,6 +187,90 @@ Planned future dependency features:
 - Circular dependency prevention.
 - Cross-project dependencies.
 - Dependency editing from Gantt.
+
+## Dependency Lifecycle
+
+Planning Engine v2 owns the task dependency graph for project scheduling.
+Dependency create, update, delete, project listing, predecessor lookup, and
+successor lookup are managed through the backend dependency lifecycle APIs.
+This lifecycle validates graph integrity only; it does not propagate dates,
+calculate float, or calculate Critical Path.
+
+### Valid Dependency Endpoints
+
+Valid endpoints:
+
+- Standard tasks.
+- Milestones, including categorized milestones such as Release, Drop, Go Live,
+  and Decision.
+
+Invalid endpoints:
+
+- Summary tasks. Summaries are WBS containers and calculated rollup nodes, so
+  they cannot be predecessors or successors.
+- Missing task IDs.
+- Soft-deleted task records.
+- Tasks outside the current project dependency graph.
+
+### Validation Rules
+
+`SchedulingFoundationService` is the centralized dependency validation
+authority. Project and planning services must delegate dependency integrity
+checks to it rather than duplicating graph rules.
+
+The validator rejects:
+
+- Self dependencies.
+- Duplicate active predecessor/successor relationships.
+- Circular dependency graph mutations.
+- Summary task predecessors.
+- Summary task successors.
+- Invalid or deleted task references.
+- Unsupported dependency types for new mutations.
+
+New dependency mutations support only FS, SS, and FF. Existing stored SF rows
+remain readable for backward compatibility, but SF is deprecated and rejected
+for new create/update operations.
+
+### Dependency Graph Architecture
+
+The active project dependency graph is represented as directed edges:
+
+```text
+predecessorTaskId -> successorTaskId
+```
+
+Validation builds an adjacency map from active dependencies, excludes the edge
+being updated when applicable, adds the proposed edge in memory, and performs a
+depth-first reachability check from the proposed successor back to the proposed
+predecessor. If that path exists, the proposed mutation would create a cycle and
+is rejected before persistence.
+
+This keeps the algorithm linear in the size of the project graph:
+
+```text
+O(V + E)
+```
+
+where `V` is the number of task nodes reached during traversal and `E` is the
+number of active dependency edges. This is suitable for current project-level
+plans and can be optimized later with cached graph snapshots, indexed adjacency
+reads, or incremental graph validation if project plans become very large.
+
+### Future Compatibility
+
+The lifecycle deliberately validates only the relationship graph today. The
+model remains compatible with future additions without redesign:
+
+- Lead and lag.
+- External dependencies.
+- Cross-project dependencies.
+- Soft dependencies.
+- Finish No Later Than constraints.
+- Must Start On constraints.
+
+Future scheduling stories can consume the validated graph for schedule
+propagation, float, Critical Path, and constraint calculations.
 
 ## Gantt Rendering Standards
 

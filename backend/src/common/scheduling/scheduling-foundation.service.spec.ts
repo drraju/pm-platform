@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { TaskDependencyType } from '../enums/task-dependency-type.enum';
 import { MilestoneCategory } from '../enums/milestone-category.enum';
 import { TaskKind } from '../enums/task-kind.enum';
 import { TaskStatus } from '../enums/task-status.enum';
@@ -172,6 +173,131 @@ describe('SchedulingFoundationService', () => {
         {},
       ),
     ).toThrow('Summary task schedule is calculated from child work');
+  });
+
+  it('validates supported dependency relationships', () => {
+    expect(() =>
+      service.validateTaskDependency(
+        {
+          dependencyType: TaskDependencyType.FinishToStart,
+          predecessorTaskId: 'task-a',
+          successorTaskId: 'task-b',
+        },
+        {
+          dependencies: [],
+          predecessorTask: { id: 'task-a', taskKind: TaskKind.Standard },
+          projectId: 'project-id',
+          successorTask: { id: 'task-b', taskKind: TaskKind.Milestone },
+        },
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects unsupported dependency mutation types including deprecated SF', () => {
+    expect(() =>
+      service.validateTaskDependency(
+        {
+          dependencyType: TaskDependencyType.StartToFinish,
+          predecessorTaskId: 'task-a',
+          successorTaskId: 'task-b',
+        },
+        {
+          dependencies: [],
+          predecessorTask: { id: 'task-a', taskKind: TaskKind.Standard },
+          projectId: 'project-id',
+          successorTask: { id: 'task-b', taskKind: TaskKind.Standard },
+        },
+      ),
+    ).toThrow('Unsupported dependency type SF');
+  });
+
+  it('rejects duplicate and circular dependency graph mutations', () => {
+    expect(() =>
+      service.validateTaskDependency(
+        {
+          dependencyType: TaskDependencyType.FinishToStart,
+          predecessorTaskId: 'task-a',
+          successorTaskId: 'task-b',
+        },
+        {
+          dependencies: [
+            {
+              id: 'dependency-a-b',
+              predecessorTaskId: 'task-a',
+              successorTaskId: 'task-b',
+            },
+          ],
+          predecessorTask: { id: 'task-a', taskKind: TaskKind.Standard },
+          projectId: 'project-id',
+          successorTask: { id: 'task-b', taskKind: TaskKind.Standard },
+        },
+      ),
+    ).toThrow('An active dependency already exists between these tasks');
+
+    expect(() =>
+      service.validateTaskDependency(
+        {
+          dependencyType: TaskDependencyType.FinishToStart,
+          predecessorTaskId: 'task-c',
+          successorTaskId: 'task-a',
+        },
+        {
+          dependencies: [
+            {
+              id: 'dependency-a-b',
+              predecessorTaskId: 'task-a',
+              successorTaskId: 'task-b',
+            },
+            {
+              id: 'dependency-b-c',
+              predecessorTaskId: 'task-b',
+              successorTaskId: 'task-c',
+            },
+          ],
+          predecessorTask: { id: 'task-c', taskKind: TaskKind.Standard },
+          projectId: 'project-id',
+          successorTask: { id: 'task-a', taskKind: TaskKind.Standard },
+        },
+      ),
+    ).toThrow('Task dependencies cannot contain circular relationships');
+  });
+
+  it('rejects invalid dependency endpoints', () => {
+    expect(() =>
+      service.validateTaskDependency(
+        {
+          dependencyType: TaskDependencyType.FinishToStart,
+          predecessorTaskId: 'summary-task',
+          successorTaskId: 'task-b',
+        },
+        {
+          dependencies: [],
+          predecessorTask: { id: 'summary-task', taskKind: TaskKind.Summary },
+          projectId: 'project-id',
+          successorTask: { id: 'task-b', taskKind: TaskKind.Standard },
+        },
+      ),
+    ).toThrow('Summary tasks cannot be dependency predecessor endpoints');
+
+    expect(() =>
+      service.validateTaskDependency(
+        {
+          dependencyType: TaskDependencyType.FinishToStart,
+          predecessorTaskId: 'task-a',
+          successorTaskId: 'deleted-task',
+        },
+        {
+          dependencies: [],
+          predecessorTask: { id: 'task-a', taskKind: TaskKind.Standard },
+          projectId: 'project-id',
+          successorTask: {
+            deletedAt: new Date(),
+            id: 'deleted-task',
+            taskKind: TaskKind.Standard,
+          },
+        },
+      ),
+    ).toThrow('Task deleted-task not found for project project-id');
   });
 
   it('rolls up a single-level summary from descendant executable work', () => {

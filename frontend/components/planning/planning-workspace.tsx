@@ -78,7 +78,7 @@ type RowDragState = {
 
 const rowHeight = 46;
 const planningGridTemplate =
-  "70px 150px minmax(280px,360px) 160px 120px 120px 90px 100px 120px";
+  "70px 130px minmax(260px,1fr) 150px 110px 110px 110px 100px 100px";
 const planningGridWidth = 1260;
 const headerHeight = 44;
 const resourceHeight = 18;
@@ -88,9 +88,8 @@ const editableFields: EditableField[] = [
   "ownerId",
   "plannedStartDate",
   "plannedFinishDate",
-  "durationDays",
-  "percentComplete",
   "status",
+  "percentComplete",
 ];
 const statusOptions: NonNullable<ApiPlanningTaskSchedule["status"]>[] = [
   "backlog",
@@ -129,6 +128,7 @@ export function PlanningWorkspace({
   workspace,
 }: PlanningWorkspaceProps) {
   const [zoom, setZoom] = useState<ZoomMode>("week");
+  const [fitTimelineWidth, setFitTimelineWidth] = useState<number | null>(null);
   const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -145,7 +145,12 @@ export function PlanningWorkspace({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [rowDragState, setRowDragState] = useState<RowDragState | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const workspaceScrollRef = useRef<HTMLElement | null>(null);
+  const verticalScrollRef = useRef<HTMLElement | null>(null);
+  const timelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const pendingTimelineScrollRef = useRef<null | {
+    ratio?: number;
+    scrollLeft?: number;
+  }>(null);
   const dependencySectionRef = useRef<HTMLElement | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const taskNameRefs = useRef(new Map<string, HTMLSpanElement>());
@@ -167,8 +172,8 @@ export function PlanningWorkspace({
     [rows, summaryTaskIds],
   );
   const timeline = useMemo(
-    () => buildTimeline(localSchedules, zoom),
-    [localSchedules, zoom],
+    () => buildTimeline(localSchedules, zoom, fitTimelineWidth),
+    [fitTimelineWidth, localSchedules, zoom],
   );
   const allocationsByTaskId = useMemo(
     () => groupAllocations(workspace.resourceAllocations),
@@ -207,6 +212,7 @@ export function PlanningWorkspace({
     taskName.focus();
     rowRefs.current.get(newTaskFocusId)?.scrollIntoView?.({
       block: "nearest",
+      inline: "nearest",
     });
     setNewTaskFocusId(null);
   }, [newTaskFocusId, localSchedules]);
@@ -223,6 +229,26 @@ export function PlanningWorkspace({
   );
   const hasSummaryTasks = summaryTaskIds.size > 0;
   const canCreateChildForSelection = selectedSchedule?.taskKind === "summary";
+
+  useLayoutEffect(() => {
+    const pendingScroll = pendingTimelineScrollRef.current;
+    const scrollContainer = timelineScrollRef.current;
+    if (!pendingScroll || !scrollContainer) {
+      return;
+    }
+
+    if (typeof pendingScroll.scrollLeft === "number") {
+      scrollContainer.scrollLeft = pendingScroll.scrollLeft;
+    } else if (typeof pendingScroll.ratio === "number") {
+      const viewportWidth = Math.max(scrollContainer.clientWidth || 0, 1);
+      scrollContainer.scrollLeft = Math.max(
+        0,
+        pendingScroll.ratio * totalWidth - viewportWidth / 2,
+      );
+    }
+
+    pendingTimelineScrollRef.current = null;
+  }, [totalWidth]);
 
   function toggleCollapse(taskId: string) {
     setCollapsedIds((currentIds) => {
@@ -561,6 +587,17 @@ export function PlanningWorkspace({
   }
 
   function changeZoom(direction: "in" | "out") {
+    const scrollContainer = timelineScrollRef.current;
+    if (scrollContainer) {
+      const viewportWidth = Math.max(scrollContainer.clientWidth || 0, 1);
+      pendingTimelineScrollRef.current = {
+        ratio: Math.min(
+          1,
+          Math.max(0, (scrollContainer.scrollLeft + viewportWidth / 2) / totalWidth),
+        ),
+      };
+    }
+    setFitTimelineWidth(null);
     setZoom((currentZoom) => {
       const currentIndex = zoomModes.indexOf(currentZoom);
       const nextIndex =
@@ -572,10 +609,7 @@ export function PlanningWorkspace({
   }
 
   function fitToProject() {
-    const viewportWidth = Math.max(
-      0,
-      (workspaceScrollRef.current?.clientWidth || 900) - planningGridWidth,
-    );
+    const viewportWidth = Math.max(320, timelineScrollRef.current?.clientWidth || 900);
     const nextZoom =
       [...zoomModes]
         .reverse()
@@ -583,9 +617,11 @@ export function PlanningWorkspace({
           (mode) =>
             buildTimeline(localSchedules, mode).width <= viewportWidth,
         ) ?? "quarter";
+    setFitTimelineWidth(viewportWidth);
+    pendingTimelineScrollRef.current = { scrollLeft: 0 };
     setZoom(nextZoom);
     window.setTimeout(() => {
-      const scrollContainer = workspaceScrollRef.current;
+      const scrollContainer = timelineScrollRef.current;
       if (scrollContainer) {
         scrollContainer.scrollLeft = 0;
       }
@@ -597,18 +633,12 @@ export function PlanningWorkspace({
     if (todayX === null) {
       return;
     }
-    const scrollContainer = workspaceScrollRef.current;
+    const scrollContainer = timelineScrollRef.current;
     if (!scrollContainer) {
       return;
     }
-    const viewportWidth = Math.max(
-      0,
-      (scrollContainer.clientWidth || 900) - planningGridWidth,
-    );
-    scrollContainer.scrollLeft = Math.max(
-      0,
-      planningGridWidth + todayX - viewportWidth / 2,
-    );
+    const viewportWidth = Math.max(0, scrollContainer.clientWidth || 900);
+    scrollContainer.scrollLeft = Math.max(0, todayX - viewportWidth / 2);
   }
 
   function scrollToDependencies() {
@@ -784,7 +814,10 @@ export function PlanningWorkspace({
               <select
                 className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700"
                 id="planning-time-scale"
-                onChange={(event) => setZoom(event.target.value as ZoomMode)}
+                onChange={(event) => {
+                  setFitTimelineWidth(null);
+                  setZoom(event.target.value as ZoomMode);
+                }}
                 value={zoom}
               >
                 {zoomModes.map((mode) => (
@@ -809,19 +842,18 @@ export function PlanningWorkspace({
 
       <section
         aria-label="Scrollable planning workspace"
-        className="min-h-0 flex-1 overflow-auto bg-white"
-        ref={workspaceScrollRef}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-white"
+        ref={verticalScrollRef}
       >
         <div
-          className="grid min-h-[560px]"
+          className="grid min-h-[560px] min-w-0"
           style={{
-            gridTemplateColumns: `${planningGridWidth}px ${totalWidth}px`,
-            width: planningGridWidth + totalWidth,
+            gridTemplateColumns: `${planningGridWidth}px minmax(0, 1fr)`,
           }}
         >
-        <div className="overflow-visible border-r border-slate-200">
+        <div className="overflow-hidden border-r border-slate-200">
           <div
-            className="sticky top-0 z-10 grid h-11 min-w-[1260px] items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
+            className="sticky top-0 z-10 grid h-11 items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
             style={{
               gridTemplateColumns: planningGridTemplate,
               width: planningGridWidth,
@@ -845,12 +877,14 @@ export function PlanningWorkspace({
             <span className="h-full border-r border-slate-200 px-3 py-3">
               Finish
             </span>
-            <span className="h-full border-r border-slate-200 px-3 py-3 text-right">
-              Duration
-            </span>
-            <span className="h-full px-3 py-3 text-right">% Complete</span>
-            <span className="h-full border-l border-slate-200 px-3 py-3">
+            <span className="h-full border-r border-slate-200 px-3 py-3">
               Status
+            </span>
+            <span className="h-full border-r border-slate-200 px-3 py-3 text-right">
+              Progress
+            </span>
+            <span className="h-full px-3 py-3">
+              Priority
             </span>
           </div>
           {rows.map(({ depth, schedule, wbs }) => {
@@ -864,7 +898,7 @@ export function PlanningWorkspace({
               <div
                 aria-label={`Planning row ${wbs} ${title}`}
                 aria-selected={selectedTaskId === schedule.taskId}
-                className={`grid h-[46px] min-w-[1260px] items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
+                className={`grid h-[46px] items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
                   isSummary
                     ? "bg-slate-50 font-semibold text-slate-800"
                     : isMilestone
@@ -938,7 +972,14 @@ export function PlanningWorkspace({
                     className={`truncate text-slate-950 ${
                       isSummary ? "font-bold" : "font-medium"
                     }`}
-                    onDoubleClick={() => startEditing(schedule, "taskTitle")}
+                    onClick={
+                      isEditing(editingCell, schedule.taskId, "taskTitle")
+                        ? undefined
+                        : (event) => {
+                            event.stopPropagation();
+                            startEditing(schedule, "taskTitle");
+                          }
+                    }
                     ref={(element) => {
                       if (element) {
                         taskNameRefs.current.set(schedule.taskId, element);
@@ -1008,14 +1049,14 @@ export function PlanningWorkspace({
                       current ? { ...current, value } : current,
                     )
                   }
-                  onCommitValue={(value) =>
-                    void commitEditValue(schedule, "status", value)
-                  }
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() => startEditing(schedule, "plannedStartDate")}
                   ownerOptions={ownerOptions}
                   readOnly={isReadOnlyField(schedule, "plannedStartDate")}
                   schedule={schedule}
+                  onCommitValue={(value) =>
+                    void commitEditValue(schedule, "plannedStartDate", value)
+                  }
                 />
                 <EditableGridCell
                   displayValue={formatDateCell(schedule, "plannedFinishDate")}
@@ -1028,6 +1069,9 @@ export function PlanningWorkspace({
                       current ? { ...current, value } : current,
                     )
                   }
+                  onCommitValue={(value) =>
+                    void commitEditValue(schedule, "plannedFinishDate", value)
+                  }
                   onKeyDown={handleEditKeyDown}
                   onStartEdit={() =>
                     startEditing(schedule, "plannedFinishDate")
@@ -1037,21 +1081,27 @@ export function PlanningWorkspace({
                   schedule={schedule}
                 />
                 <EditableGridCell
-                  align="right"
-                  displayValue={`${schedule.durationDays}d`}
+                  displayValue={
+                    isMilestone
+                      ? getMilestoneState(schedule)
+                      : formatStatus(schedule.status ?? schedule.task?.status)
+                  }
                   editingCell={editingCell}
                   editError={editError}
-                  field="durationDays"
+                  field="status"
                   onBlur={() => void commitEdit()}
                   onChange={(value) =>
                     setEditingCell((current) =>
                       current ? { ...current, value } : current,
                     )
                   }
+                  onCommitValue={(value) =>
+                    void commitEditValue(schedule, "status", value)
+                  }
                   onKeyDown={handleEditKeyDown}
-                  onStartEdit={() => startEditing(schedule, "durationDays")}
+                  onStartEdit={() => startEditing(schedule, "status")}
                   ownerOptions={ownerOptions}
-                  readOnly={isReadOnlyField(schedule, "durationDays")}
+                  readOnly={isReadOnlyField(schedule, "status")}
                   schedule={schedule}
                 />
                 <EditableGridCell
@@ -1076,39 +1126,35 @@ export function PlanningWorkspace({
                   readOnly={isReadOnlyField(schedule, "percentComplete")}
                   schedule={schedule}
                 />
-                <EditableGridCell
-                  displayValue={
-                    isMilestone
-                      ? getMilestoneState(schedule)
-                      : formatStatus(schedule.status)
-                  }
-                  editingCell={editingCell}
-                  editError={editError}
-                  field="status"
-                  onBlur={() => void commitEdit()}
-                  onChange={(value) =>
-                    setEditingCell((current) =>
-                      current ? { ...current, value } : current,
-                    )
-                  }
-                  onKeyDown={handleEditKeyDown}
-                  onStartEdit={() => startEditing(schedule, "status")}
-                  ownerOptions={ownerOptions}
-                  readOnly={isReadOnlyField(schedule, "status")}
-                  schedule={schedule}
-                />
+                <span
+                  className="flex h-full min-w-0 items-center px-3"
+                  title={formatPriority(schedule)}
+                >
+                  <span className="truncate">{formatPriority(schedule)}</span>
+                </span>
               </div>
             );
           })}
           {rows.length === 0 ? (
-            <div className="min-w-[1260px] px-4 py-12 text-center text-sm text-slate-500">
+            <div className="px-4 py-12 text-center text-sm text-slate-500">
               <p className="font-semibold text-slate-700">No Tasks</p>
               <p className="mt-1">Add a task to start building the project WBS.</p>
             </div>
           ) : null}
         </div>
 
-        <div className="overflow-visible">
+        <div
+          aria-label="Scrollable timeline pane"
+          className="min-w-0 overflow-x-auto overflow-y-hidden"
+          ref={timelineScrollRef}
+        >
+          <div
+            data-testid="timeline-scroll-surface"
+            style={{
+              minWidth: totalWidth,
+              width: totalWidth,
+            }}
+          >
           <svg
             aria-label="Interactive Gantt timeline"
             className="block"
@@ -1309,6 +1355,7 @@ export function PlanningWorkspace({
               </marker>
             </defs>
           </svg>
+          </div>
         </div>
       </div>
 
@@ -1728,7 +1775,14 @@ function EditableGridCell({
       className={`flex h-full min-w-0 items-center border-r border-slate-100 px-3 ${
         align === "right" ? "justify-end text-right" : ""
       } ${readOnly ? "cursor-not-allowed bg-slate-50 text-slate-500" : ""}`}
-      onDoubleClick={readOnly ? undefined : onStartEdit}
+      onClick={
+        readOnly || editing
+          ? undefined
+          : (event) => {
+              event.stopPropagation();
+              onStartEdit();
+            }
+      }
       title={title}
     >
       {editing && !readOnly ? (
@@ -1774,6 +1828,7 @@ function InlineEditor({
   const commonProps = {
     autoFocus: true,
     className,
+    onClick: (event: React.MouseEvent<HTMLElement>) => event.stopPropagation(),
     onBlur,
     onKeyDown,
   };
@@ -2167,7 +2222,11 @@ function getSummaryTaskIds(schedules: ApiPlanningTaskSchedule[]) {
   return summaryTaskIds;
 }
 
-function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {
+function buildTimeline(
+  schedules: ApiPlanningTaskSchedule[],
+  zoom: ZoomMode,
+  fitWidth?: number | null,
+) {
   const currentDate = today();
   const starts = schedules
     .map((schedule) => schedule.plannedStartDate)
@@ -2193,10 +2252,15 @@ function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {
   );
   const daysPerUnit =
     zoom === "day" ? 1 : zoom === "week" ? 7 : zoom === "month" ? 30 : 90;
-  const unitWidth =
+  const baseUnitWidth =
     zoom === "day" ? 34 : zoom === "week" ? 58 : zoom === "month" ? 86 : 120;
   const totalDays = Math.max(1, diffDays(formatDate(min), formatDate(max)));
   const units = Math.ceil(totalDays / daysPerUnit);
+  const fittedUnitWidth =
+    fitWidth && fitWidth > 0 ? Math.max(8, fitWidth / (units + 1)) : null;
+  const unitWidth = fittedUnitWidth
+    ? Math.min(baseUnitWidth, fittedUnitWidth)
+    : baseUnitWidth;
   const ticks = Array.from({ length: units + 1 }).map((_, index) => {
     const date = addDays(min, index * daysPerUnit);
     return {
@@ -2225,7 +2289,7 @@ function buildTimeline(schedules: ApiPlanningTaskSchedule[], zoom: ZoomMode) {
         ? (todayOffset / daysPerUnit) * unitWidth
         : null,
     unitWidth,
-    width: Math.max(900, (units + 1) * unitWidth),
+    width: Math.max(fitWidth ?? 900, (units + 1) * unitWidth),
   };
 }
 
@@ -2316,6 +2380,14 @@ function formatStatus(value?: string | null) {
     todo: "To Do",
   };
   return labels[value] ?? value;
+}
+
+function formatPriority(schedule: ApiPlanningTaskSchedule) {
+  const priority = schedule.task?.priority;
+  if (!priority) {
+    return "Medium";
+  }
+  return priority.replaceAll("_", " ");
 }
 
 function getMilestoneState(schedule: ApiPlanningTaskSchedule) {

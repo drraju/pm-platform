@@ -244,6 +244,42 @@ export class ProjectsController {
     );
   }
 
+  @Get(':projectId/tasks/:taskId/dependencies/predecessors')
+  @ApiOperation({ summary: 'List dependency predecessors for a project task' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'taskId', format: 'uuid' })
+  @ApiOkResponse({ type: TaskDependency, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project or task not found' })
+  findProjectTaskPredecessors(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ): Promise<TaskDependency[]> {
+    return this.projectsService.findProjectTaskPredecessors(
+      projectId,
+      taskId,
+      request.user,
+    );
+  }
+
+  @Get(':projectId/tasks/:taskId/dependencies/successors')
+  @ApiOperation({ summary: 'List dependency successors for a project task' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'taskId', format: 'uuid' })
+  @ApiOkResponse({ type: TaskDependency, isArray: true })
+  @ApiNotFoundResponse({ description: 'Project or task not found' })
+  findProjectTaskSuccessors(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ): Promise<TaskDependency[]> {
+    return this.projectsService.findProjectTaskSuccessors(
+      projectId,
+      taskId,
+      request.user,
+    );
+  }
+
   @Post(':projectId/baselines')
   @RequirePermissions(PermissionKey.ProjectUpdate)
   @ApiOperation({ summary: 'Capture a project baseline' })

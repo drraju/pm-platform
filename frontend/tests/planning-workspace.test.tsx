@@ -157,6 +157,69 @@ const orderingWorkspace: ApiPlanningWorkspace = {
   ],
 };
 
+const longTimelineWorkspace: ApiPlanningWorkspace = {
+  ...workspace,
+  dependencies: [
+    {
+      dependencyType: "FS",
+      id: "long-dep-1",
+      lagDays: 0,
+      predecessorTaskId: "long-task-1",
+      successorTaskId: "long-task-2",
+    },
+  ],
+  schedules: [
+    {
+      ...workspace.schedules[1],
+      durationDays: 151,
+      id: "long-schedule-1",
+      parentTaskId: null,
+      plannedFinishDate: "2026-05-31",
+      plannedStartDate: "2026-01-01",
+      sequenceNumber: 1,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "long-task-1",
+        title: "Discovery",
+      },
+      taskId: "long-task-1",
+      taskTitle: "Discovery",
+    },
+    {
+      ...workspace.schedules[1],
+      durationDays: 183,
+      id: "long-schedule-2",
+      isCritical: false,
+      parentTaskId: null,
+      plannedFinishDate: "2026-11-30",
+      plannedStartDate: "2026-06-01",
+      sequenceNumber: 2,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "long-task-2",
+        title: "Delivery",
+      },
+      taskId: "long-task-2",
+      taskTitle: "Delivery",
+    },
+    {
+      ...workspace.schedules[2],
+      id: "long-schedule-3",
+      parentTaskId: null,
+      plannedFinishDate: "2026-12-15",
+      plannedStartDate: "2026-12-15",
+      sequenceNumber: 3,
+      taskId: "long-milestone-1",
+      taskTitle: "Launch milestone",
+    },
+  ],
+  snapshot: {
+    ...workspace.snapshot,
+    projectFinishDate: "2026-12-15",
+    projectStartDate: "2026-01-01",
+  },
+};
+
 const nestedWorkspace: ApiPlanningWorkspace = {
   ...workspace,
   criticalPathTaskIds: [],
@@ -354,6 +417,9 @@ describe("PlanningWorkspace", () => {
     expect(within(taskRow).getByText("Task")).toBeInTheDocument();
     expect(within(milestoneRow).getByText("Release")).toBeInTheDocument();
     expect(within(milestoneRow).getByText("Same date")).toBeInTheDocument();
+    expect(screen.getByText("Priority")).toBeInTheDocument();
+    expect(within(taskRow).getByText("medium")).toBeInTheDocument();
+    expect(screen.queryByText("Duration")).not.toBeInTheDocument();
   });
 
   it("renders all milestone category badges", () => {
@@ -407,10 +473,10 @@ describe("PlanningWorkspace", () => {
     const toolbar = screen.getByLabelText("Planning toolbar");
     expect(toolbar).toHaveClass("sticky");
     const scrollableWorkspace = screen.getByLabelText("Scrollable planning workspace");
-    expect(scrollableWorkspace).toHaveClass("overflow-auto");
-    expect(
-      screen.getByLabelText("Interactive Gantt timeline").parentElement,
-    ).not.toHaveClass("overflow-x-auto");
+    expect(scrollableWorkspace).toHaveClass("overflow-y-auto");
+    expect(screen.getByLabelText("Scrollable timeline pane")).toHaveClass(
+      "overflow-x-auto",
+    );
 
     const addButton = within(toolbar).getByRole("button", { name: "Add" });
     expect(addButton).toHaveAttribute("aria-haspopup", "menu");
@@ -428,6 +494,36 @@ describe("PlanningWorkspace", () => {
       within(toolbar).getByRole("button", { name: "Fit to Project" }),
     ).toBeInTheDocument();
     expect(within(toolbar).getByLabelText("Time Scale")).toBeInTheDocument();
+  });
+
+  it("keeps horizontal overflow owned by the timeline pane when the timeline exceeds the viewport", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={longTimelineWorkspace}
+      />,
+    );
+
+    const scrollableWorkspace = screen.getByLabelText("Scrollable planning workspace");
+    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    const timelineSurface = screen.getByTestId("timeline-scroll-surface");
+    const svg = screen.getByLabelText("Interactive Gantt timeline");
+    Object.defineProperty(timelinePane, "clientWidth", {
+      configurable: true,
+      value: 640,
+    });
+
+    expect(scrollableWorkspace).toHaveClass("overflow-x-hidden");
+    expect(timelinePane).toHaveClass("overflow-x-auto");
+    expect(Number(svg.getAttribute("width"))).toBeGreaterThan(
+      timelinePane.clientWidth,
+    );
+    expect(timelineSurface).toHaveStyle({
+      width: `${svg.getAttribute("width")}px`,
+    });
   });
 
   it("enables child creation only for selected summary rows", () => {
@@ -524,7 +620,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    fireEvent.doubleClick(screen.getByTitle("Alice Ng"));
+    fireEvent.click(screen.getByTitle("Alice Ng"));
     const ownerSelect = screen
       .getByRole("option", { name: "Bob Stone" })
       .closest("select");
@@ -747,7 +843,7 @@ describe("PlanningWorkspace", () => {
 
     render(<Harness />);
 
-    fireEvent.doubleClick(screen.getByTitle("Design schedule"));
+    fireEvent.click(screen.getByTitle("Design schedule"));
     fireEvent.change(screen.getByDisplayValue("Design schedule"), {
       target: { value: "Build delivery plan" },
     });
@@ -773,7 +869,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    fireEvent.doubleClick(screen.getByText("50%"));
+    fireEvent.click(screen.getByText("50%"));
     fireEvent.change(screen.getByDisplayValue("50"), {
       target: { value: "125" },
     });
@@ -796,7 +892,7 @@ describe("PlanningWorkspace", () => {
     );
 
     const milestoneRow = screen.getByRole("row", { name: /Gate approved/ });
-    fireEvent.doubleClick(within(milestoneRow).getByText("07-06"));
+    fireEvent.click(within(milestoneRow).getByText("07-06"));
     fireEvent.change(screen.getByDisplayValue("2026-07-06"), {
       target: { value: "2026-07-08" },
     });
@@ -807,6 +903,62 @@ describe("PlanningWorkspace", () => {
     await waitFor(() => {
       expect(onUpdateSchedule).toHaveBeenCalledWith("task-3", {
         plannedStartDate: "2026-07-08",
+      });
+    });
+  });
+
+  it("activates date, status and progress editors from a single click", async () => {
+    const onUpdateSchedule = vi.fn().mockResolvedValue(workspace.schedules[1]);
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={workspace}
+      />,
+    );
+
+    const taskRow = screen.getByRole("row", { name: /1\.1 Design schedule/ });
+
+    fireEvent.click(within(taskRow).getByText("07-05"));
+    fireEvent.change(screen.getByDisplayValue("2026-07-05"), {
+      target: { value: "2026-07-07" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("2026-07-07"), {
+      key: "Enter",
+    });
+
+    await waitFor(() => {
+      expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
+        plannedFinishDate: "2026-07-07",
+      });
+    });
+
+    fireEvent.click(within(taskRow).getByText("In Progress"));
+    const statusSelect = screen.getByRole("option", { name: "Done" }).closest("select");
+    expect(statusSelect).not.toBeNull();
+    fireEvent.change(statusSelect as HTMLSelectElement, {
+      target: { value: "done" },
+    });
+
+    await waitFor(() => {
+      expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
+        status: "done",
+      });
+    });
+
+    fireEvent.click(within(taskRow).getByText("50%"));
+    fireEvent.change(screen.getByDisplayValue("50"), {
+      target: { value: "75" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("75"), {
+      key: "Enter",
+    });
+
+    await waitFor(() => {
+      expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
+        percentComplete: 75,
       });
     });
   });
@@ -895,6 +1047,36 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByLabelText("Time Scale")).toHaveValue("day");
   });
 
+  it("zooms in and increases the rendered timeline width while preserving the timeline viewport", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={longTimelineWorkspace}
+      />,
+    );
+
+    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    Object.defineProperty(timelinePane, "clientWidth", {
+      configurable: true,
+      value: 640,
+    });
+    timelinePane.scrollLeft = 220;
+    const beforeWidth = Number(
+      screen.getByLabelText("Interactive Gantt timeline").getAttribute("width"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom In" }));
+
+    const afterWidth = Number(
+      screen.getByLabelText("Interactive Gantt timeline").getAttribute("width"),
+    );
+    expect(afterWidth).toBeGreaterThan(beforeWidth);
+    expect(timelinePane.scrollLeft).toBeGreaterThan(220);
+  });
+
   it("zooms out to a broader timeline scale", () => {
     render(
       <PlanningWorkspace
@@ -909,6 +1091,29 @@ describe("PlanningWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Zoom Out" }));
 
     expect(screen.getByLabelText("Time Scale")).toHaveValue("month");
+  });
+
+  it("zooms out and reduces the rendered timeline width", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={longTimelineWorkspace}
+      />,
+    );
+
+    const beforeWidth = Number(
+      screen.getByLabelText("Interactive Gantt timeline").getAttribute("width"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom Out" }));
+
+    const afterWidth = Number(
+      screen.getByLabelText("Interactive Gantt timeline").getAttribute("width"),
+    );
+    expect(afterWidth).toBeLessThan(beforeWidth);
   });
 
   it("switches timeline scale from the selector", () => {
@@ -946,6 +1151,33 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByLabelText("Time Scale")).toHaveValue("quarter");
   });
 
+  it("fits a long project into the visible timeline pane and resets horizontal scroll", async () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={longTimelineWorkspace}
+      />,
+    );
+
+    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    Object.defineProperty(timelinePane, "clientWidth", {
+      configurable: true,
+      value: 640,
+    });
+    timelinePane.scrollLeft = 400;
+
+    fireEvent.click(screen.getByRole("button", { name: "Fit to Project" }));
+
+    await waitFor(() => expect(timelinePane.scrollLeft).toBe(0));
+    expect(screen.getByLabelText("Time Scale")).toHaveValue("quarter");
+    expect(
+      Number(screen.getByLabelText("Interactive Gantt timeline").getAttribute("width")),
+    ).toBe(640);
+  });
+
   it("scrolls horizontally to today", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-05T00:00:00Z"));
@@ -959,22 +1191,18 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const scrollableWorkspace = screen.getByLabelText(
-      "Scrollable planning workspace",
-    ) as HTMLElement;
-    Object.defineProperty(scrollableWorkspace, "clientWidth", {
+    const scrollableWorkspace = screen.getByLabelText("Scrollable planning workspace");
+    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    Object.defineProperty(timelinePane, "clientWidth", {
       configurable: true,
-      value: 1400,
+      value: 20,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
 
     expect(screen.getByLabelText("Today marker")).toBeInTheDocument();
-    expect(scrollableWorkspace.scrollLeft).toBeGreaterThan(0);
-    expect(
-      screen.getByLabelText("Interactive Gantt timeline").parentElement
-        ?.scrollLeft ?? 0,
-    ).toBe(0);
+    expect(timelinePane.scrollLeft).toBeGreaterThan(0);
+    expect(scrollableWorkspace.scrollLeft).toBe(0);
     vi.useRealTimers();
   });
 
@@ -1011,6 +1239,29 @@ describe("PlanningWorkspace", () => {
       plannedFinishDate: "2026-07-06",
       plannedStartDate: "2026-07-02",
     });
+  });
+
+  it("keeps the timeline header, bars and dependency lines on the same rendered width", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={longTimelineWorkspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom In" }));
+
+    const svg = screen.getByLabelText("Interactive Gantt timeline");
+    const width = svg.getAttribute("width");
+    const rowLine = svg.querySelector("line[y1='90']");
+    const dependencyLine = svg.querySelector("path[marker-end='url(#arrow)']");
+
+    expect(rowLine).toHaveAttribute("x2", width);
+    expect(screen.getByLabelText("Move Discovery")).toBeInTheDocument();
+    expect(dependencyLine).toBeInTheDocument();
   });
 
   it("adds a top-level task at the end of the top-level task list", async () => {

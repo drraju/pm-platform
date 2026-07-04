@@ -101,7 +101,7 @@ describe('ProjectsService', () => {
     } as Repository<Project>['manager'];
     taskDependenciesRepository = {
       create: jest.fn((input) => input),
-      find: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       save: jest.fn((input) =>
         Promise.resolve({ id: 'task-dependency-id', ...input }),
@@ -1126,6 +1126,49 @@ describe('ProjectsService', () => {
     });
   });
 
+  it('lists task predecessors and successors', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValue({
+      id: 'task-id',
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Standard,
+    });
+    taskDependenciesRepository.find
+      ?.mockResolvedValueOnce([{ id: 'predecessor-dependency-id' }])
+      .mockResolvedValueOnce([{ id: 'successor-dependency-id' }]);
+
+    await expect(
+      service.findProjectTaskPredecessors(projectId, 'task-id'),
+    ).resolves.toEqual([{ id: 'predecessor-dependency-id' }]);
+    expect(taskDependenciesRepository.find).toHaveBeenCalledWith({
+      order: { createdAt: 'ASC' },
+      relations: {
+        predecessorTask: true,
+        successorTask: true,
+      },
+      where: {
+        successorTaskId: 'task-id',
+        successorTask: { projectId },
+      },
+    });
+
+    await expect(
+      service.findProjectTaskSuccessors(projectId, 'task-id'),
+    ).resolves.toEqual([{ id: 'successor-dependency-id' }]);
+    expect(taskDependenciesRepository.find).toHaveBeenCalledWith({
+      order: { createdAt: 'ASC' },
+      relations: {
+        predecessorTask: true,
+        successorTask: true,
+      },
+      where: {
+        predecessorTaskId: 'task-id',
+        predecessorTask: { projectId },
+      },
+    });
+  });
+
   it('creates a project task dependency between two leaf tasks', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne
@@ -1143,7 +1186,6 @@ describe('ProjectsService', () => {
       })
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
-    taskDependenciesRepository.findOne?.mockResolvedValue(null);
 
     const result = await service.createProjectTaskDependency(
       projectId,
@@ -1177,7 +1219,37 @@ describe('ProjectsService', () => {
     );
   });
 
-  it('allows milestones as dependency endpoints', async () => {
+  it.each([
+    TaskDependencyType.StartToStart,
+    TaskDependencyType.FinishToFinish,
+  ])('creates a %s project task dependency', async (dependencyType) => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      });
+
+    await service.createProjectTaskDependency(projectId, {
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-task-id',
+      dependencyType,
+    });
+
+    expect(taskDependenciesRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ dependencyType }),
+    );
+  });
+
+  it('allows milestones as predecessor dependency endpoints', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne
       ?.mockResolvedValueOnce({
@@ -1192,8 +1264,6 @@ describe('ProjectsService', () => {
         projectId,
         taskKind: TaskKind.Standard,
       })
-      .mockResolvedValueOnce(null);
-    taskDependenciesRepository.findOne?.mockResolvedValue(null);
 
     await service.createProjectTaskDependency(projectId, {
       predecessorTaskId: 'pred-milestone-id',
@@ -1205,6 +1275,38 @@ describe('ProjectsService', () => {
       predecessorTaskId: 'pred-milestone-id',
       successorTaskId: 'succ-task-id',
       dependencyType: TaskDependencyType.FinishToFinish,
+      lagDays: 0,
+      createdById: undefined,
+      updatedById: undefined,
+    });
+  });
+
+  it('allows milestones as successor dependency endpoints', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'pred-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'succ-milestone-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Milestone,
+      });
+
+    await service.createProjectTaskDependency(projectId, {
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-milestone-id',
+      dependencyType: TaskDependencyType.StartToStart,
+    });
+
+    expect(taskDependenciesRepository.create).toHaveBeenCalledWith({
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-milestone-id',
+      dependencyType: TaskDependencyType.StartToStart,
       lagDays: 0,
       createdById: undefined,
       updatedById: undefined,
@@ -1245,10 +1347,10 @@ describe('ProjectsService', () => {
         successorTaskId: 'succ-task-id',
         dependencyType: TaskDependencyType.FinishToStart,
       }),
-    ).rejects.toThrow('Summary tasks cannot be dependency endpoints');
+    ).rejects.toThrow('Summary tasks cannot be dependency predecessor endpoints');
   });
 
-  it('rejects dependency creation when an endpoint is not a leaf task', async () => {
+  it('allows non-summary task endpoints even when they have children', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne
       ?.mockResolvedValueOnce({
@@ -1262,16 +1364,15 @@ describe('ProjectsService', () => {
         parentTaskId: null,
         projectId,
         taskKind: TaskKind.Standard,
-      })
-      .mockResolvedValueOnce({ id: 'pred-child-task-id' });
+      });
 
-    await expect(
-      service.createProjectTaskDependency(projectId, {
-        predecessorTaskId: 'pred-task-id',
-        successorTaskId: 'succ-task-id',
-        dependencyType: TaskDependencyType.StartToStart,
-      }),
-    ).rejects.toThrow('Only leaf tasks and milestones can be dependency endpoints');
+    await service.createProjectTaskDependency(projectId, {
+      predecessorTaskId: 'pred-task-id',
+      successorTaskId: 'succ-task-id',
+      dependencyType: TaskDependencyType.StartToStart,
+    });
+
+    expect(taskDependenciesRepository.create).toHaveBeenCalled();
   });
 
   it('rejects duplicate active dependencies between the same tasks', async () => {
@@ -1289,11 +1390,13 @@ describe('ProjectsService', () => {
         projectId,
         taskKind: TaskKind.Standard,
       })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null);
-    taskDependenciesRepository.findOne?.mockResolvedValue({
-      id: 'existing-task-dependency-id',
-    });
+    taskDependenciesRepository.find?.mockResolvedValue([
+      {
+        id: 'existing-task-dependency-id',
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+      },
+    ]);
 
     await expect(
       service.createProjectTaskDependency(projectId, {
@@ -1302,6 +1405,43 @@ describe('ProjectsService', () => {
         dependencyType: TaskDependencyType.FinishToStart,
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('rejects circular task dependency creation', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'task-c',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'task-a',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      });
+    taskDependenciesRepository.find?.mockResolvedValue([
+      {
+        id: 'dependency-a-b',
+        predecessorTaskId: 'task-a',
+        successorTaskId: 'task-b',
+      },
+      {
+        id: 'dependency-b-c',
+        predecessorTaskId: 'task-b',
+        successorTaskId: 'task-c',
+      },
+    ]);
+
+    await expect(
+      service.createProjectTaskDependency(projectId, {
+        predecessorTaskId: 'task-c',
+        successorTaskId: 'task-a',
+        dependencyType: TaskDependencyType.FinishToStart,
+      }),
+    ).rejects.toThrow('Task dependencies cannot contain circular relationships');
   });
 
   it('updates a project task dependency', async () => {
@@ -1316,7 +1456,6 @@ describe('ProjectsService', () => {
         predecessorTask: { projectId },
         successorTask: { projectId },
       })
-      .mockResolvedValueOnce(null);
     tasksRepository.findOne
       ?.mockResolvedValueOnce({
         id: 'pred-task-id',
@@ -1329,9 +1468,7 @@ describe('ProjectsService', () => {
         parentTaskId: null,
         projectId,
         taskKind: TaskKind.Standard,
-      })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null);
+      });
 
     await service.updateProjectTaskDependency(
       projectId,

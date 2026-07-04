@@ -117,3 +117,12 @@ The architecture must support:
 - Prefer reusable services/hooks/components over page-specific duplication.
 - Add tests at the domain boundary where behavior is owned.
 - Update architecture and ADRs when changing domain ownership or scheduling rules.
+
+Planning Engine
+├── planning-engine-v2.md            ✅ (Overall architecture)
+├── critical-path-engine.md          ← Next
+├── dependency-engine.md             (Later)
+├── baseline-engine.md               (Later)
+├── calendar-engine.md               (Later)
+├── resource-engine.md               (Later)
+└── export-framework.md              (Later)

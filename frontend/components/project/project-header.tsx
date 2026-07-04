@@ -85,7 +85,7 @@ function formatCompletion(project: ApiProject) {
   const tasks = project.tasks ?? [];
 
   if (tasks.length === 0) {
-    return null;
+    return "0%";
   }
 
   const totalCompletion = tasks.reduce(

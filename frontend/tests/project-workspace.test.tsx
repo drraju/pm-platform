@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ProjectHealthCard } from "@/components/projects/project-health-card";
+import { ProjectSummary } from "@/components/project/project-summary";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
 import {
   ProjectWorkspaceRegisterSection,
@@ -144,6 +145,33 @@ describe("Project workspace components", () => {
     expect(screen.getByText("Phases")).toBeInTheDocument();
     expect(screen.getByText("Tasks")).toBeInTheDocument();
     expect(screen.getByText("Milestones")).toBeInTheDocument();
+  });
+
+  it("renders zero planning metrics after the final task is removed", () => {
+    render(
+      <>
+        <ProjectSummary
+          project={{
+            id: "project-1",
+            name: "Empty Project",
+            status: "active",
+            taskCounts: { milestones: 0, phases: 0, tasks: 0 },
+            tasks: [],
+          }}
+        />
+        <ProjectWorkspaceSummary
+          taskCounts={{ milestones: 4, phases: 3, tasks: 25 }}
+          tasks={[]}
+        />
+      </>,
+    );
+
+    expect(screen.getByText("Completion")).toBeInTheDocument();
+    expect(screen.getByText("0%")).toBeInTheDocument();
+    expect(screen.getByText("Phases").nextSibling).toHaveTextContent("0");
+    expect(screen.getByText("Tasks").nextSibling).toHaveTextContent("0");
+    expect(screen.getByText("Milestones").nextSibling).toHaveTextContent("0");
+    expect(screen.getByText("Plan Items").nextSibling).toHaveTextContent("0");
   });
 
   it("renders project health status and reasons", () => {

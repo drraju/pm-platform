@@ -498,6 +498,50 @@ export class ProjectsService {
     return this.findTaskDependency(projectId, dependencyId);
   }
 
+  async findProjectTaskPredecessors(
+    projectId: string,
+    taskId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<TaskDependency[]> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
+    await this.ensurePlanningTaskExists(projectId, taskId);
+
+    return this.taskDependenciesRepository.find({
+      order: { createdAt: 'ASC' },
+      relations: {
+        predecessorTask: true,
+        successorTask: true,
+      },
+      where: {
+        successorTaskId: taskId,
+        successorTask: { projectId },
+      },
+    });
+  }
+
+  async findProjectTaskSuccessors(
+    projectId: string,
+    taskId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<TaskDependency[]> {
+    await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
+    await this.ensurePlanningTaskExists(projectId, taskId);
+
+    return this.taskDependenciesRepository.find({
+      order: { createdAt: 'ASC' },
+      relations: {
+        predecessorTask: true,
+        successorTask: true,
+      },
+      where: {
+        predecessorTaskId: taskId,
+        predecessorTask: { projectId },
+      },
+    });
+  }
+
   async createProjectTaskDependency(
     projectId: string,
     createTaskDependencyDto: CreateTaskDependencyDto,
@@ -718,8 +762,8 @@ export class ProjectsService {
     });
     if (
       !dependency ||
-      dependency.predecessorTask.projectId !== projectId ||
-      dependency.successorTask.projectId !== projectId
+      dependency.predecessorTask?.projectId !== projectId ||
+      dependency.successorTask?.projectId !== projectId
     ) {
       throw new NotFoundException(
         `Task dependency ${dependencyId} not found for project ${projectId}`,
@@ -805,69 +849,29 @@ export class ProjectsService {
     },
     existingDependencyId?: string,
   ) {
-    if (input.predecessorTaskId === input.successorTaskId) {
-      throw new BadRequestException(
-        'A task dependency cannot reference the same task twice',
-      );
-    }
-
     const [predecessorTask, successorTask] = await Promise.all([
       this.findPlanningTask(projectId, input.predecessorTaskId),
       this.findPlanningTask(projectId, input.successorTaskId),
     ]);
-
-    if (!predecessorTask) {
-      throw new NotFoundException(
-        `Task ${input.predecessorTaskId} not found for project ${projectId}`,
-      );
-    }
-
-    if (!successorTask) {
-      throw new NotFoundException(
-        `Task ${input.successorTaskId} not found for project ${projectId}`,
-      );
-    }
-
-    await this.ensureDependencyEndpointEligible(projectId, predecessorTask);
-    await this.ensureDependencyEndpointEligible(projectId, successorTask);
-
-    const duplicateDependency = await this.taskDependenciesRepository.findOne({
-      select: { id: true },
-      where: {
-        predecessorTaskId: input.predecessorTaskId,
-        successorTaskId: input.successorTaskId,
+    const dependencies = await this.taskDependenciesRepository.find({
+      select: {
+        id: true,
+        predecessorTaskId: true,
+        successorTaskId: true,
       },
+      where: [
+        { predecessorTask: { projectId } },
+        { successorTask: { projectId } },
+      ],
     });
-    if (duplicateDependency && duplicateDependency.id !== existingDependencyId) {
-      throw new ConflictException(
-        'An active dependency already exists between these tasks',
-      );
-    }
-  }
 
-  private async ensureDependencyEndpointEligible(
-    projectId: string,
-    task: Pick<Task, 'id' | 'taskKind'>,
-  ) {
-    if (task.taskKind === TaskKind.Summary) {
-      throw new BadRequestException(
-        'Summary tasks cannot be dependency endpoints',
-      );
-    }
-
-    if (task.taskKind === TaskKind.Milestone) {
-      return;
-    }
-
-    const childTask = await this.tasksRepository.findOne({
-      select: { id: true },
-      where: { parentTaskId: task.id, projectId },
+    this.schedulingFoundationService.validateTaskDependency(input, {
+      dependencies,
+      existingDependencyId,
+      predecessorTask,
+      projectId,
+      successorTask,
     });
-    if (childTask) {
-      throw new BadRequestException(
-        'Only leaf tasks and milestones can be dependency endpoints',
-      );
-    }
   }
 
   private async ensureTaskHasNoChildren(projectId: string, taskId: string) {
@@ -908,6 +912,17 @@ export class ProjectsService {
       },
       where: { id: taskId, projectId },
     });
+  }
+
+  private async ensurePlanningTaskExists(projectId: string, taskId: string) {
+    const task = await this.findPlanningTask(projectId, taskId);
+    if (!task) {
+      throw new NotFoundException(
+        `Task ${taskId} not found for project ${projectId}`,
+      );
+    }
+
+    return task;
   }
 
   private async ensureCanManageProject(
