@@ -13,6 +13,17 @@ import type {
 
 type ZoomMode = "day" | "week" | "month" | "quarter";
 type DragMode = "move" | "resize-end";
+type PlanningViewMode = "split" | "grid" | "timeline";
+type GridColumnId =
+  | "durationDays"
+  | "ownerId"
+  | "percentComplete"
+  | "plannedFinishDate"
+  | "plannedStartDate"
+  | "priority"
+  | "status"
+  | "taskTitle"
+  | "wbs";
 type EditableField =
   | "durationDays"
   | "ownerId"
@@ -76,10 +87,20 @@ type RowDragState = {
   taskId: string;
 };
 
+type GridColumnDefinition = {
+  align?: "left" | "right";
+  defaultVisible: boolean;
+  editableField?: EditableField;
+  id: GridColumnId;
+  label: string;
+  minWidth: number;
+};
+
 const rowHeight = 46;
-const planningGridTemplate =
-  "70px 130px minmax(260px,1fr) 150px 110px 110px 110px 100px 100px";
-const planningGridWidth = 1260;
+const defaultGridWidth = 420;
+const minGridWidth = 300;
+const maxGridWidth = 500;
+const compactViewportWidth = 1280;
 const headerHeight = 44;
 const resourceHeight = 18;
 const barHeight = 16;
@@ -107,6 +128,75 @@ const zoomLabels: Record<ZoomMode, string> = {
 };
 const toolbarButtonClassName =
   "rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+const preferenceKeys = {
+  columns: "pm-platform.planningWorkspace.visibleColumns",
+  splitWidth: "pm-platform.planningWorkspace.splitWidth",
+  viewMode: "pm-platform.planningWorkspace.viewMode",
+  zoom: "pm-platform.planningWorkspace.zoom",
+};
+const gridColumns: GridColumnDefinition[] = [
+  { defaultVisible: true, id: "wbs", label: "WBS", minWidth: 58 },
+  {
+    defaultVisible: true,
+    editableField: "taskTitle",
+    id: "taskTitle",
+    label: "Task Name",
+    minWidth: 180,
+  },
+  {
+    defaultVisible: true,
+    editableField: "plannedStartDate",
+    id: "plannedStartDate",
+    label: "Start",
+    minWidth: 82,
+  },
+  {
+    defaultVisible: true,
+    editableField: "plannedFinishDate",
+    id: "plannedFinishDate",
+    label: "Finish",
+    minWidth: 82,
+  },
+  {
+    defaultVisible: false,
+    editableField: "ownerId",
+    id: "ownerId",
+    label: "Owner",
+    minWidth: 130,
+  },
+  {
+    defaultVisible: false,
+    editableField: "status",
+    id: "status",
+    label: "Status",
+    minWidth: 110,
+  },
+  {
+    defaultVisible: false,
+    id: "priority",
+    label: "Priority",
+    minWidth: 90,
+  },
+  {
+    align: "right",
+    defaultVisible: false,
+    editableField: "percentComplete",
+    id: "percentComplete",
+    label: "Progress",
+    minWidth: 92,
+  },
+  {
+    align: "right",
+    defaultVisible: false,
+    id: "durationDays",
+    label: "Duration",
+    minWidth: 84,
+  },
+];
+const defaultGridColumnIds = gridColumns
+  .filter((column) => column.defaultVisible)
+  .map((column) => column.id);
+const optionalGridColumns = gridColumns.filter((column) => !column.defaultVisible);
 const milestoneCategories: Array<{
   category: ApiMilestoneCategory;
   label: string;
@@ -127,8 +217,20 @@ export function PlanningWorkspace({
   projectMembers = [],
   workspace,
 }: PlanningWorkspaceProps) {
-  const [zoom, setZoom] = useState<ZoomMode>("week");
+  const [zoom, setZoom] = useState<ZoomMode>(() => readZoomPreference());
+  const [gridWidth, setGridWidth] = useState(() =>
+    readNumberPreference(preferenceKeys.splitWidth, defaultGridWidth),
+  );
   const [fitTimelineWidth, setFitTimelineWidth] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<PlanningViewMode>(() =>
+    readViewModePreference(),
+  );
+  const [visibleOptionalColumnIds, setVisibleOptionalColumnIds] = useState<
+    GridColumnId[]
+  >(() => readVisibleColumnPreference());
+  const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -144,6 +246,7 @@ export function PlanningWorkspace({
   });
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [rowDragState, setRowDragState] = useState<RowDragState | null>(null);
+  const workspaceSplitRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const verticalScrollRef = useRef<HTMLElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
@@ -158,6 +261,42 @@ export function PlanningWorkspace({
   useEffect(() => {
     setLocalSchedules(workspace.schedules);
   }, [workspace.schedules]);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateResponsiveState = () => {
+      setIsCompactViewport(window.innerWidth < compactViewportWidth);
+      if (!readPreference(preferenceKeys.splitWidth)) {
+        const containerWidth = workspaceSplitRef.current?.clientWidth ?? 0;
+        if (containerWidth > 0) {
+          setGridWidth(clampGridWidth(containerWidth * 0.35));
+        }
+      }
+    };
+
+    updateResponsiveState();
+    window.addEventListener("resize", updateResponsiveState);
+    return () => window.removeEventListener("resize", updateResponsiveState);
+  }, []);
+
+  useEffect(() => {
+    writePreference(preferenceKeys.splitWidth, String(Math.round(gridWidth)));
+  }, [gridWidth]);
+
+  useEffect(() => {
+    writePreference(preferenceKeys.columns, visibleOptionalColumnIds.join(","));
+  }, [visibleOptionalColumnIds]);
+
+  useEffect(() => {
+    writePreference(preferenceKeys.viewMode, viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    writePreference(preferenceKeys.zoom, zoom);
+  }, [zoom]);
 
   const rows = useMemo(
     () => buildVisibleRows(localSchedules, collapsedIds),
@@ -190,6 +329,24 @@ export function PlanningWorkspace({
     () => buildOwnerOptions(workspace, projectMembers),
     [projectMembers, workspace],
   );
+  const visibleColumns = useMemo(() => {
+    const enabledIds = new Set<GridColumnId>([
+      ...defaultGridColumnIds,
+      ...(isCompactViewport ? [] : visibleOptionalColumnIds),
+    ]);
+    return gridColumns.filter((column) => enabledIds.has(column.id));
+  }, [isCompactViewport, visibleOptionalColumnIds]);
+  const gridMinContentWidth = useMemo(
+    () => visibleColumns.reduce((width, column) => width + column.minWidth, 0),
+    [visibleColumns],
+  );
+  const gridContentWidth = Math.max(gridWidth, gridMinContentWidth);
+  const gridTemplateColumns = buildGridTemplateColumns(
+    visibleColumns,
+    gridContentWidth,
+  );
+  const showGrid = viewMode !== "timeline";
+  const showTimeline = viewMode !== "grid";
 
   useEffect(() => {
     setDependencyDraft((currentDraft) => ({
@@ -645,6 +802,284 @@ export function PlanningWorkspace({
     dependencySectionRef.current?.scrollIntoView({ block: "nearest" });
   }
 
+  function toggleOptionalColumn(columnId: GridColumnId) {
+    setVisibleOptionalColumnIds((currentIds) =>
+      currentIds.includes(columnId)
+        ? currentIds.filter((id) => id !== columnId)
+        : [...currentIds, columnId],
+    );
+  }
+
+  function restoreDefaultColumns() {
+    setVisibleOptionalColumnIds([]);
+  }
+
+  function startSplitterDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!showGrid || !showTimeline) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const clientX = getReactPointerClientX(event);
+    if (!Number.isFinite(clientX)) {
+      return;
+    }
+    const containerLeft =
+      workspaceSplitRef.current?.getBoundingClientRect().left ?? 0;
+    const nextGridWidth = clampGridWidth(clientX - containerLeft);
+    setGridWidth(nextGridWidth);
+  }
+
+  function moveSplitter(event: React.PointerEvent<HTMLButtonElement>) {
+    if (event.buttons !== 1 || !showGrid || !showTimeline) {
+      return;
+    }
+    const clientX = getReactPointerClientX(event);
+    if (!Number.isFinite(clientX)) {
+      return;
+    }
+    const containerLeft =
+      workspaceSplitRef.current?.getBoundingClientRect().left ?? 0;
+    setGridWidth(clampGridWidth(clientX - containerLeft));
+  }
+
+  function adjustSplitterWithKeyboard(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+  ) {
+    if (!showGrid || !showTimeline) {
+      return;
+    }
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+    event.preventDefault();
+    setGridWidth((currentWidth) =>
+      clampGridWidth(currentWidth + (event.key === "ArrowRight" ? 24 : -24)),
+    );
+  }
+
+  function renderGridCell(
+    column: GridColumnDefinition,
+    row: VisibleRow,
+    hasChildren: boolean,
+    isSummary: boolean,
+    isMilestone: boolean,
+    title: string,
+  ) {
+    const { depth, schedule, wbs } = row;
+    if (column.id === "wbs") {
+      return (
+        <span
+          className="flex h-full cursor-move items-center border-r border-slate-100 px-3 font-mono text-slate-500"
+          key={column.id}
+          title="Drag to reorder"
+        >
+          <span aria-hidden className="mr-2 text-slate-400">
+            ::
+          </span>
+          <span>{wbs}</span>
+        </span>
+      );
+    }
+
+    if (column.id === "taskTitle") {
+      return (
+        <div
+          className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-3"
+          key={column.id}
+          style={{ paddingLeft: 12 + depth * 16 }}
+        >
+          {hasChildren ? (
+            <button
+              aria-label={`${collapsedIds.has(schedule.taskId) ? "Expand" : "Collapse"} ${title}`}
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-slate-500"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleCollapse(schedule.taskId);
+              }}
+              type="button"
+            >
+              {collapsedIds.has(schedule.taskId) ? "►" : "▼"}
+            </button>
+          ) : (
+            <span className="w-3 shrink-0" />
+          )}
+          <TypeBadge schedule={schedule} />
+          <span
+            className={`min-w-0 truncate text-slate-950 ${
+              isSummary ? "font-bold" : "font-medium"
+            }`}
+            onClick={
+              isEditing(editingCell, schedule.taskId, "taskTitle")
+                ? undefined
+                : (event) => {
+                    event.stopPropagation();
+                    startEditing(schedule, "taskTitle");
+                  }
+            }
+            ref={(element) => {
+              if (element) {
+                taskNameRefs.current.set(schedule.taskId, element);
+              } else {
+                taskNameRefs.current.delete(schedule.taskId);
+              }
+            }}
+            tabIndex={-1}
+            title={title}
+          >
+            {isEditing(editingCell, schedule.taskId, "taskTitle") ? (
+              <InlineEditor
+                error={editError}
+                field="taskTitle"
+                onBlur={() => void commitEdit()}
+                onChange={(value) =>
+                  setEditingCell((current) =>
+                    current ? { ...current, value } : current,
+                  )
+                }
+                onKeyDown={handleEditKeyDown}
+                ownerOptions={ownerOptions}
+                value={editingCell?.value ?? ""}
+              />
+            ) : (
+              title
+            )}
+          </span>
+          {isSummary ? (
+            <span
+              className="shrink-0 rounded-sm border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600"
+              title="Calculated from child tasks."
+            >
+              Calculated
+            </span>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (column.id === "ownerId") {
+      return (
+        <EditableGridCell
+          align="left"
+          displayValue={formatOwner(schedule)}
+          editingCell={editingCell}
+          editError={editError}
+          field="ownerId"
+          key={column.id}
+          onBlur={() => void commitEdit()}
+          onChange={(value) =>
+            setEditingCell((current) =>
+              current ? { ...current, value } : current,
+            )
+          }
+          onCommitValue={(value) => void commitEditValue(schedule, "ownerId", value)}
+          onKeyDown={handleEditKeyDown}
+          onStartEdit={() => startEditing(schedule, "ownerId")}
+          ownerOptions={ownerOptions}
+          readOnly={isReadOnlyField(schedule, "ownerId")}
+          schedule={schedule}
+        />
+      );
+    }
+
+    if (column.id === "plannedStartDate" || column.id === "plannedFinishDate") {
+      const field = column.id;
+      return (
+        <EditableGridCell
+          displayValue={formatDateCell(schedule, field)}
+          editingCell={editingCell}
+          editError={editError}
+          field={field}
+          key={column.id}
+          onBlur={() => void commitEdit()}
+          onChange={(value) =>
+            setEditingCell((current) =>
+              current ? { ...current, value } : current,
+            )
+          }
+          onCommitValue={(value) => void commitEditValue(schedule, field, value)}
+          onKeyDown={handleEditKeyDown}
+          onStartEdit={() => startEditing(schedule, field)}
+          ownerOptions={ownerOptions}
+          readOnly={isReadOnlyField(schedule, field)}
+          schedule={schedule}
+        />
+      );
+    }
+
+    if (column.id === "status") {
+      return (
+        <EditableGridCell
+          displayValue={
+            isMilestone
+              ? getMilestoneState(schedule)
+              : formatStatus(schedule.status ?? schedule.task?.status)
+          }
+          editingCell={editingCell}
+          editError={editError}
+          field="status"
+          key={column.id}
+          onBlur={() => void commitEdit()}
+          onChange={(value) =>
+            setEditingCell((current) =>
+              current ? { ...current, value } : current,
+            )
+          }
+          onCommitValue={(value) => void commitEditValue(schedule, "status", value)}
+          onKeyDown={handleEditKeyDown}
+          onStartEdit={() => startEditing(schedule, "status")}
+          ownerOptions={ownerOptions}
+          readOnly={isReadOnlyField(schedule, "status")}
+          schedule={schedule}
+        />
+      );
+    }
+
+    if (column.id === "percentComplete") {
+      return (
+        <EditableGridCell
+          align="right"
+          displayValue={
+            isMilestone
+              ? getMilestoneState(schedule)
+              : `${Number(schedule.percentComplete).toFixed(0)}%`
+          }
+          editingCell={editingCell}
+          editError={editError}
+          field="percentComplete"
+          key={column.id}
+          onBlur={() => void commitEdit()}
+          onChange={(value) =>
+            setEditingCell((current) =>
+              current ? { ...current, value } : current,
+            )
+          }
+          onKeyDown={handleEditKeyDown}
+          onStartEdit={() => startEditing(schedule, "percentComplete")}
+          ownerOptions={ownerOptions}
+          readOnly={isReadOnlyField(schedule, "percentComplete")}
+          schedule={schedule}
+        />
+      );
+    }
+
+    const displayValue =
+      column.id === "priority"
+        ? formatPriority(schedule)
+        : `${Number(schedule.durationDays ?? 0)}d`;
+    return (
+      <span
+        className={`flex h-full min-w-0 items-center border-r border-slate-100 px-3 ${
+          column.align === "right" ? "justify-end text-right" : ""
+        }`}
+        key={column.id}
+        title={displayValue}
+      >
+        <span className="truncate">{displayValue}</span>
+      </span>
+    );
+  }
+
   return (
     <div className="flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
       <section
@@ -792,6 +1227,96 @@ export function PlanningWorkspace({
               </button>
             </ToolbarGroup>
             <ToolbarGroup label="View">
+              <span className="relative">
+                <button
+                  aria-expanded={isViewMenuOpen}
+                  aria-haspopup="menu"
+                  className={toolbarButtonClassName}
+                  onClick={() => {
+                    setIsColumnsMenuOpen(false);
+                    setIsViewMenuOpen((isOpen) => !isOpen);
+                  }}
+                  type="button"
+                >
+                  View <span aria-hidden>▾</span>
+                </button>
+                {isViewMenuOpen ? (
+                  <span
+                    className="absolute right-0 top-9 z-30 w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                    role="menu"
+                  >
+                    {[
+                      ["split", "Grid + Timeline"],
+                      ["grid", "Grid Only"],
+                      ["timeline", "Timeline Only"],
+                    ].map(([mode, label]) => (
+                      <button
+                        className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                        key={mode}
+                        onClick={() => {
+                          setViewMode(mode as PlanningViewMode);
+                          setIsViewMenuOpen(false);
+                        }}
+                        role="menuitemradio"
+                        aria-checked={viewMode === mode}
+                        type="button"
+                      >
+                        <span>{label}</span>
+                        <span aria-hidden>{viewMode === mode ? "*" : ""}</span>
+                      </button>
+                    ))}
+                  </span>
+                ) : null}
+              </span>
+              <span className="relative">
+                <button
+                  aria-expanded={isColumnsMenuOpen}
+                  aria-haspopup="menu"
+                  className={toolbarButtonClassName}
+                  disabled={!showGrid}
+                  onClick={() => {
+                    setIsViewMenuOpen(false);
+                    setIsColumnsMenuOpen((isOpen) => !isOpen);
+                  }}
+                  type="button"
+                >
+                  Columns <span aria-hidden>▾</span>
+                </button>
+                {isColumnsMenuOpen ? (
+                  <span
+                    className="absolute right-0 top-9 z-30 w-48 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                    role="menu"
+                  >
+                    {optionalGridColumns.map((column) => {
+                      const checked =
+                        !isCompactViewport &&
+                        visibleOptionalColumnIds.includes(column.id);
+                      return (
+                        <label
+                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
+                          key={column.id}
+                        >
+                          <input
+                            checked={checked}
+                            disabled={isCompactViewport}
+                            onChange={() => toggleOptionalColumn(column.id)}
+                            type="checkbox"
+                          />
+                          <span>{column.label}</span>
+                        </label>
+                      );
+                    })}
+                    <button
+                      className="mt-1 w-full rounded border-t border-slate-100 px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={restoreDefaultColumns}
+                      role="menuitem"
+                      type="button"
+                    >
+                      Restore Defaults
+                    </button>
+                  </span>
+                ) : null}
+              </span>
               <button
                 className={toolbarButtonClassName}
                 disabled={!hasSummaryTasks}
@@ -846,308 +1371,137 @@ export function PlanningWorkspace({
         ref={verticalScrollRef}
       >
         <div
-          className="grid min-h-[560px] min-w-0"
-          style={{
-            gridTemplateColumns: `${planningGridWidth}px minmax(0, 1fr)`,
-          }}
+          aria-label="Planning split workspace"
+          className="flex min-h-[560px] min-w-0"
+          data-grid-width={Math.round(gridWidth)}
+          data-view-mode={viewMode}
+          ref={workspaceSplitRef}
         >
-        <div className="overflow-hidden border-r border-slate-200">
-          <div
-            className="sticky top-0 z-10 grid h-11 items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
-            style={{
-              gridTemplateColumns: planningGridTemplate,
-              width: planningGridWidth,
-            }}
-          >
-            <span className="h-full border-r border-slate-200 px-3 py-3">
-              WBS
-            </span>
-            <span className="h-full border-r border-slate-200 px-4 py-3">
-              Type
-            </span>
-            <span className="h-full border-r border-slate-200 px-4 py-3">
-              Name
-            </span>
-            <span className="h-full border-r border-slate-200 px-4 py-3">
-              Owner
-            </span>
-            <span className="h-full border-r border-slate-200 px-3 py-3">
-              Start / Date
-            </span>
-            <span className="h-full border-r border-slate-200 px-3 py-3">
-              Finish
-            </span>
-            <span className="h-full border-r border-slate-200 px-3 py-3">
-              Status
-            </span>
-            <span className="h-full border-r border-slate-200 px-3 py-3 text-right">
-              Progress
-            </span>
-            <span className="h-full px-3 py-3">
-              Priority
-            </span>
-          </div>
-          {rows.map(({ depth, schedule, wbs }) => {
-            const hasChildren = localSchedules.some(
-              (candidate) => candidate.parentTaskId === schedule.taskId,
-            );
-            const title = getTaskTitle(schedule);
-            const isSummary = schedule.taskKind === "summary";
-            const isMilestone = schedule.taskKind === "milestone";
-            return (
+          {showGrid ? (
+            <div
+              aria-label="Frozen planning grid"
+              className="min-w-0 overflow-x-auto border-r border-slate-200"
+              style={{
+                flex: showTimeline ? `0 0 ${gridWidth}px` : "1 1 auto",
+                width: showTimeline ? gridWidth : "100%",
+              }}
+            >
               <div
-                aria-label={`Planning row ${wbs} ${title}`}
-                aria-selected={selectedTaskId === schedule.taskId}
-                className={`grid h-[46px] items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
-                  isSummary
-                    ? "bg-slate-50 font-semibold text-slate-800"
-                    : isMilestone
-                      ? "bg-white text-slate-700"
-                      : ""
-                } ${
-                  selectedTaskId === schedule.taskId
-                    ? "bg-brand/10 shadow-[inset_3px_0_0_#0f766e] ring-1 ring-inset ring-brand/30"
-                    : ""
-                }`}
-                draggable={!editingCell}
-                key={schedule.taskId}
-                onClick={() => {
-                  setSelectedTaskId(schedule.taskId);
-                  setHierarchyError(null);
-                }}
-                onDragEnd={() => setRowDragState(null)}
-                onDragOver={(event) => handleRowDragOver(event, schedule)}
-                onDragStart={(event) => startRowDrag(event, schedule)}
-                onDrop={(event) => dropRow(event, schedule)}
-                onKeyDown={(event) =>
-                  handleRowKeyDown(event, schedule, hasChildren)
-                }
-                ref={(element) => {
-                  if (element) {
-                    rowRefs.current.set(schedule.taskId, element);
-                  } else {
-                    rowRefs.current.delete(schedule.taskId);
-                  }
-                }}
-                role="row"
+                className="sticky top-0 z-10 grid h-11 items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
                 style={{
-                  gridTemplateColumns: planningGridTemplate,
-                  width: planningGridWidth,
+                  gridTemplateColumns,
+                  width: gridContentWidth,
                 }}
-                tabIndex={0}
               >
-                <span
-                  className="flex h-full cursor-move items-center border-r border-slate-100 px-3 font-mono text-slate-500"
-                  title="Drag to reorder"
-                >
-                  <span aria-hidden className="mr-2 text-slate-400">
-                    ::
-                  </span>
-                  <span>{wbs}</span>
-                </span>
-                <div className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-3">
-                  <TypeBadge schedule={schedule} />
-                </div>
-                <div
-                  className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-4"
-                  style={{ paddingLeft: 16 + depth * 18 }}
-                >
-                  {hasChildren ? (
-                    <button
-                      aria-label={`${collapsedIds.has(schedule.taskId) ? "Expand" : "Collapse"} ${title}`}
-                      className="inline-flex h-5 w-5 items-center justify-center text-slate-500"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleCollapse(schedule.taskId);
-                      }}
-                      type="button"
-                    >
-                      {collapsedIds.has(schedule.taskId) ? "►" : "▼"}
-                    </button>
-                  ) : (
-                    <span className="w-3" />
-                  )}
-                  <TaskTypeIcon taskKind={schedule.taskKind} />
+                {visibleColumns.map((column) => (
                   <span
-                    className={`truncate text-slate-950 ${
-                      isSummary ? "font-bold" : "font-medium"
+                    className={`h-full border-r border-slate-200 px-3 py-3 ${
+                      column.align === "right" ? "text-right" : ""
                     }`}
-                    onClick={
-                      isEditing(editingCell, schedule.taskId, "taskTitle")
-                        ? undefined
-                        : (event) => {
-                            event.stopPropagation();
-                            startEditing(schedule, "taskTitle");
-                          }
+                    key={column.id}
+                  >
+                    {column.label}
+                  </span>
+                ))}
+              </div>
+              {rows.map((row) => {
+                const { schedule, wbs } = row;
+                const hasChildren = localSchedules.some(
+                  (candidate) => candidate.parentTaskId === schedule.taskId,
+                );
+                const title = getTaskTitle(schedule);
+                const isSummary = schedule.taskKind === "summary";
+                const isMilestone = schedule.taskKind === "milestone";
+                return (
+                  <div
+                    aria-label={`Planning row ${wbs} ${title}`}
+                    aria-selected={selectedTaskId === schedule.taskId}
+                    className={`grid h-[46px] items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
+                      isSummary
+                        ? "bg-slate-50 font-semibold text-slate-800"
+                        : isMilestone
+                          ? "bg-white text-slate-700"
+                          : ""
+                    } ${
+                      selectedTaskId === schedule.taskId
+                        ? "bg-brand/10 shadow-[inset_3px_0_0_#0f766e] ring-1 ring-inset ring-brand/30"
+                        : ""
+                    }`}
+                    draggable={!editingCell}
+                    key={schedule.taskId}
+                    onClick={() => {
+                      setSelectedTaskId(schedule.taskId);
+                      setHierarchyError(null);
+                    }}
+                    onDragEnd={() => setRowDragState(null)}
+                    onDragOver={(event) => handleRowDragOver(event, schedule)}
+                    onDragStart={(event) => startRowDrag(event, schedule)}
+                    onDrop={(event) => dropRow(event, schedule)}
+                    onKeyDown={(event) =>
+                      handleRowKeyDown(event, schedule, hasChildren)
                     }
                     ref={(element) => {
                       if (element) {
-                        taskNameRefs.current.set(schedule.taskId, element);
+                        rowRefs.current.set(schedule.taskId, element);
                       } else {
-                        taskNameRefs.current.delete(schedule.taskId);
+                        rowRefs.current.delete(schedule.taskId);
                       }
                     }}
-                    tabIndex={-1}
-                    title={title}
+                    role="row"
+                    style={{
+                      gridTemplateColumns,
+                      width: gridContentWidth,
+                    }}
+                    tabIndex={0}
                   >
-                    {isEditing(editingCell, schedule.taskId, "taskTitle") ? (
-                      <InlineEditor
-                        error={editError}
-                        field="taskTitle"
-                        onBlur={() => void commitEdit()}
-                        onChange={(value) =>
-                          setEditingCell((current) =>
-                            current ? { ...current, value } : current,
-                          )
-                        }
-                        onKeyDown={handleEditKeyDown}
-                        ownerOptions={ownerOptions}
-                        value={editingCell?.value ?? ""}
-                      />
-                    ) : (
-                      title
+                    {visibleColumns.map((column) =>
+                      renderGridCell(
+                        column,
+                        row,
+                        hasChildren,
+                        isSummary,
+                        isMilestone,
+                        title,
+                      ),
                     )}
-                  </span>
-                  {isSummary ? (
-                    <span
-                      className="shrink-0 rounded-sm border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600"
-                      title="Calculated from child tasks."
-                    >
-                      Calculated
-                    </span>
-                  ) : null}
-                </div>
-                <EditableGridCell
-                  align="left"
-                  displayValue={formatOwner(schedule)}
-                  editingCell={editingCell}
-                  editError={editError}
-                  field="ownerId"
-                  onBlur={() => void commitEdit()}
-                  onChange={(value) =>
-                    setEditingCell((current) =>
-                      current ? { ...current, value } : current,
-                    )
-                  }
-                  onCommitValue={(value) =>
-                    void commitEditValue(schedule, "ownerId", value)
-                  }
-                  onKeyDown={handleEditKeyDown}
-                  onStartEdit={() => startEditing(schedule, "ownerId")}
-                  ownerOptions={ownerOptions}
-                  readOnly={isReadOnlyField(schedule, "ownerId")}
-                  schedule={schedule}
-                />
-                <EditableGridCell
-                  displayValue={formatDateCell(schedule, "plannedStartDate")}
-                  editingCell={editingCell}
-                  editError={editError}
-                  field="plannedStartDate"
-                  onBlur={() => void commitEdit()}
-                  onChange={(value) =>
-                    setEditingCell((current) =>
-                      current ? { ...current, value } : current,
-                    )
-                  }
-                  onKeyDown={handleEditKeyDown}
-                  onStartEdit={() => startEditing(schedule, "plannedStartDate")}
-                  ownerOptions={ownerOptions}
-                  readOnly={isReadOnlyField(schedule, "plannedStartDate")}
-                  schedule={schedule}
-                  onCommitValue={(value) =>
-                    void commitEditValue(schedule, "plannedStartDate", value)
-                  }
-                />
-                <EditableGridCell
-                  displayValue={formatDateCell(schedule, "plannedFinishDate")}
-                  editingCell={editingCell}
-                  editError={editError}
-                  field="plannedFinishDate"
-                  onBlur={() => void commitEdit()}
-                  onChange={(value) =>
-                    setEditingCell((current) =>
-                      current ? { ...current, value } : current,
-                    )
-                  }
-                  onCommitValue={(value) =>
-                    void commitEditValue(schedule, "plannedFinishDate", value)
-                  }
-                  onKeyDown={handleEditKeyDown}
-                  onStartEdit={() =>
-                    startEditing(schedule, "plannedFinishDate")
-                  }
-                  ownerOptions={ownerOptions}
-                  readOnly={isReadOnlyField(schedule, "plannedFinishDate")}
-                  schedule={schedule}
-                />
-                <EditableGridCell
-                  displayValue={
-                    isMilestone
-                      ? getMilestoneState(schedule)
-                      : formatStatus(schedule.status ?? schedule.task?.status)
-                  }
-                  editingCell={editingCell}
-                  editError={editError}
-                  field="status"
-                  onBlur={() => void commitEdit()}
-                  onChange={(value) =>
-                    setEditingCell((current) =>
-                      current ? { ...current, value } : current,
-                    )
-                  }
-                  onCommitValue={(value) =>
-                    void commitEditValue(schedule, "status", value)
-                  }
-                  onKeyDown={handleEditKeyDown}
-                  onStartEdit={() => startEditing(schedule, "status")}
-                  ownerOptions={ownerOptions}
-                  readOnly={isReadOnlyField(schedule, "status")}
-                  schedule={schedule}
-                />
-                <EditableGridCell
-                  align="right"
-                  displayValue={
-                    isMilestone
-                      ? getMilestoneState(schedule)
-                      : `${Number(schedule.percentComplete).toFixed(0)}%`
-                  }
-                  editingCell={editingCell}
-                  editError={editError}
-                  field="percentComplete"
-                  onBlur={() => void commitEdit()}
-                  onChange={(value) =>
-                    setEditingCell((current) =>
-                      current ? { ...current, value } : current,
-                    )
-                  }
-                  onKeyDown={handleEditKeyDown}
-                  onStartEdit={() => startEditing(schedule, "percentComplete")}
-                  ownerOptions={ownerOptions}
-                  readOnly={isReadOnlyField(schedule, "percentComplete")}
-                  schedule={schedule}
-                />
-                <span
-                  className="flex h-full min-w-0 items-center px-3"
-                  title={formatPriority(schedule)}
+                  </div>
+                );
+              })}
+              {rows.length === 0 ? (
+                <div
+                  className="px-4 py-12 text-center text-sm text-slate-500"
+                  style={{ width: gridContentWidth }}
                 >
-                  <span className="truncate">{formatPriority(schedule)}</span>
-                </span>
-              </div>
-            );
-          })}
-          {rows.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm text-slate-500">
-              <p className="font-semibold text-slate-700">No Tasks</p>
-              <p className="mt-1">Add a task to start building the project WBS.</p>
+                  <p className="font-semibold text-slate-700">No Tasks</p>
+                  <p className="mt-1">Add a task to start building the project WBS.</p>
+                </div>
+              ) : null}
             </div>
           ) : null}
-        </div>
 
-        <div
-          aria-label="Scrollable timeline pane"
-          className="min-w-0 overflow-x-auto overflow-y-hidden"
-          ref={timelineScrollRef}
-        >
+          {showGrid && showTimeline ? (
+            <button
+              aria-label="Resize planning panes"
+              aria-orientation="vertical"
+              aria-valuemax={maxGridWidth}
+              aria-valuemin={minGridWidth}
+              aria-valuenow={Math.round(gridWidth)}
+              className="z-10 w-2 shrink-0 cursor-col-resize border-x border-slate-200 bg-slate-100 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-brand"
+              onKeyDown={adjustSplitterWithKeyboard}
+              onPointerDown={startSplitterDrag}
+              onPointerMove={moveSplitter}
+              role="separator"
+              title="Resize planning panes"
+              type="button"
+            />
+          ) : null}
+
+          {showTimeline ? (
+            <div
+              aria-label="Scrollable timeline pane"
+              className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+              ref={timelineScrollRef}
+            >
           <div
             data-testid="timeline-scroll-surface"
             style={{
@@ -1356,7 +1710,8 @@ export function PlanningWorkspace({
             </defs>
           </svg>
           </div>
-        </div>
+            </div>
+          ) : null}
       </div>
 
       <section
@@ -1478,7 +1833,90 @@ export function PlanningWorkspace({
   );
 }
 
+function clampGridWidth(width: number) {
+  return Math.min(maxGridWidth, Math.max(minGridWidth, Math.round(width)));
+}
+
+function buildGridTemplateColumns(
+  columns: GridColumnDefinition[],
+  contentWidth: number,
+) {
+  const fixedWidth = columns
+    .filter((column) => column.id !== "taskTitle")
+    .reduce((width, column) => width + column.minWidth, 0);
+  const taskTitleWidth = Math.max(180, contentWidth - fixedWidth);
+  return columns
+    .map((column) =>
+      column.id === "taskTitle"
+        ? `${taskTitleWidth}px`
+        : `${column.minWidth}px`,
+    )
+    .join(" ");
+}
+
+function readPreference(key: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writePreference(key: string, value: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures; the workspace remains usable without persisted preferences.
+  }
+}
+
+function readNumberPreference(key: string, fallback: number) {
+  const preference = readPreference(key);
+  if (preference === null) {
+    return fallback;
+  }
+  const value = Number(preference);
+  return Number.isFinite(value) ? clampGridWidth(value) : fallback;
+}
+
+function readZoomPreference(): ZoomMode {
+  const value = readPreference(preferenceKeys.zoom);
+  return zoomModes.includes(value as ZoomMode) ? (value as ZoomMode) : "week";
+}
+
+function readViewModePreference(): PlanningViewMode {
+  const value = readPreference(preferenceKeys.viewMode);
+  return value === "grid" || value === "timeline" || value === "split"
+    ? value
+    : "split";
+}
+
+function readVisibleColumnPreference(): GridColumnId[] {
+  const value = readPreference(preferenceKeys.columns);
+  if (!value) {
+    return [];
+  }
+  const optionalColumnIds = new Set(optionalGridColumns.map((column) => column.id));
+  return value
+    .split(",")
+    .filter((columnId): columnId is GridColumnId =>
+      optionalColumnIds.has(columnId as GridColumnId),
+    );
+}
+
 function getPointerClientX(event: React.PointerEvent<SVGElement>) {
+  const nativeClientX = (event.nativeEvent as PointerEvent | MouseEvent)
+    .clientX;
+  return Number.isFinite(event.clientX) ? event.clientX : nativeClientX;
+}
+
+function getReactPointerClientX(event: React.PointerEvent<HTMLElement>) {
   const nativeClientX = (event.nativeEvent as PointerEvent | MouseEvent)
     .clientX;
   return Number.isFinite(event.clientX) ? event.clientX : nativeClientX;

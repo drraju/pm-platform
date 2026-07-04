@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
 import type { ApiPlanningWorkspace } from "@/lib/api/client";
 
@@ -366,7 +366,42 @@ function openAddMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
 }
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+  window.dispatchEvent(new Event("resize"));
+}
+
+function ensureLocalStorage() {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      clear: () => store.clear(),
+      getItem: (key: string) => store.get(key) ?? null,
+      removeItem: (key: string) => store.delete(key),
+      setItem: (key: string, value: string) => store.set(key, value),
+    },
+  });
+}
+
+function showColumns(...labels: string[]) {
+  fireEvent.click(screen.getByRole("button", { name: /columns/i }));
+  labels.forEach((label) => {
+    fireEvent.click(screen.getByLabelText(label));
+  });
+  fireEvent.click(screen.getByRole("button", { name: /columns/i }));
+}
+
 describe("PlanningWorkspace", () => {
+  beforeEach(() => {
+    ensureLocalStorage();
+    window.localStorage.clear();
+    setViewportWidth(1440);
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -417,8 +452,8 @@ describe("PlanningWorkspace", () => {
     expect(within(taskRow).getByText("Task")).toBeInTheDocument();
     expect(within(milestoneRow).getByText("Release")).toBeInTheDocument();
     expect(within(milestoneRow).getByText("Same date")).toBeInTheDocument();
-    expect(screen.getByText("Priority")).toBeInTheDocument();
-    expect(within(taskRow).getByText("medium")).toBeInTheDocument();
+    expect(screen.queryByText("Priority")).not.toBeInTheDocument();
+    expect(within(taskRow).queryByText("medium")).not.toBeInTheDocument();
     expect(screen.queryByText("Duration")).not.toBeInTheDocument();
   });
 
@@ -453,7 +488,8 @@ describe("PlanningWorkspace", () => {
     );
 
     const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
-    fireEvent.doubleClick(within(summaryRow).getByText("20%"));
+    showColumns("Progress");
+    fireEvent.click(within(summaryRow).getByText("20%"));
 
     expect(screen.queryByDisplayValue("20")).not.toBeInTheDocument();
     expect(onUpdateSchedule).not.toHaveBeenCalled();
@@ -526,6 +562,179 @@ describe("PlanningWorkspace", () => {
     });
   });
 
+  it("renders the default enterprise split layout with only core planning columns", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const splitWorkspace = screen.getByLabelText("Planning split workspace");
+    expect(splitWorkspace).toHaveAttribute("data-view-mode", "split");
+    expect(splitWorkspace).toHaveAttribute("data-grid-width", "420");
+    expect(screen.getByLabelText("Frozen planning grid")).toBeInTheDocument();
+    expect(screen.getByLabelText("Scrollable timeline pane")).toBeInTheDocument();
+    expect(screen.getByRole("separator", { name: "Resize planning panes" })).toBeInTheDocument();
+    expect(screen.getByText("WBS")).toBeInTheDocument();
+    expect(screen.getByText("Task Name")).toBeInTheDocument();
+    expect(screen.getByText("Start")).toBeInTheDocument();
+    expect(screen.getByText("Finish")).toBeInTheDocument();
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
+    expect(screen.queryByText("Status")).not.toBeInTheDocument();
+  });
+
+  it("resizes the split panes with the draggable divider and persists the width", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const separator = screen.getByRole("separator", { name: "Resize planning panes" });
+    fireEvent(
+      separator,
+      new MouseEvent("pointerdown", { bubbles: true, clientX: 360 }),
+    );
+    fireEvent(
+      separator,
+      new MouseEvent("pointermove", { bubbles: true, buttons: 1, clientX: 480 }),
+    );
+
+    expect(screen.getByLabelText("Planning split workspace")).toHaveAttribute(
+      "data-grid-width",
+      "480",
+    );
+    expect(window.localStorage.getItem("pm-platform.planningWorkspace.splitWidth")).toBe("480");
+
+    fireEvent.keyDown(separator, { key: "ArrowLeft" });
+    expect(screen.getByLabelText("Planning split workspace")).toHaveAttribute(
+      "data-grid-width",
+      "456",
+    );
+  });
+
+  it("shows optional grid columns without shrinking the timeline pane", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    showColumns("Owner", "Status", "Priority", "Progress", "Duration");
+
+    const splitWorkspace = screen.getByLabelText("Planning split workspace");
+    expect(splitWorkspace).toHaveAttribute("data-grid-width", "420");
+    expect(screen.getByText("Owner")).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("Priority")).toBeInTheDocument();
+    expect(screen.getByText("Progress")).toBeInTheDocument();
+    expect(screen.getByText("Duration")).toBeInTheDocument();
+    expect(screen.getByLabelText("Scrollable timeline pane")).toHaveClass("flex-1");
+  });
+
+  it("persists split width, visible columns and zoom in local storage", () => {
+    const { unmount } = render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    showColumns("Owner");
+    const separator = screen.getByRole("separator", { name: "Resize planning panes" });
+    fireEvent(
+      separator,
+      new MouseEvent("pointerdown", { bubbles: true, clientX: 360 }),
+    );
+    fireEvent(
+      separator,
+      new MouseEvent("pointermove", { bubbles: true, buttons: 1, clientX: 500 }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Zoom In" }));
+    unmount();
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByLabelText("Planning split workspace")).toHaveAttribute(
+      "data-grid-width",
+      "500",
+    );
+    expect(screen.getByText("Owner")).toBeInTheDocument();
+    expect(screen.getByLabelText("Time Scale")).toHaveValue("day");
+  });
+
+  it("supports grid-only and timeline-only view modes", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^View/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Grid Only/ }));
+
+    expect(screen.getByLabelText("Frozen planning grid")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Scrollable timeline pane")).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator", { name: "Resize planning panes" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^View/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Timeline Only/ }));
+
+    expect(screen.queryByLabelText("Frozen planning grid")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Scrollable timeline pane")).toBeInTheDocument();
+  });
+
+  it("uses default columns on laptop-sized viewports even when optional columns are saved", () => {
+    window.localStorage.setItem(
+      "pm-platform.planningWorkspace.visibleColumns",
+      "ownerId,status,priority,percentComplete",
+    );
+    setViewportWidth(1024);
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByText("Task Name")).toBeInTheDocument();
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
+    expect(screen.queryByText("Status")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /columns/i }));
+    expect(screen.getByLabelText("Owner")).toBeDisabled();
+  });
+
   it("enables child creation only for selected summary rows", () => {
     render(
       <PlanningWorkspace
@@ -560,6 +769,7 @@ describe("PlanningWorkspace", () => {
     );
 
     const milestoneRow = screen.getByRole("row", { name: /1\.2 Gate approved/ });
+    showColumns("Status", "Progress");
     expect(within(milestoneRow).getAllByText("Pending")).toHaveLength(2);
 
     fireEvent.doubleClick(within(milestoneRow).getAllByText("Pending")[0]);
@@ -620,6 +830,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
+    showColumns("Owner");
     fireEvent.click(screen.getByTitle("Alice Ng"));
     const ownerSelect = screen
       .getByRole("option", { name: "Bob Stone" })
@@ -869,6 +1080,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
+    showColumns("Progress");
     fireEvent.click(screen.getByText("50%"));
     fireEvent.change(screen.getByDisplayValue("50"), {
       target: { value: "125" },
@@ -919,6 +1131,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
+    showColumns("Status", "Progress");
     const taskRow = screen.getByRole("row", { name: /1\.1 Design schedule/ });
 
     fireEvent.click(within(taskRow).getByText("07-05"));
