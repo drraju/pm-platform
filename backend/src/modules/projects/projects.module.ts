@@ -14,10 +14,12 @@ import { Project } from './entities/project.entity';
 import { ProjectVisibilityService } from './project-visibility.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
+import { PlanningSnapshotModule } from '../planning/planning-snapshot.module';
 
 @Module({
   imports: [
     HealthModule,
+    PlanningSnapshotModule,
     TypeOrmModule.forFeature([
       Project,
       ProjectBaseline,

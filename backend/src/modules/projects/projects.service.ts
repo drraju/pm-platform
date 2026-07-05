@@ -49,6 +49,7 @@ import {
   ProjectVisibilityActor,
   ProjectVisibilityService,
 } from './project-visibility.service';
+import { PlanningSnapshotService } from '../planning/planning-snapshot.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
 type AuthenticatedActor = AuthorizationActor;
@@ -80,6 +81,7 @@ export class ProjectsService {
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
+    private readonly planningSnapshotService: PlanningSnapshotService,
   ) {}
 
   async create(
@@ -321,6 +323,7 @@ export class ProjectsService {
 
     const task = await this.findProjectTask(projectId, taskId);
     await this.tasksRepository.softRemove(task);
+    await this.planningSnapshotService.rebuildWorkspaceSnapshot(projectId, actor);
   }
 
   async captureProjectBaseline(

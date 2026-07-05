@@ -20,6 +20,7 @@ import { ProjectMember } from '../entities/project-member.entity';
 import { Project } from '../entities/project.entity';
 import { ProjectVisibilityService } from '../project-visibility.service';
 import { ProjectsService } from '../projects.service';
+import { PlanningSnapshotService } from '../../planning/planning-snapshot.service';
 
 type MockRepository<T extends object = object> = Partial<
   Record<keyof Repository<T>, jest.Mock>
@@ -47,6 +48,9 @@ describe('ProjectsService', () => {
   let projectVisibilityService: {
     canViewProject: jest.Mock;
     getVisibleProjects: jest.Mock;
+  };
+  let planningSnapshotService: {
+    rebuildWorkspaceSnapshot: jest.Mock;
   };
   let transactionalEntityManager: {
     save: jest.Mock;
@@ -121,6 +125,9 @@ describe('ProjectsService', () => {
       canViewProject: jest.fn().mockResolvedValue(true),
       getVisibleProjects: jest.fn().mockResolvedValue([{ id: projectId }]),
     };
+    planningSnapshotService = {
+      rebuildWorkspaceSnapshot: jest.fn().mockResolvedValue(undefined),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -162,6 +169,10 @@ describe('ProjectsService', () => {
         {
           provide: ProjectVisibilityService,
           useValue: projectVisibilityService,
+        },
+        {
+          provide: PlanningSnapshotService,
+          useValue: planningSnapshotService,
         },
       ],
     }).compile();
@@ -969,6 +980,10 @@ describe('ProjectsService', () => {
     await service.removeProjectTask(projectId, taskId);
 
     expect(tasksRepository.softRemove).toHaveBeenCalledWith(task);
+    expect(planningSnapshotService.rebuildWorkspaceSnapshot).toHaveBeenCalledWith(
+      projectId,
+      undefined,
+    );
   });
 
   it('captures a project baseline with immutable snapshot rows', async () => {

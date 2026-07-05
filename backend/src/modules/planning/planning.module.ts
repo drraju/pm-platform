@@ -19,11 +19,13 @@ import { ResourceAllocation } from './entities/resource-allocation.entity';
 import { ResourceCapacity } from './entities/resource-capacity.entity';
 import { ResourceWorkloadSnapshot } from './entities/resource-workload-snapshot.entity';
 import { PlanningController } from './planning.controller';
+import { PlanningSnapshotModule } from './planning-snapshot.module';
 import { PlanningService } from './planning.service';
 
 @Module({
   imports: [
     AuthzModule,
+    PlanningSnapshotModule,
     ProjectsModule,
     TypeOrmModule.forFeature([
       PlanningScheduleSnapshot,
