@@ -329,6 +329,11 @@ export class PlanningService {
 
     if (input.parentTaskId !== undefined && input.parentTaskId !== null) {
       await this.ensureTaskCanContainChildren(projectId, input.parentTaskId);
+      await this.ensureNoPlanningHierarchyCycle(
+        projectId,
+        schedule.taskId,
+        input.parentTaskId,
+      );
     }
 
     if (input.ownerId !== undefined && input.ownerId !== null) {
@@ -366,6 +371,8 @@ export class PlanningService {
     if (
       schedule.task &&
       (input.ownerId !== undefined ||
+        input.parentTaskId !== undefined ||
+        input.sequenceNumber !== undefined ||
         input.status !== undefined ||
         input.taskTitle !== undefined ||
         input.milestoneCategory !== undefined ||
@@ -376,6 +383,12 @@ export class PlanningService {
     ) {
       if (input.ownerId !== undefined) {
         schedule.task.assigneeId = input.ownerId;
+      }
+      if (input.parentTaskId !== undefined) {
+        schedule.task.parentTaskId = input.parentTaskId;
+      }
+      if (input.sequenceNumber !== undefined) {
+        schedule.task.sequenceNumber = input.sequenceNumber;
       }
       if (input.status !== undefined) {
         schedule.task.status = input.status;
@@ -392,6 +405,7 @@ export class PlanningService {
       schedule.task.plannedEndDate = normalizedSchedule.plannedEndDate;
       schedule.task.plannedStartDate = normalizedSchedule.plannedStartDate;
       schedule.task.percentComplete = Number(schedule.percentComplete ?? 0);
+      schedule.task.updatedById = actor?.userId;
       await this.tasksRepository.save(schedule.task);
     }
 
@@ -1225,7 +1239,7 @@ export class PlanningService {
     taskId: string,
   ): Promise<Task> {
     const task = await this.tasksRepository.findOne({
-      select: { id: true, projectId: true, taskKind: true },
+      select: { id: true, parentTaskId: true, projectId: true, taskKind: true },
       where: { id: taskId, projectId },
     });
     if (!task) {
@@ -1249,6 +1263,22 @@ export class PlanningService {
     return task;
   }
 
+  private async ensureNoPlanningHierarchyCycle(
+    projectId: string,
+    taskId: string,
+    parentTaskId: string,
+  ) {
+    let currentParentId: string | null = parentTaskId;
+
+    while (currentParentId) {
+      if (currentParentId === taskId) {
+        throw new BadRequestException('Task hierarchy cannot contain cycles');
+      }
+
+      const currentParent = await this.findProjectTask(projectId, currentParentId);
+      currentParentId = currentParent.parentTaskId ?? null;
+    }
+  }
   private async findPlanningTaskSchedule(
     projectId: string,
     scheduleId: string,

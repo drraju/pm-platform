@@ -16,6 +16,7 @@ import {
   type ApiPlanningWorkspace,
   type ApiTaskType,
 } from "@/features/planning";
+import { deleteProjectTask } from "@/lib/api/client";
 import { useProjectMembers } from "@/hooks/use-project-members";
 
 export default function ProjectPlanningPage() {
@@ -172,6 +173,23 @@ function PageContent() {
     }
   }
 
+  async function handleDeleteTask(taskId: string) {
+    setError(null);
+    setIsSaving(true);
+    try {
+      await deleteProjectTask(projectId, taskId);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to delete task",
+      );
+      throw requestError;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <ProjectLayout
       activeTab="planning"
@@ -192,10 +210,12 @@ function PageContent() {
 
       {!isLoading && !areMembersLoading && workspace ? (
         <PlanningWorkspace
+          onDeleteTask={handleDeleteTask}
           isSaving={isSaving}
           onCreateDependency={handleCreateDependency}
           onCreateTask={handleCreateTask}
           onDeleteDependency={handleDeleteDependency}
+          onRefreshWorkspace={loadWorkspace}
           onUpdateSchedule={handleUpdateSchedule}
           projectMembers={members}
           workspace={workspace}

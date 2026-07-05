@@ -139,6 +139,20 @@ The canonical model uses three primary task types.
 
 Release and Drop are milestone categories, not separate primary task types.
 
+### Hierarchy Editing Rules
+
+- Name remains editable for Task, Summary, and Milestone rows.
+- Scheduling read-only rules apply to calculated schedule fields only and must
+  not lock the Name field.
+- Only Summary rows may contain child items.
+- A row cannot move beneath itself.
+- A Summary cannot move beneath one of its descendants.
+- Task hierarchy mutations must reject circular parent chains.
+- Moving under a Milestone is invalid.
+- Moving under a standard Task is invalid.
+- WBS numbering remains derived from current hierarchy and sibling order; it is
+  not stored as the authoritative structure.
+
 ## Summary Categories
 
 Summary categories label the WBS container without changing schedule math.
@@ -339,12 +353,45 @@ Collapsed summaries still render a summary row based on descendants.
 | Progress | Editable | Calculated | Usually 0 or 100 |
 | Priority | Editable | Not applicable | Editable |
 
+### Delete Semantics
+
+- Task: delete immediately.
+- Milestone: delete immediately.
+- Empty Summary: delete immediately.
+- Summary with children: require confirmation with exactly three outcomes:
+  - Move children to parent.
+  - Delete Summary and all descendants.
+  - Cancel.
+
+When a Summary is deleted and children are promoted, the promoted children keep
+their relative order and are inserted at the deleted Summary position in the
+parent sibling list.
+
+### Move Semantics
+
+Initial enterprise WBS editing supports command-style hierarchy changes before
+drag and drop:
+
+- Move Up.
+- Move Down.
+- Move to Parent.
+- Move to Summary...
+
+Move operations must:
+
+- Recalculate sibling ordering automatically.
+- Refresh derived WBS numbering automatically.
+- Refresh summary rollups after persistence.
+- Refresh the Planning Workspace after completion so server-derived hierarchy
+  and rollup state becomes authoritative again.
+
 ## Planning Toolbar
 
 The toolbar should provide grouped actions:
 
 ```text
 Tasks:      Add Task | Add Child | Add Summary | Add Milestone | Add Release/Drop | Delete
+WBS:        Move Up | Move Down | Move to Parent | Move to Summary...
 Schedule:   Dependencies | Today
 Zoom:       Zoom Out | Zoom In | Fit
 View:       Expand All | Collapse All | Time Scale | Filters | Help

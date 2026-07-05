@@ -58,7 +58,9 @@ type PlanningWorkspaceProps = {
     parentTaskId?: string | null;
     taskType?: ApiTaskType;
   }) => Promise<ApiPlanningTaskSchedule>;
+  onDeleteTask?: (taskId: string) => Promise<void>;
   onDeleteDependency: (dependencyId: string) => Promise<void>;
+  onRefreshWorkspace?: () => Promise<void>;
   onUpdateSchedule: (
     taskId: string,
     input: {
@@ -91,6 +93,15 @@ type DragState = {
 
 type RowDragState = {
   parentTaskId: string | null;
+  taskId: string;
+};
+
+type SummaryDeleteDialogState = {
+  taskId: string;
+};
+
+type MoveToSummaryState = {
+  destinationTaskId: string;
   taskId: string;
 };
 
@@ -278,7 +289,9 @@ export function PlanningWorkspace({
   isSaving = false,
   onCreateDependency,
   onCreateTask,
+  onDeleteTask = async () => {},
   onDeleteDependency,
+  onRefreshWorkspace = async () => {},
   onUpdateSchedule,
   projectMembers = [],
   workspace,
@@ -315,6 +328,10 @@ export function PlanningWorkspace({
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
+  const [summaryDeleteDialog, setSummaryDeleteDialog] =
+    useState<SummaryDeleteDialogState | null>(null);
+  const [moveToSummaryState, setMoveToSummaryState] =
+    useState<MoveToSummaryState | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isAddChildMenuOpen, setIsAddChildMenuOpen] = useState(false);
   const [dependencyDraft, setDependencyDraft] = useState({
@@ -416,6 +433,27 @@ export function PlanningWorkspace({
     () => buildOwnerOptions(workspace, projectMembers),
     [projectMembers, workspace],
   );
+  const selectedTaskChildren = useMemo(
+    () =>
+      selectedTaskId
+        ? getDirectChildSchedules(localSchedules, selectedTaskId)
+        : [],
+    [localSchedules, selectedTaskId],
+  );
+  const selectedTaskSiblingContext = useMemo(
+    () =>
+      selectedTaskId
+        ? getSiblingContext(localSchedules, selectedTaskId)
+        : null,
+    [localSchedules, selectedTaskId],
+  );
+  const moveToSummaryOptions = useMemo(
+    () =>
+      selectedTaskId
+        ? getEligibleSummaryMoveTargets(localSchedules, selectedTaskId)
+        : [],
+    [localSchedules, selectedTaskId],
+  );
   const visibleColumns = useMemo(() => {
     const enabledIds = new Set<GridColumnId>([
       ...defaultGridColumnIds,
@@ -453,13 +491,20 @@ export function PlanningWorkspace({
     if (!taskName) {
       return;
     }
-    taskName.focus();
     rowRefs.current.get(newTaskFocusId)?.scrollIntoView?.({
       block: "nearest",
       inline: "nearest",
     });
+    const input = taskName.querySelector("input");
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+      const cursorPosition = input.value.length;
+      input.setSelectionRange(cursorPosition, cursorPosition);
+    } else {
+      taskName.focus();
+    }
     setNewTaskFocusId(null);
-  }, [newTaskFocusId, localSchedules]);
+  }, [editingCell, newTaskFocusId, localSchedules]);
 
   const totalHeight = headerHeight + rows.length * rowHeight + 24;
   const totalWidth = timeline.width;
@@ -473,6 +518,10 @@ export function PlanningWorkspace({
   );
   const hasSummaryTasks = summaryTaskIds.size > 0;
   const canCreateChildForSelection = selectedSchedule?.taskKind === "summary";
+  const canMoveSelectionUp = Boolean(selectedTaskSiblingContext?.previousTaskId);
+  const canMoveSelectionDown = Boolean(selectedTaskSiblingContext?.nextTaskId);
+  const canMoveSelectionToParent = Boolean(selectedSchedule?.parentTaskId);
+  const canMoveSelectionToSummary = moveToSummaryOptions.length > 0;
   const addChildTooltip = getAddChildTooltip(selectedSchedule);
 
   useLayoutEffect(() => {
@@ -546,6 +595,12 @@ export function PlanningWorkspace({
     }
     setSelectedTaskId(keepSelectedTaskId ?? schedule.taskId);
     if (focusCreatedTask) {
+      setEditingCell({
+        field: "taskTitle",
+        taskId: schedule.taskId,
+        value: getTaskTitle(schedule),
+      });
+      setEditError(null);
       setNewTaskFocusId(schedule.taskId);
     }
     setIsAddMenuOpen(false);
@@ -925,6 +980,193 @@ export function PlanningWorkspace({
     setShowFloatColumns(false);
   }
 
+  async function applyHierarchyOperation(input: {
+    deletedTaskIds?: string[];
+    nextSchedules: ApiPlanningTaskSchedule[];
+    selectedTaskId?: string | null;
+  }) {
+    const previousSchedules = localSchedules;
+    const previousSelectedTaskId = selectedTaskId;
+    const deletedTaskIds = input.deletedTaskIds ?? [];
+    const nextSelectedTaskId =
+      typeof input.selectedTaskId === "undefined"
+        ? previousSelectedTaskId
+        : input.selectedTaskId;
+    const changedSchedules = buildHierarchyUpdatePayloads(
+      previousSchedules,
+      input.nextSchedules,
+      deletedTaskIds,
+    );
+
+    setHierarchyError(null);
+    setSummaryDeleteDialog(null);
+    setMoveToSummaryState(null);
+    setLocalSchedules(input.nextSchedules);
+    setSelectedTaskId(nextSelectedTaskId);
+
+    try {
+      for (const schedule of changedSchedules) {
+        await onUpdateSchedule(schedule.taskId, {
+          parentTaskId: schedule.parentTaskId ?? null,
+          sequenceNumber: schedule.sequenceNumber ?? null,
+        });
+      }
+      for (const taskId of deletedTaskIds) {
+        await onDeleteTask(taskId);
+      }
+      await onRefreshWorkspace();
+    } catch (error) {
+      setLocalSchedules(previousSchedules);
+      setSelectedTaskId(previousSelectedTaskId);
+      setHierarchyError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update the work breakdown structure.",
+      );
+    }
+  }
+
+  async function moveSelectedTask(direction: "up" | "down") {
+    if (!selectedTaskId) {
+      return;
+    }
+    const result = reorderScheduleByDirection(localSchedules, selectedTaskId, direction);
+    if (!result) {
+      return;
+    }
+    await applyHierarchyOperation({ nextSchedules: result, selectedTaskId });
+  }
+
+  async function moveSelectionToParent() {
+    if (!selectedSchedule?.parentTaskId) {
+      return;
+    }
+
+    const parentSchedule = localSchedules.find(
+      (schedule) => schedule.taskId === selectedSchedule.parentTaskId,
+    );
+    if (!parentSchedule) {
+      return;
+    }
+
+    const targetParentId = parentSchedule.parentTaskId ?? null;
+    const targetSiblings = getOrderedSiblings(localSchedules, targetParentId);
+    const parentIndex = targetSiblings.findIndex(
+      (schedule) => schedule.taskId === parentSchedule.taskId,
+    );
+    const result = moveScheduleToParent(
+      localSchedules,
+      selectedSchedule.taskId,
+      targetParentId,
+      parentIndex + 1,
+    );
+
+    if ("error" in result) {
+      setHierarchyError(result.error);
+      return;
+    }
+
+    await applyHierarchyOperation({
+      nextSchedules: result,
+      selectedTaskId: selectedSchedule.taskId,
+    });
+  }
+
+  function openMoveToSummaryDialog() {
+    if (!selectedTaskId || moveToSummaryOptions.length === 0) {
+      return;
+    }
+    setMoveToSummaryState({
+      destinationTaskId: moveToSummaryOptions[0].taskId,
+      taskId: selectedTaskId,
+    });
+    setHierarchyError(null);
+  }
+
+  async function confirmMoveToSummary() {
+    if (!moveToSummaryState) {
+      return;
+    }
+
+    const result = moveScheduleToParent(
+      localSchedules,
+      moveToSummaryState.taskId,
+      moveToSummaryState.destinationTaskId,
+    );
+    if ("error" in result) {
+      setHierarchyError(result.error);
+      return;
+    }
+
+    await applyHierarchyOperation({
+      nextSchedules: result,
+      selectedTaskId: moveToSummaryState.taskId,
+    });
+  }
+
+  async function deleteSelectedTask() {
+    if (!selectedSchedule) {
+      return;
+    }
+
+    if (
+      selectedSchedule.taskKind === "summary" &&
+      selectedTaskChildren.length > 0
+    ) {
+      setSummaryDeleteDialog({ taskId: selectedSchedule.taskId });
+      setHierarchyError(null);
+      return;
+    }
+
+    const deletedTaskIds = [selectedSchedule.taskId];
+    const nextSchedules = removeSchedulesAndRenumber(localSchedules, deletedTaskIds);
+    await applyHierarchyOperation({
+      deletedTaskIds,
+      nextSchedules,
+      selectedTaskId: getFallbackSelectionTaskId(
+        localSchedules,
+        nextSchedules,
+        selectedSchedule.taskId,
+      ),
+    });
+  }
+
+  async function deleteSummaryAndMoveChildrenToParent() {
+    if (!summaryDeleteDialog) {
+      return;
+    }
+
+    const deletedTaskIds = [summaryDeleteDialog.taskId];
+    const nextSchedules = promoteSummaryChildren(localSchedules, summaryDeleteDialog.taskId);
+    await applyHierarchyOperation({
+      deletedTaskIds,
+      nextSchedules,
+      selectedTaskId: getFallbackSelectionTaskId(
+        localSchedules,
+        nextSchedules,
+        summaryDeleteDialog.taskId,
+      ),
+    });
+  }
+
+  async function deleteSummaryAndDescendants() {
+    if (!summaryDeleteDialog) {
+      return;
+    }
+
+    const deletedTaskIds = getDeletionOrder(localSchedules, summaryDeleteDialog.taskId);
+    const nextSchedules = removeSchedulesAndRenumber(localSchedules, deletedTaskIds);
+    await applyHierarchyOperation({
+      deletedTaskIds,
+      nextSchedules,
+      selectedTaskId: getFallbackSelectionTaskId(
+        localSchedules,
+        nextSchedules,
+        summaryDeleteDialog.taskId,
+      ),
+    });
+  }
+
   function startSplitterDrag(event: React.PointerEvent<HTMLButtonElement>) {
     if (!showGrid || !showTimeline) {
       return;
@@ -1261,7 +1503,7 @@ export function PlanningWorkspace({
   }
 
   return (
-    <div className="flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
+    <div className="relative flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
       <section
         aria-label="Planning toolbar"
         className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 p-3 backdrop-blur"
@@ -1407,11 +1649,57 @@ export function PlanningWorkspace({
               </span>
               <button
                 className={toolbarButtonClassName}
-                disabled
-                title="Task deletion is outside this UX polish story."
+                disabled={!selectedSchedule || isSaving}
+                onClick={() => void deleteSelectedTask()}
+                title={
+                  selectedSchedule
+                    ? selectedSchedule.taskKind === "summary" &&
+                      selectedTaskChildren.length > 0
+                      ? "Delete this Summary and choose what to do with its child items."
+                      : `Delete ${getTaskTitle(selectedSchedule)}`
+                    : "Select a row to delete."
+                }
                 type="button"
               >
                 Delete
+              </button>
+            </ToolbarGroup>
+            <ToolbarGroup label="WBS">
+              <button
+                className={toolbarButtonClassName}
+                disabled={!canMoveSelectionUp || isSaving}
+                onClick={() => void moveSelectedTask("up")}
+                title="Move the selected item up within its siblings."
+                type="button"
+              >
+                Move Up
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled={!canMoveSelectionDown || isSaving}
+                onClick={() => void moveSelectedTask("down")}
+                title="Move the selected item down within its siblings."
+                type="button"
+              >
+                Move Down
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled={!canMoveSelectionToParent || isSaving}
+                onClick={() => void moveSelectionToParent()}
+                title="Outdent the selected item to its parent level."
+                type="button"
+              >
+                Move to Parent
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                disabled={!canMoveSelectionToSummary || isSaving}
+                onClick={openMoveToSummaryDialog}
+                title="Move the selected item beneath a different Summary."
+                type="button"
+              >
+                Move to Summary...
               </button>
             </ToolbarGroup>
             <ToolbarGroup label="Schedule">
@@ -2081,6 +2369,85 @@ export function PlanningWorkspace({
       </section>
       </section>
 
+      {summaryDeleteDialog ? (
+        <DialogBackdrop>
+          <DialogPanel title="Delete Summary">
+            <p className="text-sm text-slate-700">
+              This Summary contains child items.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                className={toolbarButtonClassName}
+                onClick={() => void deleteSummaryAndMoveChildrenToParent()}
+                type="button"
+              >
+                Move children to parent
+              </button>
+              <button
+                className="rounded-md border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                onClick={() => void deleteSummaryAndDescendants()}
+                type="button"
+              >
+                Delete Summary and all descendants
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                onClick={() => setSummaryDeleteDialog(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          </DialogPanel>
+        </DialogBackdrop>
+      ) : null}
+
+      {moveToSummaryState ? (
+        <DialogBackdrop>
+          <DialogPanel title="Move to Summary">
+            <label className="block text-sm font-semibold text-slate-700">
+              Destination Summary
+              <select
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                onChange={(event) =>
+                  setMoveToSummaryState((current) =>
+                    current
+                      ? {
+                          ...current,
+                          destinationTaskId: event.target.value,
+                        }
+                      : current,
+                  )
+                }
+                value={moveToSummaryState.destinationTaskId}
+              >
+                {moveToSummaryOptions.map((option) => (
+                  <option key={option.taskId} value={option.taskId}>
+                    {option.wbs} {option.taskTitle}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                className={toolbarButtonClassName}
+                onClick={() => void confirmMoveToSummary()}
+                type="button"
+              >
+                Move
+              </button>
+              <button
+                className={toolbarButtonClassName}
+                onClick={() => setMoveToSummaryState(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          </DialogPanel>
+        </DialogBackdrop>
+      ) : null}
+
       <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
         <span>{localSchedules.length} Tasks</span>
         <span>{summaryTaskIds.size} Summary Tasks</span>
@@ -2205,6 +2572,29 @@ function ToolbarGroup({
         {label}
       </span>
       {children}
+    </div>
+  );
+}
+
+function DialogBackdrop({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/20 px-4">
+      {children}
+    </div>
+  );
+}
+
+function DialogPanel({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+      <h3 className="text-base font-semibold text-slate-950">{title}</h3>
+      <div className="mt-3">{children}</div>
     </div>
   );
 }
@@ -2894,6 +3284,340 @@ function reorderSchedulesWithinParent(
     changedSchedules,
     schedules: nextSchedules,
   };
+}
+
+function reorderScheduleByDirection(
+  schedules: ApiPlanningTaskSchedule[],
+  taskId: string,
+  direction: "up" | "down",
+) {
+  const siblingContext = getSiblingContext(schedules, taskId);
+  if (!siblingContext) {
+    return null;
+  }
+
+  const targetTaskId =
+    direction === "up"
+      ? siblingContext.previousTaskId
+      : siblingContext.nextTaskId;
+  if (!targetTaskId) {
+    return null;
+  }
+
+  const reordered = reorderSchedulesWithinParent(schedules, taskId, targetTaskId);
+  return reordered?.schedules ?? null;
+}
+
+function moveScheduleToParent(
+  schedules: ApiPlanningTaskSchedule[],
+  taskId: string,
+  nextParentTaskId: string | null,
+  insertIndex?: number,
+):
+  | ApiPlanningTaskSchedule[]
+  | {
+      error: string;
+    } {
+  const taskMap = new Map(schedules.map((schedule) => [schedule.taskId, schedule]));
+  const movedSchedule = taskMap.get(taskId);
+  if (!movedSchedule) {
+    return { error: "The selected row could not be found." };
+  }
+
+  if (nextParentTaskId === taskId) {
+    return { error: "A task cannot be its own parent." };
+  }
+
+  if (nextParentTaskId) {
+    const targetParent = taskMap.get(nextParentTaskId);
+    if (!targetParent) {
+      return { error: "The destination Summary could not be found." };
+    }
+    if (targetParent.taskKind === "milestone") {
+      return {
+        error: "Milestones are scheduling events and cannot contain child items.",
+      };
+    }
+    if (targetParent.taskKind !== "summary") {
+      return { error: "Only summary tasks can contain child items." };
+    }
+    const descendantIds = new Set(collectDescendantTaskIds(schedules, taskId));
+    if (descendantIds.has(nextParentTaskId)) {
+      return { error: "Task hierarchy cannot contain cycles." };
+    }
+  }
+
+  const currentParentTaskId = movedSchedule.parentTaskId ?? null;
+  const sourceSiblings = getOrderedSiblings(schedules, currentParentTaskId).filter(
+    (schedule) => schedule.taskId !== taskId,
+  );
+  const targetSiblings =
+    currentParentTaskId === nextParentTaskId
+      ? sourceSiblings
+      : getOrderedSiblings(schedules, nextParentTaskId);
+  const destinationIndex = Math.max(
+    0,
+    Math.min(insertIndex ?? targetSiblings.length, targetSiblings.length),
+  );
+  const reorderedTargetSiblings = [...targetSiblings];
+  reorderedTargetSiblings.splice(destinationIndex, 0, {
+    ...movedSchedule,
+    parentTaskId: nextParentTaskId,
+  });
+
+  const nextByTaskId = new Map<string, ApiPlanningTaskSchedule>();
+  if (currentParentTaskId === nextParentTaskId) {
+    reorderedTargetSiblings.forEach((schedule, index) => {
+      nextByTaskId.set(schedule.taskId, {
+        ...schedule,
+        parentTaskId: nextParentTaskId,
+        sequenceNumber: index + 1,
+      });
+    });
+  } else {
+    sourceSiblings.forEach((schedule, index) => {
+      nextByTaskId.set(schedule.taskId, {
+        ...schedule,
+        parentTaskId: currentParentTaskId,
+        sequenceNumber: index + 1,
+      });
+    });
+    reorderedTargetSiblings.forEach((schedule, index) => {
+      nextByTaskId.set(schedule.taskId, {
+        ...schedule,
+        parentTaskId: nextParentTaskId,
+        sequenceNumber: index + 1,
+      });
+    });
+  }
+
+  return schedules.map((schedule) => nextByTaskId.get(schedule.taskId) ?? schedule);
+}
+
+function promoteSummaryChildren(
+  schedules: ApiPlanningTaskSchedule[],
+  summaryTaskId: string,
+) {
+  const summarySchedule = schedules.find((schedule) => schedule.taskId === summaryTaskId);
+  if (!summarySchedule) {
+    return schedules;
+  }
+
+  const destinationParentId = summarySchedule.parentTaskId ?? null;
+  const directChildren = getOrderedSiblings(schedules, summaryTaskId).map((schedule) => ({
+    ...schedule,
+    parentTaskId: destinationParentId,
+  }));
+  const destinationSiblings = getOrderedSiblings(schedules, destinationParentId).filter(
+    (schedule) => schedule.taskId !== summaryTaskId,
+  );
+  const summaryIndex = getOrderedSiblings(schedules, destinationParentId).findIndex(
+    (schedule) => schedule.taskId === summaryTaskId,
+  );
+  const nextDestinationSiblings = [...destinationSiblings];
+  nextDestinationSiblings.splice(summaryIndex, 0, ...directChildren);
+  const nextByTaskId = new Map<string, ApiPlanningTaskSchedule>();
+  nextDestinationSiblings.forEach((schedule, index) => {
+    nextByTaskId.set(schedule.taskId, {
+      ...schedule,
+      parentTaskId: destinationParentId,
+      sequenceNumber: index + 1,
+    });
+  });
+
+  return schedules
+    .filter((schedule) => schedule.taskId !== summaryTaskId)
+    .map((schedule) => nextByTaskId.get(schedule.taskId) ?? schedule);
+}
+
+function removeSchedulesAndRenumber(
+  schedules: ApiPlanningTaskSchedule[],
+  removedTaskIds: string[],
+) {
+  const removedTaskIdSet = new Set(removedTaskIds);
+  const remainingSchedules = schedules.filter(
+    (schedule) => !removedTaskIdSet.has(schedule.taskId),
+  );
+  const byParentId = new Map<string | null, ApiPlanningTaskSchedule[]>();
+  const sourceIndex = new Map(
+    remainingSchedules.map((schedule, index) => [schedule.taskId, index]),
+  );
+
+  remainingSchedules.forEach((schedule) => {
+    const parentTaskId = schedule.parentTaskId ?? null;
+    byParentId.set(parentTaskId, [
+      ...(byParentId.get(parentTaskId) ?? []),
+      schedule,
+    ]);
+  });
+
+  const nextByTaskId = new Map<string, ApiPlanningTaskSchedule>();
+  byParentId.forEach((items, parentTaskId) => {
+    items
+      .sort((left, right) => compareScheduleOrder(left, right, sourceIndex))
+      .forEach((schedule, index) => {
+        nextByTaskId.set(schedule.taskId, {
+          ...schedule,
+          parentTaskId,
+          sequenceNumber: index + 1,
+        });
+      });
+  });
+
+  return remainingSchedules.map(
+    (schedule) => nextByTaskId.get(schedule.taskId) ?? schedule,
+  );
+}
+
+function buildHierarchyUpdatePayloads(
+  previousSchedules: ApiPlanningTaskSchedule[],
+  nextSchedules: ApiPlanningTaskSchedule[],
+  deletedTaskIds: string[],
+) {
+  const deletedTaskIdSet = new Set(deletedTaskIds);
+  const previousByTaskId = new Map(
+    previousSchedules.map((schedule) => [schedule.taskId, schedule]),
+  );
+
+  return nextSchedules.filter((schedule) => {
+    if (deletedTaskIdSet.has(schedule.taskId)) {
+      return false;
+    }
+    const previousSchedule = previousByTaskId.get(schedule.taskId);
+    if (!previousSchedule) {
+      return false;
+    }
+    return (
+      (previousSchedule.parentTaskId ?? null) !== (schedule.parentTaskId ?? null) ||
+      (previousSchedule.sequenceNumber ?? null) !== (schedule.sequenceNumber ?? null)
+    );
+  });
+}
+
+function getOrderedSiblings(
+  schedules: ApiPlanningTaskSchedule[],
+  parentTaskId: string | null,
+) {
+  const sourceIndex = new Map(
+    schedules.map((schedule, index) => [schedule.taskId, index]),
+  );
+  return schedules
+    .filter((schedule) => (schedule.parentTaskId ?? null) === parentTaskId)
+    .sort((left, right) => compareScheduleOrder(left, right, sourceIndex));
+}
+
+function getDirectChildSchedules(
+  schedules: ApiPlanningTaskSchedule[],
+  parentTaskId: string,
+) {
+  return getOrderedSiblings(schedules, parentTaskId);
+}
+
+function getSiblingContext(
+  schedules: ApiPlanningTaskSchedule[],
+  taskId: string,
+): {
+  nextTaskId: string | null;
+  previousTaskId: string | null;
+} | null {
+  const currentSchedule = schedules.find((schedule) => schedule.taskId === taskId);
+  if (!currentSchedule) {
+    return null;
+  }
+  const siblings = getOrderedSiblings(schedules, currentSchedule.parentTaskId ?? null);
+  const currentIndex = siblings.findIndex((schedule) => schedule.taskId === taskId);
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  return {
+    nextTaskId: siblings[currentIndex + 1]?.taskId ?? null,
+    previousTaskId: siblings[currentIndex - 1]?.taskId ?? null,
+  };
+}
+
+function collectDescendantTaskIds(
+  schedules: ApiPlanningTaskSchedule[],
+  taskId: string,
+): string[] {
+  const childrenByParentId = new Map<string | null, ApiPlanningTaskSchedule[]>();
+  schedules.forEach((schedule) => {
+    const parentTaskId = schedule.parentTaskId ?? null;
+    childrenByParentId.set(parentTaskId, [
+      ...(childrenByParentId.get(parentTaskId) ?? []),
+      schedule,
+    ]);
+  });
+
+  const descendantTaskIds: string[] = [];
+  const visit = (parentTaskId: string) => {
+    (childrenByParentId.get(parentTaskId) ?? []).forEach((schedule) => {
+      descendantTaskIds.push(schedule.taskId);
+      visit(schedule.taskId);
+    });
+  };
+  visit(taskId);
+  return descendantTaskIds;
+}
+
+function getEligibleSummaryMoveTargets(
+  schedules: ApiPlanningTaskSchedule[],
+  taskId: string,
+) {
+  const task = schedules.find((schedule) => schedule.taskId === taskId);
+  if (!task) {
+    return [];
+  }
+  const excludedTaskIds = new Set([
+    taskId,
+    task.parentTaskId ?? "",
+    ...collectDescendantTaskIds(schedules, taskId),
+  ]);
+
+  return buildVisibleRows(schedules, new Set())
+    .filter(
+      (row) =>
+        row.schedule.taskKind === "summary" &&
+        !excludedTaskIds.has(row.schedule.taskId),
+    )
+    .map((row) => ({
+      taskId: row.schedule.taskId,
+      taskTitle: getTaskTitle(row.schedule),
+      wbs: row.wbs,
+    }));
+}
+
+function getDeletionOrder(
+  schedules: ApiPlanningTaskSchedule[],
+  taskId: string,
+) {
+  const rows = buildVisibleRows(schedules, new Set());
+  const descendantIdSet = new Set(collectDescendantTaskIds(schedules, taskId));
+  return rows
+    .filter(
+      (row) =>
+        row.schedule.taskId === taskId ||
+        descendantIdSet.has(row.schedule.taskId),
+    )
+    .sort((left, right) => right.depth - left.depth)
+    .map((row) => row.schedule.taskId);
+}
+
+function getFallbackSelectionTaskId(
+  previousSchedules: ApiPlanningTaskSchedule[],
+  nextSchedules: ApiPlanningTaskSchedule[],
+  removedTaskId: string,
+) {
+  const previousRows = buildVisibleRows(previousSchedules, new Set());
+  const removedIndex = previousRows.findIndex(
+    (row) => row.schedule.taskId === removedTaskId,
+  );
+  const nextRows = buildVisibleRows(nextSchedules, new Set());
+  if (nextRows.length === 0) {
+    return null;
+  }
+  const fallbackIndex = Math.max(0, Math.min(removedIndex, nextRows.length - 1));
+  return nextRows[fallbackIndex]?.schedule.taskId ?? null;
 }
 
 function compareScheduleOrder(

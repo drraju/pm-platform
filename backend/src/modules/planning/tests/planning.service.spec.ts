@@ -824,7 +824,7 @@ describe('PlanningService', () => {
     );
 
     expect(tasksRepository.findOne).toHaveBeenCalledWith({
-      select: { id: true, projectId: true, taskKind: true },
+      select: { id: true, parentTaskId: true, projectId: true, taskKind: true },
       where: { id: 'parent-task-id', projectId },
     });
     expect(usersRepository.findOne).toHaveBeenCalledWith({
@@ -832,7 +832,12 @@ describe('PlanningService', () => {
       where: { id: 'new-owner-id' },
     });
     expect(tasksRepository.save).toHaveBeenCalledWith(
-      expect.objectContaining({ assigneeId: 'new-owner-id' }),
+      expect.objectContaining({
+        assigneeId: 'new-owner-id',
+        parentTaskId: 'parent-task-id',
+        sequenceNumber: 3,
+        updatedById: actor.userId,
+      }),
     );
     expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -990,6 +995,52 @@ describe('PlanningService', () => {
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
 
+  it('rejects moving a planning row beneath its own descendant', async () => {
+    const schedule = {
+      durationDays: 4,
+      id: 'summary-schedule-row-id',
+      parentTaskId: null,
+      percentComplete: 25,
+      plannedEndDate: '2026-07-05',
+      plannedStartDate: '2026-07-01',
+      projectId,
+      task: { id: 'summary-task-id', projectId, taskKind: TaskKind.Summary } as Task,
+      taskId: 'summary-task-id',
+      taskKind: TaskKind.Summary,
+    } as PlanningTaskSchedule;
+
+    planningTaskSchedulesRepository.findOne?.mockResolvedValue(schedule);
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'child-summary-id',
+        parentTaskId: 'summary-task-id',
+        projectId,
+        taskKind: TaskKind.Summary,
+      })
+      .mockResolvedValueOnce({
+        id: 'child-summary-id',
+        parentTaskId: 'summary-task-id',
+        projectId,
+        taskKind: TaskKind.Summary,
+      })
+      .mockResolvedValueOnce({
+        id: 'summary-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Summary,
+      });
+
+    await expect(
+      service.updatePlanningTaskSchedule(
+        projectId,
+        'summary-schedule-row-id',
+        { parentTaskId: 'child-summary-id' },
+        actor,
+      ),
+    ).rejects.toThrow('Task hierarchy cannot contain cycles');
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+  });
+
   it('rejects manual summary schedule edits', async () => {
     planningTaskSchedulesRepository.findOne?.mockResolvedValue({
       durationDays: 4,
@@ -1080,7 +1131,7 @@ describe('PlanningService', () => {
 
     expect(scheduleSnapshotsRepository.manager.transaction).toHaveBeenCalled();
     expect(tasksRepository.findOne).toHaveBeenCalledWith({
-      select: { id: true, projectId: true, taskKind: true },
+      select: { id: true, parentTaskId: true, projectId: true, taskKind: true },
       where: { id: 'parent-task-id', projectId },
     });
     expect(tasksRepository.save).toHaveBeenCalledWith(
