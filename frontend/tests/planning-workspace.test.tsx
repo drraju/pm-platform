@@ -2109,6 +2109,61 @@ describe("PlanningWorkspace", () => {
     expect(onUpdateSchedule).not.toHaveBeenCalled();
   });
 
+  it("reparents a task when dropped onto another summary and refreshes WBS numbering", async () => {
+    const onRefreshWorkspace = vi.fn().mockResolvedValue(undefined);
+    const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
+      Promise.resolve({
+        ...wbsEditingWorkspace.schedules.find((schedule) => schedule.taskId === taskId),
+        ...input,
+      }),
+    );
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onRefreshWorkspace={onRefreshWorkspace}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={wbsEditingWorkspace}
+      />,
+    );
+
+    dragRow(/1\.1 Design schedule/, /2 Execution/);
+
+    expect(screen.getByRole("row", { name: /2\.2 Design schedule/ })).toBeInTheDocument();
+    await waitFor(() => expect(onUpdateSchedule).toHaveBeenCalledTimes(2));
+    expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
+      parentTaskId: "summary-2",
+      sequenceNumber: 2,
+    });
+    expect(onUpdateSchedule).toHaveBeenCalledWith("task-3", {
+      parentTaskId: "summary-1",
+      sequenceNumber: 1,
+    });
+    expect(onRefreshWorkspace).toHaveBeenCalled();
+  });
+
+  it("rejects cross-summary row drops onto standard tasks", async () => {
+    const onUpdateSchedule = vi.fn();
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={wbsEditingWorkspace}
+      />,
+    );
+
+    dragRow(/1\.1 Design schedule/, /2\.1 Build API/);
+
+    expect(
+      screen.getByText("Only summary tasks can contain child items."),
+    ).toBeInTheDocument();
+    expect(onUpdateSchedule).not.toHaveBeenCalled();
+  });
+
   it("keeps collapsed summary branches draggable without orphaning descendants", async () => {
     const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
       Promise.resolve({
@@ -2439,9 +2494,7 @@ describe("PlanningWorkspace", () => {
 
     render(<Harness />);
 
-    fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Move to Summary..." }));
-    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    dragRow(/1\.1 Design schedule/, /2 Execution/);
 
     await waitFor(() => {
       expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveTextContent(

@@ -828,21 +828,20 @@ export function PlanningWorkspace({
     event: React.DragEvent<HTMLDivElement>,
     targetSchedule: ApiPlanningTaskSchedule,
   ) {
-    if (
-      rowDragState &&
-      rowDragState.taskId !== targetSchedule.taskId &&
-      targetSchedule.taskKind === "milestone"
-    ) {
+    if (!rowDragState || rowDragState.taskId === targetSchedule.taskId) {
+      return;
+    }
+
+    if (targetSchedule.taskKind === "milestone") {
       event.preventDefault();
       event.dataTransfer.dropEffect = "none";
       return;
     }
 
-    if (
-      !rowDragState ||
-      rowDragState.taskId === targetSchedule.taskId ||
-      rowDragState.parentTaskId !== (targetSchedule.parentTaskId ?? null)
-    ) {
+    const sameParent =
+      rowDragState.parentTaskId === (targetSchedule.parentTaskId ?? null);
+    const isSummaryTarget = targetSchedule.taskKind === "summary";
+    if (!sameParent && !isSummaryTarget) {
       return;
     }
     event.preventDefault();
@@ -854,11 +853,12 @@ export function PlanningWorkspace({
     targetSchedule: ApiPlanningTaskSchedule,
   ) {
     event.preventDefault();
-    if (
-      rowDragState &&
-      rowDragState.taskId !== targetSchedule.taskId &&
-      targetSchedule.taskKind === "milestone"
-    ) {
+    if (!rowDragState || rowDragState.taskId === targetSchedule.taskId) {
+      setRowDragState(null);
+      return;
+    }
+
+    if (targetSchedule.taskKind === "milestone") {
       setHierarchyError(
         "Milestones are scheduling events and cannot contain child items.",
       );
@@ -866,34 +866,47 @@ export function PlanningWorkspace({
       return;
     }
 
-    if (
-      !rowDragState ||
-      rowDragState.taskId === targetSchedule.taskId ||
-      rowDragState.parentTaskId !== (targetSchedule.parentTaskId ?? null)
-    ) {
+    const sameParent =
+      rowDragState.parentTaskId === (targetSchedule.parentTaskId ?? null);
+    if (!sameParent && targetSchedule.taskKind !== "summary") {
+      setHierarchyError("Only summary tasks can contain child items.");
       setRowDragState(null);
       return;
     }
 
-    const reorder = reorderSchedulesWithinParent(
+    setRowDragState(null);
+
+    if (sameParent) {
+      const reorder = reorderSchedulesWithinParent(
+        localSchedules,
+        rowDragState.taskId,
+        targetSchedule.taskId,
+      );
+      if (!reorder) {
+        return;
+      }
+
+      await applyHierarchyOperation({
+        nextSchedules: reorder.schedules,
+        selectedTaskId: rowDragState.taskId,
+      });
+      return;
+    }
+
+    const moveResult = moveScheduleToParent(
       localSchedules,
       rowDragState.taskId,
       targetSchedule.taskId,
     );
-    setRowDragState(null);
-    if (!reorder) {
+    if ("error" in moveResult) {
+      setHierarchyError(moveResult.error);
       return;
     }
 
-    setLocalSchedules(reorder.schedules);
-    await Promise.all(
-      reorder.changedSchedules.map((schedule) =>
-        onUpdateSchedule(schedule.taskId, {
-          parentTaskId: schedule.parentTaskId ?? null,
-          sequenceNumber: schedule.sequenceNumber ?? null,
-        }),
-      ),
-    );
+    await applyHierarchyOperation({
+      nextSchedules: moveResult,
+      selectedTaskId: rowDragState.taskId,
+    });
   }
 
   function changeZoom(direction: "in" | "out") {
