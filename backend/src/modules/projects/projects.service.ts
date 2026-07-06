@@ -89,10 +89,36 @@ export class ProjectsService {
     actor?: AuthenticatedActor,
   ): Promise<Project> {
     await this.ensureCanCreateProject(actor);
-    await this.validateGovernanceUsers(createProjectDto);
+    if (!actor?.userId) {
+      throw new ForbiddenException('Authenticated user is required');
+    }
 
-    return this.projectsRepository.save(
-      this.projectsRepository.create(createProjectDto),
+    const normalizedInput = {
+      ...createProjectDto,
+      ownerId: actor.userId,
+    };
+    await this.validateGovernanceUsers(normalizedInput);
+
+    return this.projectsRepository.manager.transaction(
+      async (transactionalEntityManager) => {
+        const project = await transactionalEntityManager.save(
+          Project,
+          this.projectsRepository.create(normalizedInput),
+        );
+
+        await transactionalEntityManager.save(
+          ProjectMember,
+          this.projectMembersRepository.create({
+            createdById: actor.userId,
+            projectId: project.id,
+            role: ProjectRole.Owner,
+            updatedById: actor.userId,
+            userId: actor.userId,
+          }),
+        );
+
+        return project;
+      },
     );
   }
 

@@ -56,6 +56,11 @@ describe('ProjectsService', () => {
     save: jest.Mock;
     update: jest.Mock;
   };
+  const actor = {
+    email: 'owner@example.com',
+    roleId: 'role-id',
+    userId,
+  };
 
   beforeEach(async () => {
     projectsRepository = {
@@ -96,6 +101,14 @@ describe('ProjectsService', () => {
           return Promise.resolve({ id: 'project-baseline-id', ...input });
         }
 
+        if (entity === Project) {
+          return Promise.resolve({ id: projectId, ...input });
+        }
+
+        if (entity === ProjectMember) {
+          return Promise.resolve({ id: 'member-id', ...input });
+        }
+
         return Promise.resolve(input);
       }),
       update: jest.fn(() => Promise.resolve()),
@@ -113,7 +126,7 @@ describe('ProjectsService', () => {
       softRemove: jest.fn(() => Promise.resolve()),
     };
     usersRepository = {
-      findOne: jest.fn(),
+      findOne: jest.fn().mockResolvedValue({ id: userId }),
     };
     authorizationPolicyService = {
       canDeleteProject: jest.fn().mockResolvedValue(true),
@@ -181,28 +194,101 @@ describe('ProjectsService', () => {
   });
 
   it('creates a project from the existing DTO shape', async () => {
-    const result = await service.create({
-      name: 'ERP Modernization',
-      description: 'Finance platform delivery',
-      status: 'active',
-      targetEndDate: '2026-09-30',
-    });
+    const result = await service.create(
+      {
+        name: 'ERP Modernization',
+        description: 'Finance platform delivery',
+        status: 'active',
+        targetEndDate: '2026-09-30',
+      },
+      actor,
+    );
 
     expect(projectsRepository.create).toHaveBeenCalledWith({
       name: 'ERP Modernization',
       description: 'Finance platform delivery',
+      ownerId: userId,
       status: 'active',
       targetEndDate: '2026-09-30',
     });
-    expect(projectsRepository.save).toHaveBeenCalledWith({
-      name: 'ERP Modernization',
-      description: 'Finance platform delivery',
-      status: 'active',
-      targetEndDate: '2026-09-30',
-    });
-    expect(result).toEqual(
-      expect.objectContaining({ id: projectId, name: 'ERP Modernization' }),
+    expect(projectsRepository.manager.transaction).toHaveBeenCalled();
+    expect(transactionalEntityManager.save).toHaveBeenCalledWith(
+      Project,
+      expect.objectContaining({
+        name: 'ERP Modernization',
+        ownerId: userId,
+      }),
     );
+    expect(projectMembersRepository.create).toHaveBeenCalledWith({
+      createdById: userId,
+      projectId,
+      role: ProjectRole.Owner,
+      updatedById: userId,
+      userId,
+    });
+    expect(transactionalEntityManager.save).toHaveBeenCalledWith(
+      ProjectMember,
+      expect.objectContaining({
+        projectId,
+        role: ProjectRole.Owner,
+        userId,
+      }),
+    );
+    expect(projectMembersRepository.create).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: projectId,
+        name: 'ERP Modernization',
+        ownerId: userId,
+      }),
+    );
+  });
+
+  it('overrides any incoming ownerId with the authenticated creator', async () => {
+    await service.create(
+      {
+        name: 'ERP Modernization',
+        ownerId: 'different-user-id',
+      },
+      actor,
+    );
+
+    expect(projectsRepository.create).toHaveBeenCalledWith({
+      name: 'ERP Modernization',
+      ownerId: userId,
+    });
+  });
+
+  it('requires an authenticated creator when creating a project', async () => {
+    await expect(
+      service.create({
+        name: 'ERP Modernization',
+      }),
+    ).rejects.toThrow('Authenticated user is required');
+  });
+
+  it('rolls back project creation when owner membership creation fails', async () => {
+    const failure = new Error('membership insert failed');
+    transactionalEntityManager.save.mockImplementation((entity, input) => {
+      if (entity === Project) {
+        return Promise.resolve({ id: projectId, ...input });
+      }
+      if (entity === ProjectMember) {
+        return Promise.reject(failure);
+      }
+      return Promise.resolve(input);
+    });
+
+    await expect(
+      service.create(
+        {
+          name: 'ERP Modernization',
+        },
+        actor,
+      ),
+    ).rejects.toThrow('membership insert failed');
+
+    expect(projectsRepository.manager.transaction).toHaveBeenCalled();
   });
 
   it('lists projects with owner details newest first', async () => {
