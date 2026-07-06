@@ -47,6 +47,7 @@ const userId = '9fce3bfb-a20c-4748-ad1c-60a138e66cce';
 
 describe('PlanningService', () => {
   let service: PlanningService;
+  let planningSnapshotService: PlanningSnapshotService;
   let scheduleSnapshotsRepository: MockRepository<PlanningScheduleSnapshot>;
   let planningTaskSchedulesRepository: MockRepository<PlanningTaskSchedule>;
   let resourceAllocationsRepository: MockRepository<ResourceAllocation>;
@@ -240,6 +241,7 @@ describe('PlanningService', () => {
     }).compile();
 
     service = moduleRef.get(PlanningService);
+    planningSnapshotService = moduleRef.get(PlanningSnapshotService);
     planningScheduleEngineService = moduleRef.get(PlanningScheduleEngineService);
   });
 
@@ -576,6 +578,45 @@ describe('PlanningService', () => {
         taskTitle: 'Design schedule',
       }),
     ]);
+  });
+
+  it('locks only the snapshot row when rebuilding the planning workspace snapshot', async () => {
+    const task = {
+      assigneeId: userId,
+      dueDate: '2026-07-05',
+      id: taskId,
+      parentTaskId: null,
+      percentComplete: 25,
+      plannedStartDate: '2026-07-01',
+      projectId,
+      sequenceNumber: 1,
+      startDate: '2026-07-01',
+      taskKind: TaskKind.Standard,
+      title: 'Design schedule',
+    } as Task;
+
+    tasksRepository.find?.mockResolvedValue([task]);
+
+    await expect(
+      planningSnapshotService.rebuildWorkspaceSnapshot(projectId, actor),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: 'snapshot-id',
+        projectId,
+        taskSchedules: [
+          expect.objectContaining({
+            snapshotId: 'snapshot-id',
+            taskId,
+          }),
+        ],
+      }),
+    );
+
+    expect(scheduleSnapshotsRepository.findOne).toHaveBeenCalledWith({
+      lock: { mode: 'pessimistic_write' },
+      order: { scheduleVersion: 'DESC' },
+      where: { projectId },
+    });
   });
 
   it('reuses an existing planning schedule on second Planning open', async () => {

@@ -62,7 +62,6 @@ export class PlanningSnapshotService {
     const existingSnapshot = await snapshotsRepository.findOne({
       lock: { mode: 'pessimistic_write' },
       order: { scheduleVersion: 'DESC' },
-      relations: { taskSchedules: { task: { assignee: true } } },
       where: { projectId },
     });
     const tasks = await tasksRepository.find({
