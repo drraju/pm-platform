@@ -582,6 +582,15 @@ export function getPlanningWorkspace(projectId: string) {
   );
 }
 
+export function regeneratePlanningWorkspace(projectId: string) {
+  return apiRequest<ApiPlanningWorkspace>(
+    `/planning/projects/${projectId}/workspace/regenerate`,
+    {
+      method: "POST",
+    },
+  );
+}
+
 export function updatePlanningTaskSchedule(
   projectId: string,
   taskId: string,

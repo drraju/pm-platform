@@ -4,6 +4,7 @@ export {
   createPlanningResourceAllocation,
   deletePlanningDependency,
   getPlanningWorkspace,
+  regeneratePlanningWorkspace,
   updatePlanningTaskSchedule,
 } from "@/lib/api/client";
 export type {

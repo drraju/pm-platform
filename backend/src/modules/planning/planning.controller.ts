@@ -74,6 +74,17 @@ export class PlanningController {
     return this.planningService.getWorkspace(projectId, request.user);
   }
 
+  @Post('projects/:projectId/workspace/regenerate')
+  @RequirePermissions(PermissionKey.TaskUpdate)
+  @ApiOperation({ summary: 'Regenerate the project planning workspace snapshot' })
+  @ApiCreatedResponse({ type: PlanningWorkspaceDto })
+  regenerateWorkspace(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<PlanningWorkspaceDto> {
+    return this.planningService.regenerateWorkspace(projectId, request.user);
+  }
+
   @Get('projects/:projectId/schedule')
   @ApiOperation({ summary: 'Get the latest project schedule snapshot' })
   @ApiOkResponse({ type: PlanningScheduleSnapshot })

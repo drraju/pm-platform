@@ -132,6 +132,15 @@ export class PlanningService {
     };
   }
 
+  async regenerateWorkspace(
+    projectId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<PlanningWorkspaceDto> {
+    await this.ensureCanManageProject(projectId, actor);
+    await this.planningSnapshotService.rebuildWorkspaceSnapshot(projectId, actor);
+    return this.getWorkspace(projectId, actor);
+  }
+
   async getLatestSchedule(
     projectId: string,
     actor?: ProjectVisibilityActor,

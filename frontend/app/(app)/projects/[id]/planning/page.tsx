@@ -10,6 +10,7 @@ import {
   createPlanningTask,
   deletePlanningDependency,
   getPlanningWorkspace,
+  regeneratePlanningWorkspace,
   updatePlanningTaskSchedule,
   type ApiMilestoneCategory,
   type ApiPlanningTaskSchedule,
@@ -173,6 +174,24 @@ function PageContent() {
     }
   }
 
+  async function handleRegenerateWorkspace() {
+    setError(null);
+    setIsLoading(true);
+    setIsSaving(true);
+    try {
+      setWorkspace(await regeneratePlanningWorkspace(projectId));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to regenerate planning workspace",
+      );
+    } finally {
+      setIsSaving(false);
+      setIsLoading(false);
+    }
+  }
+
   async function handleDeleteTask(taskId: string) {
     setError(null);
     setIsSaving(true);
@@ -216,6 +235,7 @@ function PageContent() {
           onCreateTask={handleCreateTask}
           onDeleteDependency={handleDeleteDependency}
           onRefreshWorkspace={loadWorkspace}
+          onRegenerateWorkspace={handleRegenerateWorkspace}
           onUpdateSchedule={handleUpdateSchedule}
           projectMembers={members}
           workspace={workspace}

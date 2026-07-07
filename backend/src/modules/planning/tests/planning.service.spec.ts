@@ -335,6 +335,89 @@ describe('PlanningService', () => {
     });
   });
 
+  it('regenerates the planning workspace snapshot and returns the workspace', async () => {
+    const project = { id: projectId, name: 'ERP Modernization' } as Project;
+    const task = {
+      id: taskId,
+      parentTaskId: null,
+      projectId,
+      sequenceNumber: 1,
+      title: 'Design schedule',
+    } as Task;
+    const schedule = {
+      criticalPathTaskIds: [],
+      id: 'snapshot-id',
+      projectCompletionPercent: 0,
+      projectFinishDate: '2026-07-05',
+      projectId,
+      projectStartDate: '2026-07-01',
+      scheduleVersion: 1,
+      taskSchedules: [
+        {
+          durationDays: 4,
+          id: 'schedule-row-id',
+          isCritical: false,
+          percentComplete: 0,
+          plannedEndDate: '2026-07-05',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 1,
+          snapshotId: 'snapshot-id',
+          task,
+          taskId,
+          taskKind: 'standard',
+          totalFloatDays: null,
+        },
+      ],
+    } as PlanningScheduleSnapshot;
+    const rebuildSpy = jest
+      .spyOn(planningSnapshotService, 'rebuildWorkspaceSnapshot')
+      .mockResolvedValue(schedule);
+
+    projectsRepository.findOne?.mockResolvedValue(project);
+    projectsService.findProjectTaskDependencies.mockResolvedValue([]);
+    resourceAllocationsRepository.find?.mockResolvedValue([]);
+    scheduleSnapshotsRepository.findOne?.mockResolvedValue(schedule);
+
+    const workspace = await service.regenerateWorkspace(projectId, actor);
+
+    expect(authorizationPolicyService.canManageProject).toHaveBeenCalledWith(
+      projectId,
+      actor,
+    );
+    expect(rebuildSpy).toHaveBeenCalledWith(projectId, actor);
+    expect(workspace).toEqual(
+      expect.objectContaining({
+        project,
+        schedules: [
+          expect.objectContaining({
+            snapshotId: 'snapshot-id',
+            taskId,
+            taskTitle: 'Design schedule',
+          }),
+        ],
+        snapshot: expect.objectContaining({
+          id: 'snapshot-id',
+          projectId,
+          versionNumber: 1,
+        }),
+      }),
+    );
+  });
+
+  it('rejects workspace regeneration without project manager access', async () => {
+    const rebuildSpy = jest.spyOn(
+      planningSnapshotService,
+      'rebuildWorkspaceSnapshot',
+    );
+    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+
+    await expect(service.regenerateWorkspace(projectId, actor)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(rebuildSpy).not.toHaveBeenCalled();
+  });
+
   it('returns calculated schedule analysis fields in the planning workspace', async () => {
     const project = { id: projectId, name: 'ERP Modernization' } as Project;
     const summaryTask = {

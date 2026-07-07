@@ -597,11 +597,13 @@ describe("PlanningWorkspace", () => {
   });
 
   it("keeps the toolbar sticky and the planning workspace independently scrollable", () => {
+    const onRegenerateWorkspace = vi.fn().mockResolvedValue(undefined);
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
         onCreateTask={vi.fn()}
         onDeleteDependency={vi.fn()}
+        onRegenerateWorkspace={onRegenerateWorkspace}
         onUpdateSchedule={vi.fn()}
         workspace={workspace}
       />,
@@ -627,10 +629,37 @@ describe("PlanningWorkspace", () => {
     expect(
       within(toolbar).getByRole("button", { name: "Dependencies" }),
     ).toBeInTheDocument();
+    fireEvent.click(
+      within(toolbar).getByRole("button", { name: "Regenerate Snapshot" }),
+    );
+    expect(onRegenerateWorkspace).toHaveBeenCalled();
     expect(
       within(toolbar).getByRole("button", { name: "Fit to Project" }),
     ).toBeInTheDocument();
     expect(within(toolbar).getByLabelText("Time Scale")).toBeInTheDocument();
+  });
+
+  it("shows create snapshot when the planning workspace has no snapshot", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={
+          {
+            ...workspace,
+            snapshot: null,
+          } as unknown as ApiPlanningWorkspace
+        }
+      />,
+    );
+
+    expect(
+      within(screen.getByLabelText("Planning toolbar")).getByRole("button", {
+        name: "Create Snapshot",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("keeps horizontal overflow owned by the timeline pane when the timeline exceeds the viewport", () => {
@@ -1502,7 +1531,10 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByTitle("Planning"));
-    fireEvent.change(screen.getByDisplayValue("Planning"), {
+    const editor = screen.getByDisplayValue("Planning");
+    expect(editor).toHaveClass("w-full");
+    expect(editor.parentElement?.parentElement).toHaveClass("flex-1");
+    fireEvent.change(editor, {
       target: { value: "Program Planning" },
     });
     fireEvent.keyDown(screen.getByDisplayValue("Program Planning"), {

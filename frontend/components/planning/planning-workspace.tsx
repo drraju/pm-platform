@@ -61,6 +61,7 @@ type PlanningWorkspaceProps = {
   onDeleteTask?: (taskId: string) => Promise<void>;
   onDeleteDependency: (dependencyId: string) => Promise<void>;
   onRefreshWorkspace?: () => Promise<void>;
+  onRegenerateWorkspace?: () => Promise<void>;
   onUpdateSchedule: (
     taskId: string,
     input: {
@@ -155,27 +156,27 @@ const preferenceKeys = {
   zoom: "pm-platform.planningWorkspace.zoom",
 };
 const gridColumns: GridColumnDefinition[] = [
-  { defaultVisible: true, id: "wbs", label: "WBS", minWidth: 58 },
+  { defaultVisible: true, id: "wbs", label: "WBS", minWidth: 64 },
   {
     defaultVisible: true,
     editableField: "taskTitle",
     id: "taskTitle",
     label: "Task Name",
-    minWidth: 180,
+    minWidth: 220,
   },
   {
     defaultVisible: true,
     editableField: "plannedStartDate",
     id: "plannedStartDate",
     label: "Start",
-    minWidth: 82,
+    minWidth: 96,
   },
   {
     defaultVisible: true,
     editableField: "plannedFinishDate",
     id: "plannedFinishDate",
     label: "Finish",
-    minWidth: 82,
+    minWidth: 96,
   },
   {
     defaultVisible: false,
@@ -210,7 +211,7 @@ const gridColumns: GridColumnDefinition[] = [
     defaultVisible: false,
     id: "durationDays",
     label: "Duration",
-    minWidth: 84,
+    minWidth: 88,
   },
   {
     align: "right",
@@ -245,20 +246,20 @@ const gridColumns: GridColumnDefinition[] = [
     defaultVisible: false,
     id: "totalFloatDays",
     label: "Total Float",
-    minWidth: 104,
+    minWidth: 108,
   },
   {
     align: "right",
     defaultVisible: false,
     id: "freeFloatDays",
     label: "Free Float",
-    minWidth: 98,
+    minWidth: 104,
   },
   {
     defaultVisible: false,
     id: "critical",
     label: "Critical",
-    minWidth: 92,
+    minWidth: 86,
   },
 ];
 const defaultGridColumnIds = gridColumns
@@ -292,6 +293,7 @@ export function PlanningWorkspace({
   onDeleteTask = async () => {},
   onDeleteDependency,
   onRefreshWorkspace = async () => {},
+  onRegenerateWorkspace = async () => {},
   onUpdateSchedule,
   projectMembers = [],
   workspace,
@@ -1273,7 +1275,7 @@ export function PlanningWorkspace({
           )}
           <TypeBadge schedule={schedule} />
           <span
-            className={`min-w-0 truncate text-slate-950 ${
+            className={`flex min-w-0 flex-1 text-slate-950 ${
               isSummary ? "font-bold" : "font-medium"
             }`}
             onClick={
@@ -1527,9 +1529,11 @@ export function PlanningWorkspace({
               {workspace.project.name} planning workspace
             </h2>
             <p className="text-xs text-slate-500">
-              Schedule v{workspace.snapshot.versionNumber} ·{" "}
-              {workspace.snapshot.projectStartDate ?? "Unscheduled"} to{" "}
-              {workspace.snapshot.projectFinishDate ?? "Unscheduled"}
+              {workspace.snapshot
+                ? `Schedule v${workspace.snapshot.versionNumber}`
+                : "No schedule snapshot"}{" "}
+              · {workspace.snapshot?.projectStartDate ?? "Unscheduled"} to{" "}
+              {workspace.snapshot?.projectFinishDate ?? "Unscheduled"}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1716,6 +1720,14 @@ export function PlanningWorkspace({
               </button>
             </ToolbarGroup>
             <ToolbarGroup label="Schedule">
+              <button
+                className={toolbarButtonClassName}
+                disabled={isSaving}
+                onClick={() => void onRegenerateWorkspace()}
+                type="button"
+              >
+                {workspace.snapshot?.id ? "Regenerate Snapshot" : "Create Snapshot"}
+              </button>
               <button
                 className={toolbarButtonClassName}
                 onClick={scrollToDependencies}
@@ -1942,9 +1954,10 @@ export function PlanningWorkspace({
               }}
             >
               <div
-                className="sticky top-0 z-10 grid h-11 items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
+                className="sticky top-0 z-10 grid items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
                 style={{
                   gridTemplateColumns,
+                  height: headerHeight,
                   width: gridContentWidth,
                 }}
               >
@@ -1971,7 +1984,7 @@ export function PlanningWorkspace({
                   <div
                     aria-label={`Planning row ${wbs} ${title}`}
                     aria-selected={selectedTaskId === schedule.taskId}
-                    className={`grid h-[46px] items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
+                    className={`grid items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
                       isSummary
                         ? "bg-slate-50 font-semibold text-slate-800"
                         : isMilestone
@@ -2005,6 +2018,7 @@ export function PlanningWorkspace({
                     role="row"
                     style={{
                       gridTemplateColumns,
+                      height: rowHeight,
                       width: gridContentWidth,
                     }}
                     tabIndex={0}
