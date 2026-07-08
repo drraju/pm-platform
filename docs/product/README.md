@@ -16,6 +16,9 @@ This directory contains the current product documentation for PM Platform.
 | [Timeline Foundation](timeline-foundation.md) | Product foundation for timeline capabilities. |
 | [Resource Capacity Planning](resource-capacity-planning.md) | Product direction for resources, capacity, and allocation. |
 | [v1.1 Requirements](v1.1-requirements.md) | Product requirements for the v1.1 planning release line. |
+| [Product Backlog](PRODUCT_BACKLOG.md) | Prioritized backlog for Epic 1.2 and adjacent roadmap items. |
+| [Release Plan](RELEASE_PLAN.md) | Release mapping for ERM, scheduling integration, capacity planning, and AI direction. |
+| [Epic 1.2: Enterprise Resource Management](epics/EPIC-1.2-Enterprise-Resource-Management.md) | Product and architecture contract for Enterprise Resource Management. |
 
 ## Archived Product Documents
 

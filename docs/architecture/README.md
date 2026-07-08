@@ -24,6 +24,7 @@ This directory documents the current PM Platform architecture and approved roadm
 | [08-DEVELOPMENT-WORKFLOW.md](08-DEVELOPMENT-WORKFLOW.md) | Mandatory feature workflow. |
 | [09-CODING-STANDARDS.md](09-CODING-STANDARDS.md) | Backend/frontend coding standards. |
 | [10-ROADMAP.md](10-ROADMAP.md) | Completed, current, and future roadmap. |
+| [RESOURCE_ARCHITECTURE.md](RESOURCE_ARCHITECTURE.md) | Epic 1.2 Enterprise Resource Management architecture baseline. |
 
 ## Architecture Decision Records
 
@@ -32,6 +33,14 @@ This directory documents the current PM Platform architecture and approved roadm
 - [ADR-003 Scheduling Isolation](adr/ADR-003-scheduling-isolation.md)
 - [ADR-004 API Design](adr/ADR-004-api-design.md)
 - [ADR-005 Frontend Architecture](adr/ADR-005-frontend-architecture.md)
+- [ADR-006 Resource Domain](adr/ADR-006-resource-domain.md)
+- [ADR-007 Capacity Model](adr/ADR-007-capacity-model.md)
+- [ADR-008 Calendar Assignment](adr/ADR-008-calendar-assignment.md)
+- [ADR-009 Resource Types](adr/ADR-009-resource-types.md)
+- [ADR-010 ERM Aggregate and Ownership Boundary](adr/ADR-010-erm-aggregate-ownership-boundary.md)
+- [ADR-011 ERM Assignment Ownership](adr/ADR-011-erm-assignment-ownership.md)
+- [ADR-012 ERM Permissions and Visibility](adr/ADR-012-erm-permissions-visibility.md)
+- [ADR-013 ERM Planning Resource Transition](adr/ADR-013-erm-planning-resource-transition.md)
 
 ## Existing Detailed References
 
@@ -70,4 +79,3 @@ These existing documents remain useful detailed references:
 ## Archived Architecture Documents
 
 Historical snapshots, release-specific architecture notes, and superseded milestone documents are preserved under `docs/archive/architecture/`.
-
