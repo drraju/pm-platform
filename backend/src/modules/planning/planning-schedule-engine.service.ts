@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { SchedulingContext } from '../../common/scheduling/scheduling-context';
 import {
   PlanningBackwardPassResult,
   PlanningBackwardPassService,
@@ -18,8 +19,6 @@ import {
 import {
   PlanningGraph,
   PlanningGraphBuilderService,
-  PlanningGraphDependencyInput,
-  PlanningGraphTaskInput,
   PlanningGraphValidationError,
   PlanningGraphValidationIssue,
 } from './planning-graph-builder.service';
@@ -77,12 +76,12 @@ export class PlanningScheduleEngineService {
     private readonly criticalPath: PlanningCriticalPathService,
   ) {}
 
-  analyze(input: {
-    dependencies?: PlanningGraphDependencyInput[];
-    tasks: PlanningGraphTaskInput[];
-  }): ScheduleAnalysis {
+  analyze(context: SchedulingContext): ScheduleAnalysis {
     try {
-      const graph = this.graphBuilder.buildGraph(input);
+      const graph = this.graphBuilder.buildGraph({
+        dependencies: [...(context.dependencies ?? [])],
+        tasks: [...context.tasks],
+      });
       const forward = this.forwardPass.calculate(graph);
       const backward = this.backwardPass.calculate(graph, forward);
       const float = this.floatService.calculate(graph, forward, backward);
@@ -91,7 +90,7 @@ export class PlanningScheduleEngineService {
       return this.buildAnalysis({
         backward,
         critical,
-        dependencyCount: input.dependencies?.length ?? 0,
+        dependencyCount: context.dependencies?.length ?? 0,
         float,
         forward,
         graph,

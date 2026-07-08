@@ -15,6 +15,7 @@ import { ResourceAllocationUnit } from '../../common/enums/resource-allocation-u
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
+import { SchedulingContextFactory } from '../../common/scheduling/scheduling-context.factory';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
 import { Project } from '../projects/entities/project.entity';
@@ -84,6 +85,7 @@ export class PlanningService {
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectsService: ProjectsService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
+    private readonly schedulingContextFactory: SchedulingContextFactory,
     private readonly planningScheduleEngineService: PlanningScheduleEngineService,
     private readonly planningSnapshotService: PlanningSnapshotService,
   ) {}
@@ -737,7 +739,7 @@ export class PlanningService {
     }
 
     try {
-      return this.planningScheduleEngineService.analyze({
+      const schedulingContext = this.schedulingContextFactory.create({
         dependencies: dependencies.map((dependency) => ({
           dependencyType: dependency.dependencyType,
           id: dependency.id,
@@ -754,6 +756,8 @@ export class PlanningService {
           taskKind: taskSchedule.taskKind,
         })),
       });
+
+      return this.planningScheduleEngineService.analyze(schedulingContext);
     } catch (error) {
       if (error instanceof PlanningScheduleEngineError) {
         throw new BadRequestException({

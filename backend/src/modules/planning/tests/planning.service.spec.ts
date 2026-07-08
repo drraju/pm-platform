@@ -9,6 +9,7 @@ import { MilestoneCategory } from '../../../common/enums/milestone-category.enum
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
+import { SchedulingContextFactory } from '../../../common/scheduling/scheduling-context.factory';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { ProjectBaseline } from '../../projects/entities/project-baseline.entity';
 import { Project } from '../../projects/entities/project.entity';
@@ -189,6 +190,7 @@ describe('PlanningService', () => {
         PlanningGraphBuilderService,
         PlanningScheduleEngineService,
         PlanningSnapshotService,
+        SchedulingContextFactory,
         {
           provide: getRepositoryToken(PlanningScheduleSnapshot),
           useValue: scheduleSnapshotsRepository,
