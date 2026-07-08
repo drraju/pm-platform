@@ -32,7 +32,11 @@ export class PlanningSnapshotService {
     manager?: EntityManager,
   ): Promise<PlanningScheduleSnapshot> {
     if (manager) {
-      return this.rebuildWorkspaceSnapshotWithManager(projectId, actor, manager);
+      return this.rebuildWorkspaceSnapshotWithManager(
+        projectId,
+        actor,
+        manager,
+      );
     }
 
     return this.scheduleSnapshotsRepository.manager.transaction((transaction) =>

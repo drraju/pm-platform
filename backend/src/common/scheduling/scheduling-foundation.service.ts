@@ -95,7 +95,10 @@ export class SchedulingFoundationService {
     TaskDependencyType.FinishToFinish,
   ]);
 
-  normalizeTaskKind(input: TaskTypeInput, fallback = TaskKind.Standard): TaskKind {
+  normalizeTaskKind(
+    input: TaskTypeInput,
+    fallback = TaskKind.Standard,
+  ): TaskKind {
     if (input.taskKind) {
       return this.mapTaskKind(input.taskKind);
     }
@@ -162,7 +165,9 @@ export class SchedulingFoundationService {
     }
 
     if (input.assigneeId) {
-      throw new BadRequestException('Summary tasks cannot be assigned to a user');
+      throw new BadRequestException(
+        'Summary tasks cannot be assigned to a user',
+      );
     }
 
     if (typeof input.status !== 'undefined') {
@@ -346,8 +351,9 @@ export class SchedulingFoundationService {
         plannedStartDate,
         plannedEndDate,
       );
-      const percentComplete =
-        this.calculateWeightedProgress(executableDescendants);
+      const percentComplete = this.calculateWeightedProgress(
+        executableDescendants,
+      );
       const status = this.deriveSummaryStatus(children);
       const changed =
         schedule.plannedStartDate !== plannedStartDate ||
@@ -536,7 +542,11 @@ export class SchedulingFoundationService {
       };
     }
 
-    if (plannedStartDate && plannedEndDate && plannedStartDate !== plannedEndDate) {
+    if (
+      plannedStartDate &&
+      plannedEndDate &&
+      plannedStartDate !== plannedEndDate
+    ) {
       throw new BadRequestException(
         'Milestones must have matching planned start and end dates',
       );
@@ -574,7 +584,9 @@ export class SchedulingFoundationService {
     }
 
     if (typeof input.ownerId !== 'undefined') {
-      throw new BadRequestException('Summary tasks cannot be assigned to a user');
+      throw new BadRequestException(
+        'Summary tasks cannot be assigned to a user',
+      );
     }
 
     if (typeof input.status !== 'undefined') {
@@ -667,7 +679,10 @@ export class SchedulingFoundationService {
   private normalizeMilestoneCategory(
     value: MilestoneCategory | string,
   ): MilestoneCategory {
-    const normalizedValue = String(value).trim().toLowerCase().replace(/\s+/g, '_');
+    const normalizedValue = String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
     switch (normalizedValue) {
       case MilestoneCategory.Standard:
         return MilestoneCategory.Standard;
@@ -682,7 +697,9 @@ export class SchedulingFoundationService {
       case MilestoneCategory.Decision:
         return MilestoneCategory.Decision;
       default:
-        throw new BadRequestException(`Unsupported milestone category ${value}`);
+        throw new BadRequestException(
+          `Unsupported milestone category ${value}`,
+        );
     }
   }
 
@@ -801,7 +818,11 @@ export class SchedulingFoundationService {
     plannedStartDate?: string | null,
     plannedEndDate?: string | null,
   ) {
-    if (plannedStartDate && plannedEndDate && plannedEndDate < plannedStartDate) {
+    if (
+      plannedStartDate &&
+      plannedEndDate &&
+      plannedEndDate < plannedStartDate
+    ) {
       throw new BadRequestException(
         'Planned finish date cannot be before planned start date',
       );
@@ -830,7 +851,9 @@ export class SchedulingFoundationService {
       );
     }
 
-    if (this.mapTaskKind(task.taskKind ?? TaskKind.Standard) === TaskKind.Summary) {
+    if (
+      this.mapTaskKind(task.taskKind ?? TaskKind.Standard) === TaskKind.Summary
+    ) {
       throw new BadRequestException(
         `Summary tasks cannot be dependency ${role} endpoints`,
       );
@@ -913,10 +936,7 @@ export class SchedulingFoundationService {
       taskType: _taskType,
       ...normalizedInput
     } = input;
-    return normalizedInput as Omit<
-      T,
-      'taskType' | 'summaryCategory'
-    > & {
+    return normalizedInput as Omit<T, 'taskType' | 'summaryCategory'> & {
       milestoneCategory?: MilestoneCategory | null;
       taskKind?: TaskKind;
     };

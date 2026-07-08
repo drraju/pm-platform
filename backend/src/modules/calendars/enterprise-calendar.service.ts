@@ -19,7 +19,8 @@ export type CreateEnterpriseCalendarInput = {
   workingDayStart?: string | null;
 };
 
-export type UpdateEnterpriseCalendarInput = Partial<CreateEnterpriseCalendarInput>;
+export type UpdateEnterpriseCalendarInput =
+  Partial<CreateEnterpriseCalendarInput>;
 
 export type CreateEnterpriseCalendarExceptionInput = {
   date: string;
@@ -109,14 +110,18 @@ export class EnterpriseCalendarService {
     return this.enterpriseCalendarExceptionsRepository.save(exception);
   }
 
-  async findEnterpriseCalendar(calendarId: string): Promise<EnterpriseCalendar> {
+  async findEnterpriseCalendar(
+    calendarId: string,
+  ): Promise<EnterpriseCalendar> {
     const calendar = await this.enterpriseCalendarsRepository.findOne({
       relations: { exceptions: true },
       where: { id: calendarId },
     });
 
     if (!calendar) {
-      throw new NotFoundException(`Enterprise calendar ${calendarId} not found`);
+      throw new NotFoundException(
+        `Enterprise calendar ${calendarId} not found`,
+      );
     }
 
     return calendar;

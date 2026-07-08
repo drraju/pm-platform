@@ -198,7 +198,9 @@ describe('RaidService', () => {
       type: 'risk',
     });
     risksRepository.save?.mockImplementation(async (item) => item);
-    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
     authorizationPolicyService.hasPermission.mockResolvedValue(true);
 
     await expect(
@@ -229,7 +231,9 @@ describe('RaidService', () => {
       projectId: 'project-1',
       type: 'risk',
     });
-    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
 
     await expect(
       service.update(
@@ -248,7 +252,9 @@ describe('RaidService', () => {
       projectId: 'project-1',
       type: 'issue',
     });
-    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
     authorizationPolicyService.canManageRaid.mockResolvedValue(true);
     authorizationPolicyService.hasPermission.mockResolvedValue(true);
 
@@ -272,7 +278,9 @@ describe('RaidService', () => {
       title: 'Supplier risk',
       type: 'risk',
     });
-    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
     authorizationPolicyService.hasPermission.mockResolvedValue(true);
 
     await expect(

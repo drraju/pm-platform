@@ -128,7 +128,13 @@ describe('PlanningScheduleEngineService', () => {
 
     const analysis = service.analyze({ tasks: [task('task-1', 2)] });
 
-    expect(calls).toEqual(['graph', 'forward', 'backward', 'float', 'critical']);
+    expect(calls).toEqual([
+      'graph',
+      'forward',
+      'backward',
+      'float',
+      'critical',
+    ]);
     expect(graphBuilder.buildGraph).toHaveBeenCalledTimes(1);
     expect(forwardPass.calculate).toHaveBeenCalledTimes(1);
     expect(backwardPass.calculate).toHaveBeenCalledTimes(1);
@@ -167,7 +173,7 @@ describe('PlanningScheduleEngineService', () => {
       forwardPass,
       { calculate: jest.fn() } as unknown as PlanningBackwardPassService,
       { calculate: jest.fn() } as unknown as PlanningFloatService,
-      { identify: jest.fn() } as unknown as PlanningCriticalPathService,
+      { identify: jest.fn() },
     );
 
     expect(() =>

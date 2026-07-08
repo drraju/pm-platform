@@ -651,6 +651,12 @@ API/UI compatibility:
 | Frontend consistency | ADR-005 | 12 | Resource Dashboard and CRUD UI |
 | Security and visibility | ADR-012 | 9, 10, 12 | All ERM features |
 
+## 16.1 Implementation Traceability
+
+| Feature | Status | Delivered | Notes |
+| --- | --- | --- | --- |
+| 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | Verified through implementation review, testing, Docker verification, and Ubuntu verification. Public Resource CRUD APIs remain planned for Feature 1.2.2. |
+
 ## 17. Open Questions
 
 Intentionally deferred beyond this ADD:

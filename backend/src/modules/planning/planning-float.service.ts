@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { PlanningBackwardPassResult } from './planning-backward-pass.service';
 import { PlanningForwardPassResult } from './planning-forward-pass.service';
-import { PlanningGraph, PlanningGraphNode } from './planning-graph-builder.service';
+import {
+  PlanningGraph,
+  PlanningGraphNode,
+} from './planning-graph-builder.service';
 
 export type PlanningFloatTaskResult = {
   freeFloat: number;
@@ -61,10 +64,13 @@ export class PlanningFloatService {
     }
 
     const successorEarlyStarts = node.outgoingDependencies
-      .map((dependency) =>
-        forwardPass.tasks.get(dependency.successorTaskId)?.earlyStart,
+      .map(
+        (dependency) =>
+          forwardPass.tasks.get(dependency.successorTaskId)?.earlyStart,
       )
-      .filter((earlyStart): earlyStart is number => typeof earlyStart === 'number');
+      .filter(
+        (earlyStart): earlyStart is number => typeof earlyStart === 'number',
+      );
 
     if (successorEarlyStarts.length === 0) {
       return totalFloat;

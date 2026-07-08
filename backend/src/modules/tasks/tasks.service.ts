@@ -24,10 +24,7 @@ import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
 import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
-import {
-  decoratePlanningTasks,
-  getOperationalTasks,
-} from './planning-rollup';
+import { decoratePlanningTasks, getOperationalTasks } from './planning-rollup';
 
 type AuthenticatedActor = AuthorizationActor;
 const teamMemberEditableTaskFields = new Set([
@@ -114,14 +111,18 @@ export class TasksService {
 
     return {
       totalTasks: operationalTasks.length,
-      todoTasks: operationalTasks.filter((task) => task.status === TaskStatus.Todo).length,
+      todoTasks: operationalTasks.filter(
+        (task) => task.status === TaskStatus.Todo,
+      ).length,
       inProgressTasks: operationalTasks.filter(
         (task) => task.status === TaskStatus.InProgress,
       ).length,
-      blockedTasks: operationalTasks.filter((task) => task.status === TaskStatus.Blocked)
-        .length,
-      completedTasks: operationalTasks.filter((task) => task.status === TaskStatus.Done)
-        .length,
+      blockedTasks: operationalTasks.filter(
+        (task) => task.status === TaskStatus.Blocked,
+      ).length,
+      completedTasks: operationalTasks.filter(
+        (task) => task.status === TaskStatus.Done,
+      ).length,
       overdueTasks: operationalTasks.filter((task) => {
         if (!task.dueDate || task.status === TaskStatus.Done) {
           return false;
@@ -195,7 +196,9 @@ export class TasksService {
     projectId: string,
     actor?: AuthenticatedActor,
   ): Promise<void> {
-    if (await this.authorizationPolicyService.canManageProject(projectId, actor)) {
+    if (
+      await this.authorizationPolicyService.canManageProject(projectId, actor)
+    ) {
       return;
     }
 
@@ -260,10 +263,11 @@ export class TasksService {
     input: Partial<CreateTaskDto | UpdateTaskDto>,
     existingTask?: Task,
   ): Promise<void> {
-    const effectiveTaskKind = this.schedulingFoundationService.normalizeTaskKind(
-      input,
-      existingTask?.taskKind ?? TaskKind.Standard,
-    );
+    const effectiveTaskKind =
+      this.schedulingFoundationService.normalizeTaskKind(
+        input,
+        existingTask?.taskKind ?? TaskKind.Standard,
+      );
     const effectiveParentTaskId =
       typeof input.parentTaskId !== 'undefined'
         ? input.parentTaskId
@@ -288,15 +292,21 @@ export class TasksService {
 
     const parentTask = await this.findPlanningTask(effectiveParentTaskId);
     if (!parentTask) {
-      throw new NotFoundException(`Parent task ${effectiveParentTaskId} not found`);
+      throw new NotFoundException(
+        `Parent task ${effectiveParentTaskId} not found`,
+      );
     }
 
     if (parentTask.projectId !== projectId) {
-      throw new BadRequestException('Parent task must belong to the same project');
+      throw new BadRequestException(
+        'Parent task must belong to the same project',
+      );
     }
 
     if (parentTask.taskKind !== TaskKind.Summary) {
-      throw new BadRequestException('Only summary tasks can contain child tasks');
+      throw new BadRequestException(
+        'Only summary tasks can contain child tasks',
+      );
     }
 
     if (existingTask) {
@@ -311,7 +321,9 @@ export class TasksService {
     });
 
     if (childTask) {
-      throw new BadRequestException('Only summary tasks can contain child tasks');
+      throw new BadRequestException(
+        'Only summary tasks can contain child tasks',
+      );
     }
   }
 
@@ -341,12 +353,12 @@ export class TasksService {
   }
 
   private decorateTask(task: Task): Task {
-    return decoratePlanningTasks([task])[0] as Task;
+    return decoratePlanningTasks([task])[0];
   }
 
-  private withNormalizedProgress<T extends Partial<CreateTaskDto | UpdateTaskDto>>(
-    input: T,
-  ): T {
+  private withNormalizedProgress<
+    T extends Partial<CreateTaskDto | UpdateTaskDto>,
+  >(input: T): T {
     const normalizedInput = { ...input };
 
     if (normalizedInput.percentComplete === 100) {
@@ -359,5 +371,4 @@ export class TasksService {
 
     return normalizedInput;
   }
-
 }

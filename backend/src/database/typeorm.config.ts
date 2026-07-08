@@ -19,6 +19,7 @@ import { Issue } from '../modules/raid/entities/issue.entity';
 import { RaidComment } from '../modules/raid/entities/raid-comment.entity';
 import { RaidHistoryEntry } from '../modules/raid/entities/raid-history-entry.entity';
 import { Risk } from '../modules/raid/entities/risk.entity';
+import { Resource } from '../modules/resources/entities/resource.entity';
 import { TaskDependency } from '../modules/tasks/entities/task-dependency.entity';
 import { Task } from '../modules/tasks/entities/task.entity';
 import { Permission } from '../modules/users/entities/permission.entity';
@@ -33,6 +34,7 @@ export const databaseEntities: Function[] = [
   RolePermission,
   EnterpriseCalendar,
   EnterpriseCalendarException,
+  Resource,
   Project,
   ProjectBaseline,
   ProjectBaselineTask,

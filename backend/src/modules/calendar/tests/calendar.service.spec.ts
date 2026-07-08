@@ -116,9 +116,9 @@ describe('CalendarService', () => {
 
   it('applies organization isolation at the service boundary', async () => {
     await expect(service.listCalendars('other-org')).resolves.toEqual([]);
-    await expect(service.getCalendar('other-org', 'calendar-id')).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.getCalendar('other-org', 'calendar-id'),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('validates working hours intervals', async () => {

@@ -1,11 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsNumber,
-  IsOptional,
-  Matches,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsNumber, IsOptional, Matches, Max, Min } from 'class-validator';
 
 export class CreateWorkingHoursDto {
   @ApiProperty({ minimum: 0, maximum: 6, example: 1 })

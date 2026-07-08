@@ -45,7 +45,10 @@ export class RisksService {
     });
     if (
       !risk ||
-      !(await this.projectVisibilityService.canViewProject(risk.projectId, actor))
+      !(await this.projectVisibilityService.canViewProject(
+        risk.projectId,
+        actor,
+      ))
     ) {
       throw new NotFoundException(`Risk ${id} not found`);
     }

@@ -35,7 +35,11 @@ export class CalendarValidationService {
     }
 
     if (input.status !== undefined && input.status !== null) {
-      this.validateAllowedValue(input.status, Object.values(CalendarStatus), 'status');
+      this.validateAllowedValue(
+        input.status,
+        Object.values(CalendarStatus),
+        'status',
+      );
     }
 
     if (input.defaultWorkingDays !== undefined) {
@@ -57,7 +61,9 @@ export class CalendarValidationService {
     }
 
     if (input.date !== undefined && !this.isDateOnly(input.date)) {
-      throw new BadRequestException('Calendar exception date must be YYYY-MM-DD');
+      throw new BadRequestException(
+        'Calendar exception date must be YYYY-MM-DD',
+      );
     }
 
     if (input.exceptionType !== undefined && input.exceptionType !== null) {
@@ -130,13 +136,17 @@ export class CalendarValidationService {
     }
 
     if (hours !== undefined && hours !== null && (hours <= 0 || hours > 24)) {
-      throw new BadRequestException('Calendar hours must be greater than 0 and at most 24');
+      throw new BadRequestException(
+        'Calendar hours must be greater than 0 and at most 24',
+      );
     }
   }
 
   private validateTime(value: string, fieldLabel: string) {
     if (!timePattern.test(value)) {
-      throw new BadRequestException(`Calendar ${fieldLabel} must be HH:mm or HH:mm:ss`);
+      throw new BadRequestException(
+        `Calendar ${fieldLabel} must be HH:mm or HH:mm:ss`,
+      );
     }
   }
 

@@ -49,7 +49,10 @@ export class OperationalHealthService {
 
     const failedDependencies = report.services
       .filter((service) => service.status === 'down')
-      .map((service) => `${service.name}${service.details ? ` (${service.details})` : ''}`)
+      .map(
+        (service) =>
+          `${service.name}${service.details ? ` (${service.details})` : ''}`,
+      )
       .join(', ');
 
     this.logger.error(`Startup validation failed: ${failedDependencies}`);

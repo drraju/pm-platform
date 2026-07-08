@@ -63,7 +63,10 @@ describe('RAID management API integration', () => {
   });
 
   it('exposes update and delete operations through the RAID controller', async () => {
-    raidService.update.mockResolvedValue({ id: 'risk-1', status: 'mitigating' });
+    raidService.update.mockResolvedValue({
+      id: 'risk-1',
+      status: 'mitigating',
+    });
     raidService.remove.mockResolvedValue(undefined);
 
     await controller.update(
@@ -79,6 +82,8 @@ describe('RAID management API integration', () => {
 
     await controller.remove('risk-1', request as never);
     expect(raidService.remove).toHaveBeenCalledWith('risk-1', request.user);
-    expect(Reflect.getMetadata(HTTP_CODE_METADATA, RaidController.prototype.remove)).toBe(204);
+    expect(
+      Reflect.getMetadata(HTTP_CODE_METADATA, RaidController.prototype.remove),
+    ).toBe(204);
   });
 });

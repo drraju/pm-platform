@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { PlanningForwardPassResult } from './planning-forward-pass.service';
-import { PlanningGraph, PlanningGraphNode } from './planning-graph-builder.service';
+import {
+  PlanningGraph,
+  PlanningGraphNode,
+} from './planning-graph-builder.service';
 
 export type PlanningBackwardPassTaskResult = {
   durationDays: number;

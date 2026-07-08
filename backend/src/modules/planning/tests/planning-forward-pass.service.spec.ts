@@ -57,10 +57,7 @@ describe('PlanningForwardPassService', () => {
   it('sets milestone duration to zero and finish equal to start', () => {
     const result = calculate({
       dependencies: [dependency('dep-1', 'task-1', 'milestone-1')],
-      tasks: [
-        task('task-1', 3),
-        task('milestone-1', 10, TaskKind.Milestone),
-      ],
+      tasks: [task('task-1', 3), task('milestone-1', 10, TaskKind.Milestone)],
     });
 
     expect(result.tasks.get('milestone-1')).toEqual({

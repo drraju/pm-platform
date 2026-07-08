@@ -120,7 +120,10 @@ export class PlanningService {
       latestSchedule,
       dependencies,
     );
-    const schedules = this.toWorkspaceSchedules(latestSchedule, scheduleAnalysis);
+    const schedules = this.toWorkspaceSchedules(
+      latestSchedule,
+      scheduleAnalysis,
+    );
 
     return {
       criticalPathTaskIds: schedules
@@ -139,7 +142,10 @@ export class PlanningService {
     actor?: AuthenticatedActor,
   ): Promise<PlanningWorkspaceDto> {
     await this.ensureCanManageProject(projectId, actor);
-    await this.planningSnapshotService.rebuildWorkspaceSnapshot(projectId, actor);
+    await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+      projectId,
+      actor,
+    );
     return this.getWorkspace(projectId, actor);
   }
 
@@ -195,9 +201,9 @@ export class PlanningService {
     });
 
     if (latestSchedule) {
-      const hasOrphanedTaskSchedules = (latestSchedule.taskSchedules ?? []).some(
-        (taskSchedule) => !taskSchedule.task,
-      );
+      const hasOrphanedTaskSchedules = (
+        latestSchedule.taskSchedules ?? []
+      ).some((taskSchedule) => !taskSchedule.task);
       if (hasOrphanedTaskSchedules) {
         return this.planningSnapshotService.rebuildWorkspaceSnapshot(
           projectId,
@@ -207,7 +213,10 @@ export class PlanningService {
       return latestSchedule;
     }
 
-    return this.planningSnapshotService.rebuildWorkspaceSnapshot(projectId, actor);
+    return this.planningSnapshotService.rebuildWorkspaceSnapshot(
+      projectId,
+      actor,
+    );
   }
 
   async getCriticalPath(
@@ -300,7 +309,7 @@ export class PlanningService {
       const rebuiltSnapshot =
         await this.scheduleSnapshotsRepository.manager.transaction(
           async (manager) => {
-            await manager.getRepository(Task).save(schedule.task as Task);
+            await manager.getRepository(Task).save(schedule.task);
             return this.planningSnapshotService.rebuildWorkspaceSnapshot(
               projectId,
               actor,
@@ -308,14 +317,23 @@ export class PlanningService {
             );
           },
         );
-      return this.requireWorkspaceSchedule(rebuiltSnapshot, schedule.taskId, projectId);
+      return this.requireWorkspaceSchedule(
+        rebuiltSnapshot,
+        schedule.taskId,
+        projectId,
+      );
     }
 
-    const rebuiltSnapshot = await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+    const rebuiltSnapshot =
+      await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+        projectId,
+        actor,
+      );
+    return this.requireWorkspaceSchedule(
+      rebuiltSnapshot,
+      schedule.taskId,
       projectId,
-      actor,
     );
-    return this.requireWorkspaceSchedule(rebuiltSnapshot, schedule.taskId, projectId);
   }
 
   async createPlanningTask(
@@ -361,7 +379,7 @@ export class PlanningService {
         const plannedStartDate =
           taskKind === TaskKind.Summary
             ? null
-            : latestSchedule.projectStartDate ?? this.todayDateString();
+            : (latestSchedule.projectStartDate ?? this.todayDateString());
         const plannedEndDate =
           taskKind === TaskKind.Milestone
             ? plannedStartDate
@@ -1101,7 +1119,9 @@ export class PlanningService {
   ): Promise<Task> {
     const task = await this.findProjectTask(projectId, taskId);
     if (task.taskKind !== TaskKind.Summary) {
-      throw new BadRequestException('Only summary tasks can contain child tasks');
+      throw new BadRequestException(
+        'Only summary tasks can contain child tasks',
+      );
     }
 
     return task;
@@ -1119,7 +1139,10 @@ export class PlanningService {
         throw new BadRequestException('Task hierarchy cannot contain cycles');
       }
 
-      const currentParent = await this.findProjectTask(projectId, currentParentId);
+      const currentParent = await this.findProjectTask(
+        projectId,
+        currentParentId,
+      );
       currentParentId = currentParent.parentTaskId ?? null;
     }
   }

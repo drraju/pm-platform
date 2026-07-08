@@ -33,7 +33,11 @@ import { PlanningSnapshotModule } from '../planning/planning-snapshot.module';
     ]),
   ],
   controllers: [ProjectsController],
-  providers: [SchedulingFoundationService, ProjectsService, ProjectVisibilityService],
+  providers: [
+    SchedulingFoundationService,
+    ProjectsService,
+    ProjectVisibilityService,
+  ],
   exports: [ProjectsService, ProjectVisibilityService],
 })
 export class ProjectsModule {}

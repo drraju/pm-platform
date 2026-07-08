@@ -32,6 +32,14 @@ Should deliver:
 - Calendar assignment metadata.
 - Resource detail dashboard.
 
+## v1.2 Implementation Status
+
+| Feature | Status | Validation |
+| --- | --- | --- |
+| 1.2.1 Enterprise Resource Management Foundation | Completed | Implementation, implementation review, testing, Docker verification, and Ubuntu verification completed. |
+
+Feature 1.2.1 delivers the Resource aggregate, resource persistence, resource validation, internal Resource service, and additive database migration. It does not expose public Resource APIs; public CRUD APIs remain planned for Feature 1.2.2.
+
 ## v1.3 Scope
 
 - Approved integration between Resource Management, Calendar, Planning, and SchedulingContext.
@@ -69,4 +77,3 @@ Each release requires:
 - Docker Compose verification.
 - Ubuntu deployment compatibility.
 - Documentation and ADR updates.
-

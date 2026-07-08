@@ -63,10 +63,7 @@ describe('PlanningBackwardPassService', () => {
   it('keeps milestone late start equal to late finish', () => {
     const result = calculate({
       dependencies: [dependency('dep-1', 'task-1', 'milestone-1')],
-      tasks: [
-        task('task-1', 3),
-        task('milestone-1', 10, TaskKind.Milestone),
-      ],
+      tasks: [task('task-1', 3), task('milestone-1', 10, TaskKind.Milestone)],
     });
 
     expect(result.projectFinish).toBe(3);

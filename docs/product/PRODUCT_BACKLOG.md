@@ -2,6 +2,12 @@
 
 This backlog covers Epic 1.2 Enterprise Resource Management and adjacent roadmap items. It is prioritized using MoSCoW tags.
 
+## Implementation Status
+
+| Feature | Status | Delivered | Notes |
+| --- | --- | --- | --- |
+| 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | No public API is included. Public Resource CRUD APIs are tracked under Feature 1.2.2. |
+
 ## Must Have
 
 | ID | Item | Description | Release |
@@ -52,4 +58,3 @@ This backlog covers Epic 1.2 Enterprise Resource Management and adjacent roadmap
 | ERM-W-005 | Billing/Invoicing | Future finance integration, not ERM foundation. |
 | ERM-W-006 | AI Staffing Plans | Future v2 direction. |
 | ERM-W-007 | SaaS Tenant Administration | Future v3 direction. |
-

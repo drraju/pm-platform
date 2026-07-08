@@ -15,6 +15,10 @@ import { StartupValidationService } from './startup-validation.service';
     MigrationRunnerService,
     StartupValidationService,
   ],
-  exports: [ProjectHealthService, StartupValidationService, OperationalHealthService],
+  exports: [
+    ProjectHealthService,
+    StartupValidationService,
+    OperationalHealthService,
+  ],
 })
 export class HealthModule {}

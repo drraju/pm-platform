@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
@@ -169,7 +173,10 @@ export class RaidService {
 
     if (
       !item ||
-      !(await this.projectVisibilityService.canViewProject(item.projectId, actor))
+      !(await this.projectVisibilityService.canViewProject(
+        item.projectId,
+        actor,
+      ))
     ) {
       throw new NotFoundException(`RAID item ${id} not found`);
     }
@@ -222,7 +229,9 @@ export class RaidService {
     item: RaidItem,
     actor?: ProjectVisibilityActor,
   ) {
-    if (await this.authorizationPolicyService.canManageRaid(item.projectId, actor)) {
+    if (
+      await this.authorizationPolicyService.canManageRaid(item.projectId, actor)
+    ) {
       return;
     }
 
@@ -244,7 +253,10 @@ export class RaidService {
     actor?: ProjectVisibilityActor,
   ) {
     if (
-      (await this.authorizationPolicyService.canManageRaid(item.projectId, actor)) &&
+      (await this.authorizationPolicyService.canManageRaid(
+        item.projectId,
+        actor,
+      )) &&
       (await this.authorizationPolicyService.hasPermission(
         actor,
         PermissionKey.RaidDelete,
@@ -267,16 +279,16 @@ export class RaidService {
     actor?: ProjectVisibilityActor,
   ) {
     const entity = repository.create({
-        ...createRaidItemDto,
-        createdById: actor?.userId,
-        updatedById: actor?.userId,
-      } as unknown as T);
-    const createdItem = (await repository.save(entity)) as T;
+      ...createRaidItemDto,
+      createdById: actor?.userId,
+      updatedById: actor?.userId,
+    } as unknown as T);
+    const createdItem = await repository.save(entity);
 
     await this.recordHistoryEntry(createdItem, {
       action: 'created',
       changes: this.toHistoryChanges(
-        this.buildChangeSet({} as RaidItem, createRaidItemDto),
+        this.buildChangeSet({}, createRaidItemDto),
       ),
     });
 
@@ -360,7 +372,10 @@ export class RaidService {
 
       const previousValue = currentItem[fieldName as keyof typeof currentItem];
 
-      if (this.normalizeHistoryValue(previousValue) === this.normalizeHistoryValue(nextValue)) {
+      if (
+        this.normalizeHistoryValue(previousValue) ===
+        this.normalizeHistoryValue(nextValue)
+      ) {
         return [];
       }
 
@@ -376,7 +391,11 @@ export class RaidService {
 
   private async recordUpdateHistory(
     item: Risk | Issue | Assumption | Dependency,
-    changes: Array<{ fieldName: string; nextValue: string | null; previousValue: string | null }>,
+    changes: Array<{
+      fieldName: string;
+      nextValue: string | null;
+      previousValue: string | null;
+    }>,
     actor?: ProjectVisibilityActor,
   ) {
     for (const change of changes) {
@@ -400,7 +419,10 @@ export class RaidService {
     input: {
       action: string;
       actorId?: string | null;
-      changes?: Record<string, { previousValue: string | null; nextValue: string | null }> | null;
+      changes?: Record<
+        string,
+        { previousValue: string | null; nextValue: string | null }
+      > | null;
       fieldName?: string | null;
       nextValue?: string | null;
       previousValue?: string | null;
@@ -424,7 +446,11 @@ export class RaidService {
   }
 
   private toHistoryChanges(
-    changes: Array<{ fieldName: string; nextValue: string | null; previousValue: string | null }>,
+    changes: Array<{
+      fieldName: string;
+      nextValue: string | null;
+      previousValue: string | null;
+    }>,
   ) {
     if (changes.length === 0) {
       return null;

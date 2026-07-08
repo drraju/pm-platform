@@ -66,25 +66,23 @@ describe('PortfolioController authorization', () => {
     guard = moduleRef.get(PermissionsGuard);
   });
 
-  it.each([
-    'Program Manager',
-    'Portfolio Manager',
-    'Executive',
-  ])('allows %s to access portfolio reporting', async (roleName) => {
-    await expect(guard.canActivate(createContext(roleName, controller))).resolves.toBe(
-      true,
-    );
-  });
+  it.each(['Program Manager', 'Portfolio Manager', 'Executive'])(
+    'allows %s to access portfolio reporting',
+    async (roleName) => {
+      await expect(
+        guard.canActivate(createContext(roleName, controller)),
+      ).resolves.toBe(true);
+    },
+  );
 
-  it.each([
-    'Customer',
-    'Partner',
-    'Team Member',
-  ])('denies %s from accessing portfolio reporting', async (roleName) => {
-    await expect(guard.canActivate(createContext(roleName, controller))).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-  });
+  it.each(['Customer', 'Partner', 'Team Member'])(
+    'denies %s from accessing portfolio reporting',
+    async (roleName) => {
+      await expect(
+        guard.canActivate(createContext(roleName, controller)),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    },
+  );
 });
 
 function createContext(

@@ -11,10 +11,7 @@ import { CalendarService } from './calendar.service';
   imports: [
     AuthzModule,
     EnterpriseCalendarDomainModule,
-    TypeOrmModule.forFeature([
-      EnterpriseCalendar,
-      EnterpriseCalendarException,
-    ]),
+    TypeOrmModule.forFeature([EnterpriseCalendar, EnterpriseCalendarException]),
   ],
   controllers: [CalendarController],
   providers: [CalendarService],

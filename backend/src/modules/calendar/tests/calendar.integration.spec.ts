@@ -27,7 +27,10 @@ type Persisted<T> = T & {
 class InMemoryRepository<T extends { id?: string; deletedAt?: Date | null }> {
   private sequence = 1;
 
-  constructor(private readonly prefix: string, private readonly rows: Persisted<T>[] = []) {}
+  constructor(
+    private readonly prefix: string,
+    private readonly rows: Persisted<T>[] = [],
+  ) {}
 
   create(input: Partial<T>): T {
     return input as T;
@@ -70,7 +73,9 @@ class InMemoryRepository<T extends { id?: string; deletedAt?: Date | null }> {
     select?: Record<string, boolean>;
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[];
   }): Promise<Persisted<T> | null> {
-    return this.applyOrder(this.filter(options?.where), options?.order)[0] ?? null;
+    return (
+      this.applyOrder(this.filter(options?.where), options?.order)[0] ?? null
+    );
   }
 
   async softRemove(input: Persisted<T>): Promise<Persisted<T>> {
@@ -149,7 +154,9 @@ describe('Calendar API integration', () => {
         },
         {
           provide: getRepositoryToken(EnterpriseCalendarException),
-          useValue: new InMemoryRepository<EnterpriseCalendarException>('exception'),
+          useValue: new InMemoryRepository<EnterpriseCalendarException>(
+            'exception',
+          ),
         },
       ],
     }).compile();
@@ -195,12 +202,14 @@ describe('Calendar API integration', () => {
 
     expect(updated.name).toBe('Corporate Calendar Updated');
     await expect(controller.listCalendars(undefined)).resolves.toHaveLength(1);
-    await expect(controller.getCalendar(undefined, calendar.id)).resolves.toEqual(
-      expect.objectContaining({ id: calendar.id }),
-    );
+    await expect(
+      controller.getCalendar(undefined, calendar.id),
+    ).resolves.toEqual(expect.objectContaining({ id: calendar.id }));
 
     await controller.deleteCalendar(undefined, calendar.id);
-    await expect(controller.getCalendar(undefined, calendar.id)).resolves.toEqual(
+    await expect(
+      controller.getCalendar(undefined, calendar.id),
+    ).resolves.toEqual(
       expect.objectContaining({ status: CalendarStatus.Archived }),
     );
   });
@@ -208,12 +217,16 @@ describe('Calendar API integration', () => {
   it('manages working hours through calendar defaults', async () => {
     const calendar = await createCalendar(controller);
 
-    const created = await controller.createWorkingHours(undefined, calendar.id, {
-      dayOfWeek: 6,
-      end: '13:00',
-      hours: 4,
-      start: '09:00',
-    });
+    const created = await controller.createWorkingHours(
+      undefined,
+      calendar.id,
+      {
+        dayOfWeek: 6,
+        end: '13:00',
+        hours: 4,
+        start: '09:00',
+      },
+    );
     expect(created).toEqual(
       expect.objectContaining({
         calendarId: calendar.id,
@@ -246,7 +259,9 @@ describe('Calendar API integration', () => {
     ).rejects.toThrow(BadRequestException);
 
     await controller.deleteWorkingHours(undefined, calendar.id, '6');
-    await expect(controller.listWorkingHours(undefined, calendar.id)).resolves.toHaveLength(5);
+    await expect(
+      controller.listWorkingHours(undefined, calendar.id),
+    ).resolves.toHaveLength(5);
   });
 
   it('supports holiday CRUD and duplicate-date validation', async () => {
@@ -281,10 +296,14 @@ describe('Calendar API integration', () => {
       },
     );
     expect(updated.date).toBe('2026-12-24');
-    await expect(controller.listHolidays(undefined, calendar.id)).resolves.toHaveLength(1);
+    await expect(
+      controller.listHolidays(undefined, calendar.id),
+    ).resolves.toHaveLength(1);
 
     await controller.deleteHoliday(undefined, calendar.id, holiday.id);
-    await expect(controller.listHolidays(undefined, calendar.id)).resolves.toEqual([]);
+    await expect(
+      controller.listHolidays(undefined, calendar.id),
+    ).resolves.toEqual([]);
   });
 
   it('supports exception day CRUD and semantic validation', async () => {
@@ -298,11 +317,15 @@ describe('Calendar API integration', () => {
       }),
     ).rejects.toThrow(UnprocessableEntityException);
 
-    const exception = await controller.createExceptionDay(undefined, calendar.id, {
-      closed: true,
-      date: '2026-11-27',
-      name: 'Closure',
-    });
+    const exception = await controller.createExceptionDay(
+      undefined,
+      calendar.id,
+      {
+        closed: true,
+        date: '2026-11-27',
+        name: 'Closure',
+      },
+    );
     expect(exception.closed).toBe(true);
 
     const updated = await controller.updateExceptionDay(
@@ -326,19 +349,23 @@ describe('Calendar API integration', () => {
         workingDayStart: '10:00',
       }),
     );
-    await expect(controller.listExceptionDays(undefined, calendar.id)).resolves.toHaveLength(1);
+    await expect(
+      controller.listExceptionDays(undefined, calendar.id),
+    ).resolves.toHaveLength(1);
 
     await controller.deleteExceptionDay(undefined, calendar.id, exception.id);
-    await expect(controller.listExceptionDays(undefined, calendar.id)).resolves.toEqual([]);
+    await expect(
+      controller.listExceptionDays(undefined, calendar.id),
+    ).resolves.toEqual([]);
   });
 
   it('isolates calendar data by organization scope', async () => {
     const calendar = await createCalendar(controller);
 
     await expect(controller.listCalendars('other-org')).resolves.toEqual([]);
-    await expect(controller.getCalendar('other-org', calendar.id)).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      controller.getCalendar('other-org', calendar.id),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('rejects invalid calendar metadata and dates', async () => {

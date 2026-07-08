@@ -111,7 +111,10 @@ describe('ProjectVisibilityService', () => {
     authorizationPolicyService.canViewProject.mockResolvedValue(true);
 
     await expect(
-      service.canViewProject('project-1', { roleId: 'role-1', userId: 'user-1' }),
+      service.canViewProject('project-1', {
+        roleId: 'role-1',
+        userId: 'user-1',
+      }),
     ).resolves.toBe(true);
     expect(authorizationPolicyService.canViewProject).toHaveBeenCalledWith(
       'project-1',

@@ -244,7 +244,9 @@ describe('PlanningService', () => {
 
     service = moduleRef.get(PlanningService);
     planningSnapshotService = moduleRef.get(PlanningSnapshotService);
-    planningScheduleEngineService = moduleRef.get(PlanningScheduleEngineService);
+    planningScheduleEngineService = moduleRef.get(
+      PlanningScheduleEngineService,
+    );
   });
 
   it('aggregates the planning workspace from thin API contracts', async () => {
@@ -1215,7 +1217,11 @@ describe('PlanningService', () => {
       plannedEndDate: '2026-07-05',
       plannedStartDate: '2026-07-01',
       projectId,
-      task: { id: 'summary-task-id', projectId, taskKind: TaskKind.Summary } as Task,
+      task: {
+        id: 'summary-task-id',
+        projectId,
+        taskKind: TaskKind.Summary,
+      } as Task,
       taskId: 'summary-task-id',
       taskKind: TaskKind.Summary,
     } as PlanningTaskSchedule;
@@ -1262,7 +1268,7 @@ describe('PlanningService', () => {
       task: { id: taskId, projectId, taskKind: TaskKind.Summary } as Task,
       taskId,
       taskKind: TaskKind.Summary,
-    } as PlanningTaskSchedule);
+    });
 
     await expect(
       service.updatePlanningTaskSchedule(
@@ -1284,7 +1290,7 @@ describe('PlanningService', () => {
       projectId,
       task: { id: taskId, projectId } as Task,
       taskId,
-    } as PlanningTaskSchedule);
+    });
 
     await expect(
       service.updatePlanningTaskSchedule(
@@ -1293,7 +1299,9 @@ describe('PlanningService', () => {
         { plannedFinishDate: '2026-06-30' },
         actor,
       ),
-    ).rejects.toThrow('Planned finish date cannot be before planned start date');
+    ).rejects.toThrow(
+      'Planned finish date cannot be before planned start date',
+    );
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
 
@@ -1316,10 +1324,7 @@ describe('PlanningService', () => {
       taskKind: TaskKind.Summary,
     });
     tasksRepository.find
-      ?.mockResolvedValueOnce([
-        { sequenceNumber: 1 },
-        { sequenceNumber: 2 },
-      ])
+      ?.mockResolvedValueOnce([{ sequenceNumber: 1 }, { sequenceNumber: 2 }])
       .mockResolvedValueOnce([
         {
           dueDate: '2026-07-10',
@@ -1420,25 +1425,23 @@ describe('PlanningService', () => {
     scheduleSnapshotsRepository.findOne
       ?.mockResolvedValueOnce(snapshot)
       .mockResolvedValueOnce(snapshot);
-    tasksRepository.find
-      ?.mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          dueDate: '2026-07-01',
-          id: taskId,
-          milestoneCategory: MilestoneCategory.Release,
-          parentTaskId: null,
-          percentComplete: 0,
-          plannedEndDate: '2026-07-01',
-          plannedStartDate: '2026-07-01',
-          projectId,
-          sequenceNumber: 1,
-          startDate: '2026-07-01',
-          status: TaskStatus.Todo,
-          taskKind: TaskKind.Milestone,
-          title: 'Release drop',
-        },
-      ]);
+    tasksRepository.find?.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        dueDate: '2026-07-01',
+        id: taskId,
+        milestoneCategory: MilestoneCategory.Release,
+        parentTaskId: null,
+        percentComplete: 0,
+        plannedEndDate: '2026-07-01',
+        plannedStartDate: '2026-07-01',
+        projectId,
+        sequenceNumber: 1,
+        startDate: '2026-07-01',
+        status: TaskStatus.Todo,
+        taskKind: TaskKind.Milestone,
+        title: 'Release drop',
+      },
+    ]);
 
     const schedule = await service.createPlanningTask(
       projectId,

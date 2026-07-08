@@ -1,6 +1,6 @@
 | Feature | Description                    | Dependencies | Estimated Complexity | Status  |
 | ------- | ------------------------------ | ------------ | -------------------- | ------- |
-| 1.2.1   | ERM Domain Model & Persistence | None         | Medium               | Planned |
+| 1.2.1   | ERM Domain Model & Persistence | None         | Medium               | Completed |
 | 1.2.2   | Resource CRUD API              | 1.2.1        | Medium               | Planned |
 | 1.2.3   | Resource Management UI         | 1.2.2        | Medium               | Planned |
 | 1.2.4   | Skills Management              | 1.2.1        | Medium               | Planned |

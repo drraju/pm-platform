@@ -2,7 +2,7 @@
 
 ## Status
 
-Product and architecture baseline. Not yet implemented.
+Product and architecture baseline approved. Feature 1.2.1 Enterprise Resource Management Foundation has been implemented and verified. Stage 14 Feature Commit remains pending.
 
 ## Business Objective
 
@@ -161,11 +161,14 @@ It does not yet have:
 
 | Field | Detail |
 | --- | --- |
+| Status | Completed. |
 | Purpose | Introduce Resource aggregate and lifecycle. |
-| Scope | Resource entity, type, status, optional user link, audit, validation. |
-| Out of Scope | Skills, cost, capacity calculations. |
+| Scope | Resource entity, type, status, optional user link, audit, validation, internal service, and persistence migration. |
+| Delivered | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. |
+| Out of Scope | Public Resource CRUD API, frontend UI, skills, cost, capacity calculations. |
 | Dependencies | Users, RBAC, database migration rules. |
-| Acceptance Criteria | Resource can be created, listed, updated, archived, and searched. |
+| Acceptance Criteria | Resource domain foundation is implemented and verified without scheduling changes. |
+| Next Feature | Feature 1.2.2 Resource CRUD API. |
 
 ### 1.2.2 Resource Profiles
 
@@ -246,4 +249,3 @@ It does not yet have:
 - Frontend follows feature architecture and has Vitest coverage.
 - Scheduling Engine remains unchanged unless explicitly approved in a later epic.
 - Docker and Ubuntu verification pass for implementation features.
-

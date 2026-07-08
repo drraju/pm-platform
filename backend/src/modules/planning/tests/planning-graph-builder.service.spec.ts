@@ -59,8 +59,18 @@ describe('PlanningGraphBuilderService', () => {
   it('builds a branch graph', () => {
     const graph = service.buildGraph({
       dependencies: [
-        dependency('dep-1', 'task-1', 'task-2', TaskDependencyType.StartToStart),
-        dependency('dep-2', 'task-1', 'task-3', TaskDependencyType.FinishToFinish),
+        dependency(
+          'dep-1',
+          'task-1',
+          'task-2',
+          TaskDependencyType.StartToStart,
+        ),
+        dependency(
+          'dep-2',
+          'task-1',
+          'task-3',
+          TaskDependencyType.FinishToFinish,
+        ),
       ],
       tasks: [task('task-1'), task('task-2'), task('task-3')],
     });
@@ -114,10 +124,7 @@ describe('PlanningGraphBuilderService', () => {
   it('includes milestones as valid leaf dependency endpoints', () => {
     const graph = service.buildGraph({
       dependencies: [dependency('dep-1', 'task-1', 'milestone-1')],
-      tasks: [
-        task('task-1'),
-        task('milestone-1', TaskKind.Milestone),
-      ],
+      tasks: [task('task-1'), task('milestone-1', TaskKind.Milestone)],
     });
 
     expect(graph.nodes.get('milestone-1')).toEqual(

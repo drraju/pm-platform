@@ -168,7 +168,9 @@ export type PhaseComputedFields = {
   phaseStartDate: string | null;
 };
 
-function findEarliestDate(values: Array<string | null | undefined>): string | null {
+function findEarliestDate(
+  values: Array<string | null | undefined>,
+): string | null {
   const dates = values.filter((value): value is string => Boolean(value));
   if (dates.length === 0) {
     return null;
@@ -179,7 +181,9 @@ function findEarliestDate(values: Array<string | null | undefined>): string | nu
   );
 }
 
-function findLatestDate(values: Array<string | null | undefined>): string | null {
+function findLatestDate(
+  values: Array<string | null | undefined>,
+): string | null {
   const dates = values.filter((value): value is string => Boolean(value));
   if (dates.length === 0) {
     return null;
@@ -197,7 +201,9 @@ function normalizePercentComplete(value?: number | string | null): number {
 
   if (typeof value === 'string') {
     const numericValue = Number(value);
-    return Number.isFinite(numericValue) ? clampPercentComplete(numericValue) : 0;
+    return Number.isFinite(numericValue)
+      ? clampPercentComplete(numericValue)
+      : 0;
   }
 
   return 0;

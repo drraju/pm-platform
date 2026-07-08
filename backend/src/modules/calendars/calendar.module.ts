@@ -7,10 +7,7 @@ import { EnterpriseCalendarService } from './enterprise-calendar.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      EnterpriseCalendar,
-      EnterpriseCalendarException,
-    ]),
+    TypeOrmModule.forFeature([EnterpriseCalendar, EnterpriseCalendarException]),
   ],
   providers: [CalendarValidationService, EnterpriseCalendarService],
   exports: [CalendarValidationService, EnterpriseCalendarService],

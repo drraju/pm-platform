@@ -40,7 +40,10 @@ export class MigrationRunnerService {
         continue;
       }
 
-      const sql = await fs.readFile(path.join(migrationDirectory, filename), 'utf8');
+      const sql = await fs.readFile(
+        path.join(migrationDirectory, filename),
+        'utf8',
+      );
       this.logger.log(`Applying migration: ${filename}`);
 
       await this.dataSource.transaction(async (transactionalEntityManager) => {

@@ -179,7 +179,9 @@ describe('TasksService', () => {
         taskKind: TaskKind.Milestone,
         title: 'Go-live',
       }),
-    ).rejects.toThrow('Milestones must have matching planned start and end dates');
+    ).rejects.toThrow(
+      'Milestones must have matching planned start and end dates',
+    );
   });
 
   it('normalizes milestone creation when only the planned start date is supplied', async () => {
@@ -481,8 +483,9 @@ describe('TasksService', () => {
       status: TaskStatus.Todo,
     };
     tasksRepository.findOne?.mockResolvedValue(task);
-    projectMembersRepository.findOne
-      ?.mockResolvedValueOnce({ id: 'assignee-member-id' });
+    projectMembersRepository.findOne?.mockResolvedValueOnce({
+      id: 'assignee-member-id',
+    });
 
     await service.update(
       taskId,

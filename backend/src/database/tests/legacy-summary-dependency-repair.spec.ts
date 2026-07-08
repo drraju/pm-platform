@@ -38,7 +38,9 @@ describe('legacy summary dependency repair migration', () => {
     );
 
     expect(result.removedCount).toBe(2);
-    expect(result.dependencies).toEqual([dependency('dep-valid', 'task-1', 'task-2')]);
+    expect(result.dependencies).toEqual([
+      dependency('dep-valid', 'task-1', 'task-2'),
+    ]);
   });
 
   it('keeps task-to-task dependencies intact', () => {
@@ -88,8 +90,14 @@ describe('legacy summary dependency repair migration', () => {
       dependency('dep-valid', 'task-1', 'milestone-1'),
     ];
 
-    const firstRun = applyLegacySummaryDependencyRepair(tasks, initialDependencies);
-    const secondRun = applyLegacySummaryDependencyRepair(tasks, firstRun.dependencies);
+    const firstRun = applyLegacySummaryDependencyRepair(
+      tasks,
+      initialDependencies,
+    );
+    const secondRun = applyLegacySummaryDependencyRepair(
+      tasks,
+      firstRun.dependencies,
+    );
 
     expect(firstRun.removedCount).toBe(1);
     expect(firstRun.dependencies).toEqual([
@@ -115,14 +123,16 @@ function applyLegacySummaryDependencyRepair(
   tasks: TaskRecord[],
   dependencies: TaskDependencyRecord[],
 ) {
-  const taskKindById = new Map(tasks.map((taskRecord) => [taskRecord.id, taskRecord.taskKind]));
+  const taskKindById = new Map(
+    tasks.map((taskRecord) => [taskRecord.id, taskRecord.taskKind]),
+  );
   const remainingDependencies = dependencies.filter((taskDependency) => {
-    const predecessorTaskKind = taskKindById.get(taskDependency.predecessorTaskId);
+    const predecessorTaskKind = taskKindById.get(
+      taskDependency.predecessorTaskId,
+    );
     const successorTaskKind = taskKindById.get(taskDependency.successorTaskId);
 
-    return (
-      predecessorTaskKind !== 'summary' && successorTaskKind !== 'summary'
-    );
+    return predecessorTaskKind !== 'summary' && successorTaskKind !== 'summary';
   });
 
   return {

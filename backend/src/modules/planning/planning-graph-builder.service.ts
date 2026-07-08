@@ -284,7 +284,9 @@ export class PlanningGraphBuilderService {
       );
     }
 
-    const queue = [...nodes.keys()].filter((taskId) => inDegree.get(taskId) === 0);
+    const queue = [...nodes.keys()].filter(
+      (taskId) => inDegree.get(taskId) === 0,
+    );
     const ordered: string[] = [];
 
     for (let index = 0; index < queue.length; index += 1) {

@@ -5,10 +5,14 @@ import { User } from '../../users/entities/user.entity';
 import { Project } from './project.entity';
 
 @Entity({ name: 'project_members' })
-@Index('idx_project_members_active_project_user_unique', ['projectId', 'userId'], {
-  unique: true,
-  where: '"deleted_at" IS NULL',
-})
+@Index(
+  'idx_project_members_active_project_user_unique',
+  ['projectId', 'userId'],
+  {
+    unique: true,
+    where: '"deleted_at" IS NULL',
+  },
+)
 export class ProjectMember extends AuditableEntity {
   @Column({ name: 'project_id', type: 'uuid' })
   projectId: string;

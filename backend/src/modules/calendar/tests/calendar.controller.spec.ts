@@ -26,7 +26,7 @@ describe('CalendarController', () => {
       updateExceptionDay: jest.fn(),
       updateHoliday: jest.fn(),
       updateWorkingHours: jest.fn(),
-    } as unknown as Record<keyof CalendarService, jest.Mock>;
+    };
 
     controller = new CalendarController(service as unknown as CalendarService);
   });
@@ -47,10 +47,13 @@ describe('CalendarController', () => {
     });
     await controller.deleteCalendar(undefined, 'calendar-id');
 
-    expect(service.createCalendar).toHaveBeenCalledWith(DEFAULT_ORGANIZATION_ID, {
-      name: 'Corporate Calendar',
-      type: CalendarType.Enterprise,
-    });
+    expect(service.createCalendar).toHaveBeenCalledWith(
+      DEFAULT_ORGANIZATION_ID,
+      {
+        name: 'Corporate Calendar',
+        type: CalendarType.Enterprise,
+      },
+    );
     expect(service.listCalendars).toHaveBeenCalledWith(DEFAULT_ORGANIZATION_ID);
     expect(service.getCalendar).toHaveBeenCalledWith(
       DEFAULT_ORGANIZATION_ID,
@@ -91,10 +94,15 @@ describe('CalendarController', () => {
       date: '2026-12-25',
       name: 'Christmas',
     });
-    await controller.updateHoliday(organizationId, 'calendar-id', 'holiday-id', {
-      date: '2026-12-24',
-      name: 'Christmas Eve',
-    });
+    await controller.updateHoliday(
+      organizationId,
+      'calendar-id',
+      'holiday-id',
+      {
+        date: '2026-12-24',
+        name: 'Christmas Eve',
+      },
+    );
     await controller.deleteHoliday(organizationId, 'calendar-id', 'holiday-id');
     await controller.listExceptionDays(organizationId, 'calendar-id');
     await controller.createExceptionDay(organizationId, 'calendar-id', {

@@ -25,9 +25,7 @@ describe('baseline persistence architecture SQL', () => {
     expect(hardeningMigration).toContain(
       'FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL',
     );
-    expect(hardeningMigration).toContain(
-      'ALTER COLUMN task_id DROP NOT NULL',
-    );
+    expect(hardeningMigration).toContain('ALTER COLUMN task_id DROP NOT NULL');
   });
 
   it('allows only lifecycle metadata changes on baseline headers', () => {
@@ -35,9 +33,15 @@ describe('baseline persistence architecture SQL', () => {
     const hardeningMigration = readFileSync(hardeningMigrationPath, 'utf8');
 
     for (const sql of [bootstrapSchema, hardeningMigration]) {
-      expect(sql).toContain("CHECK (status IN ('draft', 'approved', 'superseded'))");
-      expect(sql).toContain("OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at");
-      expect(sql).toContain("OR NEW.deleted_by_id IS DISTINCT FROM OLD.deleted_by_id");
+      expect(sql).toContain(
+        "CHECK (status IN ('draft', 'approved', 'superseded'))",
+      );
+      expect(sql).toContain(
+        'OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at',
+      );
+      expect(sql).toContain(
+        'OR NEW.deleted_by_id IS DISTINCT FROM OLD.deleted_by_id',
+      );
       expect(sql).toContain(
         "RAISE EXCEPTION 'Project baseline status must be a lifecycle status'",
       );
@@ -52,7 +56,9 @@ describe('baseline persistence architecture SQL', () => {
       expect(sql).toContain(
         "RAISE EXCEPTION 'Project baseline tasks are immutable'",
       );
-      expect(sql).toContain('BEFORE UPDATE OR DELETE ON project_baseline_tasks');
+      expect(sql).toContain(
+        'BEFORE UPDATE OR DELETE ON project_baseline_tasks',
+      );
     }
   });
 });

@@ -93,7 +93,9 @@ describe('RisksService', () => {
       id: 'risk-1',
       projectId: 'project-1',
     });
-    jest.spyOn(projectVisibilityService, 'canViewProject').mockResolvedValue(true);
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
 
     await expect(
       service.findOne('risk-1', { roleId: 'role-1', userId: 'customer-1' }),

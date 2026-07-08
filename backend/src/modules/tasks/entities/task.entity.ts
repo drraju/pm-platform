@@ -66,10 +66,22 @@ export class Task extends AuditableEntity {
   @Column({ name: 'actual_end_date', type: 'date', nullable: true })
   actualEndDate?: string | null;
 
-  @Column({ name: 'estimated_hours', type: 'numeric', precision: 10, scale: 2, nullable: true })
+  @Column({
+    name: 'estimated_hours',
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
   estimatedHours?: number | null;
 
-  @Column({ name: 'remaining_hours', type: 'numeric', precision: 10, scale: 2, nullable: true })
+  @Column({
+    name: 'remaining_hours',
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
   remainingHours?: number | null;
 
   phaseProgress?: number | null;

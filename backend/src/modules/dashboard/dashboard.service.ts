@@ -137,12 +137,17 @@ export class DashboardService {
 
     return {
       total: operationalTasks.length,
-      todo: operationalTasks.filter((task) => task.status === TaskStatus.Todo).length,
-      inProgress: operationalTasks.filter((task) => task.status === TaskStatus.InProgress)
+      todo: operationalTasks.filter((task) => task.status === TaskStatus.Todo)
         .length,
-      blocked: operationalTasks.filter((task) => task.status === TaskStatus.Blocked)
-        .length,
-      completed: operationalTasks.filter((task) => task.status === TaskStatus.Done).length,
+      inProgress: operationalTasks.filter(
+        (task) => task.status === TaskStatus.InProgress,
+      ).length,
+      blocked: operationalTasks.filter(
+        (task) => task.status === TaskStatus.Blocked,
+      ).length,
+      completed: operationalTasks.filter(
+        (task) => task.status === TaskStatus.Done,
+      ).length,
       overdue: operationalTasks.filter((task) => this.isOverdue(task)).length,
     };
   }

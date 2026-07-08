@@ -84,12 +84,18 @@ export class CalendarService {
     }
 
     const [calendars, defaultCalendarId] = await Promise.all([
-      this.calendarsRepository.find({ order: { createdAt: 'ASC', name: 'ASC' } }),
+      this.calendarsRepository.find({
+        order: { createdAt: 'ASC', name: 'ASC' },
+      }),
       this.getDefaultCalendarId(),
     ]);
 
     return calendars.map((calendar) =>
-      CalendarMapper.toCalendarResponse(calendar, organizationId, defaultCalendarId),
+      CalendarMapper.toCalendarResponse(
+        calendar,
+        organizationId,
+        defaultCalendarId,
+      ),
     );
   }
 
@@ -128,7 +134,10 @@ export class CalendarService {
     if (input.name !== undefined) {
       await this.ensureUniqueName(input.name, calendarId);
     }
-    await this.ensureDefaultCalendarAllowed(Boolean(input.isDefault), calendarId);
+    await this.ensureDefaultCalendarAllowed(
+      Boolean(input.isDefault),
+      calendarId,
+    );
     this.calendarValidationService.validateEnterpriseCalendar(input);
 
     const calendar = await this.findCalendar(organizationId, calendarId);
@@ -146,7 +155,10 @@ export class CalendarService {
     );
   }
 
-  async deleteCalendar(organizationId: string, calendarId: string): Promise<void> {
+  async deleteCalendar(
+    organizationId: string,
+    calendarId: string,
+  ): Promise<void> {
     const calendar = await this.findCalendar(organizationId, calendarId);
     calendar.status = CalendarStatus.Archived;
     await this.calendarsRepository.save(calendar);
@@ -345,11 +357,7 @@ export class CalendarService {
     );
     this.validateExceptionDay(input);
     const exceptionType = this.toExceptionType(input);
-    await this.ensureUniqueExceptionDate(
-      calendarId,
-      input.date,
-      exceptionId,
-    );
+    await this.ensureUniqueExceptionDate(calendarId, input.date, exceptionId);
 
     Object.assign(exception, {
       date: input.date,
@@ -399,10 +407,16 @@ export class CalendarService {
   ) {
     await this.findCalendar(organizationId, calendarId);
     const exception = await this.exceptionsRepository.findOne({
-      where: { enterpriseCalendarId: calendarId, exceptionType, id: exceptionId },
+      where: {
+        enterpriseCalendarId: calendarId,
+        exceptionType,
+        id: exceptionId,
+      },
     });
     if (!exception) {
-      throw new NotFoundException(`Calendar exception ${exceptionId} not found`);
+      throw new NotFoundException(
+        `Calendar exception ${exceptionId} not found`,
+      );
     }
     return exception;
   }
@@ -428,7 +442,9 @@ export class CalendarService {
       ],
     });
     if (!exception) {
-      throw new NotFoundException(`Calendar exception ${exceptionId} not found`);
+      throw new NotFoundException(
+        `Calendar exception ${exceptionId} not found`,
+      );
     }
     return exception;
   }
@@ -439,7 +455,9 @@ export class CalendarService {
       throw new BadRequestException('Calendar name is required');
     }
     const existingCalendar = await this.calendarsRepository.findOne({
-      where: calendarId ? { id: Not(calendarId), name: trimmedName } : { name: trimmedName },
+      where: calendarId
+        ? { id: Not(calendarId), name: trimmedName }
+        : { name: trimmedName },
     });
     if (existingCalendar) {
       throw new ConflictException('Calendar name already exists');
@@ -564,7 +582,10 @@ export class CalendarService {
     return dayOfWeek;
   }
 
-  private ensureWorkingDayExists(calendar: EnterpriseCalendar, dayOfWeek: number) {
+  private ensureWorkingDayExists(
+    calendar: EnterpriseCalendar,
+    dayOfWeek: number,
+  ) {
     if (!(calendar.defaultWorkingDays ?? []).includes(dayOfWeek)) {
       throw new NotFoundException(`Working hours ${dayOfWeek} not found`);
     }

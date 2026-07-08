@@ -118,7 +118,12 @@ describe('PlanningCriticalPathService', () => {
   it('does not mark negative-float activities critical', () => {
     const result = identify({
       dependencies: [
-        dependency('dep-1', 'task-1', 'task-2', TaskDependencyType.StartToStart),
+        dependency(
+          'dep-1',
+          'task-1',
+          'task-2',
+          TaskDependencyType.StartToStart,
+        ),
       ],
       tasks: [task('task-1', 5), task('task-2', 2)],
     });

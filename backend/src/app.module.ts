@@ -16,6 +16,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PlanningModule } from './modules/planning/planning.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { RaidModule } from './modules/raid/raid.module';
+import { ResourceModule } from './modules/resources/resource.module';
 import { RisksModule } from './modules/risks/risks.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
@@ -27,6 +28,7 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     AuthzModule,
     AuthModule,
     CalendarModule,
+    ResourceModule,
     UsersModule,
     ProjectsModule,
     TasksModule,

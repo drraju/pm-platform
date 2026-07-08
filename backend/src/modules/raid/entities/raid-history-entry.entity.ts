@@ -28,7 +28,10 @@ export class RaidHistoryEntry extends AuditableEntity {
   nextValue?: string | null;
 
   @Column({ name: 'changes', type: 'jsonb', nullable: true })
-  changes?: Record<string, { previousValue: string | null; nextValue: string | null }> | null;
+  changes?: Record<
+    string,
+    { previousValue: string | null; nextValue: string | null }
+  > | null;
 
   @Column({ name: 'actor_id', type: 'uuid', nullable: true })
   actorId?: string | null;

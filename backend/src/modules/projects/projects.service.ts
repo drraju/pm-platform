@@ -125,7 +125,9 @@ export class ProjectsService {
   async findAll(actor?: ProjectVisibilityActor): Promise<ProjectWithHealth[]> {
     const projects =
       await this.projectVisibilityService.getVisibleProjects(actor);
-    return projects.map((project) => this.decorateProject(this.withHealth(project)));
+    return projects.map((project) =>
+      this.decorateProject(this.withHealth(project)),
+    );
   }
 
   async findOne(
@@ -194,12 +196,14 @@ export class ProjectsService {
         throw new ConflictException('User is already a project member');
       }
 
-      existingMember.role = createProjectMemberDto.role ?? ProjectRole.Contributor;
+      existingMember.role =
+        createProjectMemberDto.role ?? ProjectRole.Contributor;
       existingMember.deletedAt = null;
       existingMember.deletedById = null;
       existingMember.updatedById = actor?.userId;
 
-      const restoredMember = await this.projectMembersRepository.save(existingMember);
+      const restoredMember =
+        await this.projectMembersRepository.save(existingMember);
       return this.toProjectMemberResponse(
         await this.findMember(projectId, restoredMember.id),
       );
@@ -333,7 +337,9 @@ export class ProjectsService {
       projectId,
       normalizedInput.assigneeId,
     );
-    Object.assign(task, this.withNormalizedProgress(normalizedInput), { projectId });
+    Object.assign(task, this.withNormalizedProgress(normalizedInput), {
+      projectId,
+    });
 
     const savedTask = await this.tasksRepository.save(task);
     return this.decorateTask(savedTask);
@@ -349,7 +355,10 @@ export class ProjectsService {
 
     const task = await this.findProjectTask(projectId, taskId);
     await this.tasksRepository.softRemove(task);
-    await this.planningSnapshotService.rebuildWorkspaceSnapshot(projectId, actor);
+    await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+      projectId,
+      actor,
+    );
   }
 
   async captureProjectBaseline(
@@ -738,7 +747,9 @@ export class ProjectsService {
       ),
     );
 
-    await Promise.all(uniqueUserIds.map((userId) => this.ensureUserExists(userId)));
+    await Promise.all(
+      uniqueUserIds.map((userId) => this.ensureUserExists(userId)),
+    );
   }
 
   private async findMember(
@@ -826,10 +837,11 @@ export class ProjectsService {
     input: Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
     existingTask?: Task,
   ) {
-    const effectiveTaskKind = this.schedulingFoundationService.normalizeTaskKind(
-      input,
-      existingTask?.taskKind ?? TaskKind.Standard,
-    );
+    const effectiveTaskKind =
+      this.schedulingFoundationService.normalizeTaskKind(
+        input,
+        existingTask?.taskKind ?? TaskKind.Standard,
+      );
     const effectiveParentTaskId =
       typeof input.parentTaskId !== 'undefined'
         ? input.parentTaskId
@@ -852,7 +864,10 @@ export class ProjectsService {
       throw new BadRequestException('A task cannot be its own parent');
     }
 
-    const parentTask = await this.findPlanningTask(projectId, effectiveParentTaskId);
+    const parentTask = await this.findPlanningTask(
+      projectId,
+      effectiveParentTaskId,
+    );
     if (!parentTask) {
       throw new NotFoundException(
         `Parent task ${effectiveParentTaskId} not found for project ${projectId}`,
@@ -860,11 +875,17 @@ export class ProjectsService {
     }
 
     if (parentTask.taskKind !== TaskKind.Summary) {
-      throw new BadRequestException('Only summary tasks can contain child tasks');
+      throw new BadRequestException(
+        'Only summary tasks can contain child tasks',
+      );
     }
 
     if (existingTask) {
-      await this.ensureNoHierarchyCycle(projectId, existingTask.id, parentTask.id);
+      await this.ensureNoHierarchyCycle(
+        projectId,
+        existingTask.id,
+        parentTask.id,
+      );
     }
   }
 
@@ -910,7 +931,9 @@ export class ProjectsService {
     });
 
     if (childTask) {
-      throw new BadRequestException('Only summary tasks can contain child tasks');
+      throw new BadRequestException(
+        'Only summary tasks can contain child tasks',
+      );
     }
   }
 
@@ -926,7 +949,10 @@ export class ProjectsService {
         throw new BadRequestException('Task hierarchy cannot contain cycles');
       }
 
-      const currentParent = await this.findPlanningTask(projectId, currentParentId);
+      const currentParent = await this.findPlanningTask(
+        projectId,
+        currentParentId,
+      );
       currentParentId = currentParent?.parentTaskId ?? null;
     }
   }
@@ -958,7 +984,9 @@ export class ProjectsService {
     projectId: string,
     actor?: AuthenticatedActor,
   ): Promise<void> {
-    if (await this.authorizationPolicyService.canManageProject(projectId, actor)) {
+    if (
+      await this.authorizationPolicyService.canManageProject(projectId, actor)
+    ) {
       return;
     }
 
@@ -982,7 +1010,9 @@ export class ProjectsService {
     projectId: string,
     actor?: AuthenticatedActor,
   ) {
-    if (await this.authorizationPolicyService.canDeleteProject(projectId, actor)) {
+    if (
+      await this.authorizationPolicyService.canDeleteProject(projectId, actor)
+    ) {
       return;
     }
 
@@ -1073,7 +1103,7 @@ export class ProjectsService {
   }
 
   private decorateTask(task: Task): Task {
-    return decoratePlanningTasks([task])[0] as Task;
+    return decoratePlanningTasks([task])[0];
   }
 
   private withNormalizedProgress<

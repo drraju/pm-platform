@@ -35,6 +35,9 @@ export class ProjectBaseline extends AuditableEntity {
   @JoinColumn({ name: 'captured_by_id' })
   capturedBy?: User;
 
-  @OneToMany(() => ProjectBaselineTask, (baselineTask) => baselineTask.projectBaseline)
+  @OneToMany(
+    () => ProjectBaselineTask,
+    (baselineTask) => baselineTask.projectBaseline,
+  )
   tasks?: ProjectBaselineTask[];
 }

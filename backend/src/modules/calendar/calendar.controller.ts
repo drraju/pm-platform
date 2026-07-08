@@ -66,8 +66,12 @@ export class CalendarController {
   @ApiOperation({ summary: 'Create an enterprise calendar' })
   @ApiCreatedResponse({ type: CalendarResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid calendar payload' })
-  @ApiConflictResponse({ description: 'Calendar name or default already exists' })
-  @ApiUnprocessableEntityResponse({ description: 'Unsupported calendar metadata' })
+  @ApiConflictResponse({
+    description: 'Calendar name or default already exists',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'Unsupported calendar metadata',
+  })
   createCalendar(
     @Headers('x-organization-id') organizationId: string | undefined,
     @Body() input: CreateCalendarDto,
@@ -270,7 +274,9 @@ export class CalendarController {
   @ApiBadRequestResponse({ description: 'Invalid exception payload' })
   @ApiConflictResponse({ description: 'Exception date already exists' })
   @ApiNotFoundResponse({ description: 'Calendar not found' })
-  @ApiUnprocessableEntityResponse({ description: 'Invalid exception semantics' })
+  @ApiUnprocessableEntityResponse({
+    description: 'Invalid exception semantics',
+  })
   createExceptionDay(
     @Headers('x-organization-id') organizationId: string | undefined,
     @Param('id') id: string,
@@ -292,7 +298,9 @@ export class CalendarController {
   @ApiBadRequestResponse({ description: 'Invalid exception payload' })
   @ApiConflictResponse({ description: 'Exception date already exists' })
   @ApiNotFoundResponse({ description: 'Calendar or exception not found' })
-  @ApiUnprocessableEntityResponse({ description: 'Invalid exception semantics' })
+  @ApiUnprocessableEntityResponse({
+    description: 'Invalid exception semantics',
+  })
   updateExceptionDay(
     @Headers('x-organization-id') organizationId: string | undefined,
     @Param('id') id: string,
@@ -349,9 +357,13 @@ export class CalendarController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: CalendarResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid calendar payload' })
-  @ApiConflictResponse({ description: 'Calendar name or default already exists' })
+  @ApiConflictResponse({
+    description: 'Calendar name or default already exists',
+  })
   @ApiNotFoundResponse({ description: 'Calendar not found' })
-  @ApiUnprocessableEntityResponse({ description: 'Unsupported calendar metadata' })
+  @ApiUnprocessableEntityResponse({
+    description: 'Unsupported calendar metadata',
+  })
   replaceCalendar(
     @Headers('x-organization-id') organizationId: string | undefined,
     @Param('id') id: string,
@@ -370,9 +382,13 @@ export class CalendarController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: CalendarResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid calendar payload' })
-  @ApiConflictResponse({ description: 'Calendar name or default already exists' })
+  @ApiConflictResponse({
+    description: 'Calendar name or default already exists',
+  })
   @ApiNotFoundResponse({ description: 'Calendar not found' })
-  @ApiUnprocessableEntityResponse({ description: 'Unsupported calendar metadata' })
+  @ApiUnprocessableEntityResponse({
+    description: 'Unsupported calendar metadata',
+  })
   updateCalendar(
     @Headers('x-organization-id') organizationId: string | undefined,
     @Param('id') id: string,

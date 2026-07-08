@@ -76,7 +76,9 @@ export class PlanningController {
 
   @Post('projects/:projectId/workspace/regenerate')
   @RequirePermissions(PermissionKey.TaskUpdate)
-  @ApiOperation({ summary: 'Regenerate the project planning workspace snapshot' })
+  @ApiOperation({
+    summary: 'Regenerate the project planning workspace snapshot',
+  })
   @ApiCreatedResponse({ type: PlanningWorkspaceDto })
   regenerateWorkspace(
     @Req() request: AuthenticatedRequest,

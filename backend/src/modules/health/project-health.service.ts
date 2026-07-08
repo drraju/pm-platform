@@ -24,7 +24,9 @@ export class ProjectHealthService {
   }: ProjectHealthInput): ProjectHealthDto {
     const operationalTasks = getOperationalTasks(tasks);
     const totalTasks = operationalTasks.length;
-    const overdueTasks = operationalTasks.filter((task) => this.isOverdue(task)).length;
+    const overdueTasks = operationalTasks.filter((task) =>
+      this.isOverdue(task),
+    ).length;
     const overdueRatio = totalTasks > 0 ? overdueTasks / totalTasks : 0;
     const criticalIssues = issues.filter(
       (issue) => this.isOpen(issue.status) && this.isCritical(issue.severity),
