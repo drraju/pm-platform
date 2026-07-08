@@ -74,7 +74,8 @@ These existing documents remain useful detailed references:
 - Planning consumes scheduling.
 - Calendar and resource administration must not directly mutate schedules.
 - Database changes should be additive.
-- Feature work should follow repository investigation, ADD, implementation, review, tests, Docker verification, and single-feature commit.
+- Feature work should follow requirements review, repository investigation, architecture gap analysis, ADR review, ADR approval when required, ADD, technical design review, Architecture Baseline Commit, implementation, implementation review, tests, Docker verification, Ubuntu verification, documentation update, and single-feature commit.
+- Implementation must not begin until Technical Design Review and the Stage 7.5 Architecture Baseline Commit are complete.
 
 ## Archived Architecture Documents
 

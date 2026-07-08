@@ -54,17 +54,84 @@ Every feature follows this sequence:
 1. Requirements Review.
 2. Repository Investigation.
 3. Architecture Gap Analysis.
-4. Architecture Design Document.
-5. Codex Prompt.
-6. Implementation.
-7. Architecture Review.
-8. Code Review.
-9. Testing.
-10. Docker Verification.
-11. Ubuntu Verification.
-12. Single Feature Commit.
+4. ADR Review.
+5. ADR Creation & Approval, if required.
+6. Architecture Design Document (ADD).
+7. Technical Design Review.
+7.5 Architecture Baseline Commit.
+8. Codex Implementation.
+9. Implementation Review.
+10. Testing.
+11. Docker Verification.
+12. Ubuntu Verification.
+13. Documentation Update.
+14. Single Feature Commit.
 
 Do not skip investigation. Existing code is the source of truth.
+Implementation must not begin until Technical Design Review and the Architecture Baseline Commit are complete.
+
+Track feature status in [Feature Progress](FEATURE_PROGRESS.md).
+
+## Architecture-First Development
+
+Architecture is completed before coding. Requirements, repository investigation, gap analysis, ADRs, and the ADD form the approved design package.
+
+Mandatory architecture approval means:
+
+- Requirements and scope are documented.
+- Repository evidence has been inspected.
+- Gaps are recorded.
+- ADR coverage has been reviewed.
+- Required ADRs are approved.
+- The ADD is approved through Technical Design Review.
+- Stage 7.5 Architecture Baseline Commit has been created.
+
+### Architecture Milestone
+
+The Architecture Milestone is complete after Stage 7.5.
+
+The Architecture Baseline Commit should include documentation only:
+
+- Requirements Review.
+- Repository Investigation.
+- Architecture Gap Analysis.
+- ADRs.
+- Architecture Design Document.
+- Architecture diagrams.
+- Product roadmap updates.
+- Architecture indexes.
+- Design references.
+
+No application source code should be included.
+
+Example commit message:
+
+```text
+docs(architecture): complete Feature <feature-id> architecture package
+```
+
+Benefits:
+
+- Architecture is versioned independently.
+- Design review becomes traceable.
+- Implementation has a stable baseline.
+- Recovery after interrupted development is easier.
+- Future architecture audits are simpler.
+
+### Implementation Milestone
+
+The Implementation Milestone is complete after Stage 14.
+
+Implementation begins from the approved Architecture Baseline Commit and proceeds through Codex implementation, implementation review, testing, Docker verification, Ubuntu verification, documentation updates, and the final single feature commit.
+
+Feature completion criteria:
+
+- Scope matches the approved ADD.
+- Protected modules remain unchanged unless explicitly approved.
+- Required tests and builds pass.
+- Docker and Ubuntu verification pass when applicable.
+- Documentation is updated.
+- `docs/FEATURE_PROGRESS.md` reflects the final status.
 
 ## Prompt Engineering Workflow
 
@@ -77,6 +144,8 @@ Prompts should include:
 - Files or modules that must not change.
 - Required tests and verification.
 - Expected final report format.
+
+Implementation prompts should reference the Architecture Baseline Commit and approved ADD.
 
 For scheduling-related work, explicitly state whether the Scheduling Engine may be modified. Most calendar, resource, UI, and persistence work should leave it unchanged.
 
@@ -151,6 +220,8 @@ Ubuntu deployment should follow the same Compose model:
 
 - Work on the feature branch named in the prompt.
 - Keep one feature per commit.
+- Create the Architecture Baseline Commit after Stage 7.5 for substantial features.
+- Create the final implementation commit only after Stage 14.
 - Do not commit generated or unrelated changes.
 - Never revert user changes without explicit instruction.
 - Before commit, run status and review the diff:
@@ -191,4 +262,3 @@ git diff --name-only
 - Docker Compose services are healthy.
 - Ubuntu deployment path remains compatible.
 - Release notes and architecture docs are updated.
-

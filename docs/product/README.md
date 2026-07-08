@@ -19,6 +19,7 @@ This directory contains the current product documentation for PM Platform.
 | [Product Backlog](PRODUCT_BACKLOG.md) | Prioritized backlog for Epic 1.2 and adjacent roadmap items. |
 | [Release Plan](RELEASE_PLAN.md) | Release mapping for ERM, scheduling integration, capacity planning, and AI direction. |
 | [Epic 1.2: Enterprise Resource Management](epics/EPIC-1.2-Enterprise-Resource-Management.md) | Product and architecture contract for Enterprise Resource Management. |
+| [Feature Progress](../FEATURE_PROGRESS.md) | Lifecycle status tracker for active and planned features. |
 
 ## Archived Product Documents
 
@@ -32,3 +33,4 @@ This directory contains the current product documentation for PM Platform.
 - Keep `docs/product/vision.md` as the single canonical Product Vision.
 - Archive superseded product drafts under `docs/archive/product/`.
 - Update this index when product documents are added, archived, or consolidated.
+- Keep feature lifecycle status aligned with `docs/FEATURE_PROGRESS.md`.

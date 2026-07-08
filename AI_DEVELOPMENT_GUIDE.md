@@ -81,6 +81,7 @@ frontend/
 docs/
   PM_PLATFORM_MASTER_GUIDE.md
   BUILD_PLAYBOOK.md
+  FEATURE_PROGRESS.md
   architecture/
   planning/v1.1/
 ```
@@ -103,17 +104,30 @@ Every substantial feature follows:
 1. Requirements Review.
 2. Repository Investigation.
 3. Architecture Gap Analysis.
-4. Architecture Design Document.
-5. Implementation Prompt.
-6. Implementation.
-7. Architecture Review.
-8. Code Review.
-9. Testing.
-10. Docker Verification.
-11. Ubuntu Verification.
-12. Single Feature Commit.
+4. ADR Review.
+5. ADR Creation & Approval, if required.
+6. Architecture Design Document (ADD).
+7. Technical Design Review.
+7.5 Architecture Baseline Commit.
+8. Codex Implementation.
+9. Implementation Review.
+10. Testing.
+11. Docker Verification.
+12. Ubuntu Verification.
+13. Documentation Update.
+14. Single Feature Commit.
 
-As an AI assistant, do not skip investigation. Use existing code as the source of truth.
+As an AI assistant:
+
+- Follow the lifecycle sequentially.
+- Never skip stages.
+- Never implement before Technical Design Review approval.
+- Recommend an Architecture Baseline Commit before implementation.
+- Resume work by consulting [Feature Progress](docs/FEATURE_PROGRESS.md).
+- Preserve ADRs and ADDs as the authoritative design documents.
+- Use existing code as the source of truth.
+
+Implementation must not begin until Stage 7 and Stage 7.5 are complete.
 
 ## 6. Backend Coding Conventions
 
@@ -363,4 +377,3 @@ Future:
 - v3 SaaS Multi-tenancy
 
 Read: [Roadmap](docs/architecture/10-ROADMAP.md).
-

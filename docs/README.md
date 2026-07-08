@@ -14,6 +14,9 @@ deployment guidance, API documentation, and release notes.
 ## Architecture
 
 - [Architecture](ARCHITECTURE.md)
+- [Architecture Index](architecture/README.md)
+- [Build Playbook](BUILD_PLAYBOOK.md)
+- [Feature Progress](FEATURE_PROGRESS.md)
 
 ## Architecture Decision Records (ADR)
 

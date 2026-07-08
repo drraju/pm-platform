@@ -188,22 +188,29 @@ Every substantial feature must follow:
 1. Requirements Review.
 2. Repository Investigation.
 3. Architecture Gap Analysis.
-4. Architecture Design Document.
-5. Codex Prompt.
-6. Implementation.
-7. Architecture Review.
-8. Code Review.
-9. Testing.
-10. Docker Verification.
-11. Ubuntu Verification.
-12. Single Feature Commit.
+4. ADR Review.
+5. ADR Creation & Approval, if required.
+6. Architecture Design Document (ADD).
+7. Technical Design Review.
+7.5 Architecture Baseline Commit.
+8. Codex Implementation.
+9. Implementation Review.
+10. Testing.
+11. Docker Verification.
+12. Ubuntu Verification.
+13. Documentation Update.
+14. Single Feature Commit.
 
 Do not skip investigation. The repository is the source of truth.
+Implementation must not begin until Stage 7 and Stage 7.5 are complete.
+
+The Architecture Baseline Commit is a documentation-only commit created after Technical Design Review and before implementation. It versions the approved requirements, investigation, gap analysis, ADRs, ADD, diagrams, roadmap updates, and indexes independently from implementation code.
 
 References:
 
 - [Build Playbook](BUILD_PLAYBOOK.md)
 - [Development Workflow](architecture/08-DEVELOPMENT-WORKFLOW.md)
+- [Feature Progress](FEATURE_PROGRESS.md)
 
 ## 8. Testing Strategy
 
@@ -410,4 +417,3 @@ Read in this order:
 5. [Development Workflow](architecture/08-DEVELOPMENT-WORKFLOW.md).
 6. [Coding Standards](architecture/09-CODING-STANDARDS.md).
 7. Current feature PRD/TDD or prompt.
-
