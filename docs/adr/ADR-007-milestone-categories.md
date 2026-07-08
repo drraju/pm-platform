@@ -1,4 +1,4 @@
-# ADR-004: Milestone Categories
+# ADR-007: Milestone Categories
 
 ## Status
 

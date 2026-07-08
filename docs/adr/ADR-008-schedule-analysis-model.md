@@ -1,23 +1,8 @@
-# ADR-005: ScheduleAnalysis Model
+# ADR-008: ScheduleAnalysis Model
 
 ## Status
 
 Accepted
-
-Date: 2026-07-08
-
-Version:
-v1.0.0-rc1
-
-Decision Owner:
-Ram Datla
-
-Implementation:
-Completed
-
-Related ADRs:
-- ADR-002 Planning Snapshot Architecture
-- ADR-003 Planning Workspace
 
 ## Context
 

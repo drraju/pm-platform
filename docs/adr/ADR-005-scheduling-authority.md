@@ -1,4 +1,4 @@
-# ADR-003: Scheduling Authority
+# ADR-005: Scheduling Authority
 
 ## Status
 

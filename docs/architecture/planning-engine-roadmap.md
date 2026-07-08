@@ -77,9 +77,9 @@ Critical:      float = 0 on the driving path
 
 ## Related Documents
 
-- [v1.1.0 Planning Workspace](v1.1.0-planning-workspace.md)
-- [v1.1.1 Planning Engine](v1.1.1-planning-engine.md)
-- [Product Roadmap](../product/product-roadmap.md)
+- [v1.1.0 Planning Workspace](../archive/architecture/v1.1.0-planning-workspace.md)
+- [v1.1.1 Planning Engine](../archive/architecture/v1.1.1-planning-engine.md)
+- [Product Roadmap](../roadmap/README.md)
 - [Feature Matrix](../product/feature-matrix.md)
 
 ## Revision History

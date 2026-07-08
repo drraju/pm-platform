@@ -1,4 +1,4 @@
-# ADR-001: Planning Engine
+# ADR-002: Planning Engine
 
 ## Status
 
@@ -49,4 +49,4 @@ This decision enables critical path, baselines, calendars, portfolio Gantt, reso
 ## Related Documents
 
 - [Planning Engine v2](../architecture/planning-engine-v2.md)
-- [ADR-003 Scheduling Authority](./ADR-003-Scheduling-Authority.md)
+- [ADR-005 Scheduling Authority](./ADR-005-scheduling-authority.md)

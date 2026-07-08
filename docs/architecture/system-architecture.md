@@ -94,7 +94,7 @@ Docker Compose
 - [Frontend Architecture](frontend.md)
 - [Planning Engine Roadmap](planning-engine-roadmap.md)
 - [Deployment Workflow](../development/deployment.md)
-- [Product Roadmap](../product/product-roadmap.md)
+- [Product Roadmap](../roadmap/README.md)
 
 ## Revision History
 

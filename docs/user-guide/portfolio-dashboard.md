@@ -69,7 +69,7 @@ Placeholder:
 - [Project Management](project-management.md)
 - [RAID Management](raid-management.md)
 - [Planning Workspace](planning-workspace.md)
-- [Product Roadmap](../product/product-roadmap.md)
+- [Product Roadmap](../roadmap/README.md)
 
 ## Revision History
 

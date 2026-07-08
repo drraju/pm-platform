@@ -1,4 +1,4 @@
-# ADR-002: Project Workspace
+# ADR-004: Project Workspace
 
 ## Status
 

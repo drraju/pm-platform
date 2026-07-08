@@ -38,7 +38,6 @@ PM Platform is a self-hosted enterprise project management platform for project 
 | --- | --- |
 | [Product Vision](../../product/vision.md) | Long-term product direction. |
 | [Feature Matrix](../../product/feature-matrix.md) | Capability matrix across product areas. |
-| [Product Roadmap](../../product/product-roadmap.md) | Planned release themes and future capabilities. |
+| [Product Roadmap](../../roadmap/README.md) | Planned release themes and future capabilities. |
 | [System Architecture](../../architecture/system-architecture.md) | Technical architecture overview. |
 | [Current State](../../architecture/current-state.md) | Current implementation state and gaps. |
-

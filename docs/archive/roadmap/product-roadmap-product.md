@@ -67,10 +67,10 @@ Planning Workspace
 
 ## Related Documents
 
-- [Vision](vision.md)
-- [Feature Matrix](feature-matrix.md)
-- [Planning Engine Roadmap](../architecture/planning-engine-roadmap.md)
-- [v1.1.1 Planning Engine Stabilization](../releases/v1.1.1-planning-engine-stabilization.md)
+- [Vision](../../product/vision.md)
+- [Feature Matrix](../../product/feature-matrix.md)
+- [Planning Engine Roadmap](../../architecture/planning-engine-roadmap.md)
+- [v1.1.1 Planning Engine Stabilization](../../releases/v1.1.1-planning-engine-stabilization.md)
 
 ## Revision History
 

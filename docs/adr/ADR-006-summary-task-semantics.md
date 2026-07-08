@@ -1,4 +1,4 @@
-# ADR-003: Summary Task Semantics
+# ADR-006: Summary Task Semantics
 
 ## Status
 

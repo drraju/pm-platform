@@ -110,7 +110,7 @@ Placeholder:
 - [v1.1.0 Planning Workspace](../architecture/v1.1.0-planning-workspace.md)
 - [v1.1.1 Planning Engine](../architecture/v1.1.1-planning-engine.md)
 - [Planning Engine Roadmap](../architecture/planning-engine-roadmap.md)
-- [Product Roadmap](../product/product-roadmap.md)
+- [Product Roadmap](../roadmap/README.md)
 
 ## Revision History
 

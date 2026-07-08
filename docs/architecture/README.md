@@ -1,128 +1,73 @@
-# PM Platform Architecture
+# Architecture Documentation
 
-## Purpose
+This directory contains the current architecture references for PM Platform.
+Historical snapshots, release-specific architecture notes, and superseded
+milestone documents are preserved under `docs/archive/architecture/`.
 
-This directory defines the long-term architecture for the PM Platform. It is the reference point for product planning, implementation design, review, testing, deployment, and future enterprise extensions.
+## Current Architecture Documents
 
-The platform is an enterprise project management system for organizations that need portfolio visibility, project execution, planning discipline, RAID governance, team accountability, reporting, and future AI-assisted project management.
+### Platform Architecture
 
-## Architecture Principles
-
-| Principle | Meaning |
+| Document | Purpose |
 | --- | --- |
-| Enterprise first | Features must support repeatable project governance, auditability, permissions, and long-lived data. |
-| One source of truth | Each business concept has one authoritative owner. Derived data must be calculated consistently. |
-| Modular product domains | Planning, Portfolio, RAID, Tasks, Team, Reports, Security, and AI evolve independently through clear contracts. |
-| Self-hostable by design | Docker and Ubuntu deployment remain first-class paths for UAT and customer environments. |
-| Progressive enterprise depth | Basic workflows must stay usable while future capabilities such as critical path, baselines, resources, and AI can attach cleanly. |
-| No hidden business rules in UI | UI should prevent invalid input, but backend services remain the authority for validation and state transitions. |
+| [System Architecture](system-architecture.md) | End-to-end repository, runtime, domain, deployment, and data-flow architecture. |
+| [Backend Architecture](backend.md) | NestJS backend modules, request flow, persistence, transactions, and quality gates. |
+| [Frontend Architecture](frontend.md) | Next.js frontend structure, component layers, UI principles, API client usage, and testing. |
+| [Database ERD](database-erd.md) | Database entity relationship reference. |
+| [Deployment Architecture](deployment.md) | Docker, environment, backup, upgrade, rollback, and operational deployment architecture. |
+| [Security Architecture](security.md) | Authentication, authorization, RBAC, JWT, secrets, audit, and security principles. |
 
-## Technology Stack
+### Planning And Scheduling
 
-| Layer | Technology |
+| Document | Purpose |
 | --- | --- |
-| Frontend | Next.js, React, TypeScript, Tailwind CSS |
-| Backend | NestJS, TypeScript |
-| Database | PostgreSQL |
-| Runtime | Node.js |
-| Deployment | Docker Compose, Ubuntu UAT, future Kubernetes |
-| Auth | JWT, RBAC, permission policies |
-| Testing | Vitest, backend unit/integration tests, UAT guides |
+| [Planning Engine v2](planning-engine-v2.md) | Planning engine domain model and scheduling architecture. |
+| [Planning Engine Roadmap](planning-engine-roadmap.md) | Planning engine direction for validation, critical path, resources, and performance. |
+| [Scheduling Engine](scheduling-engine.md) | Internal scheduling pipeline and `ScheduleAnalysis` assembly. |
+| [Scheduling Engine Performance](scheduling-engine-performance.md) | Performance considerations for scheduling calculations. |
+| [Planning Graph Engine](graph-engine.md) | Dependency graph model, validation, and topological ordering. |
+| [Planning Forward Pass](forward-pass.md) | Early Start and Early Finish calculation. |
+| [Planning Backward Pass](backward-pass.md) | Late Start and Late Finish calculation. |
+| [Planning Float Engine](float-engine.md) | Total Float and Free Float calculation. |
+| [Critical Path Engine](critical-path-engine.md) | Critical path scheduling architecture and future enhancement model. |
+| [Project Workspace](project-workspace.md) | Project workspace layout, planning surface, task, RAID, team, document, and permission architecture. |
 
-## High-Level Architecture
+### Product Domains
 
-```text
-Users
-  |
-  v
-Next.js Frontend
-  |-- Dashboard
-  |-- Portfolio
-  |-- Project Workspace
-  |-- Planning Workspace
-  |-- Tasks
-  |-- RAID
-  |-- Reports
-  |
-  v
-NestJS API
-  |-- Auth and Authorization
-  |-- Projects
-  |-- Planning
-  |-- Tasks
-  |-- RAID
-  |-- Portfolio
-  |-- Users and Teams
-  |-- Reporting
-  |
-  v
-PostgreSQL
-  |-- Projects
-  |-- Project Members
-  |-- Tasks and WBS
-  |-- Planning Snapshots
-  |-- Dependencies
-  |-- RAID
-  |-- Baselines
-  |-- Audit Data
-```
+| Document | Purpose |
+| --- | --- |
+| [Portfolio Engine](portfolio-engine.md) | Portfolio dashboard, portfolio Gantt, cross-project RAID, milestones, resources, and AI direction. |
+| [Reporting Engine](reporting-engine.md) | Project, portfolio, executive, audit, export, scheduled report, and AI reporting architecture. |
+| [AI Assistant Architecture](ai-assistant.md) | AI roles, capabilities, integrations, agentic workflows, and governance principles. |
 
-## Module Responsibilities
+### Access And Visibility
 
-| Module | Responsibility | Architecture Notes |
-| --- | --- | --- |
-| Auth | Login, JWT, session identity | Does not own business authorization decisions alone. |
-| Authorization | RBAC, permission checks, visibility | Enforced on backend; frontend uses permissions for experience shaping. |
-| Projects | Project metadata, workspace context, team membership | Parent domain for project-scoped modules. |
-| Planning | WBS, task scheduling, Gantt data, dependencies, baselines | Scheduling authority; see [Planning Engine v2](./planning-engine-v2.md). |
-| Tasks | Execution updates, assignment, status, comments | Uses planning task model but focuses on delivery work. |
-| RAID | Risks, assumptions, issues, dependencies | Project and future portfolio governance. |
-| Portfolio | Cross-project visibility, health, milestones | Future program/customer/resource aggregation. |
-| Reports | Operational, project, portfolio, executive, audit exports | Data consumer with governed transformations. |
-| AI Assistant | Future project/program/portfolio intelligence | Must use audited tools and explainable recommendations. |
+| Document | Purpose |
+| --- | --- |
+| [Role Visibility Matrix](role-visibility-matrix.md) | Role-based visibility expectations across project and dashboard surfaces. |
 
-## Layered Architecture
+## Archived Architecture Documents
 
-```text
-Presentation Layer
-  Next.js routes, React components, UI state, accessibility
+The following architecture documents were preserved as historical records during
+the Phase 3 architecture refactor:
 
-Application Layer
-  Page orchestration, API clients, hooks, view models
+| Document | Reason Archived |
+| --- | --- |
+| [Current State Assessment](../archive/architecture/current-state.md) | Historical current-state planning assessment. |
+| [Current State 2026-06-13](../archive/architecture/current-state-2026-06-13.md) | Dated architecture snapshot. |
+| [Platform History](../archive/architecture/platform-history.md) | Historical platform timeline. |
+| [Release 0.2 Gap Analysis](../archive/architecture/release-0.2-gap-analysis.md) | Release-specific readiness analysis. |
+| [Runtime Role Validation Matrix](../archive/architecture/runtime-role-validation-matrix.md) | Version-specific runtime validation artifact. |
+| [Planning Toolbar v1.0](../archive/architecture/planning-toolbar-v1.0.md) | Obsolete milestone-specific planning toolbar note. |
+| [v1.0.6 Planning Foundation Architecture](../archive/architecture/v1.0.6-planning-foundation-architecture.md) | Obsolete milestone-specific architecture document. |
+| [v1.0.7 Planning Engine Phase Rollup Enhancement](../archive/architecture/v1.0.7-planning-engine-phase-rollup-enhancement.md) | Obsolete milestone-specific architecture document. |
+| [v1.1.0 Planning Workspace](../archive/architecture/v1.1.0-planning-workspace.md) | Obsolete milestone-specific architecture document. |
+| [v1.1.1 Planning Engine](../archive/architecture/v1.1.1-planning-engine.md) | Obsolete milestone-specific architecture document. |
 
-Domain Service Layer
-  NestJS services, scheduling rules, project visibility, authorization
+## Maintenance Rules
 
-Persistence Layer
-  TypeORM entities, repositories, migrations, PostgreSQL constraints
-
-Infrastructure Layer
-  Docker, environment configuration, logging, backups, integrations
-```
-
-## Future Expansion
-
-The architecture must support:
-
-- Enterprise scheduling with critical path, calendars, constraints, lead/lag, and baselines.
-- Resource capacity, workload, allocation, timesheets, and calendars.
-- Portfolio/program/customer views with cross-project RAID and milestones.
-- Report generation to PDF, Excel, PowerPoint, and scheduled delivery.
-- AI Project Manager workflows using governed tool access and auditable recommendations.
-
-## Development Principles
-
-- Write features against documented domain concepts.
-- Keep UI behavior consistent across Planning, Tasks, Overview, Reports, and Portfolio.
-- Prefer reusable services/hooks/components over page-specific duplication.
-- Add tests at the domain boundary where behavior is owned.
-- Update architecture and ADRs when changing domain ownership or scheduling rules.
-
-Planning Engine
-├── planning-engine-v2.md            ✅ (Overall architecture)
-├── critical-path-engine.md          ← Next
-├── dependency-engine.md             (Later)
-├── baseline-engine.md               (Later)
-├── calendar-engine.md               (Later)
-├── resource-engine.md               (Later)
-└── export-framework.md              (Later)
+- Keep durable architecture references in `docs/architecture/`.
+- Move release-specific, dated, or superseded architecture notes to
+  `docs/archive/architecture/`.
+- Update this index whenever architecture documents are added, moved, or
+  archived.

@@ -1,0 +1,31 @@
+# Product Documentation
+
+This directory contains the current product documentation for PM Platform.
+
+## Current Product Documents
+
+| Document | Purpose |
+| --- | --- |
+| [Product Vision](vision.md) | Canonical product vision, mission, principles, target users, pillars, and AI direction. |
+| [Product Roadmap](../roadmap/README.md) | Release themes, near-term priorities, long-term goals, and product sequencing. |
+| [Feature Matrix](feature-matrix.md) | Capability status across current, planned, and future product areas. |
+| [Personas](personas.md) | Target user groups and product needs. |
+| [Competitive Analysis](competitive-analysis.md) | Competitive positioning and market context. |
+| [Partner and Customer Access](partner-customer-access.md) | Product direction for external stakeholder access. |
+| [Gantt View](gantt-view.md) | Product requirements and direction for Gantt planning. |
+| [Timeline Foundation](timeline-foundation.md) | Product foundation for timeline capabilities. |
+| [Resource Capacity Planning](resource-capacity-planning.md) | Product direction for resources, capacity, and allocation. |
+| [v1.1 Requirements](v1.1-requirements.md) | Product requirements for the v1.1 planning release line. |
+
+## Archived Product Documents
+
+| Document | Reason Archived |
+| --- | --- |
+| [Product Vision RC1](../archive/product/product-vision-rc1.md) | Superseded by the canonical Product Vision. |
+| [Product Philosophy](../archive/product/product-philosophy.md) | Merged into the canonical Product Vision. |
+
+## Maintenance Rules
+
+- Keep `docs/product/vision.md` as the single canonical Product Vision.
+- Archive superseded product drafts under `docs/archive/product/`.
+- Update this index when product documents are added, archived, or consolidated.

@@ -479,5 +479,5 @@ The Task entity must not become an independent scheduling engine.
 
 ## Architectural Decisions
 
-- [ADR-001 Planning Engine](../adr/ADR-001-Planning-Engine.md)
-- [ADR-003 Scheduling Authority](../adr/ADR-003-Scheduling-Authority.md)
+- [ADR-002 Planning Engine](../adr/ADR-002-planning-engine.md)
+- [ADR-005 Scheduling Authority](../adr/ADR-005-scheduling-authority.md)

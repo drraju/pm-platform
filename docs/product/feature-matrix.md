@@ -63,7 +63,7 @@ The feature matrix provides a shared view of platform maturity. It distinguishes
 ## Related Documents
 
 - [Vision](vision.md)
-- [Product Roadmap](product-roadmap.md)
+- [Product Roadmap](../roadmap/README.md)
 - [Planning Engine Roadmap](../architecture/planning-engine-roadmap.md)
 - [v1.1.1 Planning Engine Stabilization](../releases/v1.1.1-planning-engine-stabilization.md)
 

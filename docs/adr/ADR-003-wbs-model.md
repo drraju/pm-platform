@@ -1,4 +1,4 @@
-# ADR-002: WBS Model
+# ADR-003: WBS Model
 
 ## Status
 
