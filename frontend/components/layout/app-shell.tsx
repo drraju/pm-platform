@@ -20,6 +20,12 @@ const navigation = [
   { label: "Risks", href: "/risks", permissions: ["raid.read"] },
   { label: "Issues", href: "/issues", permissions: ["raid.read"] },
   { label: "Portfolio", href: "/portfolio", permissions: ["portfolio.view"] },
+  {
+    label: "Enterprise Calendars",
+    href: "/calendar",
+    permissions: ["project.update"],
+    section: "Administration",
+  },
   { label: "Users", href: "/users", permissions: ["user.manage", "role.manage"] },
   { label: "Notifications", href: "/notifications", permissions: ["notification.read"] },
 ];
@@ -274,30 +280,39 @@ function NavigationLinks({
 
   return (
     <nav aria-label="Primary navigation" className="mt-10 space-y-1">
-      {visibleNavigation.map((item) => {
+      {visibleNavigation.map((item, index) => {
         const isActive =
           pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const previousItem = visibleNavigation[index - 1];
+        const shouldShowSection =
+          !isCollapsed && item.section && item.section !== previousItem?.section;
 
         return (
-          <Link
-            aria-current={isActive ? "page" : undefined}
-            className={`flex items-center rounded-md px-3 py-2 text-sm font-medium transition ${
-              isCollapsed ? "justify-center" : "justify-between gap-3"
-            } ${
-              isActive
-                ? "bg-brand text-white"
-                : "text-slate-700 hover:bg-slate-100 hover:text-ink"
-            }`}
-            href={item.href}
-            key={item.href}
-            onClick={onNavigate}
-            title={isCollapsed ? item.label : undefined}
-          >
-            <span>{isCollapsed ? item.label.slice(0, 1) : item.label}</span>
-            {!isCollapsed && isActive ? (
-              <span className="size-2 rounded-full bg-white" />
+          <React.Fragment key={item.href}>
+            {shouldShowSection ? (
+              <p className="px-3 pt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {item.section}
+              </p>
             ) : null}
-          </Link>
+            <Link
+              aria-current={isActive ? "page" : undefined}
+              className={`flex items-center rounded-md px-3 py-2 text-sm font-medium transition ${
+                isCollapsed ? "justify-center" : "justify-between gap-3"
+              } ${
+                isActive
+                  ? "bg-brand text-white"
+                  : "text-slate-700 hover:bg-slate-100 hover:text-ink"
+              }`}
+              href={item.href}
+              onClick={onNavigate}
+              title={isCollapsed ? item.label : undefined}
+            >
+              <span>{isCollapsed ? item.label.slice(0, 1) : item.label}</span>
+              {!isCollapsed && isActive ? (
+                <span className="size-2 rounded-full bg-white" />
+              ) : null}
+            </Link>
+          </React.Fragment>
         );
       })}
     </nav>

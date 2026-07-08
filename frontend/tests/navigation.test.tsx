@@ -41,6 +41,7 @@ vi.mock("@/features/auth", () => ({
       "executive.view": ["executive:summary:read"],
       "portfolio.view": ["portfolio:summary:read"],
       "project.read": ["projects:read:all", "projects:read:assigned"],
+      "project.update": ["projects:update:any", "projects:update:assigned"],
       "raid.read": ["raid:read:all", "raid:read:assigned"],
       "task.comment": ["project-tasks:update:any", "project-tasks:update:own"],
       "task.update": ["project-tasks:update:any", "project-tasks:update:own"],
@@ -75,6 +76,7 @@ describe("AppShell", () => {
         { id: "permission-dashboard", key: "dashboard.view" },
         { id: "permission-executive", key: "executive.view" },
         { id: "permission-project-read", key: "project.read" },
+        { id: "permission-project-update", key: "project.update" },
         { id: "permission-task-update", key: "task.update" },
         { id: "permission-raid-read", key: "raid.read" },
         { id: "permission-notification-read", key: "notification.read" },
@@ -128,6 +130,10 @@ describe("AppShell", () => {
       "href",
       "/notifications",
     );
+    expect(screen.getByText("Administration")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /enterprise calendars/i }),
+    ).toHaveAttribute("href", "/calendar");
     expect(
       screen.getByRole("searchbox", { name: /global search/i }),
     ).toBeInTheDocument();
