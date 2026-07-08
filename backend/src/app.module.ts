@@ -7,6 +7,7 @@ import { AuthzModule } from './common/authz/authz.module';
 import { SanitizeResponseInterceptor } from './common/serialization/sanitize-response.interceptor';
 import { createTypeOrmOptions } from './database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
+import { CalendarModule } from './modules/calendars/calendar.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
 import { GoogleDriveModule } from './modules/integrations/google-drive/google-drive.module';
@@ -25,6 +26,7 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     TypeOrmModule.forRoot(createTypeOrmOptions()),
     AuthzModule,
     AuthModule,
+    CalendarModule,
     UsersModule,
     ProjectsModule,
     TasksModule,

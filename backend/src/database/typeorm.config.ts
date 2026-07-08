@@ -1,5 +1,7 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
+import { EnterpriseCalendarException } from '../modules/calendars/entities/enterprise-calendar-exception.entity';
+import { EnterpriseCalendar } from '../modules/calendars/entities/enterprise-calendar.entity';
 import { Notification } from '../modules/notifications/entities/notification.entity';
 import { PlanningScheduleSnapshot } from '../modules/planning/entities/planning-schedule-snapshot.entity';
 import { PlanningTaskSchedule } from '../modules/planning/entities/planning-task-schedule.entity';
@@ -29,6 +31,8 @@ export const databaseEntities: Function[] = [
   Role,
   Permission,
   RolePermission,
+  EnterpriseCalendar,
+  EnterpriseCalendarException,
   Project,
   ProjectBaseline,
   ProjectBaselineTask,
