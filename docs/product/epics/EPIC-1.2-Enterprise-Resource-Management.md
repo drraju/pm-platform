@@ -170,15 +170,15 @@ It does not yet have:
 | Acceptance Criteria | Resource domain foundation is implemented and verified without scheduling changes. |
 | Next Feature | Feature 1.2.2 Resource CRUD API. |
 
-### 1.2.2 Resource Profiles
+### 1.2.2 Resource CRUD API
 
 | Field | Detail |
 | --- | --- |
-| Purpose | Capture profile metadata for human and non-human resources. |
-| Scope | Display name, role/title, team, location, manager, status, user reference. |
+| Purpose | Expose the Resource aggregate through a governed CRUD API. |
+| Scope | Create, read, update, archive, list, and search resources using the existing 1.2.1 Resource aggregate and API boundary conventions. |
 | Out of Scope | Full HRIS integration. |
 | Dependencies | Resource Domain. |
-| Acceptance Criteria | Profile details are visible and editable from API/UI. |
+| Acceptance Criteria | Resource records are visible and editable through API boundaries without changing Scheduling, Planning, or Calendar ownership. |
 
 ### 1.2.3 Skills & Competencies
 
@@ -187,7 +187,7 @@ It does not yet have:
 | Purpose | Model searchable resource skills. |
 | Scope | Skill taxonomy, resource skills, competency level, optional certification metadata. |
 | Out of Scope | AI skill inference. |
-| Dependencies | Resource Profiles. |
+| Dependencies | Resource CRUD API. |
 | Acceptance Criteria | Resources can be filtered by skill and competency. |
 
 ### 1.2.4 Calendar Assignment
@@ -207,7 +207,7 @@ It does not yet have:
 | Purpose | Represent resource capacity and availability. |
 | Scope | Daily, weekly, monthly capacity; availability; remaining capacity. |
 | Out of Scope | Automatic leveling. |
-| Dependencies | Resource Profiles, Calendar Assignment. |
+| Dependencies | Resource CRUD API, Calendar Assignment. |
 | Acceptance Criteria | Capacity and remaining availability can be queried and tested. |
 
 ### 1.2.6 Project Assignment
@@ -227,7 +227,13 @@ It does not yet have:
 | Purpose | Capture cost/rate metadata for future portfolio planning. |
 | Scope | Standard rate, cost rate, currency, effective dates, visibility controls. |
 | Out of Scope | Payroll, billing, invoicing. |
-| Dependencies | Resource Profiles, Security. |
+| Dependencies | Resource CRUD API, Security. |
+
+## Architecture References
+
+- Epic architecture baseline: [ERM Architecture Design Document](../../architecture/ERM_ARCHITECTURE_DESIGN_DOCUMENT.md)
+- Feature 1.2.2 ADD: [Feature 1.2.2 Resource CRUD API ADD](../../architecture/FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md)
+- Feature tracking: [Feature Progress](../../FEATURE_PROGRESS.md)
 | Acceptance Criteria | Authorized users can maintain rates without exposing them broadly. |
 
 ### 1.2.8 Resource Dashboard

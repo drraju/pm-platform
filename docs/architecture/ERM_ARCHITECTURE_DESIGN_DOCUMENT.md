@@ -637,8 +637,8 @@ API/UI compatibility:
 | Requirement / Finding | ADRs | ADD Sections | Planned Implementation Features |
 | --- | --- | --- | --- |
 | Resource as first-class domain | ADR-006, ADR-010 | 4, 5, 6, 11 | 1.2.1 Resource Domain |
-| Users are not Resources | ADR-006, ADR-010 | 3, 4, 5, 9 | 1.2.1 Resource Domain, 1.2.2 Resource Profiles |
-| Support non-human resources | ADR-006, ADR-009, ADR-010 | 5, 13 | 1.2.1 Resource Domain, 1.2.2 Resource Profiles |
+| Users are not Resources | ADR-006, ADR-010 | 3, 4, 5, 9 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
+| Support non-human resources | ADR-006, ADR-009, ADR-010 | 5, 13 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
 | Skills and competencies | ADR-010 | 5, 8, 12, 13 | 1.2.3 Skills & Competencies |
 | Resource calendar assignment | ADR-002, ADR-008 | 5, 7, 14 | 1.2.4 Calendar Assignment |
 | Capacity and availability | ADR-007, ADR-010 | 5, 8, 11 | 1.2.5 Capacity Management |
@@ -656,6 +656,10 @@ API/UI compatibility:
 | Feature | Status | Delivered | Notes |
 | --- | --- | --- | --- |
 | 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | Verified through implementation review, testing, Docker verification, and Ubuntu verification. Public Resource CRUD APIs remain planned for Feature 1.2.2. |
+
+Related feature design:
+
+- [Feature 1.2.2 Resource CRUD API ADD](FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md)
 
 ## 17. Open Questions
 

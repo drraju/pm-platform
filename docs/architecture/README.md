@@ -25,6 +25,7 @@ This directory documents the current PM Platform architecture and approved roadm
 | [09-CODING-STANDARDS.md](09-CODING-STANDARDS.md) | Backend/frontend coding standards. |
 | [10-ROADMAP.md](10-ROADMAP.md) | Completed, current, and future roadmap. |
 | [RESOURCE_ARCHITECTURE.md](RESOURCE_ARCHITECTURE.md) | Epic 1.2 Enterprise Resource Management architecture baseline. |
+| [FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md](FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md) | Feature-specific ADD for Feature 1.2.2 Resource CRUD API. |
 
 ## Architecture Decision Records
 
