@@ -6,7 +6,8 @@ This backlog covers Epic 1.2 Enterprise Resource Management and adjacent roadmap
 
 | Feature | Status | Delivered | Notes |
 | --- | --- | --- | --- |
-| 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | No public API is included. Public Resource CRUD APIs are tracked under Feature 1.2.2. |
+| 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | Public Resource CRUD APIs were delivered in Feature 1.2.2. |
+| 1.2.2 Resource CRUD API | Completed | Resource CRUD API, Resource Controller, Resource DTOs, Resource Mapper, Resource API Service, ERM Resource permissions, Swagger, tests. | Docker and Ubuntu verification completed. The next UI-focused ERM feature is Feature 1.2.3 Resource Management UI. Skills & Competencies remains planned as a later ERM feature. |
 
 ## Must Have
 

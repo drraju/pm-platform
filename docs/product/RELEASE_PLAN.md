@@ -37,8 +37,13 @@ Should deliver:
 | Feature | Status | Validation |
 | --- | --- | --- |
 | 1.2.1 Enterprise Resource Management Foundation | Completed | Implementation, implementation review, testing, Docker verification, and Ubuntu verification completed. |
+| 1.2.2 Resource CRUD API | Completed | Implementation, implementation alignment, implementation review, testing, Docker verification, Docker runtime alignment, and Ubuntu verification completed. |
+| 1.2.3 Resource Management UI | Planned | Requirements Review completed. Repository Investigation pending. |
+| 1.2.4 Skills Management | Planned | Not started. Preserved as a later ERM feature after Resource Management UI. |
 
-Feature 1.2.1 delivers the Resource aggregate, resource persistence, resource validation, internal Resource service, and additive database migration. It does not expose public Resource APIs; public CRUD APIs remain planned for Feature 1.2.2.
+Feature 1.2.1 delivers the Resource aggregate, resource persistence, resource validation, internal Resource service, and additive database migration. Public Resource CRUD APIs were delivered in Feature 1.2.2.
+
+Feature 1.2.2 delivers the public Resource CRUD API boundary, Resource controller, DTOs, mapper, API service orchestration, ERM Resource permissions, Swagger documentation, and backend test coverage. Release readiness for the implemented API surface has been verified in Docker and Ubuntu-style deployment checks.
 
 ## v1.3 Scope
 

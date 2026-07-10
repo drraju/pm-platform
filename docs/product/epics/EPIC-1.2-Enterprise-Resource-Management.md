@@ -2,7 +2,7 @@
 
 ## Status
 
-Product and architecture baseline approved. Feature 1.2.1 Enterprise Resource Management Foundation has been implemented and verified. Stage 14 Feature Commit remains pending.
+Product and architecture baseline approved. Feature 1.2.1 Enterprise Resource Management Foundation and Feature 1.2.2 Resource CRUD API have been implemented and verified. Stage 14 Feature Commit remains pending.
 
 ## Business Objective
 
@@ -174,13 +174,26 @@ It does not yet have:
 
 | Field | Detail |
 | --- | --- |
+| Status | Completed. |
 | Purpose | Expose the Resource aggregate through a governed CRUD API. |
 | Scope | Create, read, update, archive, list, and search resources using the existing 1.2.1 Resource aggregate and API boundary conventions. |
 | Out of Scope | Full HRIS integration. |
 | Dependencies | Resource Domain. |
+| Delivered | Resource CRUD API, Resource Controller, Resource DTOs, Resource Mapper, Resource API Service, ERM Resource permissions, Swagger, tests, Docker verification, Ubuntu verification. |
 | Acceptance Criteria | Resource records are visible and editable through API boundaries without changing Scheduling, Planning, or Calendar ownership. |
+| Next Feature | Continue with the next approved Epic 1.2 feature from the roadmap and implementation plan. |
 
-### 1.2.3 Skills & Competencies
+### 1.2.3 Resource Management UI
+
+| Field | Detail |
+| --- | --- |
+| Purpose | Provide the first ERM user interface over the completed Resource CRUD API. |
+| Scope | Resource list, filtering, search, create/edit/archive flows, and permission-aware resource administration screens. |
+| Out of Scope | Skills taxonomy, competency modeling, capacity calculations, and scheduling integration. |
+| Dependencies | Resource CRUD API. |
+| Acceptance Criteria | Authorized users can list, find, create, edit, and archive resources through the frontend without changing Scheduling, Planning, or Calendar ownership. |
+
+### 1.2.4 Skills & Competencies
 
 | Field | Detail |
 | --- | --- |
@@ -190,7 +203,7 @@ It does not yet have:
 | Dependencies | Resource CRUD API. |
 | Acceptance Criteria | Resources can be filtered by skill and competency. |
 
-### 1.2.4 Calendar Assignment
+### 1.2.5 Calendar Assignment
 
 | Field | Detail |
 | --- | --- |
@@ -200,7 +213,7 @@ It does not yet have:
 | Dependencies | Enterprise Calendar, future Project Calendar. |
 | Acceptance Criteria | Resource can show assigned/effective calendar without changing schedules. |
 
-### 1.2.5 Capacity Management
+### 1.2.6 Capacity Management
 
 | Field | Detail |
 | --- | --- |
@@ -210,7 +223,7 @@ It does not yet have:
 | Dependencies | Resource CRUD API, Calendar Assignment. |
 | Acceptance Criteria | Capacity and remaining availability can be queried and tested. |
 
-### 1.2.6 Project Assignment
+### 1.2.7 Project Assignment
 
 | Field | Detail |
 | --- | --- |
@@ -220,7 +233,7 @@ It does not yet have:
 | Dependencies | Projects, Tasks, Planning foundations. |
 | Acceptance Criteria | Allocation CRUD works and respects project visibility. |
 
-### 1.2.7 Cost & Rates
+### 1.2.8 Cost & Rates
 
 | Field | Detail |
 | --- | --- |
@@ -228,15 +241,15 @@ It does not yet have:
 | Scope | Standard rate, cost rate, currency, effective dates, visibility controls. |
 | Out of Scope | Payroll, billing, invoicing. |
 | Dependencies | Resource CRUD API, Security. |
+| Acceptance Criteria | Authorized users can maintain rates without exposing them broadly. |
 
 ## Architecture References
 
 - Epic architecture baseline: [ERM Architecture Design Document](../../architecture/ERM_ARCHITECTURE_DESIGN_DOCUMENT.md)
 - Feature 1.2.2 ADD: [Feature 1.2.2 Resource CRUD API ADD](../../architecture/FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md)
 - Feature tracking: [Feature Progress](../../FEATURE_PROGRESS.md)
-| Acceptance Criteria | Authorized users can maintain rates without exposing them broadly. |
 
-### 1.2.8 Resource Dashboard
+### 1.2.9 Resource Dashboard
 
 | Field | Detail |
 | --- | --- |

@@ -639,12 +639,13 @@ API/UI compatibility:
 | Resource as first-class domain | ADR-006, ADR-010 | 4, 5, 6, 11 | 1.2.1 Resource Domain |
 | Users are not Resources | ADR-006, ADR-010 | 3, 4, 5, 9 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
 | Support non-human resources | ADR-006, ADR-009, ADR-010 | 5, 13 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
-| Skills and competencies | ADR-010 | 5, 8, 12, 13 | 1.2.3 Skills & Competencies |
-| Resource calendar assignment | ADR-002, ADR-008 | 5, 7, 14 | 1.2.4 Calendar Assignment |
-| Capacity and availability | ADR-007, ADR-010 | 5, 8, 11 | 1.2.5 Capacity Management |
-| Assignment ownership | ADR-011, ADR-013 | 5, 7, 8, 14 | 1.2.6 Project Assignment |
-| Cost and rates | ADR-012 | 5, 9, 12, 13 | 1.2.7 Cost & Rates |
-| Resource dashboard | ADR-005, ADR-012 | 7, 9, 12 | 1.2.8 Resource Dashboard |
+| Resource management UI | ADR-005, ADR-012 | 7, 9, 12 | 1.2.3 Resource Management UI |
+| Skills and competencies | ADR-010 | 5, 8, 12, 13 | 1.2.4 Skills & Competencies |
+| Resource calendar assignment | ADR-002, ADR-008 | 5, 7, 14 | 1.2.5 Calendar Assignment |
+| Capacity and availability | ADR-007, ADR-010 | 5, 8, 11 | 1.2.6 Capacity Management |
+| Assignment ownership | ADR-011, ADR-013 | 5, 7, 8, 14 | 1.2.7 Project Assignment |
+| Cost and rates | ADR-012 | 5, 9, 12, 13 | 1.2.8 Cost & Rates |
+| Resource dashboard | ADR-005, ADR-012 | 7, 9, 12 | 1.2.9 Resource Dashboard |
 | Scheduling isolation | ADR-003, ADR-011, ADR-013 | 3, 7, 14, 15 | All features |
 | Planning transition | ADR-013 | 7, 11, 14, 15 | 1.2.5, 1.2.6 |
 | API consistency | ADR-004 | 10 | All API-facing features |
@@ -655,7 +656,8 @@ API/UI compatibility:
 
 | Feature | Status | Delivered | Notes |
 | --- | --- | --- | --- |
-| 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | Verified through implementation review, testing, Docker verification, and Ubuntu verification. Public Resource CRUD APIs remain planned for Feature 1.2.2. |
+| 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | Verified through implementation review, testing, Docker verification, and Ubuntu verification. Public Resource CRUD APIs were delivered in Feature 1.2.2. |
+| 1.2.2 Resource CRUD API | Completed | Resource CRUD API, Resource Controller, Resource DTOs, Resource Mapper, Resource API Service, ERM Resource permissions, Swagger, backend tests. | Verified through implementation review, testing, Docker verification, Docker runtime alignment, and Ubuntu verification. |
 
 Related feature design:
 
