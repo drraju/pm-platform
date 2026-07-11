@@ -1,5 +1,15 @@
 # PM Platform Engineering Manual
 
+Engineering Governance Version: 1.0
+
+Status: Frozen
+
+Start here:
+[ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md)
+
+Authoritative Scope:
+Defines the authoritative engineering workflow, governance hierarchy, and cross-document navigation model for PM Platform.
+
 This document is the single entry point for engineering governance within PM Platform.
 
 Every developer and AI assistant should begin here before contributing to the project.
@@ -73,40 +83,46 @@ These principles apply to planning, implementation, testing, documentation, revi
 
 ## 3. Engineering Workflow
 
-All feature work must follow the mandatory engineering lifecycle below.
+The following Stage model is the authoritative engineering lifecycle for PM Platform.
+
+All other governance documents must reference this Stage model rather than redefining a competing lifecycle.
 
 ```text
-Requirements Review
-↓
-Documentation Alignment
-↓
-Repository Investigation
-↓
-Architecture & Design
-↓
-ADR Review
-↓
-Persistence
-↓
-DTO / Validation
-↓
-Quality Gate
-↓
-Application Service
-↓
-API
-↓
-Testing
-↓
-Documentation
-↓
-Final Review
-↓
-Approval
-↓
-Commit
-↓
-Push
+Stage 0  Repository & Context Verification
+
+Stage 1  Requirements Review
+
+Stage 1.1 Documentation Alignment
+
+Stage 2  Repository Investigation
+
+Stage 3  Architecture & Design
+
+Stage 3.5 ADR Review
+
+Stage 4.1 Persistence
+
+Stage 4.2 DTOs / Validation
+
+Stage 4.5 Quality Gate
+
+Stage 5  Application Service
+
+Stage 6  API
+
+Stage 7  Integration
+
+Stage 8  Testing
+
+Stage 9  Documentation
+
+Stage 10 Final Review
+
+Stage 11 Approval
+
+Stage 12 Commit
+
+Stage 13 Push
 ```
 
 Stages must be completed sequentially and may not be skipped.
@@ -119,7 +135,7 @@ The following documents define the current engineering governance baseline.
 
 | Document | Purpose | Mandatory |
 | -------- | ------- | --------- |
-| [AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md) | Defines the standard architecture-first development workflow, lifecycle phases, and verification approach. | Yes |
+| [AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md) | Defines the standard architecture-first development workflow, Stage guidance, and verification approach. | Yes |
 | [FEATURE_IMPLEMENTATION_TEMPLATE.md](FEATURE_IMPLEMENTATION_TEMPLATE.md) | Provides the reusable template for planning and executing future features. | Yes |
 | [QUALITY_GATES.md](QUALITY_GATES.md) | Defines the mandatory quality gates that every feature must pass before completion. | Yes |
 | [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md) | Defines when a stage, feature, epic, and release are truly complete. | Yes |
@@ -178,7 +194,10 @@ Repository structure must be understood before suggesting verification commands,
 
 ## 8. Governance Versioning
 
-Engineering Governance Version: 1.0
+Current governance baseline:
+
+- Version `1.0`
+- Status `Frozen`
 
 Governance versioning rules:
 
@@ -188,7 +207,18 @@ Governance versioning rules:
 
 Governance versioning helps the project separate engineering process maturity from feature delivery progress.
 
-## 9. Future Governance Roadmap
+## 9. Freeze Policy
+
+The current engineering governance baseline is considered stable.
+
+- governance documents are considered stable
+- future governance changes require review
+- significant governance changes require an ADR
+- product development resumes under Governance v1.0
+
+This freeze applies to the current governance model, not to the product roadmap. Feature and architecture work should continue using this frozen governance baseline until an approved governance revision replaces it.
+
+## 10. Future Governance Roadmap
 
 This section reserves space for future governance documents and standards expansion.
 
@@ -205,8 +235,19 @@ Future areas may include:
 
 These topics should be formalized through approved documentation rather than informal convention drift.
 
-## 10. Conclusion
+## 11. Conclusion
 
 Engineering excellence is achieved through consistent application of these standards rather than isolated implementation quality.
 
 PM Platform quality depends on disciplined architecture, deliberate review, clear documentation, and repeatable engineering behavior across every feature and release.
+
+---
+
+## Related Governance Documents
+
+- [AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md)
+- [FEATURE_IMPLEMENTATION_TEMPLATE.md](FEATURE_IMPLEMENTATION_TEMPLATE.md)
+- [QUALITY_GATES.md](QUALITY_GATES.md)
+- [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md)
+- [CODE_REVIEW_CHECKLIST.md](CODE_REVIEW_CHECKLIST.md)
+- [CODING_STANDARDS.md](CODING_STANDARDS.md)

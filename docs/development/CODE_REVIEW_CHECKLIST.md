@@ -1,8 +1,18 @@
 # PM Platform Code Review Checklist
 
+Engineering Governance Version: 1.0
+
+Start here:
+[ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md)
+
+Authoritative Scope:
+Defines the authoritative review criteria, severity model, and outcomes used during every PM Platform code review.
+
 This document defines the standard checklist used during every PM Platform code review.
 
 It is intended for human contributors, reviewers, and AI coding assistants participating in implementation review, architecture review, and final approval workflows.
+
+The canonical engineering Stage model is defined in [ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md). This checklist should be applied within that Stage model rather than alongside a competing lifecycle definition.
 
 ---
 
@@ -244,3 +254,13 @@ Use the following reminders during every review:
 - every feature should reduce user effort
 
 Good reviews improve both the code and the product direction. They should make the platform easier to maintain, safer to extend, and better for end users.
+
+---
+
+## Related Governance Documents
+
+- [ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md)
+- [AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md)
+- [QUALITY_GATES.md](QUALITY_GATES.md)
+- [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md)
+- [CODING_STANDARDS.md](CODING_STANDARDS.md)

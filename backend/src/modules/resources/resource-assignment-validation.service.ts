@@ -1,26 +1,41 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, IsNull, Not, Repository } from 'typeorm';
 import { Project } from '../projects/entities/project.entity';
 import { Task } from '../tasks/entities/task.entity';
 import {
-  CreateResourceAssignmentDto,
-  UpdateResourceAssignmentDto,
-} from './dto/resource-assignment.dto';
+  CreateResourceAssignmentCommand,
+  UpdateResourceAssignmentCommand,
+} from './resource-assignment.commands';
+import { ResourceAssignment } from './entities/resource-assignment.entity';
 import { ResourceAssignmentStatus } from './enums/resource-assignment-status.enum';
 import { Resource } from './entities/resource.entity';
 
-type ResourceAssignmentValidationInput =
-  | CreateResourceAssignmentDto
-  | UpdateResourceAssignmentDto;
+export type ResourceAssignmentValidationInput =
+  | CreateResourceAssignmentCommand
+  | UpdateResourceAssignmentCommand
+  | Pick<
+      ResourceAssignment,
+      | 'allocationPercent'
+      | 'endDate'
+      | 'plannedMinutesPerDay'
+      | 'projectId'
+      | 'resourceId'
+      | 'startDate'
+      | 'status'
+      | 'taskId'
+    >;
 
 @Injectable()
 export class ResourceAssignmentValidationService {
   constructor(
+    @InjectRepository(ResourceAssignment)
+    private readonly assignmentsRepository: Repository<ResourceAssignment>,
     @InjectRepository(Resource)
     private readonly resourcesRepository: Repository<Resource>,
     @InjectRepository(Project)
@@ -29,31 +44,68 @@ export class ResourceAssignmentValidationService {
     private readonly tasksRepository: Repository<Task>,
   ) {}
 
-  async validateCreateAssignment(input: CreateResourceAssignmentDto) {
+  async validateCreateAssignment(input: CreateResourceAssignmentCommand) {
     await this.validateAssignment(input, true);
   }
 
-  async validateUpdateAssignment(input: UpdateResourceAssignmentDto) {
+  async validateUpdateAssignment(input: UpdateResourceAssignmentCommand) {
     await this.validateAssignment(input, false);
+  }
+
+  async validateResolvedAssignment(
+    input: ResourceAssignmentValidationInput,
+    manager?: EntityManager,
+  ) {
+    await this.validateAssignment(input, true, manager);
+  }
+
+  async ensureAssignmentNotDuplicated(
+    input: Pick<
+      ResourceAssignment,
+      'endDate' | 'projectId' | 'resourceId' | 'startDate' | 'taskId'
+    >,
+    assignmentId?: string,
+    manager?: EntityManager,
+  ) {
+    const assignmentsRepository =
+      manager?.getRepository(ResourceAssignment) ?? this.assignmentsRepository;
+    const existingAssignment = await assignmentsRepository.findOne({
+      where: {
+        id: assignmentId ? Not(assignmentId) : undefined,
+        projectId: input.projectId,
+        resourceId: input.resourceId,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        taskId: input.taskId ?? IsNull(),
+      },
+    });
+
+    if (existingAssignment) {
+      throw new ConflictException('Resource assignment already exists');
+    }
   }
 
   private async validateAssignment(
     input: ResourceAssignmentValidationInput,
     requireCommitment: boolean,
+    manager?: EntityManager,
   ) {
     if (input.resourceId !== undefined) {
-      await this.ensureResourceExists(input.resourceId);
+      await this.ensureResourceExists(input.resourceId, manager);
     }
 
     if (input.projectId !== undefined) {
-      await this.ensureProjectExists(input.projectId);
+      await this.ensureProjectExists(input.projectId, manager);
     }
 
     if (input.taskId !== undefined && input.taskId !== null) {
-      await this.ensureTaskExists(input.taskId);
+      await this.ensureTaskExists(input.taskId, manager);
     }
 
-    if (input.allocationPercent !== undefined && input.allocationPercent !== null) {
+    if (
+      input.allocationPercent !== undefined &&
+      input.allocationPercent !== null
+    ) {
       this.validateAllocationPercent(input.allocationPercent);
     }
 
@@ -139,8 +191,10 @@ export class ResourceAssignmentValidationService {
     }
   }
 
-  private async ensureResourceExists(resourceId: string) {
-    const resource = await this.resourcesRepository.findOne({
+  async ensureResourceExists(resourceId: string, manager?: EntityManager) {
+    const resource = await (
+      manager?.getRepository(Resource) ?? this.resourcesRepository
+    ).findOne({
       where: { id: resourceId },
     });
 
@@ -149,8 +203,10 @@ export class ResourceAssignmentValidationService {
     }
   }
 
-  private async ensureProjectExists(projectId: string) {
-    const project = await this.projectsRepository.findOne({
+  async ensureProjectExists(projectId: string, manager?: EntityManager) {
+    const project = await (
+      manager?.getRepository(Project) ?? this.projectsRepository
+    ).findOne({
       where: { id: projectId },
     });
 
@@ -159,8 +215,10 @@ export class ResourceAssignmentValidationService {
     }
   }
 
-  private async ensureTaskExists(taskId: string) {
-    const task = await this.tasksRepository.findOne({
+  async ensureTaskExists(taskId: string, manager?: EntityManager) {
+    const task = await (
+      manager?.getRepository(Task) ?? this.tasksRepository
+    ).findOne({
       where: { id: taskId },
     });
 

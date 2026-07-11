@@ -1,8 +1,18 @@
 # PM Platform Definition of Done
 
+Engineering Governance Version: 1.0
+
+Start here:
+[ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md)
+
+Authoritative Scope:
+Defines the authoritative completion criteria for PM Platform Stages, Features, Epics, and Releases.
+
 This document defines the authoritative Definition of Done for PM Platform stages, features, epics, and releases.
 
 It is intended for human contributors, reviewers, and AI coding assistants working within the Architecture-First Development Process.
+
+The canonical engineering Stage model is defined in [ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md). This document defines completion criteria for that Stage model.
 
 ---
 
@@ -169,3 +179,13 @@ Future areas may include:
 - accessibility review
 
 These items remain reserved until the repository establishes formal policies, tooling, and approval workflows for them.
+
+---
+
+## Related Governance Documents
+
+- [ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md)
+- [AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md)
+- [QUALITY_GATES.md](QUALITY_GATES.md)
+- [CODE_REVIEW_CHECKLIST.md](CODE_REVIEW_CHECKLIST.md)
+- [CODING_STANDARDS.md](CODING_STANDARDS.md)

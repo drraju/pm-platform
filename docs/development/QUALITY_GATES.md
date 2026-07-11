@@ -1,8 +1,18 @@
 # PM Platform Quality Gates
 
+Engineering Governance Version: 1.0
+
+Start here:
+[ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md)
+
+Authoritative Scope:
+Defines the authoritative quality gates and approval checkpoints that every PM Platform feature must pass before completion.
+
 This document defines the mandatory quality gates that every PM Platform feature must pass before it is considered complete.
 
 Quality gates are part of the Architecture-First Development Process. They are intended for human contributors, reviewers, and AI coding assistants working on feature delivery, review, and release readiness.
+
+The canonical engineering Stage model is defined in [ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md). This document applies quality gates to that Stage model rather than defining a separate lifecycle vocabulary.
 
 ---
 
@@ -137,3 +147,13 @@ Future gate categories may include:
 - scalability
 
 These items are intentionally deferred until the repository introduces formal policy, tooling, and approval expectations for them.
+
+---
+
+## Related Governance Documents
+
+- [ENGINEERING_MANUAL.md](ENGINEERING_MANUAL.md)
+- [AI_DEVELOPMENT_PLAYBOOK.md](AI_DEVELOPMENT_PLAYBOOK.md)
+- [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md)
+- [CODE_REVIEW_CHECKLIST.md](CODE_REVIEW_CHECKLIST.md)
+- [CODING_STANDARDS.md](CODING_STANDARDS.md)

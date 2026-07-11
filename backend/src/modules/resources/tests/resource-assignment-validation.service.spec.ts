@@ -4,16 +4,19 @@ import { ResourceAssignmentStatus } from '../enums/resource-assignment-status.en
 
 describe('ResourceAssignmentValidationService', () => {
   let service: ResourceAssignmentValidationService;
+  let assignmentsRepository: { findOne: jest.Mock };
   let resourcesRepository: { findOne: jest.Mock };
   let projectsRepository: { findOne: jest.Mock };
   let tasksRepository: { findOne: jest.Mock };
 
   beforeEach(() => {
+    assignmentsRepository = { findOne: jest.fn() };
     resourcesRepository = { findOne: jest.fn() };
     projectsRepository = { findOne: jest.fn() };
     tasksRepository = { findOne: jest.fn() };
 
     service = new ResourceAssignmentValidationService(
+      assignmentsRepository as never,
       resourcesRepository as never,
       projectsRepository as never,
       tasksRepository as never,
@@ -96,5 +99,19 @@ describe('ResourceAssignmentValidationService', () => {
         plannedMinutesPerDay: null,
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects duplicate assignments', async () => {
+    assignmentsRepository.findOne.mockResolvedValue({ id: 'assignment-id' });
+
+    await expect(
+      service.ensureAssignmentNotDuplicated({
+        endDate: '2026-07-18',
+        projectId: 'project-id',
+        resourceId: 'resource-id',
+        startDate: '2026-07-11',
+        taskId: null,
+      }),
+    ).rejects.toThrow('Resource assignment already exists');
   });
 });

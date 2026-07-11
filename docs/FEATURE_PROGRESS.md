@@ -10,7 +10,7 @@ Update this file whenever a stage is completed. The tracker should reflect the l
 | ------- | ------------ | ------------- | ------------ | --- | --- | ---------------- | ------------------- | -------------- | --------------------- | ------- | ------ | ------ | ---- | -------------- | ------ |
 | Feature 1.2.1 – Enterprise Resource Management Foundation | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Awaiting Feature Commit |
 | Feature 1.2.2 – Resource CRUD API | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Completed (Pending Feature Commit) |
-| Feature 1.2.3 – Resource Management UI | Complete | Pending | Not Started | Not Started | Not Started | Not Started | Not Started | Not Started | Not Started | Not Started | Not Started | Not Started | Not Started | Not Started | Stage 1 complete; pending Stage 2 Repository Investigation |
+| Feature 1.2.3 – Resource Management UI | Complete | Complete | Complete | Complete | Complete | Complete | Complete | In Progress | Pending | Pending | Pending | Pending | Pending | Pending | Stage 5 complete; pending Stage 6 API |
 
 ## Stage Guidance
 

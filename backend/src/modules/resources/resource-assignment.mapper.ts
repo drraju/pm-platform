@@ -1,10 +1,12 @@
 import {
-  CreateResourceAssignmentDto,
   ResourceAssignmentResponseDto,
-  UpdateResourceAssignmentDto,
 } from './dto/resource-assignment.dto';
 import { ResourceAssignment } from './entities/resource-assignment.entity';
 import { ResourceAssignmentStatus } from './enums/resource-assignment-status.enum';
+import {
+  CreateResourceAssignmentCommand,
+  UpdateResourceAssignmentCommand,
+} from './resource-assignment.commands';
 
 export class ResourceAssignmentMapper {
   static toResponse(
@@ -31,8 +33,8 @@ export class ResourceAssignmentMapper {
     return assignments.map((assignment) => this.toResponse(assignment));
   }
 
-  static fromCreateDto(
-    input: CreateResourceAssignmentDto,
+  static fromCreateCommand(
+    input: CreateResourceAssignmentCommand,
   ): ResourceAssignment {
     return Object.assign(new ResourceAssignment(), {
       allocationPercent: input.allocationPercent ?? null,
@@ -46,25 +48,26 @@ export class ResourceAssignmentMapper {
     });
   }
 
-  static fromUpdateDto(
+  static fromUpdateCommand(
     assignment: ResourceAssignment,
-    input: UpdateResourceAssignmentDto,
+    input: UpdateResourceAssignmentCommand,
   ): ResourceAssignment {
     return Object.assign(new ResourceAssignment(), assignment, {
       allocationPercent:
         input.allocationPercent !== undefined
-          ? input.allocationPercent ?? null
+          ? (input.allocationPercent ?? null)
           : assignment.allocationPercent,
       endDate: input.endDate ?? assignment.endDate,
       plannedMinutesPerDay:
         input.plannedMinutesPerDay !== undefined
-          ? input.plannedMinutesPerDay ?? null
+          ? (input.plannedMinutesPerDay ?? null)
           : assignment.plannedMinutesPerDay,
       projectId: input.projectId ?? assignment.projectId,
       resourceId: input.resourceId ?? assignment.resourceId,
       startDate: input.startDate ?? assignment.startDate,
       status: input.status ?? assignment.status,
-      taskId: input.taskId !== undefined ? input.taskId ?? null : assignment.taskId,
+      taskId:
+        input.taskId !== undefined ? (input.taskId ?? null) : assignment.taskId,
     });
   }
 }

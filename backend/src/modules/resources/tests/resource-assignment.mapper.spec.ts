@@ -3,8 +3,8 @@ import { ResourceAssignment } from '../entities/resource-assignment.entity';
 import { ResourceAssignmentStatus } from '../enums/resource-assignment-status.enum';
 
 describe('ResourceAssignmentMapper', () => {
-  it('maps create dto to entity', () => {
-    const assignment = ResourceAssignmentMapper.fromCreateDto({
+  it('maps create command to entity', () => {
+    const assignment = ResourceAssignmentMapper.fromCreateCommand({
       allocationPercent: 50,
       endDate: '2026-07-18',
       plannedMinutesPerDay: null,
@@ -27,7 +27,7 @@ describe('ResourceAssignmentMapper', () => {
     });
   });
 
-  it('maps update dto without mutating unrelated fields', () => {
+  it('maps update command without mutating unrelated fields', () => {
     const existing = Object.assign(new ResourceAssignment(), {
       allocationPercent: 50,
       createdAt: new Date('2026-07-10T00:00:00.000Z'),
@@ -42,7 +42,7 @@ describe('ResourceAssignmentMapper', () => {
       updatedAt: new Date('2026-07-10T00:00:00.000Z'),
     });
 
-    const updated = ResourceAssignmentMapper.fromUpdateDto(existing, {
+    const updated = ResourceAssignmentMapper.fromUpdateCommand(existing, {
       plannedMinutesPerDay: 240,
       taskId: null,
     });

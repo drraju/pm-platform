@@ -74,7 +74,9 @@ class InMemoryRepository<T extends { id?: string; deletedAt?: Date | null }> {
     order?: Record<string, 'ASC' | 'DESC'>;
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[];
   }): Promise<Persisted<T> | null> {
-    return this.applyOrder(this.filter(options?.where), options?.order)[0] ?? null;
+    return (
+      this.applyOrder(this.filter(options?.where), options?.order)[0] ?? null
+    );
   }
 
   private filter(where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]) {

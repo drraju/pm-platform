@@ -68,7 +68,9 @@ describe('ResourceController authorization', () => {
 
   it('denies users without resource permissions from read endpoints', async () => {
     await expect(
-      guard.canActivate(createContext('ViewerOnly', controller, 'listResources')),
+      guard.canActivate(
+        createContext('ViewerOnly', controller, 'listResources'),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
