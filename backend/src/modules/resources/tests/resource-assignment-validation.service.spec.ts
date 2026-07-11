@@ -101,8 +101,11 @@ describe('ResourceAssignmentValidationService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('rejects duplicate assignments', async () => {
-    assignmentsRepository.findOne.mockResolvedValue({ id: 'assignment-id' });
+  it('rejects duplicate assignments regardless of lifecycle status', async () => {
+    assignmentsRepository.findOne.mockResolvedValue({
+      id: 'assignment-id',
+      status: ResourceAssignmentStatus.Archived,
+    });
 
     await expect(
       service.ensureAssignmentNotDuplicated({

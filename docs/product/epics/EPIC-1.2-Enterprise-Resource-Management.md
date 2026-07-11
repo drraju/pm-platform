@@ -183,15 +183,17 @@ It does not yet have:
 | Acceptance Criteria | Resource records are visible and editable through API boundaries without changing Scheduling, Planning, or Calendar ownership. |
 | Next Feature | Continue with the next approved Epic 1.2 feature from the roadmap and implementation plan. |
 
-### 1.2.3 Resource Management UI
+### 1.2.3 Resource Assignment
 
 | Field | Detail |
 | --- | --- |
-| Purpose | Provide the first ERM user interface over the completed Resource CRUD API. |
-| Scope | Resource list, filtering, search, create/edit/archive flows, and permission-aware resource administration screens. |
-| Out of Scope | Skills taxonomy, competency modeling, capacity calculations, and scheduling integration. |
-| Dependencies | Resource CRUD API. |
-| Acceptance Criteria | Authorized users can list, find, create, edit, and archive resources through the frontend without changing Scheduling, Planning, or Calendar ownership. |
+| Purpose | Represent governed resource commitment against projects and optional planning tasks without changing Scheduling or Planning ownership. |
+| Scope | ResourceAssignment persistence, validation, application services, duplicate-assignment enforcement, and future-safe assignment foundations. |
+| Business Rule | Duplicate assignments are never allowed. A duplicate is another non-deleted assignment with the same resource, project, optional task, start date, and end date, regardless of lifecycle status. |
+| Migration Strategy | Persistence changes follow the repository's additive, forward-only SQL migration strategy. |
+| Out of Scope | REST API, UI, capacity calculations, scheduling integration, and automatic resource leveling. |
+| Dependencies | Resource CRUD API, Projects, Tasks. |
+| Acceptance Criteria | Assignment workflows preserve ERM ownership, enforce the duplicate rule in both application validation and PostgreSQL, and do not change Scheduling, Planning, or Calendar ownership. |
 
 ### 1.2.4 Skills & Competencies
 

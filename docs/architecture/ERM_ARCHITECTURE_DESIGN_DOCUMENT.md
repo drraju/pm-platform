@@ -639,11 +639,11 @@ API/UI compatibility:
 | Resource as first-class domain | ADR-006, ADR-010 | 4, 5, 6, 11 | 1.2.1 Resource Domain |
 | Users are not Resources | ADR-006, ADR-010 | 3, 4, 5, 9 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
 | Support non-human resources | ADR-006, ADR-009, ADR-010 | 5, 13 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
-| Resource management UI | ADR-005, ADR-012 | 7, 9, 12 | 1.2.3 Resource Management UI |
+| Resource management UI | ADR-005, ADR-012 | 7, 9, 12 | Future Resource Management UI feature |
 | Skills and competencies | ADR-010 | 5, 8, 12, 13 | 1.2.4 Skills & Competencies |
 | Resource calendar assignment | ADR-002, ADR-008 | 5, 7, 14 | 1.2.5 Calendar Assignment |
 | Capacity and availability | ADR-007, ADR-010 | 5, 8, 11 | 1.2.6 Capacity Management |
-| Assignment ownership | ADR-011, ADR-013 | 5, 7, 8, 14 | 1.2.7 Project Assignment |
+| Assignment ownership | ADR-011, ADR-013 | 5, 7, 8, 14 | 1.2.3 Resource Assignment |
 | Cost and rates | ADR-012 | 5, 9, 12, 13 | 1.2.8 Cost & Rates |
 | Resource dashboard | ADR-005, ADR-012 | 7, 9, 12 | 1.2.9 Resource Dashboard |
 | Scheduling isolation | ADR-003, ADR-011, ADR-013 | 3, 7, 14, 15 | All features |

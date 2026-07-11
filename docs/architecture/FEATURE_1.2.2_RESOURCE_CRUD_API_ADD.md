@@ -46,7 +46,8 @@ This ADD is subordinate to and consistent with:
 
 ### Future Features
 
-- Feature 1.2.3 Resource Management UI.
+- Feature 1.2.3 Resource Assignment.
+- Future Resource Management UI.
 - Skills and competencies.
 - Calendar assignment.
 - Capacity and availability.
