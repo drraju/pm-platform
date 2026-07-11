@@ -1,5 +1,7 @@
 import {
+  CreateResourceAssignmentDto,
   ResourceAssignmentResponseDto,
+  UpdateResourceAssignmentDto,
 } from './dto/resource-assignment.dto';
 import { ResourceAssignment } from './entities/resource-assignment.entity';
 import { ResourceAssignmentStatus } from './enums/resource-assignment-status.enum';
@@ -9,6 +11,42 @@ import {
 } from './resource-assignment.commands';
 
 export class ResourceAssignmentMapper {
+  static toCreateCommand(
+    input: CreateResourceAssignmentDto,
+  ): CreateResourceAssignmentCommand {
+    return {
+      allocationPercent: input.allocationPercent ?? null,
+      endDate: input.endDate,
+      plannedMinutesPerDay: input.plannedMinutesPerDay ?? null,
+      projectId: input.projectId,
+      resourceId: input.resourceId,
+      startDate: input.startDate,
+      status: input.status,
+      taskId: input.taskId ?? null,
+    };
+  }
+
+  static toUpdateCommand(
+    input: UpdateResourceAssignmentDto,
+  ): UpdateResourceAssignmentCommand {
+    return {
+      allocationPercent:
+        input.allocationPercent !== undefined
+          ? (input.allocationPercent ?? null)
+          : undefined,
+      endDate: input.endDate,
+      plannedMinutesPerDay:
+        input.plannedMinutesPerDay !== undefined
+          ? (input.plannedMinutesPerDay ?? null)
+          : undefined,
+      projectId: input.projectId,
+      resourceId: input.resourceId,
+      startDate: input.startDate,
+      status: input.status,
+      taskId: input.taskId !== undefined ? (input.taskId ?? null) : undefined,
+    };
+  }
+
   static toResponse(
     assignment: ResourceAssignment,
   ): ResourceAssignmentResponseDto {

@@ -88,6 +88,10 @@ export class ResourceAssignmentService {
     });
   }
 
+  async getAssignmentById(assignmentId: string): Promise<ResourceAssignment> {
+    return this.findAssignmentOrThrow(assignmentId);
+  }
+
   async getAssignmentsByProject(
     projectId: string,
   ): Promise<ResourceAssignment[]> {
