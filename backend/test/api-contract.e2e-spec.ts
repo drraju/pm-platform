@@ -1,6 +1,9 @@
 import { INestApplication } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
+import { AuthorizationPolicyService } from '../src/common/authz/authorization-policy.service';
+import { PermissionsGuard } from '../src/common/authz/permissions.guard';
 import { DashboardController } from '../src/modules/dashboard/dashboard.controller';
 import { DashboardService } from '../src/modules/dashboard/dashboard.service';
 import { ProjectsController } from '../src/modules/projects/projects.controller';
@@ -21,6 +24,14 @@ describe('API contract', () => {
         {
           provide: ProjectsService,
           useValue: {},
+        },
+        Reflector,
+        PermissionsGuard,
+        {
+          provide: AuthorizationPolicyService,
+          useValue: {
+            getGrantedPermissionKeys: jest.fn().mockResolvedValue(new Set()),
+          },
         },
       ],
     }).compile();

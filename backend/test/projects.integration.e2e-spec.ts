@@ -1,12 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { AuthorizationPolicyService } from '../src/common/authz/authorization-policy.service';
+import { SchedulingFoundationService } from '../src/common/scheduling/scheduling-foundation.service';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
 import { ProjectHealthService } from '../src/modules/health/project-health.service';
+import { PlanningSnapshotService } from '../src/modules/planning/planning-snapshot.service';
+import { ProjectBaselineTask } from '../src/modules/projects/entities/project-baseline-task.entity';
+import { ProjectBaseline } from '../src/modules/projects/entities/project-baseline.entity';
 import { ProjectMember } from '../src/modules/projects/entities/project-member.entity';
 import { Project } from '../src/modules/projects/entities/project.entity';
 import { ProjectVisibilityService } from '../src/modules/projects/project-visibility.service';
 import { ProjectsController } from '../src/modules/projects/projects.controller';
 import { ProjectsService } from '../src/modules/projects/projects.service';
+import { TaskDependency } from '../src/modules/tasks/entities/task-dependency.entity';
 import { Task } from '../src/modules/tasks/entities/task.entity';
 import { User } from '../src/modules/users/entities/user.entity';
 
@@ -65,8 +71,25 @@ describe('Projects API integration', () => {
         },
         { provide: getRepositoryToken(Project), useValue: projectsRepository },
         { provide: getRepositoryToken(ProjectMember), useValue: {} },
+        { provide: getRepositoryToken(ProjectBaseline), useValue: {} },
+        { provide: getRepositoryToken(ProjectBaselineTask), useValue: {} },
         { provide: getRepositoryToken(Task), useValue: {} },
+        { provide: getRepositoryToken(TaskDependency), useValue: {} },
         { provide: getRepositoryToken(User), useValue: {} },
+        {
+          provide: AuthorizationPolicyService,
+          useValue: {
+            getGrantedPermissionKeys: jest.fn().mockResolvedValue(new Set()),
+          },
+        },
+        {
+          provide: SchedulingFoundationService,
+          useValue: {},
+        },
+        {
+          provide: PlanningSnapshotService,
+          useValue: {},
+        },
       ],
     }).compile();
 

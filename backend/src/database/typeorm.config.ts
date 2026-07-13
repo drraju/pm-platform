@@ -20,7 +20,11 @@ import { RaidComment } from '../modules/raid/entities/raid-comment.entity';
 import { RaidHistoryEntry } from '../modules/raid/entities/raid-history-entry.entity';
 import { Risk } from '../modules/raid/entities/risk.entity';
 import { ResourceAssignment } from '../modules/resources/entities/resource-assignment.entity';
+import { ResourceAvailabilityOverride } from '../modules/resources/entities/resource-availability-override.entity';
+import { ResourceCapacityPolicy } from '../modules/resources/entities/resource-capacity-policy.entity';
+import { ResourceSkill } from '../modules/resources/entities/resource-skill.entity';
 import { Resource } from '../modules/resources/entities/resource.entity';
+import { Skill } from '../modules/resources/entities/skill.entity';
 import { TaskDependency } from '../modules/tasks/entities/task-dependency.entity';
 import { Task } from '../modules/tasks/entities/task.entity';
 import { Permission } from '../modules/users/entities/permission.entity';
@@ -36,7 +40,11 @@ export const databaseEntities: Function[] = [
   EnterpriseCalendar,
   EnterpriseCalendarException,
   Resource,
+  Skill,
+  ResourceSkill,
   ResourceAssignment,
+  ResourceCapacityPolicy,
+  ResourceAvailabilityOverride,
   Project,
   ProjectBaseline,
   ProjectBaselineTask,

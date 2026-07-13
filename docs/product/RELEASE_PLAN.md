@@ -39,7 +39,7 @@ Should deliver:
 | 1.2.1 Enterprise Resource Management Foundation | Completed | Implementation, implementation review, testing, Docker verification, and Ubuntu verification completed. |
 | 1.2.2 Resource CRUD API | Completed | Implementation, implementation alignment, implementation review, testing, Docker verification, Docker runtime alignment, and Ubuntu verification completed. |
 | 1.2.3 Resource Assignment | Completed | Domain, persistence, validation, application service, REST API, testing, Docker verification, Ubuntu verification, and release readiness completed. |
-| 1.2.4 Skills Management | Planned | Not started. Preserved as a later ERM feature after Resource Assignment. |
+| 1.2.4 Skills Management | In Progress | Persistence, validation, application services, REST API, RBAC wiring, and backend test coverage are implemented. Final Docker/PostgreSQL release-readiness verification remains in progress. |
 
 Feature 1.2.1 delivers the Resource aggregate, resource persistence, resource validation, internal Resource service, and additive database migration. Public Resource CRUD APIs were delivered in Feature 1.2.2.
 

@@ -1,0 +1,8 @@
+Deliverables:
+
+Expand ADR-007 with the governance items above.
+Resolve any comments from the Stage 3.5 review.
+Change ADR-007 status from Proposed to Accepted.
+Cross-reference ADR-010, ADR-011, ADR-012, and ADR-013.
+Confirm that Stage 3 architecture and ADR-007 are fully aligned.
+Approve the feature for implementation.

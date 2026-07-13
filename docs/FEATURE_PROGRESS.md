@@ -11,6 +11,7 @@ Update this file whenever a stage is completed. The tracker should reflect the l
 | Feature 1.2.1 – Enterprise Resource Management Foundation | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Awaiting Feature Commit |
 | Feature 1.2.2 – Resource CRUD API | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Completed (Pending Feature Commit) |
 | Feature 1.2.3 – Resource Assignment | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Completed (Stage 13 approved) |
+| Feature 1.2.4 – Skills Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | In Progress | Pending | In Progress | Pending | In Progress (Stage 7 verification) |
 
 ## Stage Guidance
 
