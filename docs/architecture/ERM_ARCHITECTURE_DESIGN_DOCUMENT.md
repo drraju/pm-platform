@@ -660,7 +660,7 @@ API/UI compatibility:
 | 1.2.2 Resource CRUD API | Completed | Resource CRUD API, Resource Controller, Resource DTOs, Resource Mapper, Resource API Service, ERM Resource permissions, Swagger, backend tests. | Verified through implementation review, testing, Docker verification, Docker runtime alignment, and Ubuntu verification. |
 | 1.2.3 Resource Assignment | Completed | Resource Assignment persistence, validation, application service, REST API, database invariant enforcement, and tests. | Completed and approved under Engineering Governance v1.0 and its v1.1 Addendum. |
 | 1.2.4 Skills Management | Completed | Skill catalog, ResourceSkill associations, validation, application services, REST APIs, ERM permissions, and tests. | Completed and merged. |
-| 1.2.5 Resource Availability & Capacity Management | In Progress | Resource Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, ERM permissions, Swagger documentation, and backend tests. | Stage 7 engineering release-readiness verification completed; infrastructure validation remains pending. |
+| 1.2.5 Resource Availability & Capacity Management | Release Ready | Resource Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, ERM permissions, Swagger documentation, backend tests, and migration `023`. | Infrastructure, unit, integration, end-to-end, and documentation verification are complete. Stage 12 remains pending. ADR-007 governs the canonical unit, persistence rules, and derived concepts. |
 
 Related feature design:
 

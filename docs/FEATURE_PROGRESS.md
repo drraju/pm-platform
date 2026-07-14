@@ -12,7 +12,7 @@ Update this file whenever a stage is completed. The tracker should reflect the l
 | Feature 1.2.2 – Resource CRUD API | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Completed (Pending Feature Commit) |
 | Feature 1.2.3 – Resource Assignment | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Completed (Stage 13 approved) |
 | Feature 1.2.4 – Skills Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Completed |
-| Feature 1.2.5 – Resource Availability & Capacity Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Pending | Complete | Pending | Stage 7 Complete (Ready for Stage 7.5) |
+| Feature 1.2.5 – Resource Availability & Capacity Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Complete | Pending | Stage 11 Complete (Ready for Stage 12) |
 
 ## Stage Guidance
 
@@ -37,3 +37,11 @@ Update this file whenever a stage is completed. The tracker should reflect the l
 - Do not mark `Implementation` as started until Technical Design Review and Architecture Baseline Commit are complete.
 - Keep status values concise: `Not Started`, `In Progress`, `Pending`, `Complete`, `Blocked`, or a similarly clear value.
 - Link detailed artefacts from the feature's product, architecture, ADR, or roadmap documents rather than duplicating them here.
+
+## Implementation Note
+
+The persistence foundation for Feature 1.2.5 (Stage 4.1) was committed together with the final Feature 1.2.4 Skills Management commit (0c0bef2) because both features were developed concurrently.
+
+Stage 4.2 Domain Foundation was completed in commit dfee845.
+
+Subsequent implementation stages follow the documented governance sequence.

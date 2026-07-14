@@ -2,7 +2,7 @@
 
 ## Status
 
-Product and architecture baseline approved. Features 1.2.1 through 1.2.4 have been completed. Feature 1.2.5 Resource Availability & Capacity Management has completed Stage 7 engineering release-readiness verification and is awaiting infrastructure validation.
+Product and architecture baseline approved. Features 1.2.1 through 1.2.4 have been completed. Feature 1.2.5 Resource Availability & Capacity Management has completed implementation, infrastructure, unit, integration, end-to-end, and documentation verification and is ready for Stage 12.
 
 ## Business Objective
 
@@ -214,6 +214,40 @@ It does not yet have:
 | Out of Scope | Persisted availability projections, utilization, remaining capacity, snapshots, scheduling integration, and schedule mutation. |
 | Dependencies | Resource Domain, Resource Assignment, ADR-007 Capacity Model. |
 | Acceptance Criteria | Capacity Policies and Availability Overrides can be managed through governed APIs using deterministic source-of-truth inputs while derived availability remains unpersisted. |
+
+#### Implemented Lifecycle
+
+- Capacity Policies persist normal supply in `capacity_minutes_per_working_day`, use effective date ranges, and prevent overlapping active periods.
+- Capacity Policies archive through `status = archived`; archived records remain addressable by identifier and are excluded from normal lists.
+- Availability Overrides represent exceptional unavailable or reduced-capacity periods.
+- Availability Overrides use auditable soft deletion and are excluded from detail and list responses after deletion.
+- Availability projections, utilization, remaining capacity, and snapshots are not persisted.
+
+#### Implemented API
+
+- `POST /resources/:resourceId/capacity-policies`
+- `GET /resources/:resourceId/capacity-policies`
+- `GET /resources/:resourceId/capacity-policies/:policyId`
+- `PATCH /resources/:resourceId/capacity-policies/:policyId`
+- `DELETE /resources/:resourceId/capacity-policies/:policyId`
+- `POST /resources/:resourceId/availability-overrides`
+- `GET /resources/:resourceId/availability-overrides`
+- `GET /resources/:resourceId/availability-overrides/:overrideId`
+- `PATCH /resources/:resourceId/availability-overrides/:overrideId`
+- `DELETE /resources/:resourceId/availability-overrides/:overrideId`
+
+All endpoints use the existing JWT and permission-guard architecture, validate UUID route parameters, enforce nested Resource ownership, and are represented in Swagger/OpenAPI.
+
+#### Permissions, Persistence, and Seed
+
+- Capacity Policy permissions: `resource.capacity.create`, `resource.capacity.read`, `resource.capacity.update`, and `resource.capacity.archive`.
+- Availability Override permissions: `resource.availability.create`, `resource.availability.read`, `resource.availability.update`, and `resource.availability.archive`.
+- Migration `023_v1_2_5_resource_availability_capacity_foundation.sql` additively creates the Capacity Policy and Availability Override persistence model, foreign keys, checks, indexes, and active-period exclusion constraint.
+- The standard idempotent seed registers all eight permissions and grants them through the existing role matrix.
+
+#### Preserved Boundaries
+
+ERM owns Capacity Policies and Availability Overrides under the Resource aggregate. Enterprise Calendar remains the owner of working-day semantics. Existing Planning capacity and allocation persistence remains Planning-owned. Scheduling consumes no ERM persistence directly, and Feature 1.2.5 introduces no scheduling calculations or schedule mutation.
 
 ### 1.2.6 Calendar Assignment
 
