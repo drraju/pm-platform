@@ -7,22 +7,13 @@ import { PermissionsGuard } from '../../../common/authz/permissions.guard';
 import { ResourceCapacityPolicyApiService } from '../resource-capacity-policy-api.service';
 import { ResourceCapacityPolicyController } from '../resource-capacity-policy.controller';
 
-const permissionsByRoleName: Record<string, string[]> = {
-  ResourceCapacityManager: [
-    PermissionKey.ResourceCapacityArchive,
-    PermissionKey.ResourceCapacityCreate,
-    PermissionKey.ResourceCapacityRead,
-    PermissionKey.ResourceCapacityUpdate,
-  ],
-  ResourceCapacityReader: [PermissionKey.ResourceCapacityRead],
-  ViewerOnly: [PermissionKey.DashboardView],
-};
-
 describe('ResourceCapacityPolicyController authorization', () => {
   let controller: ResourceCapacityPolicyController;
   let guard: PermissionsGuard;
+  let grantedPermissions: PermissionKey[];
 
   beforeEach(async () => {
+    grantedPermissions = [];
     const moduleRef = await Test.createTestingModule({
       controllers: [ResourceCapacityPolicyController],
       providers: [
@@ -41,9 +32,8 @@ describe('ResourceCapacityPolicyController authorization', () => {
         {
           provide: AuthorizationPolicyService,
           useValue: {
-            getGrantedPermissionKeys: jest.fn(
-              ({ roleId }: { roleId: string }) =>
-                Promise.resolve(new Set(permissionsByRoleName[roleId] ?? [])),
+            getGrantedPermissionKeys: jest.fn(() =>
+              Promise.resolve(new Set(grantedPermissions)),
             ),
           },
         },
@@ -54,59 +44,30 @@ describe('ResourceCapacityPolicyController authorization', () => {
     guard = moduleRef.get(PermissionsGuard);
   });
 
-  it.each(['ResourceCapacityReader', 'ResourceCapacityManager'])(
-    'allows %s to access read endpoints',
-    async (roleName) => {
+  it.each([
+    ['createCapacityPolicy', PermissionKey.ResourceCapacityCreate],
+    ['listCapacityPolicies', PermissionKey.ResourceCapacityRead],
+    ['getCapacityPolicy', PermissionKey.ResourceCapacityRead],
+    ['updateCapacityPolicy', PermissionKey.ResourceCapacityUpdate],
+    ['deleteCapacityPolicy', PermissionKey.ResourceCapacityArchive],
+  ] as const)(
+    'requires the exact permission for %s',
+    async (methodName, requiredPermission) => {
+      grantedPermissions = [requiredPermission];
       await expect(
         guard.canActivate(
-          createCapacityContext(roleName, controller, 'listCapacityPolicies'),
+          createCapacityContext('ExactPermission', controller, methodName),
         ),
       ).resolves.toBe(true);
+
+      grantedPermissions = [];
       await expect(
         guard.canActivate(
-          createCapacityContext(roleName, controller, 'getCapacityPolicy'),
+          createCapacityContext('NoPermission', controller, methodName),
         ),
-      ).resolves.toBe(true);
+      ).rejects.toBeInstanceOf(ForbiddenException);
     },
   );
-
-  it('denies users without capacity permissions from read endpoints', async () => {
-    await expect(
-      guard.canActivate(
-        createCapacityContext('ViewerOnly', controller, 'listCapacityPolicies'),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('allows managers and denies readers for write endpoints', async () => {
-    await expect(
-      guard.canActivate(
-        createCapacityContext(
-          'ResourceCapacityManager',
-          controller,
-          'createCapacityPolicy',
-        ),
-      ),
-    ).resolves.toBe(true);
-    await expect(
-      guard.canActivate(
-        createCapacityContext(
-          'ResourceCapacityReader',
-          controller,
-          'updateCapacityPolicy',
-        ),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(
-      guard.canActivate(
-        createCapacityContext(
-          'ResourceCapacityReader',
-          controller,
-          'deleteCapacityPolicy',
-        ),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
 });
 
 function createCapacityContext(

@@ -117,6 +117,37 @@ describe('ResourceAvailabilityOverrideApiService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it.each(['update', 'delete'] as const)(
+    'rejects %s when the override belongs to another resource',
+    async (operation) => {
+      availabilityOverrideService.getAvailabilityOverrideById.mockResolvedValue(
+        override,
+      );
+
+      const result =
+        operation === 'update'
+          ? service.updateAvailabilityOverride(
+              'other-resource-id',
+              'override-id',
+              { reason: 'Updated reason' },
+              actor,
+            )
+          : service.deleteAvailabilityOverride(
+              'other-resource-id',
+              'override-id',
+              actor,
+            );
+
+      await expect(result).rejects.toBeInstanceOf(NotFoundException);
+      expect(
+        availabilityOverrideService.updateAvailabilityOverride,
+      ).not.toHaveBeenCalled();
+      expect(
+        availabilityOverrideService.archiveAvailabilityOverride,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
   it('maps list results to response DTOs', async () => {
     availabilityOverrideService.getAvailabilityOverridesByResource.mockResolvedValue(
       [override],

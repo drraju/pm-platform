@@ -29,6 +29,68 @@ describe('ResourceAvailabilityOverrideValidationService', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('accepts zero available minutes and equal boundary dates', async () => {
+    await expect(
+      service.validateCreateAvailabilityOverride({
+        availableMinutesPerWorkingDay: 0,
+        endDate: '2026-08-01',
+        overrideType: ResourceAvailabilityOverrideType.ReducedCapacity,
+        resourceId: 'resource-id',
+        startDate: '2026-08-01',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects unsupported override types', async () => {
+    await expect(
+      service.validateCreateAvailabilityOverride({
+        endDate: '2026-08-03',
+        overrideType: 'unsupported' as ResourceAvailabilityOverrideType,
+        resourceId: 'resource-id',
+        startDate: '2026-08-01',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it.each([-1, 0.5])(
+    'rejects invalid quantitative value %s',
+    async (availableMinutesPerWorkingDay) => {
+      await expect(
+        service.validateCreateAvailabilityOverride({
+          availableMinutesPerWorkingDay,
+          endDate: '2026-08-03',
+          overrideType: ResourceAvailabilityOverrideType.ReducedCapacity,
+          resourceId: 'resource-id',
+          startDate: '2026-08-01',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    },
+  );
+
+  it('accepts a reason at the 2,000-character limit', async () => {
+    await expect(
+      service.validateCreateAvailabilityOverride({
+        endDate: '2026-08-03',
+        overrideType: ResourceAvailabilityOverrideType.Unavailable,
+        reason: 'a'.repeat(2000),
+        resourceId: 'resource-id',
+        startDate: '2026-08-01',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects a reason beyond the 2,000-character limit', async () => {
+    await expect(
+      service.validateCreateAvailabilityOverride({
+        endDate: '2026-08-03',
+        overrideType: ResourceAvailabilityOverrideType.Unavailable,
+        reason: 'a'.repeat(2001),
+        resourceId: 'resource-id',
+        startDate: '2026-08-01',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it('rejects invalid date ranges', async () => {
     await expect(
       service.validateCreateAvailabilityOverride({
@@ -66,8 +128,8 @@ describe('ResourceAvailabilityOverrideValidationService', () => {
   it('throws when the resource does not exist', async () => {
     resourcesRepository.findOne.mockResolvedValue(null);
 
-    await expect(service.ensureResourceExists('missing-resource-id')).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.ensureResourceExists('missing-resource-id'),
+    ).rejects.toThrow(NotFoundException);
   });
 });

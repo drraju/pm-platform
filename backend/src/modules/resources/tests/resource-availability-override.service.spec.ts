@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { ResourceAvailabilityOverride } from '../entities/resource-availability-override.entity';
 import { ResourceAvailabilityOverrideType } from '../enums/resource-availability-override-type.enum';
@@ -52,13 +52,39 @@ describe('ResourceAvailabilityOverrideService', () => {
       find: jest.fn(),
       findOne: jest.fn(),
       manager: {
-        create: jest.fn((_entity, input) => input),
+        create: jest.fn(
+          (
+            _entity: typeof ResourceAvailabilityOverride,
+            input: Partial<ResourceAvailabilityOverride>,
+          ) => Object.assign(new ResourceAvailabilityOverride(), input),
+        ),
         findOne: jest.fn(),
-        merge: jest.fn((_entity, target, source) => ({ ...target, ...source })),
-        save: jest.fn(async (_entity, input) => input),
-        softRemove: jest.fn(async (_entity, input) => input),
-        transaction: jest.fn(async (callback) =>
-          callback(availabilityOverridesRepository.manager),
+        merge: jest.fn(
+          (
+            _entity: typeof ResourceAvailabilityOverride,
+            target: ResourceAvailabilityOverride,
+            source: Partial<ResourceAvailabilityOverride>,
+          ) =>
+            Object.assign(new ResourceAvailabilityOverride(), target, source),
+        ),
+        save: jest.fn(
+          (
+            _entity: typeof ResourceAvailabilityOverride,
+            input: ResourceAvailabilityOverride,
+          ) => Promise.resolve(input),
+        ),
+        softRemove: jest.fn(
+          (
+            _entity: typeof ResourceAvailabilityOverride,
+            input: ResourceAvailabilityOverride,
+          ) => Promise.resolve(input),
+        ),
+        transaction: jest.fn(
+          (
+            callback: (
+              manager: MockRepository<ResourceAvailabilityOverride>['manager'],
+            ) => Promise<ResourceAvailabilityOverride>,
+          ) => callback(availabilityOverridesRepository.manager),
         ),
       },
     };
@@ -100,6 +126,29 @@ describe('ResourceAvailabilityOverrideService', () => {
         updatedById: actor.userId,
       }),
     );
+  });
+
+  it('stops persistence when create validation fails', async () => {
+    validationService.validateResolvedAvailabilityOverride.mockRejectedValue(
+      new BadRequestException('invalid availability override'),
+    );
+
+    await expect(
+      service.createAvailabilityOverride({
+        endDate: '2026-08-03',
+        overrideType: ResourceAvailabilityOverrideType.ReducedCapacity,
+        resourceId: 'resource-id',
+        startDate: '2026-08-01',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(
+      availabilityOverridesRepository.manager.create,
+    ).not.toHaveBeenCalled();
+    expect(availabilityOverridesRepository.manager.save).not.toHaveBeenCalled();
+    expect(
+      availabilityOverridesRepository.manager.softRemove,
+    ).not.toHaveBeenCalled();
   });
 
   it('updates an availability override using merged state validation', async () => {

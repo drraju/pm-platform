@@ -51,6 +51,37 @@ describe('ResourceCapacityPolicyValidationService', () => {
     ).resolves.toBeUndefined();
   });
 
+  it.each([
+    [0, '2026-07-01', '2026-07-01'],
+    [480, '2026-07-01', undefined],
+  ])(
+    'accepts boundary capacity %s with dates %s to %s',
+    async (
+      capacityMinutesPerWorkingDay,
+      effectiveStartDate,
+      effectiveEndDate,
+    ) => {
+      await expect(
+        service.validateCreateCapacityPolicy({
+          capacityMinutesPerWorkingDay,
+          effectiveEndDate,
+          effectiveStartDate,
+          resourceId: 'resource-id',
+        }),
+      ).resolves.toBeUndefined();
+    },
+  );
+
+  it('rejects fractional capacity minutes', async () => {
+    await expect(
+      service.validateCreateCapacityPolicy({
+        capacityMinutesPerWorkingDay: 0.5,
+        effectiveStartDate: '2026-07-01',
+        resourceId: 'resource-id',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it('rejects negative capacity minutes', async () => {
     await expect(
       service.validateCreateCapacityPolicy({
@@ -93,11 +124,44 @@ describe('ResourceCapacityPolicyValidationService', () => {
     ).rejects.toThrow(ConflictException);
   });
 
+  it('uses an unbounded end date when checking open-ended policies', async () => {
+    queryBuilder.getOne.mockResolvedValue(null);
+
+    await expect(
+      service.ensureNoOverlappingActivePolicy({
+        effectiveEndDate: null,
+        effectiveStartDate: '2026-07-01',
+        resourceId: 'resource-id',
+        status: ResourceCapacityPolicyStatus.Active,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      'policy.effective_start_date <= :effectiveEndDate',
+      { effectiveEndDate: '9999-12-31' },
+    );
+  });
+
+  it('bypasses overlap queries for inactive policies', async () => {
+    await expect(
+      service.ensureNoOverlappingActivePolicy({
+        effectiveEndDate: '2026-07-31',
+        effectiveStartDate: '2026-07-01',
+        resourceId: 'resource-id',
+        status: ResourceCapacityPolicyStatus.Draft,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(
+      capacityPoliciesRepository.createQueryBuilder,
+    ).not.toHaveBeenCalled();
+  });
+
   it('throws when the resource does not exist', async () => {
     resourcesRepository.findOne.mockResolvedValue(null);
 
-    await expect(service.ensureResourceExists('missing-resource-id')).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.ensureResourceExists('missing-resource-id'),
+    ).rejects.toThrow(NotFoundException);
   });
 });

@@ -7,22 +7,13 @@ import { PermissionsGuard } from '../../../common/authz/permissions.guard';
 import { ResourceAvailabilityOverrideApiService } from '../resource-availability-override-api.service';
 import { ResourceAvailabilityOverrideController } from '../resource-availability-override.controller';
 
-const permissionsByRoleName: Record<string, string[]> = {
-  ResourceAvailabilityManager: [
-    PermissionKey.ResourceAvailabilityArchive,
-    PermissionKey.ResourceAvailabilityCreate,
-    PermissionKey.ResourceAvailabilityRead,
-    PermissionKey.ResourceAvailabilityUpdate,
-  ],
-  ResourceAvailabilityReader: [PermissionKey.ResourceAvailabilityRead],
-  ViewerOnly: [PermissionKey.DashboardView],
-};
-
 describe('ResourceAvailabilityOverrideController authorization', () => {
   let controller: ResourceAvailabilityOverrideController;
   let guard: PermissionsGuard;
+  let grantedPermissions: PermissionKey[];
 
   beforeEach(async () => {
+    grantedPermissions = [];
     const moduleRef = await Test.createTestingModule({
       controllers: [ResourceAvailabilityOverrideController],
       providers: [
@@ -41,9 +32,8 @@ describe('ResourceAvailabilityOverrideController authorization', () => {
         {
           provide: AuthorizationPolicyService,
           useValue: {
-            getGrantedPermissionKeys: jest.fn(
-              ({ roleId }: { roleId: string }) =>
-                Promise.resolve(new Set(permissionsByRoleName[roleId] ?? [])),
+            getGrantedPermissionKeys: jest.fn(() =>
+              Promise.resolve(new Set(grantedPermissions)),
             ),
           },
         },
@@ -54,71 +44,30 @@ describe('ResourceAvailabilityOverrideController authorization', () => {
     guard = moduleRef.get(PermissionsGuard);
   });
 
-  it.each(['ResourceAvailabilityReader', 'ResourceAvailabilityManager'])(
-    'allows %s to access read endpoints',
-    async (roleName) => {
+  it.each([
+    ['createAvailabilityOverride', PermissionKey.ResourceAvailabilityCreate],
+    ['listAvailabilityOverrides', PermissionKey.ResourceAvailabilityRead],
+    ['getAvailabilityOverride', PermissionKey.ResourceAvailabilityRead],
+    ['updateAvailabilityOverride', PermissionKey.ResourceAvailabilityUpdate],
+    ['deleteAvailabilityOverride', PermissionKey.ResourceAvailabilityArchive],
+  ] as const)(
+    'requires the exact permission for %s',
+    async (methodName, requiredPermission) => {
+      grantedPermissions = [requiredPermission];
       await expect(
         guard.canActivate(
-          createAvailabilityContext(
-            roleName,
-            controller,
-            'listAvailabilityOverrides',
-          ),
+          createAvailabilityContext('ExactPermission', controller, methodName),
         ),
       ).resolves.toBe(true);
+
+      grantedPermissions = [];
       await expect(
         guard.canActivate(
-          createAvailabilityContext(
-            roleName,
-            controller,
-            'getAvailabilityOverride',
-          ),
+          createAvailabilityContext('NoPermission', controller, methodName),
         ),
-      ).resolves.toBe(true);
+      ).rejects.toBeInstanceOf(ForbiddenException);
     },
   );
-
-  it('denies users without availability permissions from read endpoints', async () => {
-    await expect(
-      guard.canActivate(
-        createAvailabilityContext(
-          'ViewerOnly',
-          controller,
-          'listAvailabilityOverrides',
-        ),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('allows managers and denies readers for write endpoints', async () => {
-    await expect(
-      guard.canActivate(
-        createAvailabilityContext(
-          'ResourceAvailabilityManager',
-          controller,
-          'createAvailabilityOverride',
-        ),
-      ),
-    ).resolves.toBe(true);
-    await expect(
-      guard.canActivate(
-        createAvailabilityContext(
-          'ResourceAvailabilityReader',
-          controller,
-          'updateAvailabilityOverride',
-        ),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(
-      guard.canActivate(
-        createAvailabilityContext(
-          'ResourceAvailabilityReader',
-          controller,
-          'deleteAvailabilityOverride',
-        ),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
 });
 
 function createAvailabilityContext(

@@ -1,5 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Not, Repository } from 'typeorm';
 import { ResourceCapacityPolicy } from '../entities/resource-capacity-policy.entity';
 import { ResourceCapacityPolicyStatus } from '../enums/resource-capacity-policy-status.enum';
 import {
@@ -50,14 +50,41 @@ describe('ResourceCapacityPolicyService', () => {
     capacityPoliciesRepository = {
       find: jest.fn(),
       findOne: jest.fn(),
-      save: jest.fn(async (input) => ({ id: 'policy-id', ...input })),
+      save: jest.fn((input: Partial<ResourceCapacityPolicy>) =>
+        Promise.resolve(
+          Object.assign(new ResourceCapacityPolicy(), {
+            id: 'policy-id',
+            ...input,
+          }),
+        ),
+      ),
       manager: {
-        create: jest.fn((_entity, input) => input),
+        create: jest.fn(
+          (
+            _entity: typeof ResourceCapacityPolicy,
+            input: Partial<ResourceCapacityPolicy>,
+          ) => Object.assign(new ResourceCapacityPolicy(), input),
+        ),
         findOne: jest.fn(),
-        merge: jest.fn((_entity, target, source) => ({ ...target, ...source })),
-        save: jest.fn(async (_entity, input) => input),
-        transaction: jest.fn(async (callback) =>
-          callback(capacityPoliciesRepository.manager),
+        merge: jest.fn(
+          (
+            _entity: typeof ResourceCapacityPolicy,
+            target: ResourceCapacityPolicy,
+            source: Partial<ResourceCapacityPolicy>,
+          ) => Object.assign(new ResourceCapacityPolicy(), target, source),
+        ),
+        save: jest.fn(
+          (
+            _entity: typeof ResourceCapacityPolicy,
+            input: ResourceCapacityPolicy,
+          ) => Promise.resolve(input),
+        ),
+        transaction: jest.fn(
+          (
+            callback: (
+              manager: MockRepository<ResourceCapacityPolicy>['manager'],
+            ) => Promise<ResourceCapacityPolicy>,
+          ) => callback(capacityPoliciesRepository.manager),
         ),
       },
     };
@@ -109,6 +136,26 @@ describe('ResourceCapacityPolicyService', () => {
         updatedById: actor.userId,
       }),
     );
+  });
+
+  it('stops persistence when create validation fails', async () => {
+    validationService.validateResolvedCapacityPolicy.mockRejectedValue(
+      new BadRequestException('invalid capacity policy'),
+    );
+
+    await expect(
+      service.createCapacityPolicy({
+        capacityMinutesPerWorkingDay: -1,
+        effectiveStartDate: '2026-07-01',
+        resourceId: 'resource-id',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(capacityPoliciesRepository.manager.create).not.toHaveBeenCalled();
+    expect(capacityPoliciesRepository.manager.save).not.toHaveBeenCalled();
+    expect(
+      validationService.ensureNoOverlappingActivePolicy,
+    ).not.toHaveBeenCalled();
   });
 
   it('updates a capacity policy using merged state validation', async () => {
@@ -182,7 +229,7 @@ describe('ResourceCapacityPolicyService', () => {
       order: { createdAt: 'ASC', effectiveStartDate: 'ASC' },
       where: {
         resourceId: existingPolicy.resourceId,
-        status: expect.any(Object),
+        status: Not(ResourceCapacityPolicyStatus.Archived),
       },
     });
   });

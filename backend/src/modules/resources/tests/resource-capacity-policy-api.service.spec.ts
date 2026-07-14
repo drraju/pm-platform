@@ -103,6 +103,33 @@ describe('ResourceCapacityPolicyApiService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it.each(['update', 'delete'] as const)(
+    'rejects %s when the policy belongs to another resource',
+    async (operation) => {
+      capacityPolicyService.getCapacityPolicyById.mockResolvedValue(policy);
+
+      const result =
+        operation === 'update'
+          ? service.updateCapacityPolicy(
+              'other-resource-id',
+              'policy-id',
+              { capacityMinutesPerWorkingDay: 420 },
+              actor,
+            )
+          : service.deleteCapacityPolicy(
+              'other-resource-id',
+              'policy-id',
+              actor,
+            );
+
+      await expect(result).rejects.toBeInstanceOf(NotFoundException);
+      expect(capacityPolicyService.updateCapacityPolicy).not.toHaveBeenCalled();
+      expect(
+        capacityPolicyService.archiveCapacityPolicy,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
   it('maps list results to response DTOs', async () => {
     capacityPolicyService.getCapacityPoliciesByResource.mockResolvedValue([
       policy,
