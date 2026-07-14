@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Not, Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Resource } from './entities/resource.entity';
 import { ResourceCapacityPolicy } from './entities/resource-capacity-policy.entity';
 import { ResourceCapacityPolicyStatus } from './enums/resource-capacity-policy-status.enum';
@@ -74,7 +74,9 @@ export class ResourceCapacityPolicyValidationService {
 
     const existing = await policiesRepository
       .createQueryBuilder('policy')
-      .where('policy.resource_id = :resourceId', { resourceId: input.resourceId })
+      .where('policy.resource_id = :resourceId', {
+        resourceId: input.resourceId,
+      })
       .andWhere('policy.status = :status', {
         status: ResourceCapacityPolicyStatus.Active,
       })

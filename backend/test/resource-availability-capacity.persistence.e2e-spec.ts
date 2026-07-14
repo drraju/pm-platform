@@ -124,7 +124,7 @@ describe('Resource availability and capacity persistence', () => {
       readFileSync(availabilityCapacityMigrationPath, 'utf8'),
     );
 
-    const tables = await testDataSource.query(
+    const tables = await testDataSource.query<{ tablename: string }[]>(
       `SELECT tablename
        FROM pg_tables
        WHERE schemaname = 'public'
@@ -134,12 +134,12 @@ describe('Resource availability and capacity persistence', () => {
          )
        ORDER BY tablename`,
     );
-    expect(tables.map((row: { tablename: string }) => row.tablename)).toEqual([
+    expect(tables.map((row) => row.tablename)).toEqual([
       'enterprise_resource_availability_overrides',
       'enterprise_resource_capacity_policies',
     ]);
 
-    const constraints = await testDataSource.query(
+    const constraints = await testDataSource.query<{ conname: string }[]>(
       `SELECT conname
        FROM pg_constraint
        WHERE conname IN (
@@ -150,7 +150,7 @@ describe('Resource availability and capacity persistence', () => {
        )
        ORDER BY conname`,
     );
-    expect(constraints.map((row: { conname: string }) => row.conname)).toEqual([
+    expect(constraints.map((row) => row.conname)).toEqual([
       'chk_enterprise_resource_availability_overrides_shape',
       'chk_enterprise_resource_capacity_policies_capacity',
       'chk_enterprise_resource_capacity_policies_dates',
@@ -188,7 +188,7 @@ describe('Resource availability and capacity persistence', () => {
          VALUES ('Capacity Fresh Resource', 'human', 'active')`,
       );
 
-      const resources = await freshDataSource.query(
+      const resources = await freshDataSource.query<{ name: string }[]>(
         `SELECT name
          FROM enterprise_resources
          WHERE name = 'Capacity Fresh Resource'`,
@@ -205,7 +205,9 @@ describe('Resource availability and capacity persistence', () => {
            AND pid <> pg_backend_pid()`,
         [freshDatabaseName],
       );
-      await adminDataSource.query(`DROP DATABASE IF EXISTS "${freshDatabaseName}"`);
+      await adminDataSource.query(
+        `DROP DATABASE IF EXISTS "${freshDatabaseName}"`,
+      );
     }
   });
 
