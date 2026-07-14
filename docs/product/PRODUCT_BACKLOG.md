@@ -9,7 +9,8 @@ This backlog covers Epic 1.2 Enterprise Resource Management and adjacent roadmap
 | 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | Public Resource CRUD APIs were delivered in Feature 1.2.2. |
 | 1.2.2 Resource CRUD API | Completed | Resource CRUD API, Resource Controller, Resource DTOs, Resource Mapper, Resource API Service, ERM Resource permissions, Swagger, tests. | Docker and Ubuntu verification completed. The next approved ERM feature is Feature 1.2.3 Resource Assignment. |
 | 1.2.3 Resource Assignment | Completed | Resource Assignment persistence, validation, application service, duplicate-assignment business rule enforcement, REST API, testing, Docker verification, Ubuntu verification, and release readiness. | Duplicate assignments are never allowed for non-deleted assignments with the same resource, project, optional task, and date range. |
-| 1.2.4 Skills Management | In Progress | Skill catalog persistence, resource-skill association persistence, DTOs, mappers, validation services, application services, REST API, ERM RBAC wiring, and backend test coverage. | Final Docker/PostgreSQL-backed Stage 7 verification is still in progress. |
+| 1.2.4 Skills Management | Completed | Skill catalog persistence, resource-skill association persistence, DTOs, mappers, validation services, application services, REST API, ERM RBAC wiring, and backend test coverage. | Implementation and release verification completed and merged. |
+| 1.2.5 Resource Availability & Capacity Management | In Progress | Resource Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, ERM permissions, Swagger documentation, and backend test coverage. | Stage 7 engineering release-readiness verification completed. Infrastructure validation and final feature commit remain pending. |
 
 ## Must Have
 

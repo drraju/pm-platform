@@ -2,7 +2,7 @@
 
 ## Status
 
-Product and architecture baseline approved. Feature 1.2.1 Enterprise Resource Management Foundation and Feature 1.2.2 Resource CRUD API have been implemented and verified. Stage 14 Feature Commit remains pending.
+Product and architecture baseline approved. Features 1.2.1 through 1.2.4 have been completed. Feature 1.2.5 Resource Availability & Capacity Management has completed Stage 7 engineering release-readiness verification and is awaiting infrastructure validation.
 
 ## Business Objective
 
@@ -195,7 +195,7 @@ It does not yet have:
 | Dependencies | Resource CRUD API, Projects, Tasks. |
 | Acceptance Criteria | Assignment workflows preserve ERM ownership, enforce the duplicate rule in both application validation and PostgreSQL, and do not change Scheduling, Planning, or Calendar ownership. |
 
-### 1.2.4 Skills & Competencies
+### 1.2.4 Skills Management
 
 | Field | Detail |
 | --- | --- |
@@ -205,7 +205,17 @@ It does not yet have:
 | Dependencies | Resource CRUD API. |
 | Acceptance Criteria | Resources can be filtered by skill and competency. |
 
-### 1.2.5 Calendar Assignment
+### 1.2.5 Resource Availability & Capacity Management
+
+| Field | Detail |
+| --- | --- |
+| Purpose | Govern normal resource supply and exceptional availability without changing Calendar, Planning, or Scheduling ownership. |
+| Scope | Resource Capacity Policies, Availability Overrides, canonical daily-minute capacity, validation, REST APIs, and ERM permissions. |
+| Out of Scope | Persisted availability projections, utilization, remaining capacity, snapshots, scheduling integration, and schedule mutation. |
+| Dependencies | Resource Domain, Resource Assignment, ADR-007 Capacity Model. |
+| Acceptance Criteria | Capacity Policies and Availability Overrides can be managed through governed APIs using deterministic source-of-truth inputs while derived availability remains unpersisted. |
+
+### 1.2.6 Calendar Assignment
 
 | Field | Detail |
 | --- | --- |
@@ -214,16 +224,6 @@ It does not yet have:
 | Out of Scope | Schedule date calculation. |
 | Dependencies | Enterprise Calendar, future Project Calendar. |
 | Acceptance Criteria | Resource can show assigned/effective calendar without changing schedules. |
-
-### 1.2.6 Capacity Management
-
-| Field | Detail |
-| --- | --- |
-| Purpose | Represent resource capacity and availability. |
-| Scope | Daily, weekly, monthly capacity; availability; remaining capacity. |
-| Out of Scope | Automatic leveling. |
-| Dependencies | Resource CRUD API, Calendar Assignment. |
-| Acceptance Criteria | Capacity and remaining availability can be queried and tested. |
 
 ### 1.2.7 Project Assignment
 

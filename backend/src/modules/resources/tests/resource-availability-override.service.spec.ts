@@ -141,7 +141,10 @@ describe('ResourceAvailabilityOverrideService', () => {
       existingOverride,
     );
 
-    await service.archiveAvailabilityOverride(existingOverride.id, actor);
+    await service.archiveAvailabilityOverride(
+      { id: existingOverride.id },
+      actor,
+    );
 
     expect(
       availabilityOverridesRepository.manager.transaction,

@@ -4,8 +4,12 @@ import { Project } from '../projects/entities/project.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { ResourceAssignmentController } from './resource-assignment.controller';
 import { ResourceAssignmentApiService } from './resource-assignment-api.service';
+import { ResourceAvailabilityOverrideApiService } from './resource-availability-override-api.service';
+import { ResourceAvailabilityOverrideController } from './resource-availability-override.controller';
 import { ResourceAvailabilityOverrideService } from './resource-availability-override.service';
 import { ResourceAvailabilityOverrideValidationService } from './resource-availability-override-validation.service';
+import { ResourceCapacityPolicyApiService } from './resource-capacity-policy-api.service';
+import { ResourceCapacityPolicyController } from './resource-capacity-policy.controller';
 import { ResourceCapacityPolicyService } from './resource-capacity-policy.service';
 import { ResourceCapacityPolicyValidationService } from './resource-capacity-policy-validation.service';
 import { ResourceSkillApiService } from './resource-skill-api.service';
@@ -45,6 +49,8 @@ import { SkillValidationService } from './skill-validation.service';
   controllers: [
     ResourceController,
     ResourceAssignmentController,
+    ResourceCapacityPolicyController,
+    ResourceAvailabilityOverrideController,
     SkillController,
     ResourceSkillController,
   ],
@@ -63,6 +69,8 @@ import { SkillValidationService } from './skill-validation.service';
     ResourceSkillValidationService,
     ResourceApiService,
     ResourceAssignmentApiService,
+    ResourceCapacityPolicyApiService,
+    ResourceAvailabilityOverrideApiService,
     SkillApiService,
     ResourceSkillApiService,
   ],

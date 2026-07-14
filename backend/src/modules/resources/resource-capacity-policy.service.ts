@@ -5,6 +5,7 @@ import { Not, Repository } from 'typeorm';
 import { ResourceCapacityPolicy } from './entities/resource-capacity-policy.entity';
 import { ResourceCapacityPolicyStatus } from './enums/resource-capacity-policy-status.enum';
 import {
+  ArchiveResourceCapacityPolicyCommand,
   CreateResourceCapacityPolicyCommand,
   UpdateResourceCapacityPolicyCommand,
 } from './resource-capacity-policy.commands';
@@ -22,34 +23,36 @@ export class ResourceCapacityPolicyService {
     input: CreateResourceCapacityPolicyCommand,
     actor?: AuthorizationActor,
   ): Promise<ResourceCapacityPolicy> {
-    return this.capacityPoliciesRepository.manager.transaction(async (manager) => {
-      await this.capacityPolicyValidationService.validateResolvedCapacityPolicy(
-        input,
-        manager,
-      );
-      await this.capacityPolicyValidationService.ensureNoOverlappingActivePolicy(
-        {
+    return this.capacityPoliciesRepository.manager.transaction(
+      async (manager) => {
+        await this.capacityPolicyValidationService.validateResolvedCapacityPolicy(
+          input,
+          manager,
+        );
+        await this.capacityPolicyValidationService.ensureNoOverlappingActivePolicy(
+          {
+            effectiveEndDate: input.effectiveEndDate ?? null,
+            effectiveStartDate: input.effectiveStartDate,
+            resourceId: input.resourceId,
+            status: input.status ?? ResourceCapacityPolicyStatus.Draft,
+          },
+          undefined,
+          manager,
+        );
+
+        const policy = manager.create(ResourceCapacityPolicy, {
+          capacityMinutesPerWorkingDay: input.capacityMinutesPerWorkingDay,
+          createdById: actor?.userId,
           effectiveEndDate: input.effectiveEndDate ?? null,
           effectiveStartDate: input.effectiveStartDate,
           resourceId: input.resourceId,
           status: input.status ?? ResourceCapacityPolicyStatus.Draft,
-        },
-        undefined,
-        manager,
-      );
+          updatedById: actor?.userId,
+        });
 
-      const policy = manager.create(ResourceCapacityPolicy, {
-        capacityMinutesPerWorkingDay: input.capacityMinutesPerWorkingDay,
-        createdById: actor?.userId,
-        effectiveEndDate: input.effectiveEndDate ?? null,
-        effectiveStartDate: input.effectiveStartDate,
-        resourceId: input.resourceId,
-        status: input.status ?? ResourceCapacityPolicyStatus.Draft,
-        updatedById: actor?.userId,
-      });
-
-      return manager.save(ResourceCapacityPolicy, policy);
-    });
+        return manager.save(ResourceCapacityPolicy, policy);
+      },
+    );
   }
 
   async updateCapacityPolicy(
@@ -57,36 +60,38 @@ export class ResourceCapacityPolicyService {
     input: UpdateResourceCapacityPolicyCommand,
     actor?: AuthorizationActor,
   ): Promise<ResourceCapacityPolicy> {
-    return this.capacityPoliciesRepository.manager.transaction(async (manager) => {
-      const policy = await this.findCapacityPolicyOrThrow(policyId, manager);
-      const updatedPolicy = manager.merge(ResourceCapacityPolicy, policy, {
-        ...input,
-        effectiveEndDate:
-          input.effectiveEndDate !== undefined
-            ? input.effectiveEndDate
-            : policy.effectiveEndDate,
-        updatedById: actor?.userId,
-      });
+    return this.capacityPoliciesRepository.manager.transaction(
+      async (manager) => {
+        const policy = await this.findCapacityPolicyOrThrow(policyId, manager);
+        const updatedPolicy = manager.merge(ResourceCapacityPolicy, policy, {
+          ...input,
+          effectiveEndDate:
+            input.effectiveEndDate !== undefined
+              ? input.effectiveEndDate
+              : policy.effectiveEndDate,
+          updatedById: actor?.userId,
+        });
 
-      await this.capacityPolicyValidationService.validateResolvedCapacityPolicy(
-        updatedPolicy,
-        manager,
-      );
-      await this.capacityPolicyValidationService.ensureNoOverlappingActivePolicy(
-        updatedPolicy,
-        policyId,
-        manager,
-      );
+        await this.capacityPolicyValidationService.validateResolvedCapacityPolicy(
+          updatedPolicy,
+          manager,
+        );
+        await this.capacityPolicyValidationService.ensureNoOverlappingActivePolicy(
+          updatedPolicy,
+          policyId,
+          manager,
+        );
 
-      return manager.save(ResourceCapacityPolicy, updatedPolicy);
-    });
+        return manager.save(ResourceCapacityPolicy, updatedPolicy);
+      },
+    );
   }
 
   async archiveCapacityPolicy(
-    policyId: string,
+    command: ArchiveResourceCapacityPolicyCommand,
     actor?: AuthorizationActor,
   ): Promise<ResourceCapacityPolicy> {
-    const policy = await this.findCapacityPolicyOrThrow(policyId);
+    const policy = await this.findCapacityPolicyOrThrow(command.id);
     policy.status = ResourceCapacityPolicyStatus.Archived;
     policy.updatedById = actor?.userId;
     return this.capacityPoliciesRepository.save(policy);

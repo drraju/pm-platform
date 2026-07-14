@@ -86,11 +86,12 @@ describe('ResourceCapacityPolicyService', () => {
     const created = await service.createCapacityPolicy(input, actor);
 
     expect(capacityPoliciesRepository.manager.transaction).toHaveBeenCalled();
-    expect(validationService.validateResolvedCapacityPolicy).toHaveBeenCalledWith(
-      input,
-      capacityPoliciesRepository.manager,
-    );
-    expect(validationService.ensureNoOverlappingActivePolicy).toHaveBeenCalledWith(
+    expect(
+      validationService.validateResolvedCapacityPolicy,
+    ).toHaveBeenCalledWith(input, capacityPoliciesRepository.manager);
+    expect(
+      validationService.ensureNoOverlappingActivePolicy,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         effectiveEndDate: '2026-07-31',
         effectiveStartDate: '2026-07-01',
@@ -111,7 +112,9 @@ describe('ResourceCapacityPolicyService', () => {
   });
 
   it('updates a capacity policy using merged state validation', async () => {
-    capacityPoliciesRepository.manager.findOne.mockResolvedValue(existingPolicy);
+    capacityPoliciesRepository.manager.findOne.mockResolvedValue(
+      existingPolicy,
+    );
     const input: UpdateResourceCapacityPolicyCommand = {
       capacityMinutesPerWorkingDay: 420,
       effectiveEndDate: null,
@@ -123,7 +126,9 @@ describe('ResourceCapacityPolicyService', () => {
       actor,
     );
 
-    expect(validationService.validateResolvedCapacityPolicy).toHaveBeenCalledWith(
+    expect(
+      validationService.validateResolvedCapacityPolicy,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         capacityMinutesPerWorkingDay: 420,
         effectiveEndDate: null,
@@ -131,7 +136,9 @@ describe('ResourceCapacityPolicyService', () => {
       }),
       capacityPoliciesRepository.manager,
     );
-    expect(validationService.ensureNoOverlappingActivePolicy).toHaveBeenCalledWith(
+    expect(
+      validationService.ensureNoOverlappingActivePolicy,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         id: existingPolicy.id,
         resourceId: existingPolicy.resourceId,
@@ -152,7 +159,7 @@ describe('ResourceCapacityPolicyService', () => {
     capacityPoliciesRepository.findOne?.mockResolvedValue(existingPolicy);
 
     await expect(
-      service.archiveCapacityPolicy(existingPolicy.id, actor),
+      service.archiveCapacityPolicy({ id: existingPolicy.id }, actor),
     ).resolves.toEqual(
       expect.objectContaining({
         status: ResourceCapacityPolicyStatus.Archived,

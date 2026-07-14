@@ -640,9 +640,9 @@ API/UI compatibility:
 | Users are not Resources | ADR-006, ADR-010 | 3, 4, 5, 9 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
 | Support non-human resources | ADR-006, ADR-009, ADR-010 | 5, 13 | 1.2.1 Resource Domain, 1.2.2 Resource CRUD API |
 | Resource management UI | ADR-005, ADR-012 | 7, 9, 12 | Future Resource Management UI feature |
-| Skills and competencies | ADR-010 | 5, 8, 12, 13 | 1.2.4 Skills & Competencies |
-| Resource calendar assignment | ADR-002, ADR-008 | 5, 7, 14 | 1.2.5 Calendar Assignment |
-| Capacity and availability | ADR-007, ADR-010 | 5, 8, 11 | 1.2.6 Capacity Management |
+| Skills and competencies | ADR-010 | 5, 8, 12, 13 | 1.2.4 Skills Management |
+| Resource calendar assignment | ADR-002, ADR-008 | 5, 7, 14 | 1.2.6 Calendar Assignment |
+| Capacity and availability | ADR-007, ADR-010 | 5, 8, 11 | 1.2.5 Resource Availability & Capacity Management |
 | Assignment ownership | ADR-011, ADR-013 | 5, 7, 8, 14 | 1.2.3 Resource Assignment |
 | Cost and rates | ADR-012 | 5, 9, 12, 13 | 1.2.8 Cost & Rates |
 | Resource dashboard | ADR-005, ADR-012 | 7, 9, 12 | 1.2.9 Resource Dashboard |
@@ -658,6 +658,9 @@ API/UI compatibility:
 | --- | --- | --- | --- |
 | 1.2.1 Enterprise Resource Management Foundation | Completed | Resource aggregate, resource persistence, resource validation, internal Resource service, additive database migration. | Verified through implementation review, testing, Docker verification, and Ubuntu verification. Public Resource CRUD APIs were delivered in Feature 1.2.2. |
 | 1.2.2 Resource CRUD API | Completed | Resource CRUD API, Resource Controller, Resource DTOs, Resource Mapper, Resource API Service, ERM Resource permissions, Swagger, backend tests. | Verified through implementation review, testing, Docker verification, Docker runtime alignment, and Ubuntu verification. |
+| 1.2.3 Resource Assignment | Completed | Resource Assignment persistence, validation, application service, REST API, database invariant enforcement, and tests. | Completed and approved under Engineering Governance v1.0 and its v1.1 Addendum. |
+| 1.2.4 Skills Management | Completed | Skill catalog, ResourceSkill associations, validation, application services, REST APIs, ERM permissions, and tests. | Completed and merged. |
+| 1.2.5 Resource Availability & Capacity Management | In Progress | Resource Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, ERM permissions, Swagger documentation, and backend tests. | Stage 7 engineering release-readiness verification completed; infrastructure validation remains pending. |
 
 Related feature design:
 

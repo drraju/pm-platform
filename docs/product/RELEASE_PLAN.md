@@ -39,11 +39,14 @@ Should deliver:
 | 1.2.1 Enterprise Resource Management Foundation | Completed | Implementation, implementation review, testing, Docker verification, and Ubuntu verification completed. |
 | 1.2.2 Resource CRUD API | Completed | Implementation, implementation alignment, implementation review, testing, Docker verification, Docker runtime alignment, and Ubuntu verification completed. |
 | 1.2.3 Resource Assignment | Completed | Domain, persistence, validation, application service, REST API, testing, Docker verification, Ubuntu verification, and release readiness completed. |
-| 1.2.4 Skills Management | In Progress | Persistence, validation, application services, REST API, RBAC wiring, and backend test coverage are implemented. Final Docker/PostgreSQL release-readiness verification remains in progress. |
+| 1.2.4 Skills Management | Completed | Persistence, validation, application services, REST API, RBAC wiring, backend tests, and release verification completed and merged. |
+| 1.2.5 Resource Availability & Capacity Management | In Progress | Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, RBAC wiring, Swagger generation, and backend tests are verified. Infrastructure validation and final feature commit remain pending. |
 
 Feature 1.2.1 delivers the Resource aggregate, resource persistence, resource validation, internal Resource service, and additive database migration. Public Resource CRUD APIs were delivered in Feature 1.2.2.
 
 Feature 1.2.2 delivers the public Resource CRUD API boundary, Resource controller, DTOs, mapper, API service orchestration, ERM Resource permissions, Swagger documentation, and backend test coverage. Release readiness for the implemented API surface has been verified in Docker and Ubuntu-style deployment checks.
+
+Feature 1.2.5 establishes ERM-owned Resource Capacity Policies and Availability Overrides using `capacity_minutes_per_working_day` as the canonical unit governed by ADR-007. Availability projections, utilization, remaining capacity, scheduling integration, and persisted snapshots remain outside this feature's implemented API surface.
 
 ## v1.3 Scope
 

@@ -4,6 +4,7 @@ import { AuthorizationActor } from '../../common/authz/authorization-policy.serv
 import { Repository } from 'typeorm';
 import { ResourceAvailabilityOverride } from './entities/resource-availability-override.entity';
 import {
+  ArchiveResourceAvailabilityOverrideCommand,
   CreateResourceAvailabilityOverrideCommand,
   UpdateResourceAvailabilityOverrideCommand,
 } from './resource-availability-override.commands';
@@ -56,15 +57,19 @@ export class ResourceAvailabilityOverrideService {
           overrideId,
           manager,
         );
-        const updatedOverride = manager.merge(ResourceAvailabilityOverride, override, {
-          ...input,
-          availableMinutesPerWorkingDay:
-            input.availableMinutesPerWorkingDay !== undefined
-              ? input.availableMinutesPerWorkingDay
-              : override.availableMinutesPerWorkingDay,
-          reason: input.reason !== undefined ? input.reason : override.reason,
-          updatedById: actor?.userId,
-        });
+        const updatedOverride = manager.merge(
+          ResourceAvailabilityOverride,
+          override,
+          {
+            ...input,
+            availableMinutesPerWorkingDay:
+              input.availableMinutesPerWorkingDay !== undefined
+                ? input.availableMinutesPerWorkingDay
+                : override.availableMinutesPerWorkingDay,
+            reason: input.reason !== undefined ? input.reason : override.reason,
+            updatedById: actor?.userId,
+          },
+        );
 
         await this.availabilityOverrideValidationService.validateResolvedAvailabilityOverride(
           updatedOverride,
@@ -77,13 +82,13 @@ export class ResourceAvailabilityOverrideService {
   }
 
   async archiveAvailabilityOverride(
-    overrideId: string,
+    command: ArchiveResourceAvailabilityOverrideCommand,
     actor?: AuthorizationActor,
   ): Promise<void> {
     await this.availabilityOverridesRepository.manager.transaction(
       async (manager) => {
         const override = await this.findAvailabilityOverrideOrThrow(
-          overrideId,
+          command.id,
           manager,
         );
         override.deletedById = actor?.userId;
