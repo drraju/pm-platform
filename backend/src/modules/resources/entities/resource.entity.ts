@@ -1,5 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { AuditableEntity } from '../../../common/entities/auditable.entity';
+import { EnterpriseCalendar } from '../../calendars/entities/enterprise-calendar.entity';
 import { User } from '../../users/entities/user.entity';
 import { ResourceStatus } from '../enums/resource-status.enum';
 import { ResourceType } from '../enums/resource-type.enum';
@@ -28,9 +29,20 @@ export class Resource extends AuditableEntity {
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
+  @Column({ name: 'calendar_id', type: 'uuid', nullable: true })
+  calendarId?: string | null;
+
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'user_id' })
   user?: User | null;
+
+  @ManyToOne(() => EnterpriseCalendar, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+    onUpdate: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'calendar_id' })
+  calendar?: EnterpriseCalendar | null;
 
   @OneToMany(() => ResourceAssignment, (assignment) => assignment.resource)
   assignments: ResourceAssignment[];

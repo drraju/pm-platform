@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CalendarModule } from '../calendars/calendar.module';
 import { Project } from '../projects/entities/project.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { ResourceAssignmentController } from './resource-assignment.controller';
@@ -28,6 +29,10 @@ import { Resource } from './entities/resource.entity';
 import { Skill } from './entities/skill.entity';
 import { ResourceValidationService } from './resource-validation.service';
 import { ResourceService } from './resource.service';
+import { ResourceCalendarAssignmentService } from './resource-calendar-assignment.service';
+import { ResourceCalendarAssignmentApiService } from './resource-calendar-assignment-api.service';
+import { ResourceCalendarAssignmentController } from './resource-calendar-assignment.controller';
+import { ResourceCalendarAssignmentValidationService } from './resource-calendar-assignment-validation.service';
 import { SkillApiService } from './skill-api.service';
 import { SkillController } from './skill.controller';
 import { SkillService } from './skill.service';
@@ -35,6 +40,7 @@ import { SkillValidationService } from './skill-validation.service';
 
 @Module({
   imports: [
+    CalendarModule,
     TypeOrmModule.forFeature([
       Resource,
       Skill,
@@ -51,6 +57,7 @@ import { SkillValidationService } from './skill-validation.service';
     ResourceAssignmentController,
     ResourceCapacityPolicyController,
     ResourceAvailabilityOverrideController,
+    ResourceCalendarAssignmentController,
     SkillController,
     ResourceSkillController,
   ],
@@ -65,12 +72,15 @@ import { SkillValidationService } from './skill-validation.service';
     ResourceAssignmentValidationService,
     ResourceCapacityPolicyValidationService,
     ResourceAvailabilityOverrideValidationService,
+    ResourceCalendarAssignmentValidationService,
     SkillValidationService,
     ResourceSkillValidationService,
     ResourceApiService,
     ResourceAssignmentApiService,
     ResourceCapacityPolicyApiService,
     ResourceAvailabilityOverrideApiService,
+    ResourceCalendarAssignmentApiService,
+    ResourceCalendarAssignmentService,
     SkillApiService,
     ResourceSkillApiService,
   ],
@@ -85,10 +95,12 @@ import { SkillValidationService } from './skill-validation.service';
     ResourceAssignmentValidationService,
     ResourceCapacityPolicyValidationService,
     ResourceAvailabilityOverrideValidationService,
+    ResourceCalendarAssignmentValidationService,
     SkillValidationService,
     ResourceSkillValidationService,
     SkillApiService,
     ResourceSkillApiService,
+    ResourceCalendarAssignmentService,
   ],
 })
 export class ResourceModule {}
