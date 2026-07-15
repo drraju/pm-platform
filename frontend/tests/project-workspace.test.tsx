@@ -17,7 +17,7 @@ import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-te
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 
 describe("Project workspace components", () => {
-  it("renders the executive overview dashboard", () => {
+  it("renders an action-oriented project overview", () => {
     render(
       <ProjectWorkspaceOverview
         project={{
@@ -142,27 +142,36 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByText("Executive Overview")).toBeInTheDocument();
-    expect(screen.getByText("Project Name")).toBeInTheDocument();
-    expect(
-      screen.getAllByText("Customer Experience Platform Upgrade"),
-    ).toHaveLength(2);
+    expect(screen.getByText("Project Health")).toBeInTheDocument();
+    expect(screen.getByText("Overall Health")).toBeInTheDocument();
+    expect(screen.getByText("Schedule")).toBeInTheDocument();
+    expect(screen.getByText("Progress")).toBeInTheDocument();
     expect(screen.getByText("Project Manager")).toBeInTheDocument();
-    expect(screen.getByText("Business Owner")).toBeInTheDocument();
-    expect(screen.getByText("Maya Singh")).toBeInTheDocument();
+    expect(screen.getByText("Completion")).toBeInTheDocument();
     expect(screen.getByText("Timeline Snapshot")).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("list", { name: "Project timeline checkpoints" }),
+      ).getAllByRole("listitem"),
+    ).toHaveLength(5);
+    expect(screen.getByText("AI Insights")).toBeInTheDocument();
+    expect(
+      screen.getByText("No recommendations available."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Recent Activity")).toBeInTheDocument();
     expect(screen.getByText("Upcoming Milestones")).toBeInTheDocument();
-    expect(screen.getByText("RAID Summary")).toBeInTheDocument();
-    expect(screen.getByText("Team Summary")).toBeInTheDocument();
+    expect(screen.getByText("Open Risks & Issues")).toBeInTheDocument();
+    expect(screen.getByText("Resource Summary")).toBeInTheDocument();
     expect(screen.getByText("Quick Actions")).toBeInTheDocument();
     expect(screen.getByText("Beta Release")).toBeInTheDocument();
-    expect(screen.getByText("Supplier delay")).toBeInTheDocument();
-    expect(screen.getByText("Workload")).toBeInTheDocument();
-    expect(screen.getAllByText("Reserved")).toHaveLength(2);
+    expect(screen.getAllByText("Supplier delay")).toHaveLength(2);
+    expect(screen.queryByText("Executive Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Business Owner")).not.toBeInTheDocument();
+    expect(screen.queryByText("RAID Summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Team Summary")).not.toBeInTheDocument();
   });
 
-  it("keeps executive dashboard widgets compact with capped visible rows", () => {
+  it("shows up to five milestones and the latest meaningful activity", () => {
     render(
       <ProjectWorkspaceOverview
         project={{
@@ -245,25 +254,28 @@ describe("Project workspace components", () => {
       />,
     );
 
-    const activityPanel = screen.getByText("Recent Activity").closest("section");
-    const milestonePanel = screen.getByText("Upcoming Milestones").closest("section");
-    const raidPanel = screen.getByText("Recent RAID").closest("section");
-
-    expect(activityPanel).toHaveClass("h-[210px]");
-    expect(milestonePanel).toHaveClass("h-[210px]");
-    expect(raidPanel).toHaveClass("h-[210px]");
+    const activityPanel = screen
+      .getByText("Recent Activity")
+      .closest("section");
+    const milestonePanel = screen
+      .getByText("Upcoming Milestones")
+      .closest("section");
+    expect(activityPanel).not.toHaveClass("h-[210px]");
+    expect(milestonePanel).not.toHaveClass("h-[210px]");
     expect(screen.getByText("View All Activity")).toHaveAttribute(
       "href",
       "/projects/project-1/reports",
     );
     expect(screen.getByText("Activity One")).toBeInTheDocument();
     expect(screen.getByText("Activity Two")).toBeInTheDocument();
-    expect(screen.queryByText("Activity Three")).not.toBeInTheDocument();
+    expect(screen.getByText("Activity Three")).toBeInTheDocument();
     expect(screen.getByText("Milestone 5")).toBeInTheDocument();
     expect(screen.queryByText("Milestone 6")).not.toBeInTheDocument();
-    expect(screen.getByText("Supplier delay")).toBeInTheDocument();
+    expect(screen.getAllByText("Supplier delay")).toHaveLength(2);
     expect(screen.getByText("Integration issue")).toBeInTheDocument();
-    expect(screen.getByText("Vendor approval assumption")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Vendor approval assumption"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Security dependency")).not.toBeInTheDocument();
   });
 
@@ -328,12 +340,14 @@ describe("Project workspace components", () => {
 
     expect(screen.queryByText("Project Overview")).not.toBeInTheDocument();
     expect(screen.queryByText("Project summary")).not.toBeInTheDocument();
-    expect(screen.queryByText("Work Breakdown Structure")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Work Breakdown Structure"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Plan Items")).not.toBeInTheDocument();
     expect(screen.queryByText("Phases")).not.toBeInTheDocument();
   });
 
-  it("links KPI cards and quick actions to owning modules", () => {
+  it("links operational summaries and quick actions to owning modules", () => {
     render(
       <ProjectWorkspaceOverview
         project={{
@@ -349,36 +363,33 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Open Tasks")).toHaveAttribute(
-      "href",
-      "/projects/project-1/tasks",
-    );
-    expect(screen.getByLabelText("Open Risks")).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open Risks" })).toHaveAttribute(
       "href",
       "/projects/project-1/raid",
     );
-    expect(screen.getByLabelText("Open Team Members")).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open Team" })).toHaveAttribute(
       "href",
       "/projects/project-1/team",
     );
+    expect(screen.getAllByRole("link", { name: "Open Planning" })).toHaveLength(
+      2,
+    );
     expect(
-      screen.getAllByRole("link", { name: "Open Planning" })[0],
+      screen.getAllByRole("link", { name: "Open Planning" })[1],
     ).toHaveAttribute("href", "/projects/project-1/planning");
-    expect(screen.getAllByRole("link", { name: "Open Tasks" })[0]).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open Tasks" })).toHaveAttribute(
       "href",
       "/projects/project-1/tasks",
     );
-    expect(screen.getAllByRole("link", { name: "Open RAID" })[0]).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "Open RAID" })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Open Reports" })).toHaveAttribute(
       "href",
-      "/projects/project-1/raid",
+      "/projects/project-1/reports",
     );
-    expect(
-      screen.getAllByRole("link", { name: "Open Reports" })[0],
-    ).toHaveAttribute("href", "/projects/project-1/reports");
   });
 
-  it("renders the overview in responsive dashboard regions", () => {
-    const { container } = render(
+  it("renders responsive two-column operational regions", () => {
+    render(
       <ProjectWorkspaceOverview
         project={{
           id: "project-1",
@@ -390,9 +401,20 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Project KPIs")).toHaveClass("grid");
-    expect(container.querySelector(".xl\\:grid-cols-3")).toBeInTheDocument();
-    expect(container.querySelector(".sm\\:grid-cols-2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Project overview")).toHaveClass("space-y-6");
+    expect(
+      screen.getByLabelText("Project health, timeline and insights"),
+    ).toHaveClass("grid", "xl:grid-cols-2");
+    expect(
+      screen.getByLabelText("Upcoming milestones and recent activity"),
+    ).toHaveClass("grid", "xl:grid-cols-2");
+    expect(screen.getByLabelText("Operational attention")).toHaveClass(
+      "grid",
+      "xl:grid-cols-2",
+    );
+    expect(
+      screen.getByRole("list", { name: "Project timeline checkpoints" }),
+    ).toHaveClass("grid", "xl:grid-cols-5");
   });
 
   it("renders summary metrics", () => {
@@ -447,7 +469,9 @@ describe("Project workspace components", () => {
     expect(screen.getByText("Summaries").nextSibling).toHaveTextContent("0");
     expect(screen.getByText("Tasks").nextSibling).toHaveTextContent("0");
     expect(screen.getByText("Milestones").nextSibling).toHaveTextContent("0");
-    expect(screen.getByText("Planning Items").nextSibling).toHaveTextContent("0");
+    expect(screen.getByText("Planning Items").nextSibling).toHaveTextContent(
+      "0",
+    );
   });
 
   it("renders project health status and reasons", () => {
@@ -512,7 +536,9 @@ describe("Project workspace components", () => {
     expect(screen.getByText("manager")).toBeInTheDocument();
     expect(screen.getByText("Prepare release plan")).toBeInTheDocument();
     expect(screen.getByText("Li Chen")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "WBS" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "WBS" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: "Planned End" }),
     ).toBeInTheDocument();
@@ -567,11 +593,16 @@ describe("Project workspace components", () => {
       userId: "user-2",
     });
 
-    const memberRow = screen.getByText("ava.patel@example.com").closest("article");
+    const memberRow = screen
+      .getByText("ava.patel@example.com")
+      .closest("article");
     expect(memberRow).not.toBeNull();
-    fireEvent.change(within(memberRow as HTMLElement).getByDisplayValue("Contributor"), {
-      target: { value: "viewer" },
-    });
+    fireEvent.change(
+      within(memberRow as HTMLElement).getByDisplayValue("Contributor"),
+      {
+        target: { value: "viewer" },
+      },
+    );
     expect(onUpdateMember).toHaveBeenCalledWith("member-1", {
       role: "viewer",
     });
@@ -700,7 +731,9 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/remarks/i), {
       target: { value: "Kickoff scheduled." },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /save changes/i }),
+    );
 
     expect(onCreateTask).toHaveBeenCalledWith({
       assigneeId: "user-2",
@@ -723,7 +756,9 @@ describe("Project workspace components", () => {
 
     const taskRow = screen.getByText("Prepare release plan").closest("tr");
     expect(taskRow).not.toBeNull();
-    fireEvent.click(within(taskRow as HTMLElement).getByRole("button", { name: /edit/i }));
+    fireEvent.click(
+      within(taskRow as HTMLElement).getByRole("button", { name: /edit/i }),
+    );
     dialog = screen.getByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText(/title/i), {
       target: { value: "Prepare updated release plan" },
@@ -749,7 +784,9 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/remarks/i), {
       target: { value: "Plan is under review." },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /save changes/i }),
+    );
 
     expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
       assigneeId: "user-2",
@@ -770,18 +807,24 @@ describe("Project workspace components", () => {
       title: "Prepare updated release plan",
     });
 
-    fireEvent.click(within(taskRow as HTMLElement).getByRole("button", { name: /reassign/i }));
+    fireEvent.click(
+      within(taskRow as HTMLElement).getByRole("button", { name: /reassign/i }),
+    );
     dialog = screen.getByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText(/^assignee$/i), {
       target: { value: "user-2" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /save changes/i }),
+    );
 
     expect(onUpdateTask).toHaveBeenLastCalledWith("task-1", {
       assigneeId: "user-2",
     });
 
-    fireEvent.click(within(taskRow as HTMLElement).getByRole("button", { name: /delete/i }));
+    fireEvent.click(
+      within(taskRow as HTMLElement).getByRole("button", { name: /delete/i }),
+    );
     expect(onDeleteTask).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
     expect(onDeleteTask).toHaveBeenCalledWith("task-1");
@@ -846,25 +889,37 @@ describe("Project workspace components", () => {
       { target: { value: "user-2" } },
     );
     fireEvent.change(
-      within(taskRow as HTMLElement).getByLabelText("Status Prepare release plan"),
+      within(taskRow as HTMLElement).getByLabelText(
+        "Status Prepare release plan",
+      ),
       { target: { value: "in_progress" } },
     );
     fireEvent.change(
-      within(taskRow as HTMLElement).getByLabelText("Progress Prepare release plan"),
+      within(taskRow as HTMLElement).getByLabelText(
+        "Progress Prepare release plan",
+      ),
       { target: { value: "55" } },
     );
     fireEvent.blur(
-      within(taskRow as HTMLElement).getByLabelText("Progress Prepare release plan"),
+      within(taskRow as HTMLElement).getByLabelText(
+        "Progress Prepare release plan",
+      ),
     );
     fireEvent.change(
-      within(taskRow as HTMLElement).getByLabelText("Comments Prepare release plan"),
+      within(taskRow as HTMLElement).getByLabelText(
+        "Comments Prepare release plan",
+      ),
       { target: { value: "Ready for review" } },
     );
     fireEvent.blur(
-      within(taskRow as HTMLElement).getByLabelText("Comments Prepare release plan"),
+      within(taskRow as HTMLElement).getByLabelText(
+        "Comments Prepare release plan",
+      ),
     );
 
-    expect(onUpdateTask).toHaveBeenCalledWith("task-1", { assigneeId: "user-2" });
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      assigneeId: "user-2",
+    });
     expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
       status: "in_progress",
     });
@@ -907,10 +962,18 @@ describe("Project workspace components", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /create task/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Dependencies" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Start Prepare release plan")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Finish Prepare release plan")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create task/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Dependencies" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Start Prepare release plan"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Finish Prepare release plan"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();
     expect(screen.getByText("Jun 30, 2026")).toBeInTheDocument();
   });
@@ -942,9 +1005,13 @@ describe("Project workspace components", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).queryByLabelText(/^assignee$/i)).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByLabelText(/^assignee$/i),
+    ).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/status/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByLabelText(/estimated hours/i)).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByLabelText(/estimated hours/i),
+    ).not.toBeInTheDocument();
     expect(within(dialog).getByText("Calculated Progress")).toBeInTheDocument();
     expect(within(dialog).getByText("50%")).toBeInTheDocument();
   });
@@ -971,7 +1038,9 @@ describe("Project workspace components", () => {
     expect(
       screen.queryByRole("button", { name: /create task/i }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /edit/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /delete/i }),
     ).not.toBeInTheDocument();
@@ -1083,11 +1152,15 @@ describe("Project workspace components", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /child task/i }));
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByLabelText(/parent summary/i)).toHaveValue("summary-1");
+    expect(within(dialog).getByLabelText(/parent summary/i)).toHaveValue(
+      "summary-1",
+    );
     fireEvent.change(within(dialog).getByLabelText(/title/i), {
       target: { value: "Define scope" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /save changes/i }),
+    );
 
     expect(onCreateTask).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1135,7 +1208,9 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/status/i), {
       target: { value: "in_progress" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /save changes/i }),
+    );
 
     expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
       assigneeId: "user-2",
@@ -1204,7 +1279,9 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Dependencies" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Dependencies" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("2 days")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /add dependency/i }));
@@ -1218,7 +1295,9 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/lag days/i), {
       target: { value: "3" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /save dependency/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /save dependency/i }),
+    );
 
     expect(onCreateDependency).toHaveBeenCalledWith({
       dependencyType: "FS",
@@ -1232,7 +1311,9 @@ describe("Project workspace components", () => {
     fireEvent.change(within(dialog).getByLabelText(/dependency type/i), {
       target: { value: "SS" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /save dependency/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /save dependency/i }),
+    );
 
     expect(onUpdateDependency).toHaveBeenCalledWith("dependency-1", {
       dependencyType: "SS",
@@ -1294,7 +1375,9 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Baselines" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Baselines" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Approved Delivery Baseline")).toHaveLength(2);
     expect(screen.getByText("+4 days")).toBeInTheDocument();
     expect(screen.getByText("+6h")).toBeInTheDocument();
@@ -1353,12 +1436,18 @@ describe("Project workspace components", () => {
         <ProjectWorkspaceRegisterSection
           columns={[
             { header: "Title", render: (risk) => risk.title },
-            { header: "Status", render: (risk) => formatRaidLabel(risk.status) },
+            {
+              header: "Status",
+              render: (risk) => formatRaidLabel(risk.status),
+            },
             {
               header: "Probability",
               render: (risk) => formatRaidLabel(risk.probability),
             },
-            { header: "Impact", render: (risk) => formatRaidLabel(risk.impact) },
+            {
+              header: "Impact",
+              render: (risk) => formatRaidLabel(risk.impact),
+            },
             { header: "Owner", render: formatRaidOwner },
           ]}
           description="Project risks with ownership and current status."
@@ -1426,7 +1515,8 @@ describe("Project workspace components", () => {
             },
             {
               header: "Validation Status",
-              render: (assumption) => formatRaidLabel(assumption.validationStatus),
+              render: (assumption) =>
+                formatRaidLabel(assumption.validationStatus),
             },
             { header: "Owner", render: formatRaidOwner },
           ]}
@@ -1493,8 +1583,12 @@ describe("Project workspace components", () => {
       </div>,
     );
 
-    const risks = screen.getByRole("heading", { name: "Risks" }).closest("section");
-    const issues = screen.getByRole("heading", { name: "Issues" }).closest("section");
+    const risks = screen
+      .getByRole("heading", { name: "Risks" })
+      .closest("section");
+    const issues = screen
+      .getByRole("heading", { name: "Issues" })
+      .closest("section");
     const assumptions = screen
       .getByRole("heading", { name: "Assumptions" })
       .closest("section");
@@ -1507,24 +1601,66 @@ describe("Project workspace components", () => {
     expect(assumptions).not.toBeNull();
     expect(dependencies).not.toBeNull();
 
-    expect(within(risks as HTMLElement).getByRole("columnheader", { name: "Probability" })).toBeInTheDocument();
-    expect(within(risks as HTMLElement).getByRole("columnheader", { name: "Impact" })).toBeInTheDocument();
-    expect(within(risks as HTMLElement).getByText("Supplier onboarding delay")).toBeInTheDocument();
-    expect(within(risks as HTMLElement).getByText("Maria Garcia")).toBeInTheDocument();
-
-    expect(within(issues as HTMLElement).getByRole("columnheader", { name: "Severity" })).toBeInTheDocument();
-    expect(within(issues as HTMLElement).getByText("Integration outage")).toBeInTheDocument();
-    expect(within(issues as HTMLElement).getByText("critical")).toBeInTheDocument();
-
-    expect(within(assumptions as HTMLElement).getByRole("columnheader", { name: "Validation Status" })).toBeInTheDocument();
-    expect(within(assumptions as HTMLElement).getByText("Vendor API remains available")).toBeInTheDocument();
-    expect(within(assumptions as HTMLElement).getByText("validated")).toBeInTheDocument();
-
-    expect(within(dependencies as HTMLElement).getByRole("columnheader", { name: "Depends On" })).toBeInTheDocument();
-    expect(within(dependencies as HTMLElement).getByRole("columnheader", { name: "Due Date" })).toBeInTheDocument();
-    expect(within(dependencies as HTMLElement).getByText("Security review")).toBeInTheDocument();
     expect(
-      within(dependencies as HTMLElement).getByText(formatRaidDate("2026-06-30")),
+      within(risks as HTMLElement).getByRole("columnheader", {
+        name: "Probability",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(risks as HTMLElement).getByRole("columnheader", {
+        name: "Impact",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(risks as HTMLElement).getByText("Supplier onboarding delay"),
+    ).toBeInTheDocument();
+    expect(
+      within(risks as HTMLElement).getByText("Maria Garcia"),
+    ).toBeInTheDocument();
+
+    expect(
+      within(issues as HTMLElement).getByRole("columnheader", {
+        name: "Severity",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(issues as HTMLElement).getByText("Integration outage"),
+    ).toBeInTheDocument();
+    expect(
+      within(issues as HTMLElement).getByText("critical"),
+    ).toBeInTheDocument();
+
+    expect(
+      within(assumptions as HTMLElement).getByRole("columnheader", {
+        name: "Validation Status",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(assumptions as HTMLElement).getByText(
+        "Vendor API remains available",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(assumptions as HTMLElement).getByText("validated"),
+    ).toBeInTheDocument();
+
+    expect(
+      within(dependencies as HTMLElement).getByRole("columnheader", {
+        name: "Depends On",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(dependencies as HTMLElement).getByRole("columnheader", {
+        name: "Due Date",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(dependencies as HTMLElement).getByText("Security review"),
+    ).toBeInTheDocument();
+    expect(
+      within(dependencies as HTMLElement).getByText(
+        formatRaidDate("2026-06-30"),
+      ),
     ).toBeInTheDocument();
   });
 
@@ -1538,7 +1674,9 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Title" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("No records yet.")).not.toBeInTheDocument();
   });
 });

@@ -44,7 +44,7 @@ The following documents remain active under `docs/architecture/`:
 | `docs/architecture/planning-engine-roadmap.md` | Current planning architecture direction |
 | `docs/architecture/planning-engine-v2.md` | Current planning architecture |
 | `docs/architecture/portfolio-engine.md` | Current domain architecture |
-| `docs/architecture/project-workspace.md` | Current workspace architecture |
+| `docs/product/workspaces/PROJECT_WORKSPACE.md` | Current workspace architecture |
 | `docs/architecture/reporting-engine.md` | Current domain architecture |
 | `docs/architecture/role-visibility-matrix.md` | Current visibility architecture |
 | `docs/architecture/scheduling-engine-performance.md` | Current scheduling architecture |

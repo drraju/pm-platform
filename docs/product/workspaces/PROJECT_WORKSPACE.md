@@ -1,4 +1,4 @@
-# Project Workspace Architecture
+# Project Workspace
 
 ## Purpose
 
@@ -60,7 +60,7 @@ Overview provides a read-only project summary. It must show the same WBS hierarc
 
 ## Planning
 
-Planning is the scheduling workspace. It owns WBS editing, Gantt rendering, dependencies, scheduling metadata, and future critical path/baseline/calendar interactions. See [Planning Engine v2](./planning-engine-v2.md).
+Planning is the scheduling workspace. It owns WBS editing, Gantt rendering, dependencies, scheduling metadata, and future critical path/baseline/calendar interactions. See [Planning Engine v2](../../architecture/planning-engine-v2.md).
 
 ## Planning Workspace UX
 

@@ -208,8 +208,12 @@ vi.mock("next/navigation", () => ({
       window.location.pathname
         .split("/")
         .filter(Boolean)
-        .at(window.location.pathname.split("/").filter(Boolean).indexOf("projects") + 1) ??
-      "",
+        .at(
+          window.location.pathname
+            .split("/")
+            .filter(Boolean)
+            .indexOf("projects") + 1,
+        ) ?? "",
   }),
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -297,10 +301,16 @@ describe("Projects List navigation", () => {
         name: /Selected Project Workspace/i,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Executive Overview")).toBeInTheDocument();
-    expect(screen.getAllByText("Supplier onboarding delay").length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getByRole("heading", { name: "Project Health" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Timeline Snapshot" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Executive Overview")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText("Supplier onboarding delay").length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Open Risks" })).toHaveAttribute(
       "href",
       "/projects/project-123/raid",
@@ -309,12 +319,8 @@ describe("Projects List navigation", () => {
       "href",
       "/projects/project-123/raid",
     );
-    expect(
-      screen.getByRole("link", { name: "Open Dependencies" }),
-    ).toHaveAttribute("href", "/projects/project-123/raid");
-    expect(
-      screen.getByRole("link", { name: "Assumptions 1" }),
-    ).toHaveAttribute("href", "/projects/project-123/raid");
+    expect(screen.queryByText("RAID Summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Team Summary")).not.toBeInTheDocument();
   });
 
   it("renders Project Workspace tabs with the current tab highlighted", async () => {
@@ -371,7 +377,9 @@ describe("Projects List navigation", () => {
 
     render(<ProjectTasksPage />);
 
-    expect(await screen.findByText("Build workspace navigation")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Build workspace navigation"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -383,7 +391,9 @@ describe("Projects List navigation", () => {
 
     render(<ProjectRaidPage />);
 
-    expect(await screen.findByText("Supplier onboarding delay")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Supplier onboarding delay"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Integration outage")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "RAID" })).toHaveAttribute(
       "aria-current",

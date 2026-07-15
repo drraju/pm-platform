@@ -496,6 +496,11 @@ function showColumns(...labels: string[]) {
   fireEvent.click(screen.getByRole("button", { name: /columns/i }));
 }
 
+function runStructureCommand(label: string) {
+  fireEvent.click(screen.getByRole("button", { name: /^Structure/ }));
+  fireEvent.click(screen.getByRole("menuitem", { name: label }));
+}
+
 describe("PlanningWorkspace", () => {
   beforeEach(() => {
     ensureLocalStorage();
@@ -546,12 +551,27 @@ describe("PlanningWorkspace", () => {
     expect(screen.getAllByText("Type").length).toBeGreaterThan(0);
     const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
     const taskRow = screen.getByRole("row", { name: /1\.1 Design schedule/ });
-    const milestoneRow = screen.getByRole("row", { name: /1\.2 Gate approved/ });
+    const milestoneRow = screen.getByRole("row", {
+      name: /1\.2 Gate approved/,
+    });
 
-    expect(within(summaryRow).getByText("Summary")).toBeInTheDocument();
-    expect(within(summaryRow).getByText("Calculated")).toBeInTheDocument();
-    expect(within(taskRow).getByText("Task")).toBeInTheDocument();
-    expect(within(milestoneRow).getByText("Release")).toBeInTheDocument();
+    expect(
+      within(summaryRow).getByLabelText("Task type: Summary"),
+    ).toHaveAttribute(
+      "title",
+      "A Summary groups work and derives its schedule from child work.",
+    );
+    expect(
+      within(summaryRow).getByRole("img", {
+        name: "Calculated from child work",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(taskRow).getByLabelText("Task type: Task"),
+    ).toBeInTheDocument();
+    expect(
+      within(milestoneRow).getByLabelText("Task type: Release"),
+    ).toBeInTheDocument();
     expect(within(milestoneRow).getByText("Same date")).toBeInTheDocument();
     expect(screen.queryByText("Priority")).not.toBeInTheDocument();
     expect(within(taskRow).queryByText("medium")).not.toBeInTheDocument();
@@ -569,11 +589,11 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    expect(screen.getByText("Milestone")).toBeInTheDocument();
-    expect(screen.getByText("Release")).toBeInTheDocument();
-    expect(screen.getByText("Drop")).toBeInTheDocument();
-    expect(screen.getByText("Go Live")).toBeInTheDocument();
-    expect(screen.getByText("Decision")).toBeInTheDocument();
+    expect(screen.getByLabelText("Task type: Milestone")).toBeInTheDocument();
+    expect(screen.getByLabelText("Task type: Release")).toBeInTheDocument();
+    expect(screen.getByLabelText("Task type: Drop")).toBeInTheDocument();
+    expect(screen.getByLabelText("Task type: Go Live")).toBeInTheDocument();
+    expect(screen.getByLabelText("Task type: Decision")).toBeInTheDocument();
   });
 
   it("keeps calculated summary schedule fields read-only", () => {
@@ -611,7 +631,9 @@ describe("PlanningWorkspace", () => {
 
     const toolbar = screen.getByLabelText("Planning toolbar");
     expect(toolbar).toHaveClass("sticky");
-    const scrollableWorkspace = screen.getByLabelText("Scrollable planning workspace");
+    const scrollableWorkspace = screen.getByLabelText(
+      "Scrollable planning workspace",
+    );
     expect(scrollableWorkspace).toHaveClass("overflow-y-auto");
     expect(screen.getByLabelText("Scrollable timeline pane")).toHaveClass(
       "overflow-x-auto",
@@ -620,12 +642,18 @@ describe("PlanningWorkspace", () => {
     const addButton = within(toolbar).getByRole("button", { name: "Add" });
     expect(addButton).toHaveAttribute("aria-haspopup", "menu");
     fireEvent.click(addButton);
-    expect(within(toolbar).getByRole("menuitem", { name: "Task" })).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("menuitem", { name: "Task" }),
+    ).toBeInTheDocument();
     expect(
       within(toolbar).getByRole("button", { name: /Add Child/ }),
     ).toBeDisabled();
-    expect(within(toolbar).getByRole("menuitem", { name: "Summary" })).toBeInTheDocument();
-    expect(within(toolbar).getByRole("menuitem", { name: "Release" })).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("menuitem", { name: "Summary" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("menuitem", { name: "Release" }),
+    ).toBeInTheDocument();
     expect(
       within(toolbar).getByRole("button", { name: "Dependencies" }),
     ).toBeInTheDocument();
@@ -673,8 +701,12 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const scrollableWorkspace = screen.getByLabelText("Scrollable planning workspace");
-    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    const scrollableWorkspace = screen.getByLabelText(
+      "Scrollable planning workspace",
+    );
+    const timelinePane = screen.getByLabelText(
+      "Scrollable timeline pane",
+    ) as HTMLElement;
     const timelineSurface = screen.getByTestId("timeline-scroll-surface");
     const svg = screen.getByLabelText("Interactive Gantt timeline");
     Object.defineProperty(timelinePane, "clientWidth", {
@@ -705,16 +737,123 @@ describe("PlanningWorkspace", () => {
 
     const splitWorkspace = screen.getByLabelText("Planning split workspace");
     expect(splitWorkspace).toHaveAttribute("data-view-mode", "split");
-    expect(splitWorkspace).toHaveAttribute("data-grid-width", "420");
+    expect(splitWorkspace).toHaveAttribute("data-grid-width", "560");
     expect(screen.getByLabelText("Frozen planning grid")).toBeInTheDocument();
-    expect(screen.getByLabelText("Scrollable timeline pane")).toBeInTheDocument();
-    expect(screen.getByRole("separator", { name: "Resize planning panes" })).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Scrollable timeline pane"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("separator", { name: "Resize planning panes" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("WBS").length).toBeGreaterThan(0);
     expect(screen.getByText("Task Name")).toBeInTheDocument();
     expect(screen.getByText("Start")).toBeInTheDocument();
     expect(screen.getByText("Finish")).toBeInTheDocument();
     expect(screen.queryByText("Owner")).not.toBeInTheDocument();
     expect(screen.queryByText("Status")).not.toBeInTheDocument();
+  });
+
+  it("uses a compact grouped command surface and a wider task-name column", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const toolbar = screen.getByLabelText("Planning toolbar");
+    expect(toolbar).toHaveClass("px-3", "py-2");
+    expect(
+      within(toolbar).getByRole("group", { name: "Create commands" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("group", { name: "Structure commands" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("group", { name: "Schedule commands" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("group", { name: "Time commands" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("group", { name: "View commands" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Move Up" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(toolbar).getByRole("button", { name: "Zoom In" }),
+    ).toHaveClass("h-8");
+
+    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveStyle({
+      gridTemplateColumns: "64px 304px 96px 96px",
+    });
+  });
+
+  it("shows contextual task details without replacing the planning canvas", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const detailPanel = screen.getByLabelText("Planning detail panel");
+    expect(
+      within(detailPanel).getByText(
+        "Select a grid row or Gantt object to inspect its planning details.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
+
+    expect(
+      within(detailPanel).getByText("Design schedule"),
+    ).toBeInTheDocument();
+    expect(within(detailPanel).getByText("1.1 · Task")).toBeInTheDocument();
+    expect(within(detailPanel).getByText("Critical path")).toBeInTheDocument();
+    expect(detailPanel).toHaveClass("2xl:w-72", "2xl:border-l", "border-t");
+    expect(screen.getByLabelText("Frozen planning grid")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Scrollable timeline pane"),
+    ).toBeInTheDocument();
+  });
+
+  it("supports keyboard-first sibling task creation outside edit mode", async () => {
+    const createdSchedule = {
+      ...workspace.schedules[1],
+      id: "schedule-keyboard",
+      taskId: "task-keyboard",
+      taskTitle: "New task",
+    };
+    const onCreateTask = vi.fn().mockResolvedValue(createdSchedule);
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={onCreateTask}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const row = screen.getByRole("row", { name: /1\.1 Design schedule/ });
+    fireEvent.click(row);
+    fireEvent.keyDown(row, { ctrlKey: true, key: "Enter" });
+
+    await waitFor(() => {
+      expect(onCreateTask).toHaveBeenCalledWith({
+        parentTaskId: "task-1",
+        taskType: "task",
+      });
+    });
   });
 
   it("resizes the split panes with the draggable divider and persists the width", () => {
@@ -728,21 +867,29 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const separator = screen.getByRole("separator", { name: "Resize planning panes" });
+    const separator = screen.getByRole("separator", {
+      name: "Resize planning panes",
+    });
     fireEvent(
       separator,
       new MouseEvent("pointerdown", { bubbles: true, clientX: 360 }),
     );
     fireEvent(
       separator,
-      new MouseEvent("pointermove", { bubbles: true, buttons: 1, clientX: 480 }),
+      new MouseEvent("pointermove", {
+        bubbles: true,
+        buttons: 1,
+        clientX: 480,
+      }),
     );
 
     expect(screen.getByLabelText("Planning split workspace")).toHaveAttribute(
       "data-grid-width",
       "480",
     );
-    expect(window.localStorage.getItem("pm-platform.planningWorkspace.splitWidth")).toBe("480");
+    expect(
+      window.localStorage.getItem("pm-platform.planningWorkspace.splitWidth"),
+    ).toBe("480");
 
     fireEvent.keyDown(separator, { key: "ArrowLeft" });
     expect(screen.getByLabelText("Planning split workspace")).toHaveAttribute(
@@ -765,13 +912,15 @@ describe("PlanningWorkspace", () => {
     showColumns("Owner", "Status", "Priority", "Progress", "Duration");
 
     const splitWorkspace = screen.getByLabelText("Planning split workspace");
-    expect(splitWorkspace).toHaveAttribute("data-grid-width", "420");
+    expect(splitWorkspace).toHaveAttribute("data-grid-width", "560");
     expect(screen.getByText("Owner")).toBeInTheDocument();
     expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("Priority")).toBeInTheDocument();
     expect(screen.getByText("Progress")).toBeInTheDocument();
     expect(screen.getByText("Duration")).toBeInTheDocument();
-    expect(screen.getByLabelText("Scrollable timeline pane")).toHaveClass("flex-1");
+    expect(screen.getByLabelText("Scrollable timeline pane")).toHaveClass(
+      "flex-1",
+    );
   });
 
   it("persists split width, visible columns and zoom in local storage", () => {
@@ -786,14 +935,20 @@ describe("PlanningWorkspace", () => {
     );
 
     showColumns("Owner");
-    const separator = screen.getByRole("separator", { name: "Resize planning panes" });
+    const separator = screen.getByRole("separator", {
+      name: "Resize planning panes",
+    });
     fireEvent(
       separator,
       new MouseEvent("pointerdown", { bubbles: true, clientX: 360 }),
     );
     fireEvent(
       separator,
-      new MouseEvent("pointermove", { bubbles: true, buttons: 1, clientX: 500 }),
+      new MouseEvent("pointermove", {
+        bubbles: true,
+        buttons: 1,
+        clientX: 500,
+      }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Zoom In" }));
     unmount();
@@ -831,14 +986,24 @@ describe("PlanningWorkspace", () => {
     fireEvent.click(screen.getByRole("menuitemradio", { name: /Grid Only/ }));
 
     expect(screen.getByLabelText("Frozen planning grid")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Scrollable timeline pane")).not.toBeInTheDocument();
-    expect(screen.queryByRole("separator", { name: "Resize planning panes" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Scrollable timeline pane"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize planning panes" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^View/ }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /Timeline Only/ }));
+    fireEvent.click(
+      screen.getByRole("menuitemradio", { name: /Timeline Only/ }),
+    );
 
-    expect(screen.queryByLabelText("Frozen planning grid")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Scrollable timeline pane")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Frozen planning grid"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Scrollable timeline pane"),
+    ).toBeInTheDocument();
   });
 
   it("shows float columns from the View menu and keeps summary schedule values blank", () => {
@@ -867,13 +1032,21 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByText("Free Float")).toBeInTheDocument();
     expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Planning ES blank")).toBeInTheDocument();
-    expect(screen.getByLabelText("Planning Total Float blank")).toBeInTheDocument();
-    expect(screen.getByLabelText("Design schedule Total Float 0d")).toBeInTheDocument();
-    expect(screen.getByLabelText("Design schedule Critical yes")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Planning Total Float blank"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Design schedule Total Float 0d"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Design schedule Critical yes"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Gate approved ES 5")).toBeInTheDocument();
-    expect(window.localStorage.getItem("pm-platform.planningWorkspace.showFloatColumns")).toBe(
-      "true",
-    );
+    expect(
+      window.localStorage.getItem(
+        "pm-platform.planningWorkspace.showFloatColumns",
+      ),
+    ).toBe("true");
   });
 
   it("supports individual float columns from the Columns menu", () => {
@@ -892,7 +1065,9 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByText("Total Float")).toBeInTheDocument();
     expect(screen.getByText("Free Float")).toBeInTheDocument();
     expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Design schedule Free Float 0d")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Design schedule Free Float 0d"),
+    ).toBeInTheDocument();
   });
 
   it("filters Gantt bars when Show Critical Path is enabled", () => {
@@ -908,7 +1083,9 @@ describe("PlanningWorkspace", () => {
 
     expect(screen.getByLabelText("Move Planning")).toBeInTheDocument();
     expect(screen.getByLabelText("Move Design schedule")).toBeInTheDocument();
-    expect(screen.getByLabelText("Milestone Gate approved")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Milestone Gate approved"),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^View/ }));
     fireEvent.click(
@@ -917,10 +1094,14 @@ describe("PlanningWorkspace", () => {
 
     expect(screen.getByLabelText("Move Planning")).toBeInTheDocument();
     expect(screen.getByLabelText("Move Design schedule")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Milestone Gate approved")).not.toBeInTheDocument();
-    expect(window.localStorage.getItem("pm-platform.planningWorkspace.showCriticalPath")).toBe(
-      "true",
-    );
+    expect(
+      screen.queryByLabelText("Milestone Gate approved"),
+    ).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(
+        "pm-platform.planningWorkspace.showCriticalPath",
+      ),
+    ).toBe("true");
   });
 
   it("uses default columns on laptop-sized viewports even when optional columns are saved", () => {
@@ -1104,7 +1285,9 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const milestoneRow = screen.getByRole("row", { name: /1\.2 Gate approved/ });
+    const milestoneRow = screen.getByRole("row", {
+      name: /1\.2 Gate approved/,
+    });
     showColumns("Status", "Progress");
     expect(within(milestoneRow).getAllByText("Pending")).toHaveLength(2);
 
@@ -1124,18 +1307,24 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1\.1 Backend/ }),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse All" }));
+    runStructureCommand("Collapse All");
 
     expect(screen.getByRole("row", { name: /1 Phase 1/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Phase 2/ })).toBeInTheDocument();
-    expect(screen.queryByRole("row", { name: /Development/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /Development/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Visible Tasks: 2")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand All" }));
+    runStructureCommand("Expand All");
 
-    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1\.1 Backend/ }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Visible Tasks: 6")).toBeInTheDocument();
   });
 
@@ -1172,7 +1361,9 @@ describe("PlanningWorkspace", () => {
       .getByRole("option", { name: "Bob Stone" })
       .closest("select");
     expect(ownerSelect).not.toBeNull();
-    expect(screen.getByRole("option", { name: "Bob Stone" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Bob Stone" }),
+    ).toBeInTheDocument();
     fireEvent.change(ownerSelect as HTMLSelectElement, {
       target: { value: "user-2" },
     });
@@ -1214,25 +1405,49 @@ describe("PlanningWorkspace", () => {
     );
 
     expect(screen.getByRole("row", { name: /1 Phase 1/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /1\.1 Development/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /1\.2 Testing/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1 Development/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1\.1 Backend/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.2 Testing/ }),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /collapse development/i }));
-    expect(screen.queryByRole("row", { name: /1\.1\.1 Backend/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /1\.2 Testing/ })).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /collapse development/i }),
+    );
+    expect(
+      screen.queryByRole("row", { name: /1\.1\.1 Backend/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.2 Testing/ }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /collapse phase 1/i }));
-    expect(screen.queryByRole("row", { name: /1\.1 Development/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("row", { name: /1\.2 Testing/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /1\.1 Development/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /1\.2 Testing/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Phase 2/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /expand phase 1/i }));
-    expect(screen.getByRole("row", { name: /1\.1 Development/ })).toBeInTheDocument();
-    expect(screen.queryByRole("row", { name: /1\.1\.1 Backend/ })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1 Development/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /1\.1\.1 Backend/ }),
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /expand development/i }));
-    expect(screen.getByRole("row", { name: /1\.1\.1 Backend/ })).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /expand development/i }),
+    );
+    expect(
+      screen.getByRole("row", { name: /1\.1\.1 Backend/ }),
+    ).toBeInTheDocument();
   });
 
   it("does not render expand or collapse controls for leaf tasks", () => {
@@ -1248,10 +1463,14 @@ describe("PlanningWorkspace", () => {
 
     const leafRow = screen.getByRole("row", { name: /1\.1 Design schedule/ });
     expect(
-      within(leafRow).queryByRole("button", { name: /collapse design schedule/i }),
+      within(leafRow).queryByRole("button", {
+        name: /collapse design schedule/i,
+      }),
     ).not.toBeInTheDocument();
     expect(
-      within(leafRow).queryByRole("button", { name: /expand design schedule/i }),
+      within(leafRow).queryByRole("button", {
+        name: /expand design schedule/i,
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -1268,10 +1487,14 @@ describe("PlanningWorkspace", () => {
 
     const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
     fireEvent.keyDown(summaryRow, { key: "ArrowLeft" });
-    expect(screen.queryByRole("row", { name: /1\.1 Design schedule/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /1\.1 Design schedule/ }),
+    ).not.toBeInTheDocument();
 
     fireEvent.keyDown(summaryRow, { key: "ArrowRight" });
-    expect(screen.getByRole("row", { name: /1\.1 Design schedule/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1 Design schedule/ }),
+    ).toBeInTheDocument();
   });
 
   it("falls back to the task title when the planning title is blank", () => {
@@ -1321,8 +1544,7 @@ describe("PlanningWorkspace", () => {
     const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
 
     function Harness() {
-      const [currentWorkspace, setCurrentWorkspace] =
-        React.useState(workspace);
+      const [currentWorkspace, setCurrentWorkspace] = React.useState(workspace);
       return (
         <PlanningWorkspace
           onCreateDependency={vi.fn()}
@@ -1374,8 +1596,7 @@ describe("PlanningWorkspace", () => {
     const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
 
     function Harness() {
-      const [currentWorkspace, setCurrentWorkspace] =
-        React.useState(workspace);
+      const [currentWorkspace, setCurrentWorkspace] = React.useState(workspace);
       return (
         <PlanningWorkspace
           onCreateDependency={vi.fn()}
@@ -1429,8 +1650,7 @@ describe("PlanningWorkspace", () => {
     const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
 
     function Harness() {
-      const [currentWorkspace, setCurrentWorkspace] =
-        React.useState(workspace);
+      const [currentWorkspace, setCurrentWorkspace] = React.useState(workspace);
       return (
         <PlanningWorkspace
           onCreateDependency={vi.fn()}
@@ -1475,8 +1695,7 @@ describe("PlanningWorkspace", () => {
     const onUpdateSchedule = vi.fn().mockResolvedValue(updatedSchedule);
 
     function Harness() {
-      const [currentWorkspace, setCurrentWorkspace] =
-        React.useState(workspace);
+      const [currentWorkspace, setCurrentWorkspace] = React.useState(workspace);
       return (
         <PlanningWorkspace
           onCreateDependency={vi.fn()}
@@ -1510,7 +1729,7 @@ describe("PlanningWorkspace", () => {
     expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
       taskTitle: "Build delivery plan",
     });
-    expect(await screen.findByText("Build delivery plan")).toBeInTheDocument();
+    expect(await screen.findAllByText("Build delivery plan")).toHaveLength(2);
   });
 
   it("renames a summary from the Name field", async () => {
@@ -1599,7 +1818,9 @@ describe("PlanningWorkspace", () => {
     });
     fireEvent.keyDown(screen.getByDisplayValue("125"), { key: "Enter" });
 
-    expect(screen.getByText("Progress must be between 0 and 100.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Progress must be between 0 and 100."),
+    ).toBeInTheDocument();
     expect(onUpdateSchedule).not.toHaveBeenCalled();
   });
 
@@ -1661,7 +1882,9 @@ describe("PlanningWorkspace", () => {
     });
 
     fireEvent.click(within(taskRow).getByText("In Progress"));
-    const statusSelect = screen.getByRole("option", { name: "Done" }).closest("select");
+    const statusSelect = screen
+      .getByRole("option", { name: "Done" })
+      .closest("select");
     expect(statusSelect).not.toBeNull();
     fireEvent.change(statusSelect as HTMLSelectElement, {
       target: { value: "done" },
@@ -1702,7 +1925,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText(/type/i), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Type" }), {
       target: { value: "SS" },
     });
     fireEvent.click(screen.getByRole("button", { name: /add dependency/i }));
@@ -1783,7 +2006,9 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    const timelinePane = screen.getByLabelText(
+      "Scrollable timeline pane",
+    ) as HTMLElement;
     Object.defineProperty(timelinePane, "clientWidth", {
       configurable: true,
       value: 640,
@@ -1887,7 +2112,9 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    const timelinePane = screen.getByLabelText(
+      "Scrollable timeline pane",
+    ) as HTMLElement;
     Object.defineProperty(timelinePane, "clientWidth", {
       configurable: true,
       value: 640,
@@ -1899,7 +2126,11 @@ describe("PlanningWorkspace", () => {
     await waitFor(() => expect(timelinePane.scrollLeft).toBe(0));
     expect(screen.getByLabelText("Time Scale")).toHaveValue("quarter");
     expect(
-      Number(screen.getByLabelText("Interactive Gantt timeline").getAttribute("width")),
+      Number(
+        screen
+          .getByLabelText("Interactive Gantt timeline")
+          .getAttribute("width"),
+      ),
     ).toBe(640);
   });
 
@@ -1916,8 +2147,12 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    const scrollableWorkspace = screen.getByLabelText("Scrollable planning workspace");
-    const timelinePane = screen.getByLabelText("Scrollable timeline pane") as HTMLElement;
+    const scrollableWorkspace = screen.getByLabelText(
+      "Scrollable planning workspace",
+    );
+    const timelinePane = screen.getByLabelText(
+      "Scrollable timeline pane",
+    ) as HTMLElement;
     Object.defineProperty(timelinePane, "clientWidth", {
       configurable: true,
       value: 20,
@@ -1981,7 +2216,7 @@ describe("PlanningWorkspace", () => {
 
     const svg = screen.getByLabelText("Interactive Gantt timeline");
     const width = svg.getAttribute("width");
-    const rowLine = svg.querySelector("line[y1='90']");
+    const rowLine = svg.querySelector("line[y1='86']");
     const dependencyLine = svg.querySelector("path[marker-end='url(#arrow)']");
 
     expect(rowLine).toHaveAttribute("x2", width);
@@ -2034,7 +2269,9 @@ describe("PlanningWorkspace", () => {
       parentTaskId: null,
       taskType: "task",
     });
-    expect(await screen.findByRole("row", { name: /4 New Task/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("row", { name: /4 New Task/ }),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue("New Task")).toHaveFocus();
   });
 
@@ -2086,7 +2323,9 @@ describe("PlanningWorkspace", () => {
       parentTaskId: "task-1",
       taskType: "task",
     });
-    expect(await screen.findByRole("row", { name: /1\.3 New Task/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("row", { name: /1\.3 New Task/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -2116,7 +2355,9 @@ describe("PlanningWorkspace", () => {
 
     expect(screen.getByRole("row", { name: /1 Closure/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /2\.1 Design schedule/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /2\.1 Design schedule/ }),
+    ).toBeInTheDocument();
   });
 
   it("rejects row drops onto milestones with a friendly validation message", async () => {
@@ -2145,7 +2386,9 @@ describe("PlanningWorkspace", () => {
     const onRefreshWorkspace = vi.fn().mockResolvedValue(undefined);
     const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
       Promise.resolve({
-        ...wbsEditingWorkspace.schedules.find((schedule) => schedule.taskId === taskId),
+        ...wbsEditingWorkspace.schedules.find(
+          (schedule) => schedule.taskId === taskId,
+        ),
         ...input,
       }),
     );
@@ -2163,7 +2406,9 @@ describe("PlanningWorkspace", () => {
 
     dragRow(/1\.1 Design schedule/, /2 Execution/);
 
-    expect(screen.getByRole("row", { name: /2\.2 Design schedule/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /2\.2 Design schedule/ }),
+    ).toBeInTheDocument();
     await waitFor(() => expect(onUpdateSchedule).toHaveBeenCalledTimes(2));
     expect(onUpdateSchedule).toHaveBeenCalledWith("task-2", {
       parentTaskId: "summary-2",
@@ -2216,17 +2461,25 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
-    expect(screen.queryByRole("row", { name: /1\.1 Design schedule/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /1\.1 Design schedule/ }),
+    ).not.toBeInTheDocument();
 
     dragRow(/1 Planning/, /3 Closure/);
 
-    expect(screen.getByRole("row", { name: /1 Execution/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1 Execution/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Closure/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /3 Planning/ })).toBeInTheDocument();
-    expect(screen.queryByRole("row", { name: /3\.1 Design schedule/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /3\.1 Design schedule/ }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /expand planning/i }));
-    expect(screen.getByRole("row", { name: /3\.1 Design schedule/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /3\.1 Design schedule/ }),
+    ).toBeInTheDocument();
     expect(onUpdateSchedule).not.toHaveBeenCalledWith(
       "task-2",
       expect.objectContaining({ parentTaskId: null }),
@@ -2317,7 +2570,9 @@ describe("PlanningWorkspace", () => {
 
     expect(screen.getByRole("row", { name: /1 Closure/ })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /3 Execution/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /3 Execution/ }),
+    ).toBeInTheDocument();
   });
 
   it("deletes an empty summary immediately", async () => {
@@ -2337,12 +2592,16 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("row", { name: /3 Empty Summary/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete selected task" }),
+    );
 
     await waitFor(() => {
       expect(onDeleteTask).toHaveBeenCalledWith("summary-3");
     });
-    expect(screen.queryByText("This Summary contains child items.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("This Summary contains child items."),
+    ).not.toBeInTheDocument();
     expect(onRefreshWorkspace).toHaveBeenCalled();
   });
 
@@ -2351,7 +2610,9 @@ describe("PlanningWorkspace", () => {
     const onRefreshWorkspace = vi.fn().mockResolvedValue(undefined);
     const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
       Promise.resolve({
-        ...wbsEditingWorkspace.schedules.find((schedule) => schedule.taskId === taskId),
+        ...wbsEditingWorkspace.schedules.find(
+          (schedule) => schedule.taskId === taskId,
+        ),
         ...input,
       }),
     );
@@ -2369,17 +2630,29 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete selected task" }),
+    );
 
-    expect(screen.getByText("This Summary contains child items.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Move children to parent" }));
+    expect(
+      screen.getByText("This Summary contains child items."),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move children to parent" }),
+    );
 
     await waitFor(() => {
       expect(onDeleteTask).toHaveBeenCalledWith("summary-1");
     });
-    expect(screen.getByRole("row", { name: /1 Design schedule/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /2 Gate approved/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /3 Execution/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1 Design schedule/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /2 Gate approved/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /3 Execution/ }),
+    ).toBeInTheDocument();
     expect(onRefreshWorkspace).toHaveBeenCalled();
   });
 
@@ -2387,7 +2660,9 @@ describe("PlanningWorkspace", () => {
     const onRefreshWorkspace = vi.fn().mockResolvedValue(undefined);
     const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
       Promise.resolve({
-        ...wbsEditingWorkspace.schedules.find((schedule) => schedule.taskId === taskId),
+        ...wbsEditingWorkspace.schedules.find(
+          (schedule) => schedule.taskId === taskId,
+        ),
         ...input,
       }),
     );
@@ -2404,7 +2679,7 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Move to Summary..." }));
+    runStructureCommand("Move to Summary...");
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
 
     await waitFor(() => {
@@ -2413,7 +2688,9 @@ describe("PlanningWorkspace", () => {
         sequenceNumber: 2,
       });
     });
-    expect(screen.getByRole("row", { name: /2\.2 Design schedule/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /2\.2 Design schedule/ }),
+    ).toBeInTheDocument();
     expect(onRefreshWorkspace).toHaveBeenCalled();
   });
 
@@ -2421,7 +2698,9 @@ describe("PlanningWorkspace", () => {
     const onRefreshWorkspace = vi.fn().mockResolvedValue(undefined);
     const onUpdateSchedule = vi.fn().mockImplementation((taskId, input) =>
       Promise.resolve({
-        ...wbsEditingWorkspace.schedules.find((schedule) => schedule.taskId === taskId),
+        ...wbsEditingWorkspace.schedules.find(
+          (schedule) => schedule.taskId === taskId,
+        ),
         ...input,
       }),
     );
@@ -2438,9 +2717,11 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("row", { name: /2 Execution/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Up" }));
+    runStructureCommand("Move Up");
 
-    expect(screen.getByRole("row", { name: /1 Execution/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1 Execution/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
     await waitFor(() => {
       expect(onUpdateSchedule).toHaveBeenCalledWith("summary-2", {
@@ -2467,13 +2748,15 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Move to Summary..." }));
+    runStructureCommand("Move to Summary...");
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
 
     expect(
       await screen.findByText("Task hierarchy cannot contain cycles"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /1\.1 Design schedule/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1 Design schedule/ }),
+    ).toBeInTheDocument();
   });
 
   it("refreshes summary rollups after a hierarchy move reloads the workspace", async () => {
@@ -2510,7 +2793,9 @@ describe("PlanningWorkspace", () => {
           onCreateDependency={vi.fn()}
           onCreateTask={vi.fn()}
           onDeleteDependency={vi.fn()}
-          onRefreshWorkspace={async () => setCurrentWorkspace(refreshedWorkspace)}
+          onRefreshWorkspace={async () =>
+            setCurrentWorkspace(refreshedWorkspace)
+          }
           onUpdateSchedule={async (taskId, input) =>
             ({
               ...currentWorkspace.schedules.find(
@@ -2561,9 +2846,13 @@ describe("PlanningWorkspace", () => {
     render(<Harness />);
 
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
-    expect(screen.queryByRole("row", { name: /1\.1 Design schedule/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /1\.1 Design schedule/ }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Remount planning" }));
-    expect(screen.getByRole("row", { name: /1\.1 Design schedule/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /1\.1 Design schedule/ }),
+    ).toBeInTheDocument();
   });
 });

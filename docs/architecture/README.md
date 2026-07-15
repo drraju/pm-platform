@@ -61,7 +61,7 @@ These existing documents remain useful detailed references:
 | [Planning Backward Pass](backward-pass.md) | Late Start and Late Finish calculation. |
 | [Planning Float Engine](float-engine.md) | Total Float and Free Float calculation. |
 | [Critical Path Engine](critical-path-engine.md) | Critical path scheduling architecture and future enhancement model. |
-| [Project Workspace](project-workspace.md) | Project workspace layout and planning surface architecture. |
+| [Project Workspace](../product/workspaces/PROJECT_WORKSPACE.md) | Project workspace layout and planning surface architecture. |
 | [Portfolio Engine](portfolio-engine.md) | Portfolio dashboard and cross-project direction. |
 | [Reporting Engine](reporting-engine.md) | Reporting architecture. |
 | [AI Assistant Architecture](ai-assistant.md) | AI direction and governance principles. |

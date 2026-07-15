@@ -27,3 +27,9 @@ Start there for architecture notes, development workflow, user guides, release s
 ## Getting Started
 
 See [docs/README.md](docs/README.md) for the maintained documentation map.
+
+## Developer Setup
+cp .env.example .env
+docker compose up -d
+cd backend && npm run start:dev
+cd frontend && npm run dev

@@ -62,4 +62,4 @@ structure.
 
 - [Planning Engine v2](../architecture/planning-engine-v2.md)
 - [Planning Toolbar](../architecture/planning-engine/planning-toolbar.md)
-- [Project Workspace](../architecture/project-workspace.md)
+- [Project Workspace](../product/workspaces/PROJECT_WORKSPACE.md)

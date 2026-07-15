@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   ApiPlanningTaskSchedule,
   ApiPlanningWorkspace,
@@ -10,6 +16,7 @@ import type {
   ApiTaskDependency,
   ApiTaskType,
 } from "@/lib/api/client";
+import { PlanningDetailPanel } from "./planning-detail-panel";
 
 type ZoomMode = "day" | "week" | "month" | "quarter";
 type DragMode = "move" | "resize-end";
@@ -115,10 +122,10 @@ type GridColumnDefinition = {
   minWidth: number;
 };
 
-const rowHeight = 46;
-const defaultGridWidth = 420;
-const minGridWidth = 300;
-const maxGridWidth = 500;
+const rowHeight = 42;
+const defaultGridWidth = 560;
+const minGridWidth = 420;
+const maxGridWidth = 720;
 const compactViewportWidth = 1280;
 const headerHeight = 44;
 const resourceHeight = 18;
@@ -146,7 +153,7 @@ const zoomLabels: Record<ZoomMode, string> = {
   quarter: "Quarter",
 };
 const toolbarButtonClassName =
-  "rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50";
 const preferenceKeys = {
   columns: "pm-platform.planningWorkspace.visibleColumns",
   showCriticalPath: "pm-platform.planningWorkspace.showCriticalPath",
@@ -162,7 +169,7 @@ const gridColumns: GridColumnDefinition[] = [
     editableField: "taskTitle",
     id: "taskTitle",
     label: "Task Name",
-    minWidth: 220,
+    minWidth: 300,
   },
   {
     defaultVisible: true,
@@ -265,7 +272,9 @@ const gridColumns: GridColumnDefinition[] = [
 const defaultGridColumnIds = gridColumns
   .filter((column) => column.defaultVisible)
   .map((column) => column.id);
-const optionalGridColumns = gridColumns.filter((column) => !column.defaultVisible);
+const optionalGridColumns = gridColumns.filter(
+  (column) => !column.defaultVisible,
+);
 const floatColumnIds: GridColumnId[] = [
   "earlyStart",
   "earlyFinish",
@@ -322,6 +331,7 @@ export function PlanningWorkspace({
   });
   const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const [isStructureMenuOpen, setIsStructureMenuOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -426,11 +436,31 @@ export function PlanningWorkspace({
   const selectedSchedule = useMemo(
     () =>
       selectedTaskId
-        ? rows.find((row) => row.schedule.taskId === selectedTaskId)
-            ?.schedule ?? null
+        ? (rows.find((row) => row.schedule.taskId === selectedTaskId)
+            ?.schedule ?? null)
         : null,
     [rows, selectedTaskId],
   );
+  const selectedRow = useMemo(
+    () =>
+      selectedTaskId
+        ? (rows.find((row) => row.schedule.taskId === selectedTaskId) ?? null)
+        : null,
+    [rows, selectedTaskId],
+  );
+  const selectedAllocations = selectedTaskId
+    ? (allocationsByTaskId.get(selectedTaskId) ?? [])
+    : [];
+  const selectedPredecessorCount = selectedTaskId
+    ? workspace.dependencies.filter(
+        (dependency) => dependency.successorTaskId === selectedTaskId,
+      ).length
+    : 0;
+  const selectedSuccessorCount = selectedTaskId
+    ? workspace.dependencies.filter(
+        (dependency) => dependency.predecessorTaskId === selectedTaskId,
+      ).length
+    : 0;
   const ownerOptions = useMemo(
     () => buildOwnerOptions(workspace, projectMembers),
     [projectMembers, workspace],
@@ -444,9 +474,7 @@ export function PlanningWorkspace({
   );
   const selectedTaskSiblingContext = useMemo(
     () =>
-      selectedTaskId
-        ? getSiblingContext(localSchedules, selectedTaskId)
-        : null,
+      selectedTaskId ? getSiblingContext(localSchedules, selectedTaskId) : null,
     [localSchedules, selectedTaskId],
   );
   const moveToSummaryOptions = useMemo(
@@ -520,7 +548,9 @@ export function PlanningWorkspace({
   );
   const hasSummaryTasks = summaryTaskIds.size > 0;
   const canCreateChildForSelection = selectedSchedule?.taskKind === "summary";
-  const canMoveSelectionUp = Boolean(selectedTaskSiblingContext?.previousTaskId);
+  const canMoveSelectionUp = Boolean(
+    selectedTaskSiblingContext?.previousTaskId,
+  );
   const canMoveSelectionDown = Boolean(selectedTaskSiblingContext?.nextTaskId);
   const canMoveSelectionToParent = Boolean(selectedSchedule?.parentTaskId);
   const canMoveSelectionToSummary = moveToSummaryOptions.length > 0;
@@ -566,13 +596,15 @@ export function PlanningWorkspace({
     setCollapsedIds(new Set(summaryTaskIds));
   }
 
-  async function createTask(input: {
-    focusCreatedTask?: boolean;
-    keepSelectedTaskId?: string | null;
-    milestoneCategory?: ApiMilestoneCategory;
-    parentTaskId?: string | null;
-    taskType?: ApiTaskType;
-  } = {}) {
+  async function createTask(
+    input: {
+      focusCreatedTask?: boolean;
+      keepSelectedTaskId?: string | null;
+      milestoneCategory?: ApiMilestoneCategory;
+      parentTaskId?: string | null;
+      taskType?: ApiTaskType;
+    } = {},
+  ) {
     setHierarchyError(null);
     const {
       focusCreatedTask = true,
@@ -647,6 +679,54 @@ export function PlanningWorkspace({
     }
     event.preventDefault();
     setSelectedTaskId(schedule.taskId);
+  }
+
+  function handleWorkspaceKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (editingCell || isKeyboardInputTarget(event.target)) {
+      return;
+    }
+
+    const primaryModifier = event.metaKey || event.ctrlKey;
+    if (primaryModifier && event.key === "Enter") {
+      event.preventDefault();
+      if (event.shiftKey) {
+        if (selectedSchedule?.taskKind === "summary") {
+          void createTask({
+            parentTaskId: selectedSchedule.taskId,
+            taskType: "task",
+          });
+        }
+        return;
+      }
+      void createTask({
+        parentTaskId: selectedSchedule?.parentTaskId ?? null,
+        taskType: "task",
+      });
+      return;
+    }
+
+    if (event.altKey && event.shiftKey && selectedSchedule) {
+      if (event.key === "ArrowUp" && canMoveSelectionUp) {
+        event.preventDefault();
+        void moveSelectedTask("up");
+        return;
+      }
+      if (event.key === "ArrowDown" && canMoveSelectionDown) {
+        event.preventDefault();
+        void moveSelectedTask("down");
+        return;
+      }
+      if (event.key === "ArrowLeft" && canMoveSelectionToParent) {
+        event.preventDefault();
+        void moveSelectionToParent();
+        return;
+      }
+    }
+
+    if (event.key === "Delete" && selectedSchedule) {
+      event.preventDefault();
+      void deleteSelectedTask();
+    }
   }
 
   function startEditing(
@@ -755,6 +835,8 @@ export function PlanningWorkspace({
     schedule: ApiPlanningTaskSchedule,
     mode: DragMode,
   ) {
+    setSelectedTaskId(schedule.taskId);
+    setHierarchyError(null);
     if (schedule.taskKind === "summary") {
       return;
     }
@@ -918,7 +1000,10 @@ export function PlanningWorkspace({
       pendingTimelineScrollRef.current = {
         ratio: Math.min(
           1,
-          Math.max(0, (scrollContainer.scrollLeft + viewportWidth / 2) / totalWidth),
+          Math.max(
+            0,
+            (scrollContainer.scrollLeft + viewportWidth / 2) / totalWidth,
+          ),
         ),
       };
     }
@@ -934,13 +1019,15 @@ export function PlanningWorkspace({
   }
 
   function fitToProject() {
-    const viewportWidth = Math.max(320, timelineScrollRef.current?.clientWidth || 900);
+    const viewportWidth = Math.max(
+      320,
+      timelineScrollRef.current?.clientWidth || 900,
+    );
     const nextZoom =
       [...zoomModes]
         .reverse()
         .find(
-          (mode) =>
-            buildTimeline(localSchedules, mode).width <= viewportWidth,
+          (mode) => buildTimeline(localSchedules, mode).width <= viewportWidth,
         ) ?? "quarter";
     setFitTimelineWidth(viewportWidth);
     pendingTimelineScrollRef.current = { scrollLeft: 0 };
@@ -1045,7 +1132,11 @@ export function PlanningWorkspace({
     if (!selectedTaskId) {
       return;
     }
-    const result = reorderScheduleByDirection(localSchedules, selectedTaskId, direction);
+    const result = reorderScheduleByDirection(
+      localSchedules,
+      selectedTaskId,
+      direction,
+    );
     if (!result) {
       return;
     }
@@ -1134,7 +1225,10 @@ export function PlanningWorkspace({
     }
 
     const deletedTaskIds = [selectedSchedule.taskId];
-    const nextSchedules = removeSchedulesAndRenumber(localSchedules, deletedTaskIds);
+    const nextSchedules = removeSchedulesAndRenumber(
+      localSchedules,
+      deletedTaskIds,
+    );
     await applyHierarchyOperation({
       deletedTaskIds,
       nextSchedules,
@@ -1152,7 +1246,10 @@ export function PlanningWorkspace({
     }
 
     const deletedTaskIds = [summaryDeleteDialog.taskId];
-    const nextSchedules = promoteSummaryChildren(localSchedules, summaryDeleteDialog.taskId);
+    const nextSchedules = promoteSummaryChildren(
+      localSchedules,
+      summaryDeleteDialog.taskId,
+    );
     await applyHierarchyOperation({
       deletedTaskIds,
       nextSchedules,
@@ -1169,8 +1266,14 @@ export function PlanningWorkspace({
       return;
     }
 
-    const deletedTaskIds = getDeletionOrder(localSchedules, summaryDeleteDialog.taskId);
-    const nextSchedules = removeSchedulesAndRenumber(localSchedules, deletedTaskIds);
+    const deletedTaskIds = getDeletionOrder(
+      localSchedules,
+      summaryDeleteDialog.taskId,
+    );
+    const nextSchedules = removeSchedulesAndRenumber(
+      localSchedules,
+      deletedTaskIds,
+    );
     await applyHierarchyOperation({
       deletedTaskIds,
       nextSchedules,
@@ -1314,21 +1417,9 @@ export function PlanningWorkspace({
               title
             )}
           </span>
-          {isSummary ? (
-            <span
-              className="shrink-0 rounded-sm border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600"
-              title="Calculated from child work."
-            >
-              Calculated
-            </span>
-          ) : null}
+          {isSummary ? <ScheduleStateIcon kind="calculated" /> : null}
           {!isSummary && isCritical ? (
-            <span
-              className="shrink-0 rounded-sm border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
-              title="This task has zero total float."
-            >
-              Critical
-            </span>
+            <ScheduleStateIcon kind="critical" />
           ) : null}
         </div>
       );
@@ -1349,7 +1440,9 @@ export function PlanningWorkspace({
               current ? { ...current, value } : current,
             )
           }
-          onCommitValue={(value) => void commitEditValue(schedule, "ownerId", value)}
+          onCommitValue={(value) =>
+            void commitEditValue(schedule, "ownerId", value)
+          }
           onKeyDown={handleEditKeyDown}
           onStartEdit={() => startEditing(schedule, "ownerId")}
           ownerOptions={ownerOptions}
@@ -1374,7 +1467,9 @@ export function PlanningWorkspace({
               current ? { ...current, value } : current,
             )
           }
-          onCommitValue={(value) => void commitEditValue(schedule, field, value)}
+          onCommitValue={(value) =>
+            void commitEditValue(schedule, field, value)
+          }
           onKeyDown={handleEditKeyDown}
           onStartEdit={() => startEditing(schedule, field)}
           ownerOptions={ownerOptions}
@@ -1402,7 +1497,9 @@ export function PlanningWorkspace({
               current ? { ...current, value } : current,
             )
           }
-          onCommitValue={(value) => void commitEditValue(schedule, "status", value)}
+          onCommitValue={(value) =>
+            void commitEditValue(schedule, "status", value)
+          }
           onKeyDown={handleEditKeyDown}
           onStartEdit={() => startEditing(schedule, "status")}
           ownerOptions={ownerOptions}
@@ -1452,7 +1549,10 @@ export function PlanningWorkspace({
           aria-label={`${title} ${column.label} ${displayValue || "blank"}`}
           className="flex h-full min-w-0 items-center justify-end border-r border-slate-100 px-3 text-right"
           key={column.id}
-          title={displayValue || "Summary schedule values are calculated from descendants."}
+          title={
+            displayValue ||
+            "Summary schedule values are calculated from descendants."
+          }
         >
           <span className="truncate">{displayValue}</span>
         </span>
@@ -1486,9 +1586,7 @@ export function PlanningWorkspace({
           title="This task has zero total float."
         >
           {!isSummary && isCritical ? (
-            <span className="rounded-sm border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700">
-              Critical
-            </span>
+            <ScheduleStateIcon kind="critical" />
           ) : null}
         </span>
       );
@@ -1513,22 +1611,26 @@ export function PlanningWorkspace({
 
   function isScheduleCritical(schedule: ApiPlanningTaskSchedule) {
     return (
-      schedule.isCritical || workspace.criticalPathTaskIds.includes(schedule.taskId)
+      schedule.isCritical ||
+      workspace.criticalPathTaskIds.includes(schedule.taskId)
     );
   }
 
   return (
-    <div className="relative flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
+    <div
+      className="relative flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft"
+      onKeyDown={handleWorkspaceKeyDown}
+    >
       <section
         aria-label="Planning toolbar"
-        className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 p-3 backdrop-blur"
+        className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-950">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-slate-950">
               {workspace.project.name} planning workspace
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="truncate text-[11px] text-slate-500">
               {workspace.snapshot
                 ? `Schedule v${workspace.snapshot.versionNumber}`
                 : "No schedule snapshot"}{" "}
@@ -1536,391 +1638,425 @@ export function PlanningWorkspace({
               {workspace.snapshot?.projectFinishDate ?? "Unscheduled"}
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <ToolbarGroup label="Tasks">
-              <span className="relative">
-                <button
-                  aria-expanded={isAddMenuOpen}
-                  aria-haspopup="menu"
-                  className={toolbarButtonClassName}
-                  disabled={isSaving}
-                  onClick={() => setIsAddMenuOpen((isOpen) => !isOpen)}
-                  type="button"
-                >
-                  Add <span aria-hidden>▾</span>
-                </button>
-                {isAddMenuOpen ? (
-                  <span
-                    className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                    role="menu"
-                  >
-                    <AddMenuButton
-                      icon={<TaskTypeIcon taskKind="standard" />}
-                      label="Task"
-                      onClick={() =>
-                        void createTask({
-                          parentTaskId: selectedSchedule?.parentTaskId ?? null,
-                          taskType: "task",
-                        })
-                      }
-                    />
-                    <AddMenuButton
-                      icon={<TaskTypeIcon taskKind="summary" />}
-                      label="Summary"
-                      onClick={() =>
-                        void createTask({
-                          parentTaskId: selectedSchedule?.parentTaskId ?? null,
-                          taskType: "summary",
-                        })
-                      }
-                    />
-                    <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
-                      Milestone
-                    </span>
-                    {milestoneCategories.map(({ category, label }) => (
-                      <AddMenuButton
-                        icon={<MilestoneCategoryIcon category={category} />}
-                        key={category}
-                        label={label}
-                        onClick={() =>
-                          void createTask({
-                            milestoneCategory: category,
-                            parentTaskId:
-                              selectedSchedule?.parentTaskId ?? null,
-                            taskType: "milestone",
-                          })
-                        }
-                      />
-                    ))}
-                  </span>
-                ) : null}
-              </span>
-              <span className="relative">
-                <button
-                  aria-expanded={isAddChildMenuOpen}
-                  aria-haspopup="menu"
-                  className={toolbarButtonClassName}
-                  disabled={!canCreateChildForSelection || isSaving}
-                  onClick={() => setIsAddChildMenuOpen((isOpen) => !isOpen)}
-                  title={addChildTooltip}
-                  type="button"
-                >
-                  Add Child <span aria-hidden>▾</span>
-                </button>
-                {isAddChildMenuOpen ? (
-                  <span
-                    className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                    role="menu"
-                  >
-                    <AddMenuButton
-                      icon={<TaskTypeIcon taskKind="standard" />}
-                      label="Task"
-                      onClick={() => {
-                        if (selectedSchedule) {
-                          void createTask({
-                            focusCreatedTask: false,
-                            keepSelectedTaskId: selectedSchedule.taskId,
-                            parentTaskId: selectedSchedule.taskId,
-                            taskType: "task",
-                          });
-                        }
-                      }}
-                    />
-                    <AddMenuButton
-                      icon={<TaskTypeIcon taskKind="summary" />}
-                      label="Summary"
-                      onClick={() => {
-                        if (selectedSchedule) {
-                          void createTask({
-                            focusCreatedTask: false,
-                            keepSelectedTaskId: selectedSchedule.taskId,
-                            parentTaskId: selectedSchedule.taskId,
-                            taskType: "summary",
-                          });
-                        }
-                      }}
-                    />
-                    <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
-                      Milestone
-                    </span>
-                    {milestoneCategories.map(({ category, label }) => (
-                      <AddMenuButton
-                        icon={<MilestoneCategoryIcon category={category} />}
-                        key={category}
-                        label={label}
-                        onClick={() => {
-                          if (selectedSchedule) {
-                            void createTask({
-                              focusCreatedTask: false,
-                              keepSelectedTaskId: selectedSchedule.taskId,
-                              milestoneCategory: category,
-                              parentTaskId: selectedSchedule.taskId,
-                              taskType: "milestone",
-                            });
-                          }
-                        }}
-                      />
-                    ))}
-                  </span>
-                ) : null}
-              </span>
+          <span
+            aria-live="polite"
+            className="shrink-0 text-[11px] font-semibold text-slate-500"
+          >
+            {isSaving ? "Saving…" : "Plan current"}
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+          <ToolbarGroup label="Create">
+            <span className="relative">
               <button
-                className={toolbarButtonClassName}
-                disabled={!selectedSchedule || isSaving}
-                onClick={() => void deleteSelectedTask()}
-                title={
-                  selectedSchedule
-                    ? selectedSchedule.taskKind === "summary" &&
-                      selectedTaskChildren.length > 0
-                      ? "Delete this Summary and choose what to do with its child items."
-                      : `Delete ${getTaskTitle(selectedSchedule)}`
-                    : "Select a row to delete."
-                }
-                type="button"
-              >
-                Delete
-              </button>
-            </ToolbarGroup>
-            <ToolbarGroup label="WBS">
-              <button
-                className={toolbarButtonClassName}
-                disabled={!canMoveSelectionUp || isSaving}
-                onClick={() => void moveSelectedTask("up")}
-                title="Move the selected item up within its siblings."
-                type="button"
-              >
-                Move Up
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                disabled={!canMoveSelectionDown || isSaving}
-                onClick={() => void moveSelectedTask("down")}
-                title="Move the selected item down within its siblings."
-                type="button"
-              >
-                Move Down
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                disabled={!canMoveSelectionToParent || isSaving}
-                onClick={() => void moveSelectionToParent()}
-                title="Outdent the selected item to its parent level."
-                type="button"
-              >
-                Move to Parent
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                disabled={!canMoveSelectionToSummary || isSaving}
-                onClick={openMoveToSummaryDialog}
-                title="Move the selected item beneath a different Summary."
-                type="button"
-              >
-                Move to Summary...
-              </button>
-            </ToolbarGroup>
-            <ToolbarGroup label="Schedule">
-              <button
+                aria-expanded={isAddMenuOpen}
+                aria-haspopup="menu"
                 className={toolbarButtonClassName}
                 disabled={isSaving}
-                onClick={() => void onRegenerateWorkspace()}
+                onClick={() => setIsAddMenuOpen((isOpen) => !isOpen)}
                 type="button"
               >
-                {workspace.snapshot?.id ? "Regenerate Snapshot" : "Create Snapshot"}
+                Add <span aria-hidden>▾</span>
               </button>
-              <button
-                className={toolbarButtonClassName}
-                onClick={scrollToDependencies}
-                type="button"
-              >
-                Dependencies
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                onClick={scrollToToday}
-                type="button"
-              >
-                Today
-              </button>
-            </ToolbarGroup>
-            <ToolbarGroup label="Zoom">
-              <button
-                aria-label="Zoom Out"
-                className={toolbarButtonClassName}
-                disabled={!canZoomOut}
-                onClick={() => changeZoom("out")}
-                title="Zoom Out"
-                type="button"
-              >
-                -
-              </button>
-              <button
-                aria-label="Zoom In"
-                className={toolbarButtonClassName}
-                disabled={!canZoomIn}
-                onClick={() => changeZoom("in")}
-                title="Zoom In"
-                type="button"
-              >
-                +
-              </button>
-              <button
-                className={toolbarButtonClassName}
-                onClick={fitToProject}
-                type="button"
-              >
-                Fit to Project
-              </button>
-            </ToolbarGroup>
-            <ToolbarGroup label="View">
-              <span className="relative">
-                <button
-                  aria-expanded={isViewMenuOpen}
-                  aria-haspopup="menu"
-                  className={toolbarButtonClassName}
-                  onClick={() => {
-                    setIsColumnsMenuOpen(false);
-                    setIsViewMenuOpen((isOpen) => !isOpen);
-                  }}
-                  type="button"
+              {isAddMenuOpen ? (
+                <span
+                  className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  role="menu"
                 >
-                  View <span aria-hidden>▾</span>
-                </button>
-                {isViewMenuOpen ? (
-                  <span
-                    className="absolute right-0 top-9 z-30 w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                    role="menu"
-                  >
-                    {[
-                      ["split", "Grid + Timeline"],
-                      ["grid", "Grid Only"],
-                      ["timeline", "Timeline Only"],
-                    ].map(([mode, label]) => (
-                      <button
-                        className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
-                        key={mode}
-                        onClick={() => {
-                          setViewMode(mode as PlanningViewMode);
-                          setIsViewMenuOpen(false);
-                        }}
-                        role="menuitemradio"
-                        aria-checked={viewMode === mode}
-                        type="button"
-                      >
-                        <span>{label}</span>
-                        <span aria-hidden>{viewMode === mode ? "*" : ""}</span>
-                      </button>
-                    ))}
-                    <span className="my-1 block border-t border-slate-100" />
-                    <button
-                      aria-checked={showCriticalPath}
-                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
-                      onClick={() => setShowCriticalPath((isVisible) => !isVisible)}
-                      role="menuitemcheckbox"
-                      type="button"
-                    >
-                      <span>Show Critical Path</span>
-                      <span aria-hidden>{showCriticalPath ? "*" : ""}</span>
-                    </button>
-                    <button
-                      aria-checked={showFloatColumns}
-                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
-                      onClick={toggleFloatColumns}
-                      role="menuitemcheckbox"
-                      type="button"
-                    >
-                      <span>Show Float Columns</span>
-                      <span aria-hidden>{showFloatColumns ? "*" : ""}</span>
-                    </button>
+                  <AddMenuButton
+                    icon={<TaskTypeIcon taskKind="standard" />}
+                    label="Task"
+                    onClick={() =>
+                      void createTask({
+                        parentTaskId: selectedSchedule?.parentTaskId ?? null,
+                        taskType: "task",
+                      })
+                    }
+                  />
+                  <AddMenuButton
+                    icon={<TaskTypeIcon taskKind="summary" />}
+                    label="Summary"
+                    onClick={() =>
+                      void createTask({
+                        parentTaskId: selectedSchedule?.parentTaskId ?? null,
+                        taskType: "summary",
+                      })
+                    }
+                  />
+                  <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
+                    Milestone
                   </span>
-                ) : null}
-              </span>
-              <span className="relative">
-                <button
-                  aria-expanded={isColumnsMenuOpen}
-                  aria-haspopup="menu"
-                  className={toolbarButtonClassName}
-                  disabled={!showGrid}
-                  onClick={() => {
-                    setIsViewMenuOpen(false);
-                    setIsColumnsMenuOpen((isOpen) => !isOpen);
-                  }}
-                  type="button"
+                  {milestoneCategories.map(({ category, label }) => (
+                    <AddMenuButton
+                      icon={<MilestoneCategoryIcon category={category} />}
+                      key={category}
+                      label={label}
+                      onClick={() =>
+                        void createTask({
+                          milestoneCategory: category,
+                          parentTaskId: selectedSchedule?.parentTaskId ?? null,
+                          taskType: "milestone",
+                        })
+                      }
+                    />
+                  ))}
+                </span>
+              ) : null}
+            </span>
+            <span className="relative">
+              <button
+                aria-expanded={isAddChildMenuOpen}
+                aria-haspopup="menu"
+                className={toolbarButtonClassName}
+                disabled={!canCreateChildForSelection || isSaving}
+                onClick={() => setIsAddChildMenuOpen((isOpen) => !isOpen)}
+                title={addChildTooltip}
+                type="button"
+              >
+                Add Child <span aria-hidden>▾</span>
+              </button>
+              {isAddChildMenuOpen ? (
+                <span
+                  className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  role="menu"
                 >
-                  Columns <span aria-hidden>▾</span>
-                </button>
-                {isColumnsMenuOpen ? (
-                  <span
-                    className="absolute right-0 top-9 z-30 w-48 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                    role="menu"
-                  >
-                    {optionalGridColumns.map((column) => {
-                      const checked =
-                        !isCompactViewport &&
-                        visibleOptionalColumnIds.includes(column.id);
-                      return (
-                        <label
-                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
-                          key={column.id}
-                        >
-                          <input
-                            checked={checked}
-                            disabled={isCompactViewport}
-                            onChange={() => toggleOptionalColumn(column.id)}
-                            type="checkbox"
-                          />
-                          <span>{column.label}</span>
-                        </label>
-                      );
-                    })}
-                    <button
-                      className="mt-1 w-full rounded border-t border-slate-100 px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
-                      onClick={restoreDefaultColumns}
-                      role="menuitem"
-                      type="button"
-                    >
-                      Restore Defaults
-                    </button>
+                  <AddMenuButton
+                    icon={<TaskTypeIcon taskKind="standard" />}
+                    label="Task"
+                    onClick={() => {
+                      if (selectedSchedule) {
+                        void createTask({
+                          focusCreatedTask: false,
+                          keepSelectedTaskId: selectedSchedule.taskId,
+                          parentTaskId: selectedSchedule.taskId,
+                          taskType: "task",
+                        });
+                      }
+                    }}
+                  />
+                  <AddMenuButton
+                    icon={<TaskTypeIcon taskKind="summary" />}
+                    label="Summary"
+                    onClick={() => {
+                      if (selectedSchedule) {
+                        void createTask({
+                          focusCreatedTask: false,
+                          keepSelectedTaskId: selectedSchedule.taskId,
+                          parentTaskId: selectedSchedule.taskId,
+                          taskType: "summary",
+                        });
+                      }
+                    }}
+                  />
+                  <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
+                    Milestone
                   </span>
-                ) : null}
-              </span>
+                  {milestoneCategories.map(({ category, label }) => (
+                    <AddMenuButton
+                      icon={<MilestoneCategoryIcon category={category} />}
+                      key={category}
+                      label={label}
+                      onClick={() => {
+                        if (selectedSchedule) {
+                          void createTask({
+                            focusCreatedTask: false,
+                            keepSelectedTaskId: selectedSchedule.taskId,
+                            milestoneCategory: category,
+                            parentTaskId: selectedSchedule.taskId,
+                            taskType: "milestone",
+                          });
+                        }
+                      }}
+                    />
+                  ))}
+                </span>
+              ) : null}
+            </span>
+            <button
+              aria-label="Delete selected task"
+              className={toolbarButtonClassName}
+              disabled={!selectedSchedule || isSaving}
+              onClick={() => void deleteSelectedTask()}
+              title={
+                selectedSchedule
+                  ? selectedSchedule.taskKind === "summary" &&
+                    selectedTaskChildren.length > 0
+                    ? "Delete this Summary and choose what to do with its child items."
+                    : `Delete ${getTaskTitle(selectedSchedule)}`
+                  : "Select a row to delete."
+              }
+              type="button"
+            >
+              <CommandIcon name="delete" />
+              <span className="hidden 2xl:inline">Delete</span>
+            </button>
+          </ToolbarGroup>
+          <ToolbarGroup label="Structure">
+            <span className="relative">
               <button
+                aria-expanded={isStructureMenuOpen}
+                aria-haspopup="menu"
                 className={toolbarButtonClassName}
-                disabled={!hasSummaryTasks}
-                onClick={expandAll}
+                onClick={() => setIsStructureMenuOpen((isOpen) => !isOpen)}
                 type="button"
               >
-                Expand All
+                <CommandIcon name="structure" />
+                Structure <span aria-hidden>▾</span>
               </button>
+              {isStructureMenuOpen ? (
+                <span
+                  className="absolute left-0 top-9 z-30 w-52 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  role="menu"
+                >
+                  <StructureMenuButton
+                    disabled={!canMoveSelectionUp || isSaving}
+                    label="Move Up"
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      void moveSelectedTask("up");
+                    }}
+                    shortcut="Alt+Shift+↑"
+                  />
+                  <StructureMenuButton
+                    disabled={!canMoveSelectionDown || isSaving}
+                    label="Move Down"
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      void moveSelectedTask("down");
+                    }}
+                    shortcut="Alt+Shift+↓"
+                  />
+                  <StructureMenuButton
+                    disabled={!canMoveSelectionToParent || isSaving}
+                    label="Move to Parent"
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      void moveSelectionToParent();
+                    }}
+                    shortcut="Alt+Shift+←"
+                  />
+                  <StructureMenuButton
+                    disabled={!canMoveSelectionToSummary || isSaving}
+                    label="Move to Summary..."
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      openMoveToSummaryDialog();
+                    }}
+                  />
+                  <span className="my-1 block border-t border-slate-100" />
+                  <StructureMenuButton
+                    disabled={!hasSummaryTasks}
+                    label="Expand All"
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      expandAll();
+                    }}
+                  />
+                  <StructureMenuButton
+                    disabled={!hasSummaryTasks}
+                    label="Collapse All"
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      collapseAll();
+                    }}
+                  />
+                </span>
+              ) : null}
+            </span>
+          </ToolbarGroup>
+          <ToolbarGroup label="Schedule">
+            <button
+              className={toolbarButtonClassName}
+              disabled={isSaving}
+              onClick={() => void onRegenerateWorkspace()}
+              type="button"
+            >
+              <CommandIcon name="refresh" />
+              {workspace.snapshot?.id
+                ? "Regenerate Snapshot"
+                : "Create Snapshot"}
+            </button>
+            <button
+              className={toolbarButtonClassName}
+              onClick={scrollToDependencies}
+              type="button"
+            >
+              <CommandIcon name="link" />
+              Dependencies
+            </button>
+          </ToolbarGroup>
+          <ToolbarGroup label="Time">
+            <button
+              className={toolbarButtonClassName}
+              onClick={scrollToToday}
+              type="button"
+            >
+              Today
+            </button>
+            <button
+              aria-label="Zoom Out"
+              className={toolbarButtonClassName}
+              disabled={!canZoomOut}
+              onClick={() => changeZoom("out")}
+              title="Zoom Out"
+              type="button"
+            >
+              <CommandIcon name="zoom-out" />
+            </button>
+            <button
+              aria-label="Zoom In"
+              className={toolbarButtonClassName}
+              disabled={!canZoomIn}
+              onClick={() => changeZoom("in")}
+              title="Zoom In"
+              type="button"
+            >
+              <CommandIcon name="zoom-in" />
+            </button>
+            <button
+              aria-label="Fit to Project"
+              className={toolbarButtonClassName}
+              onClick={fitToProject}
+              type="button"
+            >
+              <CommandIcon name="fit" />
+              <span className="hidden xl:inline">Fit</span>
+            </button>
+            <label className="sr-only" htmlFor="planning-time-scale">
+              Time Scale
+            </label>
+            <select
+              className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700"
+              id="planning-time-scale"
+              onChange={(event) => {
+                setFitTimelineWidth(null);
+                setZoom(event.target.value as ZoomMode);
+              }}
+              value={zoom}
+            >
+              {zoomModes.map((mode) => (
+                <option key={mode} value={mode}>
+                  {zoomLabels[mode]}
+                </option>
+              ))}
+            </select>
+          </ToolbarGroup>
+          <ToolbarGroup label="View">
+            <span className="relative">
               <button
+                aria-expanded={isViewMenuOpen}
+                aria-haspopup="menu"
                 className={toolbarButtonClassName}
-                disabled={!hasSummaryTasks}
-                onClick={collapseAll}
-                type="button"
-              >
-                Collapse All
-              </button>
-              <label className="sr-only" htmlFor="planning-time-scale">
-                Time Scale
-              </label>
-              <select
-                className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700"
-                id="planning-time-scale"
-                onChange={(event) => {
-                  setFitTimelineWidth(null);
-                  setZoom(event.target.value as ZoomMode);
+                onClick={() => {
+                  setIsColumnsMenuOpen(false);
+                  setIsViewMenuOpen((isOpen) => !isOpen);
                 }}
-                value={zoom}
+                type="button"
               >
-                {zoomModes.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {zoomLabels[mode]}
-                  </option>
-                ))}
-              </select>
-              <KeyboardHelp />
-            </ToolbarGroup>
-          </div>
+                View <span aria-hidden>▾</span>
+              </button>
+              {isViewMenuOpen ? (
+                <span
+                  className="absolute right-0 top-9 z-30 w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  role="menu"
+                >
+                  {[
+                    ["split", "Grid + Timeline"],
+                    ["grid", "Grid Only"],
+                    ["timeline", "Timeline Only"],
+                  ].map(([mode, label]) => (
+                    <button
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                      key={mode}
+                      onClick={() => {
+                        setViewMode(mode as PlanningViewMode);
+                        setIsViewMenuOpen(false);
+                      }}
+                      role="menuitemradio"
+                      aria-checked={viewMode === mode}
+                      type="button"
+                    >
+                      <span>{label}</span>
+                      <span aria-hidden>{viewMode === mode ? "*" : ""}</span>
+                    </button>
+                  ))}
+                  <span className="my-1 block border-t border-slate-100" />
+                  <button
+                    aria-checked={showCriticalPath}
+                    className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={() =>
+                      setShowCriticalPath((isVisible) => !isVisible)
+                    }
+                    role="menuitemcheckbox"
+                    type="button"
+                  >
+                    <span>Show Critical Path</span>
+                    <span aria-hidden>{showCriticalPath ? "*" : ""}</span>
+                  </button>
+                  <button
+                    aria-checked={showFloatColumns}
+                    className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={toggleFloatColumns}
+                    role="menuitemcheckbox"
+                    type="button"
+                  >
+                    <span>Show Float Columns</span>
+                    <span aria-hidden>{showFloatColumns ? "*" : ""}</span>
+                  </button>
+                </span>
+              ) : null}
+            </span>
+            <span className="relative">
+              <button
+                aria-expanded={isColumnsMenuOpen}
+                aria-haspopup="menu"
+                className={toolbarButtonClassName}
+                disabled={!showGrid}
+                onClick={() => {
+                  setIsViewMenuOpen(false);
+                  setIsColumnsMenuOpen((isOpen) => !isOpen);
+                }}
+                type="button"
+              >
+                Columns <span aria-hidden>▾</span>
+              </button>
+              {isColumnsMenuOpen ? (
+                <span
+                  className="absolute right-0 top-9 z-30 w-48 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  role="menu"
+                >
+                  {optionalGridColumns.map((column) => {
+                    const checked =
+                      !isCompactViewport &&
+                      visibleOptionalColumnIds.includes(column.id);
+                    return (
+                      <label
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
+                        key={column.id}
+                      >
+                        <input
+                          checked={checked}
+                          disabled={isCompactViewport}
+                          onChange={() => toggleOptionalColumn(column.id)}
+                          type="checkbox"
+                        />
+                        <span>{column.label}</span>
+                      </label>
+                    );
+                  })}
+                  <button
+                    className="mt-1 w-full rounded border-t border-slate-100 px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={restoreDefaultColumns}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Restore Defaults
+                  </button>
+                </span>
+              ) : null}
+            </span>
+            <KeyboardHelp />
+          </ToolbarGroup>
         </div>
         {hierarchyError ? (
           <div
@@ -1937,463 +2073,539 @@ export function PlanningWorkspace({
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-white"
         ref={verticalScrollRef}
       >
-        <div
-          aria-label="Planning split workspace"
-          className="flex min-h-[560px] min-w-0"
-          data-grid-width={Math.round(gridWidth)}
-          data-view-mode={viewMode}
-          ref={workspaceSplitRef}
-        >
-          {showGrid ? (
+        <div className="flex min-h-full flex-col 2xl:flex-row">
+          <div className="min-w-0 flex-1">
             <div
-              aria-label="Frozen planning grid"
-              className="min-w-0 overflow-x-auto border-r border-slate-200"
-              style={{
-                flex: showTimeline ? `0 0 ${gridWidth}px` : "1 1 auto",
-                width: showTimeline ? gridWidth : "100%",
-              }}
+              aria-label="Planning split workspace"
+              className="flex min-h-[560px] min-w-0"
+              data-grid-width={Math.round(gridWidth)}
+              data-view-mode={viewMode}
+              ref={workspaceSplitRef}
             >
-              <div
-                className="sticky top-0 z-10 grid items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
-                style={{
-                  gridTemplateColumns,
-                  height: headerHeight,
-                  width: gridContentWidth,
-                }}
-              >
-                {visibleColumns.map((column) => (
-                  <span
-                    className={`h-full border-r border-slate-200 px-3 py-3 ${
-                      column.align === "right" ? "text-right" : ""
-                    }`}
-                    key={column.id}
-                  >
-                    {column.label}
-                  </span>
-                ))}
-              </div>
-              {rows.map((row) => {
-                const { schedule, wbs } = row;
-                const hasChildren = localSchedules.some(
-                  (candidate) => candidate.parentTaskId === schedule.taskId,
-                );
-                const title = getTaskTitle(schedule);
-                const isSummary = schedule.taskKind === "summary";
-                const isMilestone = schedule.taskKind === "milestone";
-                return (
+              {showGrid ? (
+                <div
+                  aria-label="Frozen planning grid"
+                  className="min-w-0 overflow-x-auto border-r border-slate-200"
+                  style={{
+                    flex: showTimeline ? `0 0 ${gridWidth}px` : "1 1 auto",
+                    width: showTimeline ? gridWidth : "100%",
+                  }}
+                >
                   <div
-                    aria-label={`Planning row ${wbs} ${title}`}
-                    aria-selected={selectedTaskId === schedule.taskId}
-                    className={`grid items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
-                      isSummary
-                        ? "bg-slate-50 font-semibold text-slate-800"
-                        : isMilestone
-                          ? "bg-white text-slate-700"
-                          : ""
-                    } ${
-                      selectedTaskId === schedule.taskId
-                        ? "bg-brand/10 shadow-[inset_3px_0_0_#0f766e] ring-1 ring-inset ring-brand/30"
-                        : ""
-                    }`}
-                    draggable={!editingCell}
-                    key={schedule.taskId}
-                    onClick={() => {
-                      setSelectedTaskId(schedule.taskId);
-                      setHierarchyError(null);
-                    }}
-                    onDragEnd={() => setRowDragState(null)}
-                    onDragOver={(event) => handleRowDragOver(event, schedule)}
-                    onDragStart={(event) => startRowDrag(event, schedule)}
-                    onDrop={(event) => dropRow(event, schedule)}
-                    onKeyDown={(event) =>
-                      handleRowKeyDown(event, schedule, hasChildren)
-                    }
-                    ref={(element) => {
-                      if (element) {
-                        rowRefs.current.set(schedule.taskId, element);
-                      } else {
-                        rowRefs.current.delete(schedule.taskId);
-                      }
-                    }}
-                    role="row"
+                    className="sticky top-0 z-10 grid items-center border-b border-slate-300 bg-slate-50 text-xs font-bold uppercase text-slate-600"
                     style={{
                       gridTemplateColumns,
-                      height: rowHeight,
+                      height: headerHeight,
                       width: gridContentWidth,
                     }}
-                    tabIndex={0}
                   >
-                    {visibleColumns.map((column) =>
-                      renderGridCell(
-                        column,
-                        row,
-                        hasChildren,
-                        isSummary,
-                        isMilestone,
-                        title,
-                      ),
-                    )}
+                    {visibleColumns.map((column) => (
+                      <span
+                        className={`h-full border-r border-slate-200 px-3 py-3 ${
+                          column.align === "right" ? "text-right" : ""
+                        }`}
+                        key={column.id}
+                      >
+                        {column.label}
+                      </span>
+                    ))}
                   </div>
-                );
-              })}
-              {rows.length === 0 ? (
+                  {rows.map((row) => {
+                    const { schedule, wbs } = row;
+                    const hasChildren = localSchedules.some(
+                      (candidate) => candidate.parentTaskId === schedule.taskId,
+                    );
+                    const title = getTaskTitle(schedule);
+                    const isSummary = schedule.taskKind === "summary";
+                    const isMilestone = schedule.taskKind === "milestone";
+                    return (
+                      <div
+                        aria-label={`Planning row ${wbs} ${title}`}
+                        aria-selected={selectedTaskId === schedule.taskId}
+                        className={`grid items-center border-b border-slate-100 text-xs text-slate-700 transition hover:bg-slate-50 ${
+                          isSummary
+                            ? "bg-slate-50 font-semibold text-slate-800"
+                            : isMilestone
+                              ? "bg-white text-slate-700"
+                              : ""
+                        } ${
+                          selectedTaskId === schedule.taskId
+                            ? "bg-brand/10 shadow-[inset_3px_0_0_#0f766e] ring-1 ring-inset ring-brand/30"
+                            : ""
+                        }`}
+                        draggable={!editingCell}
+                        key={schedule.taskId}
+                        onClick={() => {
+                          setSelectedTaskId(schedule.taskId);
+                          setHierarchyError(null);
+                        }}
+                        onDragEnd={() => setRowDragState(null)}
+                        onDragOver={(event) =>
+                          handleRowDragOver(event, schedule)
+                        }
+                        onDragStart={(event) => startRowDrag(event, schedule)}
+                        onDrop={(event) => dropRow(event, schedule)}
+                        onKeyDown={(event) =>
+                          handleRowKeyDown(event, schedule, hasChildren)
+                        }
+                        ref={(element) => {
+                          if (element) {
+                            rowRefs.current.set(schedule.taskId, element);
+                          } else {
+                            rowRefs.current.delete(schedule.taskId);
+                          }
+                        }}
+                        role="row"
+                        style={{
+                          gridTemplateColumns,
+                          height: rowHeight,
+                          width: gridContentWidth,
+                        }}
+                        tabIndex={0}
+                      >
+                        {visibleColumns.map((column) =>
+                          renderGridCell(
+                            column,
+                            row,
+                            hasChildren,
+                            isSummary,
+                            isMilestone,
+                            title,
+                          ),
+                        )}
+                      </div>
+                    );
+                  })}
+                  {rows.length === 0 ? (
+                    <div
+                      className="px-4 py-12 text-center text-sm text-slate-500"
+                      style={{ width: gridContentWidth }}
+                    >
+                      <p className="font-semibold text-slate-700">No Tasks</p>
+                      <p className="mt-1">
+                        Add a task to start building the project WBS.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {showGrid && showTimeline ? (
+                <button
+                  aria-label="Resize planning panes"
+                  aria-orientation="vertical"
+                  aria-valuemax={maxGridWidth}
+                  aria-valuemin={minGridWidth}
+                  aria-valuenow={Math.round(gridWidth)}
+                  className="z-10 w-2 shrink-0 cursor-col-resize border-x border-slate-200 bg-slate-100 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-brand"
+                  onKeyDown={adjustSplitterWithKeyboard}
+                  onPointerDown={startSplitterDrag}
+                  onPointerMove={moveSplitter}
+                  role="separator"
+                  title="Resize planning panes"
+                  type="button"
+                />
+              ) : null}
+
+              {showTimeline ? (
                 <div
-                  className="px-4 py-12 text-center text-sm text-slate-500"
-                  style={{ width: gridContentWidth }}
+                  aria-label="Scrollable timeline pane"
+                  className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+                  ref={timelineScrollRef}
                 >
-                  <p className="font-semibold text-slate-700">No Tasks</p>
-                  <p className="mt-1">Add a task to start building the project WBS.</p>
+                  <div
+                    data-testid="timeline-scroll-surface"
+                    style={{
+                      minWidth: totalWidth,
+                      width: totalWidth,
+                    }}
+                  >
+                    <svg
+                      aria-label="Interactive Gantt timeline"
+                      className="block"
+                      height={totalHeight}
+                      onPointerUp={finishDrag}
+                      ref={svgRef}
+                      role="img"
+                      width={totalWidth}
+                    >
+                      <rect
+                        fill="#f8fafc"
+                        height={headerHeight}
+                        width={totalWidth}
+                        x={0}
+                        y={0}
+                      />
+                      {timeline.ticks.map((tick) => (
+                        <g key={tick.date}>
+                          {tick.isWeekend ? (
+                            <rect
+                              fill="#f1f5f9"
+                              height={totalHeight}
+                              opacity={0.7}
+                              width={timeline.unitWidth}
+                              x={tick.x}
+                              y={headerHeight}
+                            />
+                          ) : null}
+                          <line
+                            stroke="#e2e8f0"
+                            x1={tick.x}
+                            x2={tick.x}
+                            y1={0}
+                            y2={totalHeight}
+                          />
+                          <text
+                            fill="#64748b"
+                            fontSize="11"
+                            x={tick.x + 6}
+                            y={26}
+                          >
+                            {tick.label}
+                          </text>
+                        </g>
+                      ))}
+                      {timeline.todayX !== null ? (
+                        <line
+                          aria-label="Today marker"
+                          stroke="#ef4444"
+                          strokeDasharray="4 4"
+                          strokeWidth={2}
+                          x1={timeline.todayX}
+                          x2={timeline.todayX}
+                          y1={headerHeight}
+                          y2={totalHeight}
+                        />
+                      ) : null}
+
+                      {rows.map(({ schedule }, index) => {
+                        const title = getTaskTitle(schedule);
+                        const y = headerHeight + index * rowHeight + 12;
+                        const geometry = getBarGeometry(schedule, timeline);
+                        const isCritical = isScheduleCritical(schedule);
+                        const shouldRenderScheduleBar =
+                          !showCriticalPath ||
+                          schedule.taskKind === "summary" ||
+                          (schedule.taskKind === "milestone" && isCritical) ||
+                          (schedule.taskKind === "standard" && isCritical);
+                        const allocations =
+                          allocationsByTaskId.get(schedule.taskId) ?? [];
+                        return (
+                          <g key={schedule.taskId}>
+                            <line
+                              stroke="#f1f5f9"
+                              x1={0}
+                              x2={totalWidth}
+                              y1={headerHeight + (index + 1) * rowHeight}
+                              y2={headerHeight + (index + 1) * rowHeight}
+                            />
+                            {geometry && shouldRenderScheduleBar ? (
+                              schedule.taskKind === "milestone" ? (
+                                <rect
+                                  aria-label={`Milestone ${title}`}
+                                  fill={getMilestoneFill(schedule, isCritical)}
+                                  height={16}
+                                  onPointerDown={(event) =>
+                                    startDrag(event, schedule, "move")
+                                  }
+                                  style={{ cursor: "grab" }}
+                                  stroke={
+                                    selectedTaskId === schedule.taskId
+                                      ? "#0f172a"
+                                      : "none"
+                                  }
+                                  strokeWidth={
+                                    selectedTaskId === schedule.taskId ? 2 : 0
+                                  }
+                                  transform={`rotate(45 ${geometry.x + 8} ${y + 8})`}
+                                  width={16}
+                                  x={geometry.x}
+                                  y={y}
+                                />
+                              ) : (
+                                <g>
+                                  <rect
+                                    aria-label={`Move ${title}`}
+                                    fill={
+                                      schedule.taskKind === "summary"
+                                        ? "#64748b"
+                                        : isCritical
+                                          ? "#dc2626"
+                                          : "#0f766e"
+                                    }
+                                    stroke={
+                                      selectedTaskId === schedule.taskId
+                                        ? "#0f172a"
+                                        : isCritical
+                                          ? "#7f1d1d"
+                                          : "none"
+                                    }
+                                    strokeWidth={
+                                      isCritical ||
+                                      selectedTaskId === schedule.taskId
+                                        ? 2
+                                        : 0
+                                    }
+                                    height={barHeight}
+                                    opacity={
+                                      schedule.taskKind === "summary" ? 0.65 : 1
+                                    }
+                                    onPointerDown={(event) =>
+                                      startDrag(event, schedule, "move")
+                                    }
+                                    rx={3}
+                                    style={{
+                                      cursor:
+                                        schedule.taskKind === "summary"
+                                          ? "not-allowed"
+                                          : "grab",
+                                    }}
+                                    width={geometry.width}
+                                    x={geometry.x}
+                                    y={y}
+                                  />
+                                  <rect
+                                    fill="#ccfbf1"
+                                    height={barHeight}
+                                    opacity={
+                                      schedule.taskKind === "summary"
+                                        ? 0.35
+                                        : 0.75
+                                    }
+                                    rx={3}
+                                    width={Math.max(
+                                      0,
+                                      geometry.width *
+                                        (Number(schedule.percentComplete) /
+                                          100),
+                                    )}
+                                    x={geometry.x}
+                                    y={y}
+                                  />
+                                  {schedule.taskKind !== "summary" ? (
+                                    <rect
+                                      aria-label={`Resize ${title}`}
+                                      fill="#0f172a"
+                                      height={barHeight}
+                                      onPointerDown={(event) =>
+                                        startDrag(event, schedule, "resize-end")
+                                      }
+                                      style={{ cursor: "ew-resize" }}
+                                      width={5}
+                                      x={geometry.x + geometry.width - 5}
+                                      y={y}
+                                    />
+                                  ) : null}
+                                </g>
+                              )
+                            ) : null}
+                            {shouldRenderScheduleBar
+                              ? allocations.map(
+                                  (allocation, allocationIndex) => {
+                                    const allocationY =
+                                      y +
+                                      barHeight +
+                                      3 +
+                                      allocationIndex * resourceHeight;
+                                    return (
+                                      <g key={allocation.id}>
+                                        <rect
+                                          fill={allocationColor(
+                                            allocation.allocationPercent,
+                                          )}
+                                          height={12}
+                                          rx={2}
+                                          width={Math.max(
+                                            48,
+                                            Number(
+                                              allocation.allocationPercent,
+                                            ),
+                                          )}
+                                          x={geometry?.x ?? 0}
+                                          y={allocationY}
+                                        />
+                                        <text
+                                          fill="#0f172a"
+                                          fontSize="10"
+                                          x={(geometry?.x ?? 0) + 54}
+                                          y={allocationY + 10}
+                                        >
+                                          {formatAllocation(allocation)}
+                                        </text>
+                                      </g>
+                                    );
+                                  },
+                                )
+                              : null}
+                          </g>
+                        );
+                      })}
+
+                      {workspace.dependencies.map((dependency) => {
+                        const line = getDependencyLine(
+                          dependency,
+                          rows,
+                          timeline,
+                        );
+                        return line ? (
+                          <path
+                            d={line}
+                            fill="none"
+                            key={dependency.id}
+                            markerEnd="url(#arrow)"
+                            stroke="#475569"
+                            strokeWidth={1.5}
+                          />
+                        ) : null;
+                      })}
+                      <defs>
+                        <marker
+                          id="arrow"
+                          markerHeight="8"
+                          markerWidth="8"
+                          orient="auto"
+                          refX="7"
+                          refY="4"
+                        >
+                          <path d="M0,0 L8,4 L0,8 z" fill="#475569" />
+                        </marker>
+                      </defs>
+                    </svg>
+                  </div>
                 </div>
               ) : null}
             </div>
-          ) : null}
 
-          {showGrid && showTimeline ? (
-            <button
-              aria-label="Resize planning panes"
-              aria-orientation="vertical"
-              aria-valuemax={maxGridWidth}
-              aria-valuemin={minGridWidth}
-              aria-valuenow={Math.round(gridWidth)}
-              className="z-10 w-2 shrink-0 cursor-col-resize border-x border-slate-200 bg-slate-100 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-brand"
-              onKeyDown={adjustSplitterWithKeyboard}
-              onPointerDown={startSplitterDrag}
-              onPointerMove={moveSplitter}
-              role="separator"
-              title="Resize planning panes"
-              type="button"
-            />
-          ) : null}
-
-          {showTimeline ? (
-            <div
-              aria-label="Scrollable timeline pane"
-              className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
-              ref={timelineScrollRef}
+            <section
+              className="m-3 grid gap-4 rounded-md border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr]"
+              ref={dependencySectionRef}
             >
-          <div
-            data-testid="timeline-scroll-surface"
-            style={{
-              minWidth: totalWidth,
-              width: totalWidth,
-            }}
-          >
-          <svg
-            aria-label="Interactive Gantt timeline"
-            className="block"
-            height={totalHeight}
-            onPointerUp={finishDrag}
-            ref={svgRef}
-            role="img"
-            width={totalWidth}
-          >
-            <rect
-              fill="#f8fafc"
-              height={headerHeight}
-              width={totalWidth}
-              x={0}
-              y={0}
-            />
-            {timeline.ticks.map((tick) => (
-              <g key={tick.date}>
-                {tick.isWeekend ? (
-                  <rect
-                    fill="#f1f5f9"
-                    height={totalHeight}
-                    opacity={0.7}
-                    width={timeline.unitWidth}
-                    x={tick.x}
-                    y={headerHeight}
-                  />
-                ) : null}
-                <line
-                  stroke="#e2e8f0"
-                  x1={tick.x}
-                  x2={tick.x}
-                  y1={0}
-                  y2={totalHeight}
-                />
-                <text fill="#64748b" fontSize="11" x={tick.x + 6} y={26}>
-                  {tick.label}
-                </text>
-              </g>
-            ))}
-            {timeline.todayX !== null ? (
-              <line
-                aria-label="Today marker"
-                stroke="#ef4444"
-                strokeDasharray="4 4"
-                strokeWidth={2}
-                x1={timeline.todayX}
-                x2={timeline.todayX}
-                y1={headerHeight}
-                y2={totalHeight}
-              />
-            ) : null}
-
-            {rows.map(({ schedule }, index) => {
-              const title = getTaskTitle(schedule);
-              const y = headerHeight + index * rowHeight + 12;
-              const geometry = getBarGeometry(schedule, timeline);
-              const isCritical = isScheduleCritical(schedule);
-              const shouldRenderScheduleBar =
-                !showCriticalPath ||
-                schedule.taskKind === "summary" ||
-                (schedule.taskKind === "milestone" && isCritical) ||
-                (schedule.taskKind === "standard" && isCritical);
-              const allocations =
-                allocationsByTaskId.get(schedule.taskId) ?? [];
-              return (
-                <g key={schedule.taskId}>
-                  <line
-                    stroke="#f1f5f9"
-                    x1={0}
-                    x2={totalWidth}
-                    y1={headerHeight + (index + 1) * rowHeight}
-                    y2={headerHeight + (index + 1) * rowHeight}
-                  />
-                  {geometry && shouldRenderScheduleBar ? (
-                    schedule.taskKind === "milestone" ? (
-                      <rect
-                        aria-label={`Milestone ${title}`}
-                        fill={getMilestoneFill(schedule, isCritical)}
-                        height={16}
-                        onPointerDown={(event) =>
-                          startDrag(event, schedule, "move")
-                        }
-                        style={{ cursor: "grab" }}
-                        transform={`rotate(45 ${geometry.x + 8} ${y + 8})`}
-                        width={16}
-                        x={geometry.x}
-                        y={y}
-                      />
-                    ) : (
-                      <g>
-                        <rect
-                          aria-label={`Move ${title}`}
-                          fill={
-                            schedule.taskKind === "summary"
-                              ? "#64748b"
-                              : isCritical
-                                ? "#dc2626"
-                                : "#0f766e"
-                          }
-                          stroke={isCritical ? "#7f1d1d" : "none"}
-                          strokeWidth={isCritical ? 2 : 0}
-                          height={barHeight}
-                          opacity={schedule.taskKind === "summary" ? 0.65 : 1}
-                          onPointerDown={(event) =>
-                            startDrag(event, schedule, "move")
-                          }
-                          rx={3}
-                          style={{
-                            cursor:
-                              schedule.taskKind === "summary"
-                                ? "not-allowed"
-                                : "grab",
-                          }}
-                          width={geometry.width}
-                          x={geometry.x}
-                          y={y}
-                        />
-                        <rect
-                          fill="#ccfbf1"
-                          height={barHeight}
-                          opacity={schedule.taskKind === "summary" ? 0.35 : 0.75}
-                          rx={3}
-                          width={Math.max(
-                            0,
-                            geometry.width *
-                              (Number(schedule.percentComplete) / 100),
-                          )}
-                          x={geometry.x}
-                          y={y}
-                        />
-                        {schedule.taskKind !== "summary" ? (
-                          <rect
-                            aria-label={`Resize ${title}`}
-                            fill="#0f172a"
-                            height={barHeight}
-                            onPointerDown={(event) =>
-                              startDrag(event, schedule, "resize-end")
-                            }
-                            style={{ cursor: "ew-resize" }}
-                            width={5}
-                            x={geometry.x + geometry.width - 5}
-                            y={y}
-                          />
-                        ) : null}
-                      </g>
-                    )
-                  ) : null}
-                  {shouldRenderScheduleBar ? allocations.map((allocation, allocationIndex) => {
-                    const allocationY =
-                      y + barHeight + 3 + allocationIndex * resourceHeight;
-                    return (
-                      <g key={allocation.id}>
-                        <rect
-                          fill={allocationColor(allocation.allocationPercent)}
-                          height={12}
-                          rx={2}
-                          width={Math.max(
-                            48,
-                            Number(allocation.allocationPercent),
-                          )}
-                          x={geometry?.x ?? 0}
-                          y={allocationY}
-                        />
-                        <text
-                          fill="#0f172a"
-                          fontSize="10"
-                          x={(geometry?.x ?? 0) + 54}
-                          y={allocationY + 10}
-                        >
-                          {formatAllocation(allocation)}
-                        </text>
-                      </g>
-                    );
-                  }) : null}
-                </g>
-              );
-            })}
-
-            {workspace.dependencies.map((dependency) => {
-              const line = getDependencyLine(dependency, rows, timeline);
-              return line ? (
-                <path
-                  d={line}
-                  fill="none"
-                  key={dependency.id}
-                  markerEnd="url(#arrow)"
-                  stroke="#475569"
-                  strokeWidth={1.5}
-                />
-              ) : null;
-            })}
-            <defs>
-              <marker
-                id="arrow"
-                markerHeight="8"
-                markerWidth="8"
-                orient="auto"
-                refX="7"
-                refY="4"
+              <form
+                className="grid gap-3 sm:grid-cols-4"
+                onSubmit={submitDependency}
               >
-                <path d="M0,0 L8,4 L0,8 z" fill="#475569" />
-              </marker>
-            </defs>
-          </svg>
-          </div>
-            </div>
-          ) : null}
-      </div>
-
-      <section
-        className="m-3 grid gap-4 rounded-md border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr]"
-        ref={dependencySectionRef}
-      >
-        <form className="grid gap-3 sm:grid-cols-4" onSubmit={submitDependency}>
-          <label className="block">
-            <span className="text-xs font-semibold uppercase text-slate-500">
-              Predecessor
-            </span>
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
-              onChange={(event) =>
-                setDependencyDraft((draft) => ({
-                  ...draft,
-                  predecessorTaskId: event.target.value,
-                }))
-              }
-              value={dependencyDraft.predecessorTaskId}
-            >
-              {leafRows.map((row) => (
-                <option key={row.schedule.taskId} value={row.schedule.taskId}>
-                  {row.wbs} {getTaskTitle(row.schedule)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold uppercase text-slate-500">
-              Successor
-            </span>
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
-              onChange={(event) =>
-                setDependencyDraft((draft) => ({
-                  ...draft,
-                  successorTaskId: event.target.value,
-                }))
-              }
-              value={dependencyDraft.successorTaskId}
-            >
-              {leafRows.map((row) => (
-                <option key={row.schedule.taskId} value={row.schedule.taskId}>
-                  {row.wbs} {getTaskTitle(row.schedule)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold uppercase text-slate-500">
-              Type
-            </span>
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
-              onChange={(event) =>
-                setDependencyDraft((draft) => ({
-                  ...draft,
-                  dependencyType: event.target.value as "FS" | "SS" | "FF",
-                }))
-              }
-              value={dependencyDraft.dependencyType}
-            >
-              <option value="FS">Finish to Start</option>
-              <option value="SS">Start to Start</option>
-              <option value="FF">Finish to Finish</option>
-            </select>
-          </label>
-          <button
-            className="self-end rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            disabled={
-              isSaving ||
-              !dependencyDraft.predecessorTaskId ||
-              !dependencyDraft.successorTaskId
-            }
-            type="submit"
-          >
-            Add dependency
-          </button>
-        </form>
-
-        <div className="space-y-2">
-          {workspace.dependencies.length === 0 ? (
-            <p className="text-sm text-slate-500">No dependencies yet.</p>
-          ) : (
-            workspace.dependencies.map((dependency) => (
-              <div
-                className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"
-                key={dependency.id}
-              >
-                <span>
-                  {taskName(dependency.predecessorTaskId, localSchedules)} →{" "}
-                  {taskName(dependency.successorTaskId, localSchedules)}{" "}
-                  · {dependency.dependencyType}
-                </span>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">
+                    Predecessor
+                  </span>
+                  <select
+                    className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    onChange={(event) =>
+                      setDependencyDraft((draft) => ({
+                        ...draft,
+                        predecessorTaskId: event.target.value,
+                      }))
+                    }
+                    value={dependencyDraft.predecessorTaskId}
+                  >
+                    {leafRows.map((row) => (
+                      <option
+                        key={row.schedule.taskId}
+                        value={row.schedule.taskId}
+                      >
+                        {row.wbs} {getTaskTitle(row.schedule)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">
+                    Successor
+                  </span>
+                  <select
+                    className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    onChange={(event) =>
+                      setDependencyDraft((draft) => ({
+                        ...draft,
+                        successorTaskId: event.target.value,
+                      }))
+                    }
+                    value={dependencyDraft.successorTaskId}
+                  >
+                    {leafRows.map((row) => (
+                      <option
+                        key={row.schedule.taskId}
+                        value={row.schedule.taskId}
+                      >
+                        {row.wbs} {getTaskTitle(row.schedule)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">
+                    Type
+                  </span>
+                  <select
+                    className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    onChange={(event) =>
+                      setDependencyDraft((draft) => ({
+                        ...draft,
+                        dependencyType: event.target.value as
+                          | "FS"
+                          | "SS"
+                          | "FF",
+                      }))
+                    }
+                    value={dependencyDraft.dependencyType}
+                  >
+                    <option value="FS">Finish to Start</option>
+                    <option value="SS">Start to Start</option>
+                    <option value="FF">Finish to Finish</option>
+                  </select>
+                </label>
                 <button
-                  className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700"
-                  disabled={isSaving}
-                  onClick={() => onDeleteDependency(dependency.id)}
-                  type="button"
+                  className="self-end rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={
+                    isSaving ||
+                    !dependencyDraft.predecessorTaskId ||
+                    !dependencyDraft.successorTaskId
+                  }
+                  type="submit"
                 >
-                  Delete
+                  Add dependency
                 </button>
+              </form>
+
+              <div className="space-y-2">
+                {workspace.dependencies.length === 0 ? (
+                  <p className="text-sm text-slate-500">No dependencies yet.</p>
+                ) : (
+                  workspace.dependencies.map((dependency) => (
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      key={dependency.id}
+                    >
+                      <span>
+                        {taskName(dependency.predecessorTaskId, localSchedules)}{" "}
+                        → {taskName(dependency.successorTaskId, localSchedules)}{" "}
+                        · {dependency.dependencyType}
+                      </span>
+                      <button
+                        className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700"
+                        disabled={isSaving}
+                        onClick={() => onDeleteDependency(dependency.id)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
-            ))
-          )}
+            </section>
+          </div>
+          <PlanningDetailPanel
+            allocations={selectedAllocations}
+            isCritical={Boolean(
+              selectedSchedule && isScheduleCritical(selectedSchedule),
+            )}
+            predecessorCount={selectedPredecessorCount}
+            schedule={selectedSchedule}
+            successorCount={selectedSuccessorCount}
+            wbs={selectedRow?.wbs}
+          />
         </div>
-      </section>
       </section>
 
       {summaryDeleteDialog ? (
@@ -2490,6 +2702,14 @@ function clampGridWidth(width: number) {
   return Math.min(maxGridWidth, Math.max(minGridWidth, Math.round(width)));
 }
 
+function isKeyboardInputTarget(target: EventTarget) {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.matches("button, input, select, textarea, [role='menuitem']"))
+  );
+}
+
 function buildGridTemplateColumns(
   columns: GridColumnDefinition[],
   contentWidth: number,
@@ -2497,7 +2717,7 @@ function buildGridTemplateColumns(
   const fixedWidth = columns
     .filter((column) => column.id !== "taskTitle")
     .reduce((width, column) => width + column.minWidth, 0);
-  const taskTitleWidth = Math.max(180, contentWidth - fixedWidth);
+  const taskTitleWidth = Math.max(300, contentWidth - fixedWidth);
   return columns
     .map((column) =>
       column.id === "taskTitle"
@@ -2559,7 +2779,9 @@ function readVisibleColumnPreference(): GridColumnId[] {
   if (!value) {
     return [];
   }
-  const optionalColumnIds = new Set(optionalGridColumns.map((column) => column.id));
+  const optionalColumnIds = new Set(
+    optionalGridColumns.map((column) => column.id),
+  );
   return value
     .split(",")
     .filter((columnId): columnId is GridColumnId =>
@@ -2594,12 +2816,115 @@ function ToolbarGroup({
   label: string;
 }) {
   return (
-    <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3 first:border-l-0 first:pl-0">
-      <span className="mr-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+    <div
+      aria-label={`${label} commands`}
+      className="flex items-center gap-1 border-l border-slate-200 pl-2 first:border-l-0 first:pl-0"
+      role="group"
+    >
+      <span className="mr-1 hidden text-[10px] font-bold uppercase tracking-wide text-slate-500 xl:inline">
         {label}
       </span>
       {children}
     </div>
+  );
+}
+
+function StructureMenuButton({
+  disabled = false,
+  label,
+  onClick,
+  shortcut,
+}: {
+  disabled?: boolean;
+  label: string;
+  onClick: () => void;
+  shortcut?: string;
+}) {
+  return (
+    <button
+      className="flex w-full items-center justify-between gap-3 rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={disabled}
+      onClick={onClick}
+      role="menuitem"
+      type="button"
+    >
+      <span>{label}</span>
+      {shortcut ? (
+        <span
+          aria-hidden="true"
+          className="text-[10px] font-medium text-slate-400"
+        >
+          {shortcut}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function CommandIcon({
+  name,
+}: {
+  name:
+    | "delete"
+    | "fit"
+    | "link"
+    | "refresh"
+    | "structure"
+    | "zoom-in"
+    | "zoom-out";
+}) {
+  const paths: Record<typeof name, React.ReactNode> = {
+    delete: (
+      <>
+        <path d="M5 7h14M9 7V4h6v3M8 10v8M12 10v8M16 10v8M6.5 7l1 14h9l1-14" />
+      </>
+    ),
+    fit: <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />,
+    link: (
+      <>
+        <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2" />
+        <path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2" />
+      </>
+    ),
+    refresh: (
+      <>
+        <path d="M20 7v5h-5" />
+        <path d="M4 17v-5h5M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5" />
+      </>
+    ),
+    structure: (
+      <>
+        <path d="M6 5h12M6 12h8M6 19h12" />
+        <path d="m15 9 3 3-3 3" />
+      </>
+    ),
+    "zoom-in": (
+      <>
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m15.5 15.5 5 5M10.5 7.5v6M7.5 10.5h6" />
+      </>
+    ),
+    "zoom-out": (
+      <>
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m15.5 15.5 5 5M7.5 10.5h6" />
+      </>
+    ),
+  };
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      {paths[name]}
+    </svg>
   );
 }
 
@@ -2660,7 +2985,8 @@ function TypeBadge({ schedule }: { schedule: ApiPlanningTaskSchedule }) {
 
   return (
     <span
-      className={`inline-flex max-w-full items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-bold uppercase ${
+      aria-label={`Task type: ${typeLabel}`}
+      className={`inline-flex size-6 shrink-0 items-center justify-center rounded border ${
         schedule.taskKind === "summary"
           ? "border-slate-300 bg-slate-100 text-slate-700"
           : schedule.taskKind === "milestone"
@@ -2674,7 +3000,26 @@ function TypeBadge({ schedule }: { schedule: ApiPlanningTaskSchedule }) {
       ) : (
         <TaskTypeIcon taskKind={schedule.taskKind} />
       )}
-      <span className="truncate">{typeLabel}</span>
+    </span>
+  );
+}
+
+function ScheduleStateIcon({ kind }: { kind: "calculated" | "critical" }) {
+  const isCritical = kind === "critical";
+  const label = isCritical
+    ? "Critical task: zero total float"
+    : "Calculated from child work";
+
+  return (
+    <span
+      aria-label={label}
+      className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+        isCritical ? "bg-red-100 text-red-700" : "bg-slate-200 text-slate-700"
+      }`}
+      role="img"
+      title={label}
+    >
+      {isCritical ? "!" : "∑"}
     </span>
   );
 }
@@ -2759,7 +3104,12 @@ function MilestoneCategoryIcon({
           strokeLinejoin="round"
           strokeWidth="1.8"
         />
-        <path d="M9 18l-3 3M15 18l3 3M12 8.5h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        <path
+          d="M9 18l-3 3M15 18l3 3M12 8.5h.01"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="2"
+        />
       </svg>
     );
   }
@@ -2778,7 +3128,12 @@ function MilestoneCategoryIcon({
           strokeLinejoin="round"
           strokeWidth="1.8"
         />
-        <path d="m4 8.5 8 4.5 8-4.5M12 13v7" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+        <path
+          d="m4 8.5 8 4.5 8-4.5M12 13v7"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+        />
       </svg>
     );
   }
@@ -2791,7 +3146,12 @@ function MilestoneCategoryIcon({
         fill="none"
         viewBox="0 0 24 24"
       >
-        <path d="M6 21V4" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        <path
+          d="M6 21V4"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="2"
+        />
         <path
           d="M6 5h10l-1.5 3L16 11H6"
           stroke="currentColor"
@@ -2810,8 +3170,19 @@ function MilestoneCategoryIcon({
         fill="none"
         viewBox="0 0 24 24"
       >
-        <path d="m5 13 4 4L19 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
-        <path d="M4 20h16" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+        <path
+          d="m5 13 4 4L19 7"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.2"
+        />
+        <path
+          d="M4 20h16"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1.8"
+        />
       </svg>
     );
   }
@@ -2852,7 +3223,9 @@ function KeyboardHelp() {
           <span className="block">Enter or Space: select row</span>
           <span className="block">Enter: save inline edit</span>
           <span className="block">Escape: cancel inline edit</span>
-          <span className="block">Tab: save and move to next editable cell</span>
+          <span className="block">
+            Tab: save and move to next editable cell
+          </span>
         </span>
       ) : null}
     </span>
@@ -3040,7 +3413,7 @@ function buildOwnerOptions(
         ? `${member.user.firstName} ${member.user.lastName}`.trim() ||
           member.user.email ||
           member.userId
-      : member.userId,
+        : member.userId,
     });
   });
   if (projectMembers.length > 0) {
@@ -3228,9 +3601,9 @@ function validateEdit(
   return null;
 }
 
-function buildEditPayload(editingCell: EditingCell): Parameters<
-  PlanningWorkspaceProps["onUpdateSchedule"]
->[1] {
+function buildEditPayload(
+  editingCell: EditingCell,
+): Parameters<PlanningWorkspaceProps["onUpdateSchedule"]>[1] {
   const value = editingCell.value.trim();
   if (editingCell.field === "taskTitle") {
     return { taskTitle: value };
@@ -3258,7 +3631,9 @@ function reorderSchedulesWithinParent(
   draggedTaskId: string,
   targetTaskId: string,
 ) {
-  const dragged = schedules.find((schedule) => schedule.taskId === draggedTaskId);
+  const dragged = schedules.find(
+    (schedule) => schedule.taskId === draggedTaskId,
+  );
   const target = schedules.find((schedule) => schedule.taskId === targetTaskId);
   if (!dragged || !target) {
     return null;
@@ -3331,7 +3706,11 @@ function reorderScheduleByDirection(
     return null;
   }
 
-  const reordered = reorderSchedulesWithinParent(schedules, taskId, targetTaskId);
+  const reordered = reorderSchedulesWithinParent(
+    schedules,
+    taskId,
+    targetTaskId,
+  );
   return reordered?.schedules ?? null;
 }
 
@@ -3345,7 +3724,9 @@ function moveScheduleToParent(
   | {
       error: string;
     } {
-  const taskMap = new Map(schedules.map((schedule) => [schedule.taskId, schedule]));
+  const taskMap = new Map(
+    schedules.map((schedule) => [schedule.taskId, schedule]),
+  );
   const movedSchedule = taskMap.get(taskId);
   if (!movedSchedule) {
     return { error: "The selected row could not be found." };
@@ -3362,7 +3743,8 @@ function moveScheduleToParent(
     }
     if (targetParent.taskKind === "milestone") {
       return {
-        error: "Milestones are scheduling events and cannot contain child items.",
+        error:
+          "Milestones are scheduling events and cannot contain child items.",
       };
     }
     if (targetParent.taskKind !== "summary") {
@@ -3375,9 +3757,10 @@ function moveScheduleToParent(
   }
 
   const currentParentTaskId = movedSchedule.parentTaskId ?? null;
-  const sourceSiblings = getOrderedSiblings(schedules, currentParentTaskId).filter(
-    (schedule) => schedule.taskId !== taskId,
-  );
+  const sourceSiblings = getOrderedSiblings(
+    schedules,
+    currentParentTaskId,
+  ).filter((schedule) => schedule.taskId !== taskId);
   const targetSiblings =
     currentParentTaskId === nextParentTaskId
       ? sourceSiblings
@@ -3418,29 +3801,37 @@ function moveScheduleToParent(
     });
   }
 
-  return schedules.map((schedule) => nextByTaskId.get(schedule.taskId) ?? schedule);
+  return schedules.map(
+    (schedule) => nextByTaskId.get(schedule.taskId) ?? schedule,
+  );
 }
 
 function promoteSummaryChildren(
   schedules: ApiPlanningTaskSchedule[],
   summaryTaskId: string,
 ) {
-  const summarySchedule = schedules.find((schedule) => schedule.taskId === summaryTaskId);
+  const summarySchedule = schedules.find(
+    (schedule) => schedule.taskId === summaryTaskId,
+  );
   if (!summarySchedule) {
     return schedules;
   }
 
   const destinationParentId = summarySchedule.parentTaskId ?? null;
-  const directChildren = getOrderedSiblings(schedules, summaryTaskId).map((schedule) => ({
-    ...schedule,
-    parentTaskId: destinationParentId,
-  }));
-  const destinationSiblings = getOrderedSiblings(schedules, destinationParentId).filter(
-    (schedule) => schedule.taskId !== summaryTaskId,
+  const directChildren = getOrderedSiblings(schedules, summaryTaskId).map(
+    (schedule) => ({
+      ...schedule,
+      parentTaskId: destinationParentId,
+    }),
   );
-  const summaryIndex = getOrderedSiblings(schedules, destinationParentId).findIndex(
-    (schedule) => schedule.taskId === summaryTaskId,
-  );
+  const destinationSiblings = getOrderedSiblings(
+    schedules,
+    destinationParentId,
+  ).filter((schedule) => schedule.taskId !== summaryTaskId);
+  const summaryIndex = getOrderedSiblings(
+    schedules,
+    destinationParentId,
+  ).findIndex((schedule) => schedule.taskId === summaryTaskId);
   const nextDestinationSiblings = [...destinationSiblings];
   nextDestinationSiblings.splice(summaryIndex, 0, ...directChildren);
   const nextByTaskId = new Map<string, ApiPlanningTaskSchedule>();
@@ -3515,8 +3906,10 @@ function buildHierarchyUpdatePayloads(
       return false;
     }
     return (
-      (previousSchedule.parentTaskId ?? null) !== (schedule.parentTaskId ?? null) ||
-      (previousSchedule.sequenceNumber ?? null) !== (schedule.sequenceNumber ?? null)
+      (previousSchedule.parentTaskId ?? null) !==
+        (schedule.parentTaskId ?? null) ||
+      (previousSchedule.sequenceNumber ?? null) !==
+        (schedule.sequenceNumber ?? null)
     );
   });
 }
@@ -3547,12 +3940,19 @@ function getSiblingContext(
   nextTaskId: string | null;
   previousTaskId: string | null;
 } | null {
-  const currentSchedule = schedules.find((schedule) => schedule.taskId === taskId);
+  const currentSchedule = schedules.find(
+    (schedule) => schedule.taskId === taskId,
+  );
   if (!currentSchedule) {
     return null;
   }
-  const siblings = getOrderedSiblings(schedules, currentSchedule.parentTaskId ?? null);
-  const currentIndex = siblings.findIndex((schedule) => schedule.taskId === taskId);
+  const siblings = getOrderedSiblings(
+    schedules,
+    currentSchedule.parentTaskId ?? null,
+  );
+  const currentIndex = siblings.findIndex(
+    (schedule) => schedule.taskId === taskId,
+  );
   if (currentIndex < 0) {
     return null;
   }
@@ -3567,7 +3967,10 @@ function collectDescendantTaskIds(
   schedules: ApiPlanningTaskSchedule[],
   taskId: string,
 ): string[] {
-  const childrenByParentId = new Map<string | null, ApiPlanningTaskSchedule[]>();
+  const childrenByParentId = new Map<
+    string | null,
+    ApiPlanningTaskSchedule[]
+  >();
   schedules.forEach((schedule) => {
     const parentTaskId = schedule.parentTaskId ?? null;
     childrenByParentId.set(parentTaskId, [
@@ -3643,7 +4046,10 @@ function getFallbackSelectionTaskId(
   if (nextRows.length === 0) {
     return null;
   }
-  const fallbackIndex = Math.max(0, Math.min(removedIndex, nextRows.length - 1));
+  const fallbackIndex = Math.max(
+    0,
+    Math.min(removedIndex, nextRows.length - 1),
+  );
   return nextRows[fallbackIndex]?.schedule.taskId ?? null;
 }
 
@@ -3727,10 +4133,7 @@ function buildTimeline(
       .sort()
       .at(-1) ?? currentDate;
   const min = addDays(parseDate(earliestDate), -3);
-  const max = addDays(
-    parseDate(latestDate),
-    21,
-  );
+  const max = addDays(parseDate(latestDate), 21);
   const daysPerUnit =
     zoom === "day" ? 1 : zoom === "week" ? 7 : zoom === "month" ? 30 : 90;
   const baseUnitWidth =
@@ -3751,12 +4154,12 @@ function buildTimeline(
         zoom === "quarter"
           ? `Q${Math.floor(date.getUTCMonth() / 3) + 1} ${date.getUTCFullYear()}`
           : zoom === "month"
-          ? date.toLocaleDateString("en", { month: "short", timeZone: "UTC" })
-          : date.toLocaleDateString("en", {
-              day: "2-digit",
-              month: "short",
-              timeZone: "UTC",
-            }),
+            ? date.toLocaleDateString("en", { month: "short", timeZone: "UTC" })
+            : date.toLocaleDateString("en", {
+                day: "2-digit",
+                month: "short",
+                timeZone: "UTC",
+              }),
       x: index * unitWidth,
     };
   });
@@ -3872,7 +4275,8 @@ function formatPriority(schedule: ApiPlanningTaskSchedule) {
 }
 
 function getMilestoneState(schedule: ApiPlanningTaskSchedule) {
-  return schedule.status === "done" || Number(schedule.percentComplete ?? 0) >= 100
+  return schedule.status === "done" ||
+    Number(schedule.percentComplete ?? 0) >= 100
     ? "Reached"
     : "Pending";
 }
@@ -3881,9 +4285,7 @@ function getMilestoneCategory(
   schedule: Pick<ApiPlanningTaskSchedule, "milestoneCategory" | "task">,
 ): ApiMilestoneCategory {
   return (
-    schedule.milestoneCategory ??
-    schedule.task?.milestoneCategory ??
-    "standard"
+    schedule.milestoneCategory ?? schedule.task?.milestoneCategory ?? "standard"
   );
 }
 

@@ -2,6 +2,8 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { AppShell } from "@/components/layout/app-shell";
+import { isNavigationItemActive } from "@/components/layout/app-navigation";
+import { getWorkspaceContext } from "@/components/layout/workspace-context";
 
 const authMocks = vi.hoisted(() => ({
   getAuthMe: vi.fn(),
@@ -35,7 +37,10 @@ vi.mock("@/features/auth", () => ({
   clearSession: vi.fn(),
   getAuthMe: authMocks.getAuthMe,
   getStoredPermissionKeys: vi.fn(() => []),
-  hasAnyPermission: (permissionKeys: string[], requiredPermissions: string[]) => {
+  hasAnyPermission: (
+    permissionKeys: string[],
+    requiredPermissions: string[],
+  ) => {
     const aliases: Record<string, string[]> = {
       "dashboard.view": ["dashboard:read:self"],
       "executive.view": ["executive:summary:read"],
@@ -53,7 +58,9 @@ vi.mock("@/features/auth", () => ({
         return true;
       }
 
-      return (aliases[permission] ?? []).some((alias) => permissionKeys.includes(alias));
+      return (aliases[permission] ?? []).some((alias) =>
+        permissionKeys.includes(alias),
+      );
     });
   },
   storeAuthMe: authMocks.storeAuthMe,
@@ -102,11 +109,10 @@ describe("AppShell", () => {
       expect(screen.getAllByText("Program Manager")).toHaveLength(2);
     });
 
-    expect(screen.getByRole("link", { name: /pm command center/i })).toHaveAttribute(
-      "href",
-      "/dashboard",
-    );
-    expect(screen.getByRole("link", { name: /executive/i })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: /pm platform enterprise workspace/i }),
+    ).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: /intelligence/i })).toHaveAttribute(
       "href",
       "/executive",
     );
@@ -126,16 +132,32 @@ describe("AppShell", () => {
       "href",
       "/issues",
     );
-    expect(screen.getByRole("link", { name: /notifications/i })).toHaveAttribute(
-      "href",
-      "/notifications",
-    );
+    expect(
+      screen.getByRole("link", { name: /notifications/i }),
+    ).toHaveAttribute("href", "/notifications");
     expect(screen.getByText("Administration")).toBeInTheDocument();
+    expect(screen.getByText("Workspaces")).toBeInTheDocument();
+    expect(screen.getByText("Work queues")).toBeInTheDocument();
+    expect(
+      screen.getByText("Planning").closest("[aria-disabled='true']"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Resources").closest("[aria-disabled='true']"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /enterprise calendars/i }),
     ).toHaveAttribute("href", "/calendar");
     expect(
       screen.getByRole("searchbox", { name: /global search/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /ai assistant/i }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("navigation", { name: /breadcrumb/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Current workspace: Home"),
     ).toBeInTheDocument();
     expect(screen.getAllByText("PM")).toHaveLength(2);
     expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
@@ -188,15 +210,53 @@ describe("AppShell", () => {
       "href",
       "/issues",
     );
-    expect(screen.getByRole("link", { name: /notifications/i })).toHaveAttribute(
-      "href",
-      "/notifications",
-    );
     expect(
-      screen.queryByRole("link", { name: /executive/i }),
+      screen.getByRole("link", { name: /notifications/i }),
+    ).toHaveAttribute("href", "/notifications");
+    expect(
+      screen.queryByRole("link", { name: /intelligence/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /portfolio/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("workspace route context", () => {
+  it("maps project planning routes to the Planning workspace", () => {
+    expect(getWorkspaceContext("/projects/project-1/planning")).toEqual({
+      breadcrumbs: [
+        { href: "/projects", label: "Projects" },
+        { href: "/projects/project-1", label: "Project" },
+        { label: "Planning" },
+      ],
+      description: "Project plan authoring and analysis",
+      title: "Planning",
+    });
+  });
+
+  it("maps project queues without losing their Projects workspace context", () => {
+    expect(getWorkspaceContext("/risks").title).toBe("Projects");
+    expect(getWorkspaceContext("/tasks").breadcrumbs.at(-1)?.label).toBe(
+      "My Tasks",
+    );
+  });
+
+  it("marks Planning instead of Projects active on a planning route", () => {
+    expect(
+      isNavigationItemActive("/projects/project-1/planning", {
+        label: "Planning",
+        permissions: ["project.read"],
+        section: "Workspaces",
+      }),
+    ).toBe(true);
+    expect(
+      isNavigationItemActive("/projects/project-1/planning", {
+        href: "/projects",
+        label: "Projects",
+        permissions: ["project.read"],
+        section: "Workspaces",
+      }),
+    ).toBe(false);
   });
 });
