@@ -5,7 +5,7 @@
 | 1.2.3   | Resource Assignment           | 1.2.2        | Medium               | Completed |
 | 1.2.4   | Skills Management              | 1.2.1        | Medium               | Completed |
 | 1.2.5   | Resource Availability & Capacity Management | 1.2.1 | High | Release Ready (Stage 11 complete) |
-| 1.2.6   | Calendar Assignment            | 1.2.5        | High                 | Planned |
+| 1.2.6   | Calendar Assignment            | 1.2.5        | High                 | Completed (Release Approved) |
 | 1.2.7   | Planning Integration           | 1.2.6        | High                 | Planned |
 | 1.2.8   | Dashboard Integration          | 1.2.7        | Medium               | Planned |
 
@@ -60,3 +60,33 @@ Deferred by design:
 - Capacity snapshots or caching
 - Calendar resolution and Scheduling integration
 - Planning persistence reclassification
+
+### Feature 1.2.6
+
+Status: Completed (Stage 13 approved; release approved)
+
+Delivered:
+
+- Nullable `Resource.calendar_id` reference to Enterprise Calendar
+- Assign, retrieve, replace, and clear operations through the Resource aggregate
+- Assigned Calendar and effective Calendar response metadata
+- Active-Calendar validation with archived and soft-deleted Calendar rejection
+- Shared Calendar references across multiple Resources
+- `resource.read` and `resource.update` authorization through existing RBAC
+- GET, PUT, and DELETE REST endpoints with Swagger/OpenAPI documentation
+- Additive migration `024_v1_2_6_resource_calendar_assignment.sql`
+- Unit, persistence, Docker, integration, and end-to-end verification through Stage 10
+
+Preserved boundaries:
+
+- Resource owns assignment metadata; Calendar owns Calendar definitions and lifecycle.
+- Assigned Calendar is the effective Calendar for Feature 1.2.6.
+- No inheritance, precedence engine, effective dating, Planning integration, Scheduling integration, or schedule mutation is introduced.
+
+Runtime API contract:
+
+- `GET /resources/{resourceId}/calendar` retrieves assigned and effective Calendar metadata.
+- `PUT /resources/{resourceId}/calendar` assigns or replaces an active Calendar using a UUID `calendarId`.
+- `DELETE /resources/{resourceId}/calendar` clears the assignment and returns HTTP 204.
+- All three operations require bearer authentication.
+- Responses expose nullable UUID fields for assigned, effective, and audit identifiers and nullable strings for Calendar name and status when unassigned.

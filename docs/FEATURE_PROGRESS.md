@@ -13,6 +13,7 @@ Update this file whenever a stage is completed. The tracker should reflect the l
 | Feature 1.2.3 – Resource Assignment | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Completed (Stage 13 approved) |
 | Feature 1.2.4 – Skills Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Completed |
 | Feature 1.2.5 – Resource Availability & Capacity Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Complete | Pending | Stage 11 Complete (Ready for Stage 12) |
+| Feature 1.2.6 – Calendar Assignment | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Complete | Pending | Completed (Stage 13 approved; pending feature commit) |
 
 ## Stage Guidance
 

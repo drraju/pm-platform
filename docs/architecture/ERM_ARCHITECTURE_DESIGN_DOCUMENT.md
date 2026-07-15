@@ -313,6 +313,18 @@ Assignment interaction:
 - Planning may consume ERM assignment context in future approved integration.
 - Existing Planning allocations are not automatically reclassified as ERM-owned.
 
+### Resource Calendar Assignment
+
+Feature 1.2.6 implements the ADR-008 direct-assignment model:
+
+- Resource owns the nullable `calendar_id` assignment metadata.
+- Calendar owns Enterprise Calendar definitions, working semantics, and lifecycle.
+- Assigned Calendar equals effective Calendar.
+- A Resource has no effective Calendar when `calendar_id` is `NULL`.
+- Multiple Resources may reference the same Enterprise Calendar.
+- ERM resolves Calendar references through the exported Calendar lookup application boundary, not direct Calendar repository access.
+- No Calendar inheritance, precedence engine, effective dating, assignment history, Planning integration, Scheduling integration, SchedulingContext change, or schedule mutation is introduced.
+
 ### Portfolio
 
 Capacity and reporting interaction:
@@ -661,10 +673,12 @@ API/UI compatibility:
 | 1.2.3 Resource Assignment | Completed | Resource Assignment persistence, validation, application service, REST API, database invariant enforcement, and tests. | Completed and approved under Engineering Governance v1.0 and its v1.1 Addendum. |
 | 1.2.4 Skills Management | Completed | Skill catalog, ResourceSkill associations, validation, application services, REST APIs, ERM permissions, and tests. | Completed and merged. |
 | 1.2.5 Resource Availability & Capacity Management | Release Ready | Resource Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, ERM permissions, Swagger documentation, backend tests, and migration `023`. | Infrastructure, unit, integration, end-to-end, and documentation verification are complete. Stage 12 remains pending. ADR-007 governs the canonical unit, persistence rules, and derived concepts. |
+| 1.2.6 Calendar Assignment | Completed — Release Approved | Nullable Resource Calendar reference, assignment application boundary, GET/PUT/DELETE API, validation, audit behavior, ERM permissions, Swagger documentation, backend tests, and migration `024`. | Stage 13 approved. Assigned Calendar equals effective Calendar. Inheritance, precedence, Planning integration, and Scheduling integration remain deferred. |
 
 Related feature design:
 
 - [Feature 1.2.2 Resource CRUD API ADD](FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md)
+- [ADR-008 Calendar Assignment](adr/ADR-008-calendar-assignment.md)
 
 ## 17. Open Questions
 

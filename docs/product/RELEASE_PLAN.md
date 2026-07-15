@@ -39,6 +39,7 @@ Should deliver:
 | 1.2.1 Enterprise Resource Management Foundation | Completed | Implementation, implementation review, testing, Docker verification, and Ubuntu verification completed. |
 | 1.2.2 Resource CRUD API | Completed | Implementation, implementation alignment, implementation review, testing, Docker verification, Docker runtime alignment, and Ubuntu verification completed. |
 | 1.2.3 Resource Assignment | Completed | Domain, persistence, validation, application service, REST API, testing, Docker verification, Ubuntu verification, and release readiness completed. |
+| 1.2.6 Calendar Assignment | Release Approved | Assignment metadata, REST API, migration 024, RBAC, Swagger, unit, infrastructure, integration, end-to-end, documentation, release-readiness, and final governance verification completed. |
 | 1.2.4 Skills Management | Completed | Persistence, validation, application services, REST API, RBAC wiring, backend tests, and release verification completed and merged. |
 | 1.2.5 Resource Availability & Capacity Management | Release Ready | Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, RBAC wiring, Swagger generation, backend tests, Docker/PostgreSQL infrastructure validation, integration testing, end-to-end workflows, and documentation verification are complete. Stage 12 remains pending. |
 
@@ -47,6 +48,8 @@ Feature 1.2.1 delivers the Resource aggregate, resource persistence, resource va
 Feature 1.2.2 delivers the public Resource CRUD API boundary, Resource controller, DTOs, mapper, API service orchestration, ERM Resource permissions, Swagger documentation, and backend test coverage. Release readiness for the implemented API surface has been verified in Docker and Ubuntu-style deployment checks.
 
 Feature 1.2.5 establishes ERM-owned Resource Capacity Policies and Availability Overrides using `capacity_minutes_per_working_day` as the canonical unit governed by ADR-007. Availability projections, utilization, remaining capacity, scheduling integration, and persisted snapshots remain outside this feature's implemented API surface.
+
+Feature 1.2.6 adds one nullable Enterprise Calendar reference to each Resource and exposes GET, PUT, and DELETE assignment operations. Assigned Calendar equals effective Calendar. Calendar definitions remain Calendar-owned, while ERM owns the assignment metadata. Calendar inheritance, precedence, Planning integration, Scheduling integration, and schedule mutation remain outside the v1.2 feature.
 
 Capacity Policies use status-based archival and remain available by identifier while archived records are excluded from normal lists. Availability Overrides use soft deletion and are excluded from detail and list responses after deletion. Feature permissions are seeded through the existing RBAC model under `resource.capacity.*` and `resource.availability.*`.
 

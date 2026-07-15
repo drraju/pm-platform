@@ -2,7 +2,7 @@
 
 ## Status
 
-Product and architecture baseline approved. Features 1.2.1 through 1.2.4 have been completed. Feature 1.2.5 Resource Availability & Capacity Management has completed implementation, infrastructure, unit, integration, end-to-end, and documentation verification and is ready for Stage 12.
+Product and architecture baseline approved. Features 1.2.1 through 1.2.4 have been completed. Feature 1.2.5 Resource Availability & Capacity Management is ready for Stage 12. Feature 1.2.6 Calendar Assignment is completed and release approved through Stage 13.
 
 ## Business Objective
 
@@ -253,11 +253,13 @@ ERM owns Capacity Policies and Availability Overrides under the Resource aggrega
 
 | Field | Detail |
 | --- | --- |
-| Purpose | Associate resources with calendar context. |
-| Scope | Resource calendar assignment and effective calendar source metadata. |
-| Out of Scope | Schedule date calculation. |
-| Dependencies | Enterprise Calendar, future Project Calendar. |
-| Acceptance Criteria | Resource can show assigned/effective calendar without changing schedules. |
+| Status | Completed; Stage 13 approved and release approved. |
+| Purpose | Associate a Resource with one Enterprise Calendar while preserving ERM and Calendar ownership boundaries. |
+| Scope | Nullable `Resource.calendar_id`; assign, retrieve, replace, and clear API operations; assigned/effective Calendar response metadata; audit updates; active-Calendar validation; shared Calendar references; RBAC; Swagger; migration 024. |
+| Deliverables | Resource-owned assignment metadata, Calendar lookup application boundary, GET/PUT/DELETE endpoints, response and command mapping, persistence constraints, automated tests, and runtime verification. |
+| Out of Scope | Calendar inheritance, precedence resolution, effective dating, assignment history, Planning integration, Scheduling integration, SchedulingContext changes, and schedule mutation. |
+| Dependencies | Feature 1.2.5, Resource aggregate, Enterprise Calendar, existing RBAC. |
+| Acceptance Criteria | A Resource can be unassigned or reference one active Enterprise Calendar; assigned Calendar equals effective Calendar; multiple Resources may share a Calendar; archived and soft-deleted Calendars cannot be newly assigned; clearing is idempotent; authorization and audit behavior are enforced; no Planning or Scheduling behavior changes. |
 
 ### 1.2.7 Project Assignment
 
