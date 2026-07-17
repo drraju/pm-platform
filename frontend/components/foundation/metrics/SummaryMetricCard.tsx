@@ -14,19 +14,43 @@ export interface SummaryMetricCardTrend {
   label: string;
 }
 
-export interface SummaryMetricCardProps {
+interface SummaryMetricCardCommonProps {
   ariaLabel?: string;
   className?: string;
   delta?: React.ReactNode;
   detail?: React.ReactNode;
-  href?: string;
   icon?: React.ReactNode;
-  onClick?: () => void;
   title: React.ReactNode;
   trend?: SummaryMetricCardTrend;
   value: React.ReactNode;
   variant?: SummaryMetricCardVariant;
 }
+
+export interface StaticSummaryMetricCardProps
+  extends SummaryMetricCardCommonProps {
+  disabled?: never;
+  href?: never;
+  onClick?: never;
+}
+
+export interface LinkSummaryMetricCardProps
+  extends SummaryMetricCardCommonProps {
+  disabled?: never;
+  href: string;
+  onClick?: never;
+}
+
+export interface ButtonSummaryMetricCardProps
+  extends SummaryMetricCardCommonProps {
+  disabled?: boolean;
+  href?: never;
+  onClick: React.MouseEventHandler<HTMLButtonElement>;
+}
+
+export type SummaryMetricCardProps =
+  | ButtonSummaryMetricCardProps
+  | LinkSummaryMetricCardProps
+  | StaticSummaryMetricCardProps;
 
 const variantStyles: Record<
   SummaryMetricCardVariant,
@@ -54,6 +78,7 @@ export function SummaryMetricCard({
   ariaLabel,
   className,
   delta,
+  disabled,
   detail,
   href,
   icon,
@@ -112,7 +137,6 @@ export function SummaryMetricCard({
         aria-label={ariaLabel}
         className={rootClassName}
         href={href}
-        onClick={onClick}
       >
         {content}
       </Link>
@@ -124,6 +148,7 @@ export function SummaryMetricCard({
       <button
         aria-label={ariaLabel}
         className={rootClassName}
+        disabled={disabled}
         onClick={onClick}
         type="button"
       >

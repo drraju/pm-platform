@@ -29,7 +29,7 @@ export function LoadingState({
         <span
           aria-hidden="true"
           className={classNames(
-            "block animate-pulse rounded bg-slate-200",
+            "block animate-pulse rounded bg-slate-200 motion-reduce:animate-none",
             compact ? "h-3" : "h-4",
             index === rowCount - 1 ? "w-2/3" : "w-full",
           )}

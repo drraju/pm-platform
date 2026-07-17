@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   ActionToolbar,
@@ -24,13 +24,19 @@ import {
 describe("UI Foundation v2", () => {
   it("composes responsive workspace layout primitives with their defaults", () => {
     render(
-      <WorkspaceLayout aria-label="Delivery workspace">
-        <WorkspaceContent as="section" aria-label="Workspace content">
-          <WorkspaceSection aria-label="Overview section" surface="card">
-            Overview content
-          </WorkspaceSection>
-        </WorkspaceContent>
-      </WorkspaceLayout>,
+      <>
+        <WorkspaceLayout aria-label="Delivery workspace">
+          <WorkspaceContent as="section" aria-label="Workspace content">
+            <WorkspaceSection aria-label="Overview section" surface="card">
+              Overview content
+            </WorkspaceSection>
+          </WorkspaceContent>
+        </WorkspaceLayout>
+        <WorkspaceLayout
+          aria-label="Legacy compact workspace"
+          density="compact"
+        />
+      </>,
     );
 
     expect(screen.getByLabelText("Delivery workspace")).toHaveClass("space-y-6");
@@ -39,6 +45,9 @@ describe("UI Foundation v2", () => {
     );
     expect(screen.getByRole("region", { name: "Overview section" })).toHaveClass(
       "shadow-ui-subtle",
+    );
+    expect(screen.getByLabelText("Legacy compact workspace")).toHaveClass(
+      "space-y-4",
     );
   });
 
@@ -87,12 +96,18 @@ describe("UI Foundation v2", () => {
           ariaLabel="Open assigned work"
           delta="2 since yesterday"
           href="/tasks"
-          onClick={onClick}
           title="Assigned work"
           trend={{ direction: "up", label: "Increasing" }}
           value={9}
           variant="warning"
         />
+        <SummaryMetricCard
+          ariaLabel="Refresh capacity"
+          onClick={onClick}
+          title="Available capacity"
+          value={4}
+        />
+        <SummaryMetricCard title="Budget" value="On track" />
         <HealthIndicator label="Delivery health" tone="success" value="Healthy" />
       </KPIGrid>,
     );
@@ -103,7 +118,73 @@ describe("UI Foundation v2", () => {
       "/tasks",
     );
     expect(screen.getByLabelText("Increasing")).toHaveTextContent("Increasing");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh capacity" }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Budget").closest("section")).toBeInTheDocument();
     expect(screen.getByText("Healthy")).toBeInTheDocument();
+  });
+
+  it("supports semantic roots and flexible heading levels", () => {
+    render(
+      <>
+        <SummaryCard as="article" headingLevel={3} title="Summary heading">
+          Summary content
+        </SummaryCard>
+        <EmptyState as="div" headingLevel={4} title="Empty heading" />
+        <InfoCard as="section" headingLevel={5} title="Information heading">
+          Information content
+        </InfoCard>
+        <InsightCard
+          as="article"
+          headingLevel={3}
+          state="available"
+          summary="Insight content"
+          title="Insight heading"
+        />
+      </>,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Summary heading" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 4, name: "Empty heading" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 5, name: "Information heading" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Insight heading" }),
+    ).toBeInTheDocument();
+  });
+
+  it("forwards refs from layout and card primitives", () => {
+    const contentRef = React.createRef<HTMLElement>();
+    const infoRef = React.createRef<HTMLElement>();
+    const layoutRef = React.createRef<HTMLDivElement>();
+    const sectionRef = React.createRef<HTMLElement>();
+    const summaryRef = React.createRef<HTMLElement>();
+
+    render(
+      <WorkspaceLayout ref={layoutRef} spacing="none">
+        <WorkspaceContent ref={contentRef} spacing="none">
+          <WorkspaceSection ref={sectionRef}>Section</WorkspaceSection>
+          <SummaryCard ref={summaryRef} title="Summary">
+            Content
+          </SummaryCard>
+          <InfoCard ref={infoRef} title="Information">
+            Content
+          </InfoCard>
+        </WorkspaceContent>
+      </WorkspaceLayout>,
+    );
+
+    expect(layoutRef.current).toBeInstanceOf(HTMLDivElement);
+    expect(layoutRef.current).not.toHaveClass("space-y-6");
+    expect(contentRef.current).toBeInstanceOf(HTMLDivElement);
+    expect(sectionRef.current).toBeInstanceOf(HTMLElement);
+    expect(summaryRef.current).toBeInstanceOf(HTMLElement);
+    expect(infoRef.current).toBeInstanceOf(HTMLElement);
   });
 
   it("provides status text and an accessible description without relying on colour", () => {
@@ -172,7 +253,7 @@ describe("UI Foundation v2", () => {
   });
 
   it("exposes loading, empty, and error feedback to assistive technology", () => {
-    render(
+    const { container } = render(
       <>
         <LoadingState label="Loading workspace data" rows={2} />
         <EmptyState
@@ -188,6 +269,9 @@ describe("UI Foundation v2", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Loading workspace data");
     expect(screen.getByRole("heading", { name: "No items" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Unable to load workspace");
+    expect(container.querySelector(".animate-pulse")).toHaveClass(
+      "motion-reduce:animate-none",
+    );
   });
 
   it("renders compact insight lifecycle states and native expandable details", () => {
@@ -209,5 +293,17 @@ describe("UI Foundation v2", () => {
 
     expect(screen.getByText("A concise recommendation").closest("summary")).toBeInTheDocument();
     expect(screen.getByText("Supporting evidence")).toBeInTheDocument();
+
+    rerender(
+      <InsightCard
+        errorMessage="Insight service failed"
+        state="error"
+        title="Insights"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Insight service failed",
+    );
   });
 });

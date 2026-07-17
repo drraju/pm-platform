@@ -20,14 +20,20 @@ const surfaceStyles = {
   subtle: "rounded-ui border border-slate-200/80 bg-slate-50",
 } as const;
 
-export function WorkspaceSection({
-  as = "section",
-  children,
-  className,
-  padding = "default",
-  surface = "plain",
-  ...props
-}: WorkspaceSectionProps) {
+export const WorkspaceSection = React.forwardRef<
+  HTMLElement,
+  WorkspaceSectionProps
+>(function WorkspaceSection(
+  {
+    as = "section",
+    children,
+    className,
+    padding = "default",
+    surface = "plain",
+    ...props
+  },
+  ref,
+) {
   return React.createElement(
     as,
     {
@@ -38,7 +44,8 @@ export function WorkspaceSection({
         paddingStyles[padding],
         className,
       ),
+      ref,
     },
     children,
   );
-}
+});
