@@ -3,6 +3,7 @@ import React from "react";
 import { SectionCard } from "@/components/ui/card";
 import { ContentGrid } from "@/components/ui/content-grid";
 import { SectionHeader } from "@/components/ui/section-header";
+import { ProjectHealthBadge } from "@/components/projects/project-health-badge";
 import type {
   ApiProjectDetails,
   ApiProjectMember,
@@ -62,42 +63,42 @@ export function ProjectWorkspaceOverview({
   return (
     <div aria-label="Project overview" className="space-y-6">
       <ContentGrid
-        aria-label="Project health, timeline and insights"
+        aria-label="Project health and timeline"
         columns={2}
       >
-        <DashboardPanel
-          description="The minimum information needed to understand current Project condition."
-          title="Project Health"
-        >
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-2 2xl:grid-cols-5">
-            <OverviewItem
-              label="Overall Health"
-              value={formatLabel(project.health?.status ?? project.status)}
-            />
-            <OverviewItem
-              label="Schedule"
-              value={formatSchedule(project.targetEndDate)}
-            />
-            <OverviewItem
-              label="Progress"
-              value={formatLabel(project.status)}
-            />
-            <OverviewItem
-              label="Project Manager"
-              value={formatUser(project.owner)}
-            />
-            <OverviewItem label="Completion" value={`${progress}%`} />
-          </dl>
-        </DashboardPanel>
-
-        <DashboardPanel
-          description="Recommendations will appear here when explainable Project insights are available."
-          title="AI Insights"
-        >
-          <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
-            No recommendations available.
-          </p>
-        </DashboardPanel>
+        <div className="xl:col-span-2">
+          <DashboardPanel
+            description="The minimum information needed to understand current Project condition."
+            title="Project Health"
+          >
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {project.health ? (
+                <HealthOverviewItem
+                  reasons={project.health.reasons}
+                  status={project.health.status}
+                />
+              ) : (
+                <OverviewItem
+                  label="Overall Health"
+                  value={formatLabel(project.status)}
+                />
+              )}
+              <OverviewItem
+                label="Schedule"
+                value={formatSchedule(project.targetEndDate)}
+              />
+              <OverviewItem
+                label="Progress"
+                value={formatLabel(project.status)}
+              />
+              <OverviewItem
+                label="Project Manager"
+                value={formatUser(project.owner)}
+              />
+              <OverviewItem label="Completion" value={`${progress}%`} />
+            </dl>
+          </DashboardPanel>
+        </div>
 
         <div className="xl:col-span-2">
           <TimelineSnapshot
@@ -107,104 +108,11 @@ export function ProjectWorkspaceOverview({
         </div>
       </ContentGrid>
 
-      <ContentGrid
-        aria-label="Upcoming milestones and recent activity"
-        columns={2}
-      >
+      <ContentGrid aria-label="Operational attention" columns={2}>
         <DashboardPanel
           action={
             <Link
-              className="text-sm font-semibold text-brand hover:text-brand-dark"
-              href={`${basePath}/planning`}
-            >
-              Open Planning
-            </Link>
-          }
-          description="The next five incomplete checkpoints requiring coordination."
-          title="Upcoming Milestones"
-        >
-          {upcomingMilestones.length > 0 ? (
-            <ol className="divide-y divide-slate-100">
-              {upcomingMilestones.slice(0, 5).map((milestone) => (
-                <li
-                  className="grid gap-2 py-3 first:pt-0 sm:grid-cols-[minmax(0,1.4fr)_auto] sm:items-start"
-                  key={milestone.id}
-                >
-                  <div className="min-w-0">
-                    <p className="font-semibold text-slate-950">
-                      {milestone.title}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatTaskOwner(milestone)}
-                    </p>
-                  </div>
-                  <div className="sm:text-right">
-                    <p className="text-sm font-semibold text-slate-700">
-                      {formatTaskDate(milestone)}
-                    </p>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      {getMilestoneStatus(milestone)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="py-5 text-sm text-slate-500">
-              No upcoming milestones.
-            </p>
-          )}
-        </DashboardPanel>
-
-        <DashboardPanel
-          action={
-            <Link
-              className="text-sm font-semibold text-brand hover:text-brand-dark"
-              href={`${basePath}/reports`}
-            >
-              View All Activity
-            </Link>
-          }
-          description="The latest meaningful Project events."
-          title="Recent Activity"
-        >
-          {recentActivity.length > 0 ? (
-            <ol className="divide-y divide-slate-100">
-              {recentActivity.slice(0, 5).map((activity) => (
-                <li
-                  className="py-3 first:pt-0"
-                  key={`${activity.label}-${activity.title}`}
-                >
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">
-                        {activity.label}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {activity.title}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-xs font-medium text-slate-500">
-                      {formatDate(activity.date)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="py-5 text-sm text-slate-500">No recent activity.</p>
-          )}
-        </DashboardPanel>
-      </ContentGrid>
-
-      <ContentGrid
-        aria-label="Operational attention"
-        columns={2}
-      >
-        <DashboardPanel
-          action={
-            <Link
-              className="text-sm font-semibold text-brand hover:text-brand-dark"
+              className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
               href={`${basePath}/raid`}
             >
               Open RAID
@@ -259,7 +167,7 @@ export function ProjectWorkspaceOverview({
         <DashboardPanel
           action={
             <Link
-              className="text-sm font-semibold text-brand hover:text-brand-dark"
+              className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
               href={`${basePath}/team`}
             >
               Open Team
@@ -283,17 +191,115 @@ export function ProjectWorkspaceOverview({
         </DashboardPanel>
       </ContentGrid>
 
-      <DashboardPanel
-        description="Continue in the workspace that owns the next action."
-        title="Quick Actions"
+      <ContentGrid
+        aria-label="Upcoming milestones and recent activity"
+        columns={2}
       >
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <QuickAction href={`${basePath}/planning`} label="Open Planning" />
-          <QuickAction href={`${basePath}/tasks`} label="Open Tasks" />
-          <QuickAction href={`${basePath}/raid`} label="Open RAID" />
-          <QuickAction href={`${basePath}/reports`} label="Open Reports" />
-        </div>
-      </DashboardPanel>
+        <DashboardPanel
+          action={
+            <Link
+              className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
+              href={`${basePath}/planning`}
+            >
+              Open Planning
+            </Link>
+          }
+          description="The next five incomplete checkpoints requiring coordination."
+          title="Upcoming Milestones"
+        >
+          {upcomingMilestones.length > 0 ? (
+            <ol className="divide-y divide-slate-100">
+              {upcomingMilestones.slice(0, 5).map((milestone) => (
+                <li
+                  className="grid gap-2 py-3 first:pt-0 sm:grid-cols-[minmax(0,1.4fr)_auto] sm:items-start"
+                  key={milestone.id}
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-950">
+                      {milestone.title}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatTaskOwner(milestone)}
+                    </p>
+                  </div>
+                  <div className="sm:text-right">
+                    <p className="text-sm font-semibold text-slate-700">
+                      {formatTaskDate(milestone)}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      {getMilestoneStatus(milestone)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="py-5 text-sm text-slate-500">
+              No upcoming milestones.
+            </p>
+          )}
+        </DashboardPanel>
+
+        <DashboardPanel
+          action={
+            <Link
+              className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
+              href={`${basePath}/reports`}
+            >
+              View All Activity
+            </Link>
+          }
+          description="The latest meaningful Project events."
+          title="Recent Activity"
+        >
+          {recentActivity.length > 0 ? (
+            <ol className="divide-y divide-slate-100">
+              {recentActivity.slice(0, 5).map((activity) => (
+                <li
+                  className="py-3 first:pt-0"
+                  key={`${activity.label}-${activity.title}`}
+                >
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">
+                        {activity.label}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {activity.title}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-xs font-medium text-slate-500">
+                      {formatDate(activity.date)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="py-5 text-sm text-slate-500">No recent activity.</p>
+          )}
+        </DashboardPanel>
+      </ContentGrid>
+
+    </div>
+  );
+}
+
+function HealthOverviewItem({
+  reasons,
+  status,
+}: {
+  reasons: string[];
+  status: "AMBER" | "GREEN" | "RED";
+}) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Overall Health
+      </dt>
+      <dd className="mt-2">
+        <ProjectHealthBadge reasons={reasons} status={status} />
+      </dd>
     </div>
   );
 }
@@ -352,7 +358,7 @@ function SummaryLink({
 }) {
   return (
     <Link
-      aria-label={label}
+      aria-label={`${label}: ${value}`}
       className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-3 text-sm transition hover:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
       href={href}
     >
@@ -374,17 +380,6 @@ function SummaryMetric({
       <dt className="text-xs font-medium text-slate-500">{label}</dt>
       <dd className="mt-2 text-xl font-semibold text-slate-950">{value}</dd>
     </div>
-  );
-}
-
-function QuickAction({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      className="rounded-md bg-brand px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-brand/90 focus:outline-none focus:ring-2 focus:ring-brand/30"
-      href={href}
-    >
-      {label}
-    </Link>
   );
 }
 

@@ -55,6 +55,10 @@ describe("Project workspace components", () => {
               type: "dependency",
             },
           ],
+          health: {
+            reasons: ["Supplier onboarding requires attention"],
+            status: "AMBER",
+          },
           issues: [
             {
               id: "issue-1",
@@ -144,6 +148,10 @@ describe("Project workspace components", () => {
 
     expect(screen.getByText("Project Health")).toBeInTheDocument();
     expect(screen.getByText("Overall Health")).toBeInTheDocument();
+    expect(screen.getByText("Amber")).toHaveAttribute(
+      "title",
+      "Supplier onboarding requires attention",
+    );
     expect(screen.getByText("Schedule")).toBeInTheDocument();
     expect(screen.getByText("Progress")).toBeInTheDocument();
     expect(screen.getByText("Project Manager")).toBeInTheDocument();
@@ -154,15 +162,12 @@ describe("Project workspace components", () => {
         screen.getByRole("list", { name: "Project timeline checkpoints" }),
       ).getAllByRole("listitem"),
     ).toHaveLength(5);
-    expect(screen.getByText("AI Insights")).toBeInTheDocument();
-    expect(
-      screen.getByText("No recommendations available."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("AI Insights")).not.toBeInTheDocument();
     expect(screen.getByText("Recent Activity")).toBeInTheDocument();
     expect(screen.getByText("Upcoming Milestones")).toBeInTheDocument();
     expect(screen.getByText("Open Risks & Issues")).toBeInTheDocument();
     expect(screen.getByText("Resource Summary")).toBeInTheDocument();
-    expect(screen.getByText("Quick Actions")).toBeInTheDocument();
+    expect(screen.queryByText("Quick Actions")).not.toBeInTheDocument();
     expect(screen.getByText("Beta Release")).toBeInTheDocument();
     expect(screen.getAllByText("Supplier delay")).toHaveLength(2);
     expect(screen.queryByText("Executive Overview")).not.toBeInTheDocument();
@@ -347,7 +352,7 @@ describe("Project workspace components", () => {
     expect(screen.queryByText("Phases")).not.toBeInTheDocument();
   });
 
-  it("links operational summaries and quick actions to owning modules", () => {
+  it("links operational summaries to owning modules without duplicate actions", () => {
     render(
       <ProjectWorkspaceOverview
         project={{
@@ -363,29 +368,23 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByRole("link", { name: "Open Risks" })).toHaveAttribute(
-      "href",
-      "/projects/project-1/raid",
-    );
+    expect(
+      screen.getByRole("link", { name: "Open Risks: 0" }),
+    ).toHaveAttribute("href", "/projects/project-1/raid");
     expect(screen.getByRole("link", { name: "Open Team" })).toHaveAttribute(
       "href",
       "/projects/project-1/team",
     );
-    expect(screen.getAllByRole("link", { name: "Open Planning" })).toHaveLength(
-      2,
-    );
-    expect(
-      screen.getAllByRole("link", { name: "Open Planning" })[1],
-    ).toHaveAttribute("href", "/projects/project-1/planning");
-    expect(screen.getByRole("link", { name: "Open Tasks" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open Planning" })).toHaveAttribute(
       "href",
-      "/projects/project-1/tasks",
+      "/projects/project-1/planning",
     );
-    expect(screen.getAllByRole("link", { name: "Open RAID" })).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "Open Reports" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open RAID" })).toHaveAttribute(
       "href",
-      "/projects/project-1/reports",
+      "/projects/project-1/raid",
     );
+    expect(screen.queryByRole("link", { name: "Open Tasks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open Reports" })).not.toBeInTheDocument();
   });
 
   it("renders responsive two-column operational regions", () => {
@@ -403,7 +402,7 @@ describe("Project workspace components", () => {
 
     expect(screen.getByLabelText("Project overview")).toHaveClass("space-y-6");
     expect(
-      screen.getByLabelText("Project health, timeline and insights"),
+      screen.getByLabelText("Project health and timeline"),
     ).toHaveClass("grid", "xl:grid-cols-2");
     expect(
       screen.getByLabelText("Upcoming milestones and recent activity"),

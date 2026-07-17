@@ -268,6 +268,28 @@ describe("Projects List navigation", () => {
     planningMocks.getPlanningWorkspace.mockClear();
   });
 
+  it("announces project overview loading and error states", async () => {
+    window.history.pushState({}, "", "/projects/project-123");
+    projectMocks.getProject.mockReturnValueOnce(new Promise(() => {}));
+
+    render(<ProjectWorkspacePage />);
+
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading project workspace",
+    );
+
+    cleanup();
+    projectMocks.getProject.mockRejectedValueOnce(
+      new Error("Unable to load project overview"),
+    );
+    render(<ProjectWorkspacePage />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to load project overview",
+    );
+  });
+
   it("navigates to Project Workspace when a project row is clicked", async () => {
     window.history.pushState({}, "", "/projects");
 
@@ -311,14 +333,12 @@ describe("Projects List navigation", () => {
     expect(
       screen.getAllByText("Supplier onboarding delay").length,
     ).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "Open Risks" })).toHaveAttribute(
-      "href",
-      "/projects/project-123/raid",
-    );
-    expect(screen.getByRole("link", { name: "Open Issues" })).toHaveAttribute(
-      "href",
-      "/projects/project-123/raid",
-    );
+    expect(
+      screen.getByRole("link", { name: "Open Risks: 1" }),
+    ).toHaveAttribute("href", "/projects/project-123/raid");
+    expect(
+      screen.getByRole("link", { name: "Open Issues: 1" }),
+    ).toHaveAttribute("href", "/projects/project-123/raid");
     expect(screen.queryByText("RAID Summary")).not.toBeInTheDocument();
     expect(screen.queryByText("Team Summary")).not.toBeInTheDocument();
   });

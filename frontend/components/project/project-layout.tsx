@@ -27,7 +27,8 @@ export function ProjectLayout({
 
 export function ProjectLayoutLoadingState() {
   return (
-    <div className="space-y-6">
+    <div aria-busy="true" className="space-y-6" role="status">
+      <span className="sr-only">Loading project workspace</span>
       <LoadingSkeleton className="h-48 rounded-md border border-slate-200 bg-white shadow-soft" />
       <LoadingSkeleton className="h-80 rounded-md border border-slate-200 bg-white shadow-soft" />
     </div>

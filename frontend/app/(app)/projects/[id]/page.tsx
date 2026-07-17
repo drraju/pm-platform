@@ -8,6 +8,7 @@ import {
   ProjectLayoutLoadingState,
 } from "@/components/project";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
+import { ErrorState } from "@/components/ui/states";
 import { getProject, type ApiProjectDetails } from "@/features/projects";
 
 export default function ProjectWorkspacePage() {
@@ -50,9 +51,7 @@ export default function ProjectWorkspacePage() {
   return (
     <ProjectLayout activeTab="overview" project={workspaceProject}>
       {error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </section>
+        <ErrorState variant="page">{error}</ErrorState>
       ) : null}
       {project ? <ProjectWorkspaceOverview project={project} /> : null}
     </ProjectLayout>
