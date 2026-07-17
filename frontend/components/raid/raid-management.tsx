@@ -374,7 +374,7 @@ export function RaidManagement({
           widthClassName="max-w-md"
         >
             <p className="mt-2 text-sm text-slate-600">
-              This will remove "{deletingItem.title}" from the RAID register.
+             This will remove the RAID item <strong>{deletingItem.title}</strong> from the RAID register.
             </p>
         </AppModal>
       ) : null}
