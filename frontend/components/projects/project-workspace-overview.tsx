@@ -1,9 +1,15 @@
 import Link from "next/link";
 import React from "react";
-import { SectionCard } from "@/components/ui/card";
+import {
+  EmptyState,
+  KPIGrid,
+  StatusBadge,
+  SummaryCard,
+  SummaryMetricCard,
+  WorkspaceContent,
+  type StatusBadgeTone,
+} from "@/components/foundation";
 import { ContentGrid } from "@/components/ui/content-grid";
-import { SectionHeader } from "@/components/ui/section-header";
-import { ProjectHealthBadge } from "@/components/projects/project-health-badge";
 import type {
   ApiProjectDetails,
   ApiProjectMember,
@@ -61,13 +67,13 @@ export function ProjectWorkspaceOverview({
   });
 
   return (
-    <div aria-label="Project overview" className="space-y-6">
+    <WorkspaceContent aria-label="Project overview">
       <ContentGrid
         aria-label="Project health and timeline"
         columns={2}
       >
         <div className="xl:col-span-2">
-          <DashboardPanel
+          <SummaryCard
             description="The minimum information needed to understand current Project condition."
             title="Project Health"
           >
@@ -97,7 +103,7 @@ export function ProjectWorkspaceOverview({
               />
               <OverviewItem label="Completion" value={`${progress}%`} />
             </dl>
-          </DashboardPanel>
+          </SummaryCard>
         </div>
 
         <div className="xl:col-span-2">
@@ -109,7 +115,7 @@ export function ProjectWorkspaceOverview({
       </ContentGrid>
 
       <ContentGrid aria-label="Operational attention" columns={2}>
-        <DashboardPanel
+        <SummaryCard
           action={
             <Link
               className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
@@ -121,18 +127,22 @@ export function ProjectWorkspaceOverview({
           description="Open exposure that may require a response or decision."
           title="Open Risks & Issues"
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SummaryLink
+          <KPIGrid as="div" columns={2} gap="compact">
+            <SummaryMetricCard
+              ariaLabel={`Open Risks: ${openRisks.length}`}
               href={`${basePath}/raid`}
-              label="Open Risks"
+              title="Open Risks"
               value={openRisks.length}
+              variant="critical"
             />
-            <SummaryLink
+            <SummaryMetricCard
+              ariaLabel={`Open Issues: ${openIssues.length}`}
               href={`${basePath}/raid`}
-              label="Open Issues"
+              title="Open Issues"
               value={openIssues.length}
+              variant="warning"
             />
-          </div>
+          </KPIGrid>
 
           {openRaidItems.length > 0 ? (
             <ol className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
@@ -158,13 +168,16 @@ export function ProjectWorkspaceOverview({
               ))}
             </ol>
           ) : (
-            <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
-              No open risks or issues.
-            </p>
+            <EmptyState
+              className="mt-4"
+              compact
+              description="No open risks or issues."
+              title="No operational attention needed"
+            />
           )}
-        </DashboardPanel>
+        </SummaryCard>
 
-        <DashboardPanel
+        <SummaryCard
           action={
             <Link
               className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
@@ -176,26 +189,26 @@ export function ProjectWorkspaceOverview({
           description="A concise view of the people attached to current Project work."
           title="Resource Summary"
         >
-          <dl className="grid gap-3 sm:grid-cols-3">
-            <SummaryMetric label="Project Members" value={members.length} />
-            <SummaryMetric label="Active Work" value={activeWork.length} />
-            <SummaryMetric
-              label="Assigned Active Work"
+          <KPIGrid as="div" columns={3} gap="compact">
+            <SummaryMetricCard title="Project Members" value={members.length} />
+            <SummaryMetricCard title="Active Work" value={activeWork.length} />
+            <SummaryMetricCard
+              title="Assigned Active Work"
               value={`${assignedActiveWork}/${activeWork.length}`}
             />
-          </dl>
+          </KPIGrid>
           <p className="mt-4 text-xs leading-5 text-slate-500">
             Capacity and availability detail remain in the Resource Workspace
             when authoritative data is available.
           </p>
-        </DashboardPanel>
+        </SummaryCard>
       </ContentGrid>
 
       <ContentGrid
         aria-label="Upcoming milestones and recent activity"
         columns={2}
       >
-        <DashboardPanel
+        <SummaryCard
           action={
             <Link
               className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
@@ -234,13 +247,15 @@ export function ProjectWorkspaceOverview({
               ))}
             </ol>
           ) : (
-            <p className="py-5 text-sm text-slate-500">
-              No upcoming milestones.
-            </p>
+            <EmptyState
+              compact
+              description="No upcoming milestones."
+              title="No milestones scheduled"
+            />
           )}
-        </DashboardPanel>
+        </SummaryCard>
 
-        <DashboardPanel
+        <SummaryCard
           action={
             <Link
               className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
@@ -276,12 +291,16 @@ export function ProjectWorkspaceOverview({
               ))}
             </ol>
           ) : (
-            <p className="py-5 text-sm text-slate-500">No recent activity.</p>
+            <EmptyState
+              compact
+              description="No recent activity."
+              title="No activity recorded"
+            />
           )}
-        </DashboardPanel>
+        </SummaryCard>
       </ContentGrid>
 
-    </div>
+    </WorkspaceContent>
   );
 }
 
@@ -298,7 +317,13 @@ function HealthOverviewItem({
         Overall Health
       </dt>
       <dd className="mt-2">
-        <ProjectHealthBadge reasons={reasons} status={status} />
+        <StatusBadge
+          description={reasons.join(". ")}
+          dot
+          tone={getHealthTone(status)}
+        >
+          {formatHealthStatus(status)}
+        </StatusBadge>
       </dd>
     </div>
   );
@@ -323,64 +348,18 @@ function OverviewItem({
   );
 }
 
-function DashboardPanel({
-  action,
-  children,
-  description,
-  title,
-}: {
-  action?: React.ReactNode;
-  children: React.ReactNode;
-  description?: string;
-  title: string;
-}) {
-  return (
-    <SectionCard>
-      <SectionHeader
-        action={action}
-        description={description}
-        descriptionSize="xs"
-        title={title}
-      />
-      <div className="mt-4">{children}</div>
-    </SectionCard>
-  );
+function getHealthTone(status: "AMBER" | "GREEN" | "RED"): StatusBadgeTone {
+  const tones: Record<typeof status, StatusBadgeTone> = {
+    AMBER: "warning",
+    GREEN: "success",
+    RED: "critical",
+  };
+
+  return tones[status];
 }
 
-function SummaryLink({
-  href,
-  label,
-  value,
-}: {
-  href: string;
-  label: string;
-  value: number;
-}) {
-  return (
-    <Link
-      aria-label={`${label}: ${value}`}
-      className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-3 text-sm transition hover:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
-      href={href}
-    >
-      <span className="font-medium text-slate-600">{label}</span>
-      <span className="text-xl font-semibold text-slate-950">{value}</span>
-    </Link>
-  );
-}
-
-function SummaryMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | string;
-}) {
-  return (
-    <div className="rounded-md border border-slate-200 px-3 py-3">
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
-      <dd className="mt-2 text-xl font-semibold text-slate-950">{value}</dd>
-    </div>
-  );
+function formatHealthStatus(status: "AMBER" | "GREEN" | "RED") {
+  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 function buildTimelineItems({

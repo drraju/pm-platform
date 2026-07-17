@@ -4,11 +4,13 @@ import React from "react";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
-  ProjectLayout,
-  ProjectLayoutLoadingState,
-} from "@/components/project";
+  ErrorState,
+  LoadingState,
+  WorkspaceHeader,
+  WorkspaceLayout,
+} from "@/components/foundation";
+import { ProjectLayout } from "@/components/project";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
-import { ErrorState } from "@/components/ui/states";
 import { getProject, type ApiProjectDetails } from "@/features/projects";
 
 export default function ProjectWorkspacePage() {
@@ -39,7 +41,11 @@ export default function ProjectWorkspacePage() {
   }, [projectId]);
 
   if (isLoading) {
-    return <ProjectLayoutLoadingState />;
+    return (
+      <WorkspaceLayout>
+        <LoadingState label="Loading project workspace" rows={5} />
+      </WorkspaceLayout>
+    );
   }
 
   const workspaceProject = project ?? {
@@ -49,10 +55,13 @@ export default function ProjectWorkspacePage() {
   };
 
   return (
-    <ProjectLayout activeTab="overview" project={workspaceProject}>
-      {error ? (
-        <ErrorState variant="page">{error}</ErrorState>
-      ) : null}
+    <ProjectLayout
+      activeTab="overview"
+      layout={WorkspaceLayout}
+      project={workspaceProject}
+      renderHeader={(content) => <WorkspaceHeader {...content} />}
+    >
+      {error ? <ErrorState message={error} /> : null}
       {project ? <ProjectWorkspaceOverview project={project} /> : null}
     </ProjectLayout>
   );

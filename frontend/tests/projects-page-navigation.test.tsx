@@ -327,6 +327,14 @@ describe("Projects List navigation", () => {
       screen.getByRole("heading", { name: "Project Health" }),
     ).toBeInTheDocument();
     expect(
+      screen
+        .getByRole("heading", {
+          level: 1,
+          name: "Selected Project Workspace",
+        })
+        .closest("header"),
+    ).toHaveClass("shadow-ui-subtle");
+    expect(
       screen.getByRole("heading", { name: "Timeline Snapshot" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Executive Overview")).not.toBeInTheDocument();
@@ -390,6 +398,14 @@ describe("Projects List navigation", () => {
     expect(
       await screen.findByText("Selected Project Workspace planning workspace"),
     ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("heading", {
+          level: 1,
+          name: "Selected Project Workspace",
+        })
+        .closest("header"),
+    ).toHaveClass("shadow-soft");
   });
 
   it("loads the project Tasks route", async () => {

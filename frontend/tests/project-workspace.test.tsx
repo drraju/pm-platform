@@ -148,8 +148,7 @@ describe("Project workspace components", () => {
 
     expect(screen.getByText("Project Health")).toBeInTheDocument();
     expect(screen.getByText("Overall Health")).toBeInTheDocument();
-    expect(screen.getByText("Amber")).toHaveAttribute(
-      "title",
+    expect(screen.getByText("Amber")).toHaveAccessibleDescription(
       "Supplier onboarding requires attention",
     );
     expect(screen.getByText("Schedule")).toBeInTheDocument();

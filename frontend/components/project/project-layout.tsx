@@ -3,26 +3,43 @@
 import React from "react";
 import { LoadingSkeleton } from "@/components/ui/states";
 import type { ApiProject } from "@/features/projects";
-import { ProjectHeader } from "./project-header";
+import {
+  ProjectHeader,
+  type ProjectHeaderRenderer,
+} from "./project-header";
 import type { ProjectWorkspaceTabId } from "./project-tabs";
 
 type ProjectLayoutProps = {
   activeTab: ProjectWorkspaceTabId;
   children: React.ReactNode;
+  layout?: React.ComponentType<{ children: React.ReactNode }>;
   project: ApiProject;
+  renderHeader?: ProjectHeaderRenderer;
 };
 
 export function ProjectLayout({
   activeTab,
   children,
+  layout: Layout,
   project,
+  renderHeader,
 }: ProjectLayoutProps) {
-  return (
-    <div className="space-y-6">
-      <ProjectHeader activeTab={activeTab} project={project} />
+  const content = (
+    <>
+      <ProjectHeader
+        activeTab={activeTab}
+        project={project}
+        render={renderHeader}
+      />
       {children}
-    </div>
+    </>
   );
+
+  if (Layout) {
+    return <Layout>{content}</Layout>;
+  }
+
+  return <div className="space-y-6">{content}</div>;
 }
 
 export function ProjectLayoutLoadingState() {

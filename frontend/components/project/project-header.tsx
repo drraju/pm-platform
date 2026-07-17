@@ -4,12 +4,29 @@ import React from "react";
 import type { ApiProject } from "@/features/projects";
 import { ProjectTabs, type ProjectWorkspaceTabId } from "./project-tabs";
 
+export interface ProjectHeaderContent {
+  eyebrow: string;
+  metadata: Array<{ id: string; label: string; value: React.ReactNode }>;
+  navigation: React.ReactNode;
+  subtitle?: React.ReactNode;
+  title: React.ReactNode;
+}
+
+export type ProjectHeaderRenderer = (
+  content: ProjectHeaderContent,
+) => React.ReactNode;
+
 type ProjectHeaderProps = {
   activeTab: ProjectWorkspaceTabId;
   project: ApiProject;
+  render?: ProjectHeaderRenderer;
 };
 
-export function ProjectHeader({ activeTab, project }: ProjectHeaderProps) {
+export function ProjectHeader({
+  activeTab,
+  project,
+  render,
+}: ProjectHeaderProps) {
   const metadata = [
     { label: "Status", value: formatLabel(project.health?.status ?? project.status) },
     { label: "Project Manager", value: formatUser(project.owner) },
@@ -17,6 +34,20 @@ export function ProjectHeader({ activeTab, project }: ProjectHeaderProps) {
     { label: "Finish", value: formatDate(project.targetEndDate) },
     { label: "Completion", value: formatCompletion(project) },
   ].filter((item) => item.value);
+
+  if (render) {
+    return render({
+      eyebrow: "Project Workspace",
+      metadata: metadata.map((item) => ({
+        id: item.label.toLowerCase().replaceAll(" ", "-"),
+        label: item.label,
+        value: item.value,
+      })),
+      navigation: <ProjectTabs activeTab={activeTab} projectId={project.id} />,
+      subtitle: project.description,
+      title: project.name,
+    });
+  }
 
   return (
     <header className="rounded-md border border-slate-200 bg-white shadow-soft">
