@@ -75,6 +75,9 @@ export class Task extends AuditableEntity {
   })
   estimatedHours?: number | null;
 
+  @Column({ name: 'duration_days', type: 'int', nullable: true })
+  durationDays?: number | null;
+
   @Column({
     name: 'remaining_hours',
     type: 'numeric',

@@ -24,23 +24,25 @@ export class ResourceSkillService {
     input: CreateResourceSkillCommand,
     actor?: AuthorizationActor,
   ): Promise<ResourceSkill> {
-    return this.resourceSkillsRepository.manager.transaction(async (manager) => {
-      await this.resourceSkillValidationService.validateResolvedResourceSkill(
-        input,
-        manager,
-      );
-      await this.resourceSkillValidationService.ensureResourceSkillNotDuplicated(
-        input,
-        undefined,
-        manager,
-      );
+    return this.resourceSkillsRepository.manager.transaction(
+      async (manager) => {
+        await this.resourceSkillValidationService.validateResolvedResourceSkill(
+          input,
+          manager,
+        );
+        await this.resourceSkillValidationService.ensureResourceSkillNotDuplicated(
+          input,
+          undefined,
+          manager,
+        );
 
-      const resourceSkill = ResourceSkillMapper.fromCreateCommand(input);
-      resourceSkill.createdById = actor?.userId;
-      resourceSkill.updatedById = actor?.userId;
+        const resourceSkill = ResourceSkillMapper.fromCreateCommand(input);
+        resourceSkill.createdById = actor?.userId;
+        resourceSkill.updatedById = actor?.userId;
 
-      return manager.save(ResourceSkill, resourceSkill);
-    });
+        return manager.save(ResourceSkill, resourceSkill);
+      },
+    );
   }
 
   async updateResourceSkill(
@@ -48,29 +50,31 @@ export class ResourceSkillService {
     input: UpdateResourceSkillCommand,
     actor?: AuthorizationActor,
   ): Promise<ResourceSkill> {
-    return this.resourceSkillsRepository.manager.transaction(async (manager) => {
-      const resourceSkill = await this.findResourceSkillOrThrow(
-        resourceSkillId,
-        manager,
-      );
-      const updatedResourceSkill = ResourceSkillMapper.fromUpdateCommand(
-        resourceSkill,
-        input,
-      );
+    return this.resourceSkillsRepository.manager.transaction(
+      async (manager) => {
+        const resourceSkill = await this.findResourceSkillOrThrow(
+          resourceSkillId,
+          manager,
+        );
+        const updatedResourceSkill = ResourceSkillMapper.fromUpdateCommand(
+          resourceSkill,
+          input,
+        );
 
-      await this.resourceSkillValidationService.validateResolvedResourceSkill(
-        updatedResourceSkill,
-        manager,
-      );
-      await this.resourceSkillValidationService.ensureResourceSkillNotDuplicated(
-        updatedResourceSkill,
-        resourceSkillId,
-        manager,
-      );
+        await this.resourceSkillValidationService.validateResolvedResourceSkill(
+          updatedResourceSkill,
+          manager,
+        );
+        await this.resourceSkillValidationService.ensureResourceSkillNotDuplicated(
+          updatedResourceSkill,
+          resourceSkillId,
+          manager,
+        );
 
-      updatedResourceSkill.updatedById = actor?.userId;
-      return manager.save(ResourceSkill, updatedResourceSkill);
-    });
+        updatedResourceSkill.updatedById = actor?.userId;
+        return manager.save(ResourceSkill, updatedResourceSkill);
+      },
+    );
   }
 
   async removeResourceSkill(

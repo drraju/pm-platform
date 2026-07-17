@@ -2,8 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -50,6 +53,7 @@ import {
   ProjectVisibilityService,
 } from './project-visibility.service';
 import { PlanningSnapshotService } from '../planning/planning-snapshot.service';
+import { TasksService } from '../tasks/tasks.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
 type AuthenticatedActor = AuthorizationActor;
@@ -82,6 +86,9 @@ export class ProjectsService {
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
     private readonly planningSnapshotService: PlanningSnapshotService,
+    @Inject(forwardRef(() => TasksService))
+    @Optional()
+    private readonly canonicalTasksService?: TasksService,
   ) {}
 
   async create(
@@ -299,6 +306,16 @@ export class ProjectsService {
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
     await this.ensureCanManageProject(projectId, actor);
+    const requestedKind = this.schedulingFoundationService.normalizeTaskKind(
+      createProjectTaskDto,
+      TaskKind.Standard,
+    );
+    if (requestedKind === TaskKind.Milestone && this.canonicalTasksService) {
+      return this.canonicalTasksService.create(
+        { ...createProjectTaskDto, projectId },
+        actor,
+      );
+    }
     const normalizedInput =
       this.schedulingFoundationService.normalizeTaskMutation(
         createProjectTaskDto,
@@ -312,6 +329,9 @@ export class ProjectsService {
     const task = this.tasksRepository.create({
       ...this.withNormalizedProgress(normalizedInput),
       projectId,
+      ...(actor?.userId
+        ? { createdById: actor.userId, updatedById: actor.userId }
+        : {}),
     });
 
     const savedTask = await this.tasksRepository.save(task);
@@ -327,6 +347,21 @@ export class ProjectsService {
     await this.ensureProjectExists(projectId);
     const task = await this.findProjectTask(projectId, taskId);
     await this.ensureCanUpdateTask(task, updateProjectTaskDto, actor);
+    const requestedKind = this.schedulingFoundationService.normalizeTaskKind(
+      updateProjectTaskDto,
+      task.taskKind,
+    );
+    if (
+      (task.taskKind === TaskKind.Milestone ||
+        requestedKind === TaskKind.Milestone) &&
+      this.canonicalTasksService
+    ) {
+      return this.canonicalTasksService.update(
+        taskId,
+        { ...updateProjectTaskDto, projectId },
+        actor,
+      );
+    }
     const normalizedInput =
       this.schedulingFoundationService.normalizeTaskMutation(
         updateProjectTaskDto,
@@ -339,6 +374,7 @@ export class ProjectsService {
     );
     Object.assign(task, this.withNormalizedProgress(normalizedInput), {
       projectId,
+      ...(actor?.userId ? { updatedById: actor.userId } : {}),
     });
 
     const savedTask = await this.tasksRepository.save(task);
@@ -354,6 +390,18 @@ export class ProjectsService {
     await this.ensureCanManageProject(projectId, actor);
 
     const task = await this.findProjectTask(projectId, taskId);
+    if (task.taskKind === TaskKind.Milestone && this.canonicalTasksService) {
+      await this.canonicalTasksService.cancelMilestone(taskId, actor);
+      await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+        projectId,
+        actor,
+      );
+      return;
+    }
+    if (actor?.userId) {
+      task.deletedById = actor.userId;
+      task.updatedById = actor.userId;
+    }
     await this.tasksRepository.softRemove(task);
     await this.planningSnapshotService.rebuildWorkspaceSnapshot(
       projectId,
@@ -424,6 +472,7 @@ export class ProjectsService {
               this.projectBaselineTasksRepository.create({
                 createdById: actor.userId,
                 estimatedHours: task.estimatedHours ?? null,
+                milestoneCategory: task.milestoneCategory ?? null,
                 parentTaskId: task.parentTaskId ?? null,
                 percentComplete: task.percentComplete,
                 plannedEndDate: task.plannedEndDate ?? null,

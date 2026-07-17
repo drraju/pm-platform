@@ -1,5 +1,7 @@
 import React from "react";
 import { ProjectHealthBadge } from "@/components/projects/project-health-badge";
+import { SectionCard } from "@/components/ui/card";
+import { SectionHeader } from "@/components/ui/section-header";
 import type { ApiProjectHealth } from "@/lib/api/client";
 
 type ProjectHealthCardProps = {
@@ -8,12 +10,10 @@ type ProjectHealthCardProps = {
 
 export function ProjectHealthCard({ health }: ProjectHealthCardProps) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
+    <SectionCard>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">
-            Health Status
-          </h2>
+          <SectionHeader title="Health Status" />
           <div className="mt-3">
             <ProjectHealthBadge reasons={health.reasons} status={health.status} />
           </div>
@@ -28,6 +28,6 @@ export function ProjectHealthCard({ health }: ProjectHealthCardProps) {
           ))}
         </ul>
       </div>
-    </section>
+    </SectionCard>
   );
 }

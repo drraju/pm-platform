@@ -84,6 +84,10 @@ Architecture should be documented before it is implemented when changes are mate
 
 Integrations should be designed through explicit contracts and stable boundaries rather than informal coupling or hidden side effects.
 
+### Projection-Owned Read Models
+
+Read models that combine multiple domains belong in explicit projection composers. Controllers and frontends consume the resulting contract and must not independently recalculate derived business state.
+
 ### AI-Ready Architecture
 
 Architecture should remain understandable, observable, and explicit enough that AI-assisted tooling can support engineering work without weakening design clarity.
@@ -97,6 +101,8 @@ The following rules must not change without an approved ADR:
 - business rules remain independent of transport
 - database migrations are additive
 - architecture reviews are mandatory
+- public response DTOs do not expose persistence entities or internal projections
+- controllers do not access repositories or calculate derived read-model state
 
 These invariants exist to protect the system from gradual erosion of architecture boundaries.
 

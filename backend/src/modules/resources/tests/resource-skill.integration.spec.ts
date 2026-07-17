@@ -63,7 +63,7 @@ class InMemoryRepository<T extends { id?: string; deletedAt?: Date | null }> {
     const persisted = await this.save({
       ...input,
       deletedAt: new Date('2026-07-10T00:00:00.000Z'),
-    } as T);
+    });
     return persisted;
   }
 
@@ -166,8 +166,9 @@ describe('ResourceSkill API integration', () => {
         repositoryByEntity.get(entity)!.save(input),
       softRemove: (entity: Function, input: any) =>
         repositoryByEntity.get(entity)!.softRemove(input),
-      transaction: async (callback: (manager: typeof manager) => Promise<any>) =>
-        callback(manager),
+      transaction: async (
+        callback: (manager: typeof manager) => Promise<any>,
+      ) => callback(manager),
     };
 
     resourceSkillsRepository.manager = manager;
@@ -250,9 +251,9 @@ describe('ResourceSkill API integration', () => {
     await expect(
       controller.listResourceSkillsByResource(resource.id),
     ).resolves.toEqual([expect.objectContaining({ id: created.id })]);
-    await expect(controller.listResourceSkillsBySkill(skill.id)).resolves.toEqual([
-      expect.objectContaining({ id: created.id }),
-    ]);
+    await expect(
+      controller.listResourceSkillsBySkill(skill.id),
+    ).resolves.toEqual([expect.objectContaining({ id: created.id })]);
 
     const updated = await controller.updateResourceSkill(
       createRequest(actor),

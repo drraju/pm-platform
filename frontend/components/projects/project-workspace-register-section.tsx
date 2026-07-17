@@ -1,4 +1,6 @@
 import React from "react";
+import { SectionCard } from "@/components/ui/card";
+import { SectionHeader } from "@/components/ui/section-header";
 import {
   ProjectWorkspaceTable,
   type ProjectWorkspaceTableColumn,
@@ -25,16 +27,13 @@ export function ProjectWorkspaceRegisterSection({
   title,
 }: ProjectWorkspaceRegisterSectionProps) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
-        </div>
-        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-          {items.length}
-        </span>
-      </div>
+    <SectionCard>
+      <SectionHeader
+        count={items.length}
+        description={description}
+        layout="compact"
+        title={title}
+      />
 
       <ProjectWorkspaceTable
         columns={columns}
@@ -42,7 +41,7 @@ export function ProjectWorkspaceRegisterSection({
         isLoading={isLoading}
         items={items}
       />
-    </section>
+    </SectionCard>
   );
 }
 

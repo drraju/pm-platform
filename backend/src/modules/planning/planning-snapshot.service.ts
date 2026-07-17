@@ -118,10 +118,12 @@ export class PlanningSnapshotService {
 
         return {
           createdById: actor?.userId,
-          durationDays: this.schedulingFoundationService.calculateDurationDays(
-            plannedStartDate,
-            plannedEndDate,
-          ),
+          durationDays:
+            task.durationDays ??
+            this.schedulingFoundationService.calculateDurationDays(
+              plannedStartDate,
+              plannedEndDate,
+            ),
           isCritical: false,
           milestoneCategory: task.milestoneCategory ?? null,
           parentTaskId: task.parentTaskId,

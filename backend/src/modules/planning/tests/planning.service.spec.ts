@@ -31,6 +31,7 @@ import { PlanningForwardPassService } from '../planning-forward-pass.service';
 import { PlanningGraphBuilderService } from '../planning-graph-builder.service';
 import { PlanningScheduleEngineService } from '../planning-schedule-engine.service';
 import { PlanningSnapshotService } from '../planning-snapshot.service';
+import { PlanningWorkPackageDuplicationService } from '../planning-work-package-duplication.service';
 import { PlanningService } from '../planning.service';
 
 type MockRepository<T extends object = object> = Partial<
@@ -191,6 +192,13 @@ describe('PlanningService', () => {
         PlanningScheduleEngineService,
         PlanningSnapshotService,
         SchedulingContextFactory,
+        {
+          provide: PlanningWorkPackageDuplicationService,
+          useValue: {
+            duplicate: jest.fn(),
+            removeDuplicatedWorkPackage: jest.fn(),
+          },
+        },
         {
           provide: getRepositoryToken(PlanningScheduleSnapshot),
           useValue: scheduleSnapshotsRepository,

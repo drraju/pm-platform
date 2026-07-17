@@ -1,4 +1,6 @@
 import React from "react";
+import { SectionCard } from "@/components/ui/card";
+import { SectionHeader } from "@/components/ui/section-header";
 import type { ApiAssignableUser, ApiProjectMember } from "@/lib/api/client";
 
 type ProjectWorkspaceTeamProps = {
@@ -31,20 +33,13 @@ export function ProjectWorkspaceTeam({
   const usersToAdd = availableUsers.filter((user) => !memberUserIds.has(user.id));
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">
-            Team Members
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Project roles for assigned team members.
-          </p>
-        </div>
-        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-          {members.length}
-        </span>
-      </div>
+    <SectionCard>
+      <SectionHeader
+        count={members.length}
+        description="Project roles for assigned team members."
+        layout="compact"
+        title="Team Members"
+      />
 
       {onAddMember ? (
         <div className="mt-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_0.6fr_auto] md:items-end">
@@ -183,7 +178,7 @@ export function ProjectWorkspaceTeam({
           </article>
         ))}
       </div>
-    </section>
+    </SectionCard>
   );
 }
 

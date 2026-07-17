@@ -1,5 +1,7 @@
 import Link from "next/link";
 import React from "react";
+import { SectionCard } from "@/components/ui/card";
+import { SectionHeader } from "@/components/ui/section-header";
 
 export type TimelineSnapshotItem = {
   date: string;
@@ -18,29 +20,22 @@ export function TimelineSnapshot({
   planningHref,
 }: TimelineSnapshotProps) {
   return (
-    <section
-      aria-labelledby="timeline-snapshot-title"
-      className="rounded-md border border-slate-200 bg-white p-5 shadow-soft"
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2
-            className="text-lg font-semibold text-slate-950"
-            id="timeline-snapshot-title"
-          >
-            Timeline Snapshot
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Key Project checkpoints. Dates are not shown to scale.
-          </p>
-        </div>
-        <Link
+    <SectionCard aria-labelledby="timeline-snapshot-title">
+      <SectionHeader
+        action={
+          <Link
           className="shrink-0 text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
           href={planningHref}
         >
           Open in Planning
-        </Link>
-      </div>
+          </Link>
+        }
+        description="Key Project checkpoints. Dates are not shown to scale."
+        descriptionSize="xs"
+        layout="timeline"
+        title="Timeline Snapshot"
+        titleId="timeline-snapshot-title"
+      />
 
       <ol
         aria-label="Project timeline checkpoints"
@@ -82,6 +77,6 @@ export function TimelineSnapshot({
           </li>
         ))}
       </ol>
-    </section>
+    </SectionCard>
   );
 }

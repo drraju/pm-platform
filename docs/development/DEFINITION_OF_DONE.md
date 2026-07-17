@@ -150,6 +150,9 @@ Before declaring work complete, verify:
 - [ ] DTOs confined to the transport layer
 - [ ] validation complete
 - [ ] error handling complete
+- [ ] public response DTOs and mapper boundaries verified
+- [ ] OpenAPI paths and schemas verified for API changes
+- [ ] list pagination, sorting, filtering, and stable ordering verified where applicable
 
 This checklist is mandatory even when the build and tests pass. Architectural correctness remains a separate completion requirement.
 

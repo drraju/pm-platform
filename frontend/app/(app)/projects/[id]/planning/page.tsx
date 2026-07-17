@@ -8,11 +8,15 @@ import { ProjectLayout, ProjectLayoutLoadingState } from "@/components/project";
 import {
   createPlanningDependency,
   createPlanningTask,
+  duplicatePlanningWorkPackage,
   deletePlanningDependency,
   getPlanningWorkspace,
   regeneratePlanningWorkspace,
+  removeDuplicatedPlanningWorkPackage,
   updatePlanningTaskSchedule,
   type ApiMilestoneCategory,
+  type ApiDuplicateWorkPackageInput,
+  type ApiDuplicateWorkPackageResult,
   type ApiPlanningTaskSchedule,
   type ApiPlanningWorkspace,
   type ApiTaskType,
@@ -79,7 +83,11 @@ function PageContent() {
     setError(null);
     setIsSaving(true);
     try {
-      const schedule = await updatePlanningTaskSchedule(projectId, taskId, input);
+      const schedule = await updatePlanningTaskSchedule(
+        projectId,
+        taskId,
+        input,
+      );
       setWorkspace((currentWorkspace) =>
         currentWorkspace
           ? {
@@ -157,6 +165,56 @@ function PageContent() {
     }
   }
 
+  async function handleDuplicateWorkPackage(
+    sourceSummaryTaskId: string,
+    input: ApiDuplicateWorkPackageInput,
+  ): Promise<ApiDuplicateWorkPackageResult> {
+    setError(null);
+    setIsSaving(true);
+    try {
+      const result = await duplicatePlanningWorkPackage(
+        projectId,
+        sourceSummaryTaskId,
+        input,
+      );
+      setWorkspace(result.workspace);
+      return result;
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to duplicate work package",
+      );
+      throw requestError;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleRemoveDuplicatedWorkPackage(
+    summaryTaskId: string,
+  ): Promise<ApiPlanningWorkspace> {
+    setError(null);
+    setIsSaving(true);
+    try {
+      const nextWorkspace = await removeDuplicatedPlanningWorkPackage(
+        projectId,
+        summaryTaskId,
+      );
+      setWorkspace(nextWorkspace);
+      return nextWorkspace;
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to undo duplicate work package",
+      );
+      throw requestError;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function handleDeleteDependency(dependencyId: string) {
     setError(null);
     setIsSaving(true);
@@ -212,7 +270,13 @@ function PageContent() {
   return (
     <ProjectLayout
       activeTab="planning"
-      project={workspace?.project ?? { id: projectId, name: "Planning Workspace", status: "active" }}
+      project={
+        workspace?.project ?? {
+          id: projectId,
+          name: "Planning Workspace",
+          status: "active",
+        }
+      }
     >
       {error ? (
         <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -234,8 +298,10 @@ function PageContent() {
           onCreateDependency={handleCreateDependency}
           onCreateTask={handleCreateTask}
           onDeleteDependency={handleDeleteDependency}
+          onDuplicateWorkPackage={handleDuplicateWorkPackage}
           onRefreshWorkspace={loadWorkspace}
           onRegenerateWorkspace={handleRegenerateWorkspace}
+          onRemoveDuplicatedWorkPackage={handleRemoveDuplicatedWorkPackage}
           onUpdateSchedule={handleUpdateSchedule}
           projectMembers={members}
           workspace={workspace}

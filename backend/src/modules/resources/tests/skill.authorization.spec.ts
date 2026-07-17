@@ -74,13 +74,19 @@ describe('SkillController authorization', () => {
 
   it('allows skill managers and denies readers for write endpoints', async () => {
     await expect(
-      guard.canActivate(createContext('SkillManager', controller, 'createSkill')),
+      guard.canActivate(
+        createContext('SkillManager', controller, 'createSkill'),
+      ),
     ).resolves.toBe(true);
     await expect(
-      guard.canActivate(createContext('SkillReader', controller, 'updateSkill')),
+      guard.canActivate(
+        createContext('SkillReader', controller, 'updateSkill'),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      guard.canActivate(createContext('SkillReader', controller, 'deleteSkill')),
+      guard.canActivate(
+        createContext('SkillReader', controller, 'deleteSkill'),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

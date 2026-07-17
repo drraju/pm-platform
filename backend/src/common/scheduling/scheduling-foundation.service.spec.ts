@@ -156,13 +156,65 @@ describe('SchedulingFoundationService', () => {
     ).toThrow('Milestone progress is determined by scheduling state');
   });
 
-  it('rejects manual milestone workflow status changes', () => {
+  it('normalizes milestone completion atomically', () => {
+    expect(
+      service.normalizeTaskMutation({
+        plannedStartDate: '2026-08-01',
+        status: TaskStatus.Done,
+        taskType: TaskType.Milestone,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        actualEndDate: '2026-08-01',
+        actualStartDate: '2026-08-01',
+        durationDays: 0,
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
+  it('normalizes milestone reopening by clearing completion state', () => {
+    expect(
+      service.normalizeTaskMutation(
+        { status: TaskStatus.InProgress },
+        {
+          actualEndDate: '2026-08-01',
+          actualStartDate: '2026-08-01',
+          percentComplete: 100,
+          plannedEndDate: '2026-08-01',
+          plannedStartDate: '2026-08-01',
+          status: TaskStatus.Done,
+          taskKind: TaskKind.Milestone,
+        },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        actualEndDate: null,
+        actualStartDate: null,
+        percentComplete: 0,
+        status: TaskStatus.InProgress,
+      }),
+    );
+  });
+
+  it('rejects completion without any milestone date', () => {
     expect(() =>
       service.normalizeTaskMutation({
         status: TaskStatus.Done,
         taskType: TaskType.Milestone,
       }),
-    ).toThrow('Milestone status is determined by scheduling state');
+    ).toThrow('Milestone completion requires an actual or planned date');
+  });
+
+  it('rejects inconsistent milestone actual dates', () => {
+    expect(() =>
+      service.normalizeTaskMutation({
+        actualEndDate: '2026-08-02',
+        actualStartDate: '2026-08-01',
+        taskType: TaskType.Milestone,
+      }),
+    ).toThrow('Milestones must have matching actual start and end dates');
   });
 
   it('rejects manual summary schedule changes', () => {

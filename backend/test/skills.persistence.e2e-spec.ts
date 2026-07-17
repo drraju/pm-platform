@@ -183,7 +183,9 @@ describe('Skills persistence', () => {
            AND pid <> pg_backend_pid()`,
         [freshDatabaseName],
       );
-      await adminDataSource.query(`DROP DATABASE IF EXISTS "${freshDatabaseName}"`);
+      await adminDataSource.query(
+        `DROP DATABASE IF EXISTS "${freshDatabaseName}"`,
+      );
     }
   });
 

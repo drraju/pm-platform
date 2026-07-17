@@ -28,9 +28,7 @@ type Persisted<T> = T & {
 class InMemoryRepository<T extends { id?: string; deletedAt?: Date | null }> {
   private sequence = 1;
 
-  constructor(
-    private readonly rows: Persisted<T>[] = [],
-  ) {}
+  constructor(private readonly rows: Persisted<T>[] = []) {}
 
   async find(options?: {
     order?: Record<string, 'ASC' | 'DESC'>;
@@ -227,10 +225,14 @@ describe('Skill API integration', () => {
       expect.objectContaining({ id: created.id, name: 'TypeScript' }),
     );
 
-    const updated = await controller.updateSkill(createRequest(actor), created.id, {
-      category: 'Architecture',
-      status: SkillStatus.Deprecated,
-    });
+    const updated = await controller.updateSkill(
+      createRequest(actor),
+      created.id,
+      {
+        category: 'Architecture',
+        status: SkillStatus.Deprecated,
+      },
+    );
     expect(updated).toEqual(
       expect.objectContaining({
         category: 'Architecture',
@@ -247,11 +249,16 @@ describe('Skill API integration', () => {
       expect.objectContaining({ status: SkillStatus.Archived }),
     );
     await expect(controller.listSkills({})).resolves.toEqual([]);
-    await expect(controller.listSkills({ includeArchived: true })).resolves.toHaveLength(1);
+    await expect(
+      controller.listSkills({ includeArchived: true }),
+    ).resolves.toHaveLength(1);
   });
 
   it('filters by category and excludes archived skills by default', async () => {
-    const created = await controller.createSkill(createRequest(actor), createSkillDto());
+    const created = await controller.createSkill(
+      createRequest(actor),
+      createSkillDto(),
+    );
     const other = await controller.createSkill(createRequest(actor), {
       category: 'Delivery',
       name: 'Stakeholder Management',

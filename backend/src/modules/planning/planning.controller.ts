@@ -35,6 +35,10 @@ import { CreatePlanningTaskDto } from './dto/create-planning-task.dto';
 import { CreateResourceAllocationDto } from './dto/create-resource-allocation.dto';
 import { CreateResourceCapacityDto } from './dto/create-resource-capacity.dto';
 import {
+  DuplicateWorkPackageDto,
+  DuplicateWorkPackageResultDto,
+} from './dto/duplicate-work-package.dto';
+import {
   PlanningWorkspaceDto,
   PlanningWorkspaceScheduleDto,
 } from './dto/planning-workspace.dto';
@@ -141,6 +145,40 @@ export class PlanningController {
     return this.planningService.createPlanningTask(
       projectId,
       input,
+      request.user,
+    );
+  }
+
+  @Post('projects/:projectId/tasks/:taskId/duplicate-work-package')
+  @RequirePermissions(PermissionKey.TaskCreate)
+  @ApiOperation({ summary: 'Duplicate a Summary Task work package' })
+  @ApiCreatedResponse({ type: DuplicateWorkPackageResultDto })
+  duplicateWorkPackage(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Body() input: DuplicateWorkPackageDto,
+  ): Promise<DuplicateWorkPackageResultDto> {
+    return this.planningService.duplicateWorkPackage(
+      projectId,
+      taskId,
+      input,
+      request.user,
+    );
+  }
+
+  @Delete('projects/:projectId/work-packages/:summaryTaskId')
+  @RequirePermissions(PermissionKey.TaskDelete)
+  @ApiOperation({ summary: 'Remove a duplicated work package for undo' })
+  @ApiOkResponse({ type: PlanningWorkspaceDto })
+  removeDuplicatedWorkPackage(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('summaryTaskId') summaryTaskId: string,
+  ): Promise<PlanningWorkspaceDto> {
+    return this.planningService.removeDuplicatedWorkPackage(
+      projectId,
+      summaryTaskId,
       request.user,
     );
   }

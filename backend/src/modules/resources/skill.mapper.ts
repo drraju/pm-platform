@@ -27,7 +27,9 @@ export class SkillMapper {
       category:
         input.category !== undefined ? (input.category ?? null) : undefined,
       description:
-        input.description !== undefined ? (input.description ?? null) : undefined,
+        input.description !== undefined
+          ? (input.description ?? null)
+          : undefined,
       name: input.name,
       status: input.status,
     };
@@ -70,7 +72,9 @@ export class SkillMapper {
   static fromUpdateCommand(skill: Skill, input: UpdateSkillCommand): Skill {
     return Object.assign(new Skill(), skill, {
       category:
-        input.category !== undefined ? (input.category ?? null) : skill.category,
+        input.category !== undefined
+          ? (input.category ?? null)
+          : skill.category,
       description:
         input.description !== undefined
           ? (input.description ?? null)

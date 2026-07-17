@@ -76,7 +76,9 @@ export class CreateResourceSkillDto {
   notes?: string | null;
 }
 
-export class UpdateResourceSkillDto extends PartialType(CreateResourceSkillDto) {}
+export class UpdateResourceSkillDto extends PartialType(
+  CreateResourceSkillDto,
+) {}
 
 export class QueryResourceSkillsDto {
   @ApiPropertyOptional({ example: true })

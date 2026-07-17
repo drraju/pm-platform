@@ -17,6 +17,8 @@ deployment guidance, API documentation, and release notes.
 - [Architecture Index](architecture/README.md)
 - [Build Playbook](BUILD_PLAYBOOK.md)
 - [Feature Progress](FEATURE_PROGRESS.md)
+- [Feature 1.3.1 Summary](features/FEATURE_1_3_1_SUMMARY.md)
+- [Feature 1.3.2 Completion Report](features/FEATURE_1_3_2_SUMMARY.md)
 
 ## Architecture Decision Records (ADR)
 
@@ -37,8 +39,11 @@ deployment guidance, API documentation, and release notes.
 
 ## API
 
-- [API](API.md)
+- [REST API Design Standard](architecture/API_DESIGN_STANDARD.md)
+- [API Guidelines](development/api-guidelines.md)
+- [Enterprise Dependency API](api/enterprise-dependencies.md)
+- [Technical Debt Register](development/TECHNICAL_DEBT.md)
 
 ## Release Notes
 
-- [Release Notes](RELEASES.md)
+- [Release Notes](releases/README.md)

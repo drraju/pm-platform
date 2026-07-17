@@ -1,5 +1,7 @@
 # API Guidelines
 
+The canonical, detailed REST contract is [REST API Design Standard](../architecture/API_DESIGN_STANDARD.md). This document remains a concise contributor checklist.
+
 ## REST Principles
 
 APIs should model domain resources with predictable nouns, HTTP methods, and status codes.
@@ -27,6 +29,7 @@ Current APIs are unversioned. Breaking changes should be staged through compatib
 - Request DTOs validate input.
 - Response DTOs define public shape.
 - Avoid leaking persistence-only fields unless needed.
+- Map internal projections to public response DTOs through a transport mapper.
 - Use explicit nullable values for clearable fields.
 
 ## Validation

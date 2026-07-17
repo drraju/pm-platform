@@ -1,4 +1,5 @@
 import React from "react";
+import { EmptyState } from "@/components/ui/states";
 import type {
   ApiPlanningTaskSchedule,
   ApiResourceAllocation,
@@ -34,9 +35,13 @@ export function PlanningDetailPanel({
       </div>
 
       {!schedule ? (
-        <div className="mt-4 rounded-md border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-600">
+        <EmptyState
+          className="mt-4"
+          surface="white"
+          variant="dashed"
+        >
           Select a grid row or Gantt object to inspect its planning details.
-        </div>
+        </EmptyState>
       ) : (
         <div className="mt-4 space-y-4">
           <div>

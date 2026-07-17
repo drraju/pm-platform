@@ -1,5 +1,8 @@
 import Link from "next/link";
 import React from "react";
+import { SectionCard } from "@/components/ui/card";
+import { ContentGrid } from "@/components/ui/content-grid";
+import { SectionHeader } from "@/components/ui/section-header";
 import type {
   ApiProjectDetails,
   ApiProjectMember,
@@ -58,9 +61,9 @@ export function ProjectWorkspaceOverview({
 
   return (
     <div aria-label="Project overview" className="space-y-6">
-      <section
+      <ContentGrid
         aria-label="Project health, timeline and insights"
-        className="grid gap-6 xl:grid-cols-2"
+        columns={2}
       >
         <DashboardPanel
           description="The minimum information needed to understand current Project condition."
@@ -102,11 +105,11 @@ export function ProjectWorkspaceOverview({
             planningHref={`${basePath}/planning`}
           />
         </div>
-      </section>
+      </ContentGrid>
 
-      <section
+      <ContentGrid
         aria-label="Upcoming milestones and recent activity"
-        className="grid gap-6 xl:grid-cols-2"
+        columns={2}
       >
         <DashboardPanel
           action={
@@ -192,11 +195,11 @@ export function ProjectWorkspaceOverview({
             <p className="py-5 text-sm text-slate-500">No recent activity.</p>
           )}
         </DashboardPanel>
-      </section>
+      </ContentGrid>
 
-      <section
+      <ContentGrid
         aria-label="Operational attention"
-        className="grid gap-6 xl:grid-cols-2"
+        columns={2}
       >
         <DashboardPanel
           action={
@@ -278,7 +281,7 @@ export function ProjectWorkspaceOverview({
             when authoritative data is available.
           </p>
         </DashboardPanel>
-      </section>
+      </ContentGrid>
 
       <DashboardPanel
         description="Continue in the workspace that owns the next action."
@@ -326,20 +329,15 @@ function DashboardPanel({
   title: string;
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-          {description ? (
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              {description}
-            </p>
-          ) : null}
-        </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
+    <SectionCard>
+      <SectionHeader
+        action={action}
+        description={description}
+        descriptionSize="xs"
+        title={title}
+      />
       <div className="mt-4">{children}</div>
-    </section>
+    </SectionCard>
   );
 }
 

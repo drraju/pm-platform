@@ -141,6 +141,7 @@ The following documents define the current engineering governance baseline.
 | [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md) | Defines when a stage, feature, epic, and release are truly complete. | Yes |
 | [CODE_REVIEW_CHECKLIST.md](CODE_REVIEW_CHECKLIST.md) | Defines the standard architecture-focused review checklist used for every code review. | Yes |
 | [CODING_STANDARDS.md](CODING_STANDARDS.md) | Defines the mandatory PM Platform coding standards across engineering disciplines. | Yes |
+| [REST API Design Standard](../architecture/API_DESIGN_STANDARD.md) | Defines canonical REST naming, pagination, sorting, filtering, public DTO, validation, error, Swagger, and compatibility rules. | Yes for API work |
 
 These documents should be read together. This manual is the entry point, and the linked documents provide the detailed operating standards.
 
@@ -153,6 +154,8 @@ The following rules are non-negotiable:
 - validation belongs in validation services
 - repositories perform persistence only
 - DTOs remain in the transport layer
+- public API responses use transport DTOs and never expose entities or internal projections
+- controllers never access repositories or calculate derived read-model state
 - database migrations are additive
 - architecture reviews are mandatory
 - documentation updates are mandatory

@@ -113,6 +113,7 @@ CREATE TABLE tasks (
   actual_start_date DATE,
   actual_end_date DATE,
   estimated_hours NUMERIC(10,2) CHECK (estimated_hours IS NULL OR estimated_hours >= 0),
+  duration_days INTEGER,
   remaining_hours NUMERIC(10,2) CHECK (remaining_hours IS NULL OR remaining_hours >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -125,6 +126,20 @@ CREATE TABLE tasks (
     OR planned_start_date IS NULL
     OR planned_end_date IS NULL
     OR planned_start_date = planned_end_date
+  ),
+  CONSTRAINT chk_tasks_milestone_actual_dates CHECK (
+    task_kind <> 'milestone'
+    OR actual_start_date IS NULL
+    OR actual_end_date IS NULL
+    OR actual_start_date = actual_end_date
+  ),
+  CONSTRAINT chk_tasks_milestone_duration CHECK (
+    task_kind <> 'milestone' OR duration_days = 0
+  ),
+  CONSTRAINT chk_tasks_milestone_progress CHECK (
+    task_kind <> 'milestone'
+    OR (status = 'done' AND percent_complete = 100)
+    OR (status <> 'done' AND percent_complete = 0)
   ),
   CONSTRAINT chk_tasks_parent_not_self CHECK (parent_task_id IS NULL OR parent_task_id <> id)
 );
@@ -169,6 +184,10 @@ CREATE TABLE project_baseline_tasks (
   parent_task_id UUID,
   task_title VARCHAR(255) NOT NULL,
   task_kind VARCHAR(20) NOT NULL CHECK (task_kind IN ('standard', 'summary', 'milestone')),
+  milestone_category VARCHAR(30) CHECK (
+    (task_kind = 'milestone' AND milestone_category IN ('standard', 'release', 'drop', 'go_live', 'decision'))
+    OR milestone_category IS NULL
+  ),
   sequence_number INTEGER,
   planned_start_date DATE,
   planned_end_date DATE,

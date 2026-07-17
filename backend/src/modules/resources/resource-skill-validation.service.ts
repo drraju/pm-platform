@@ -88,7 +88,10 @@ export class ResourceSkillValidationService {
       await this.ensureSkillExists(input.skillId, manager);
     }
 
-    if (input.proficiencyLevel !== undefined && input.proficiencyLevel !== null) {
+    if (
+      input.proficiencyLevel !== undefined &&
+      input.proficiencyLevel !== null
+    ) {
       this.validateAllowedValue(
         input.proficiencyLevel,
         Object.values(SkillProficiencyLevel),
@@ -111,7 +114,10 @@ export class ResourceSkillValidationService {
       );
     }
 
-    if (input.monthsExperience !== undefined && input.monthsExperience !== null) {
+    if (
+      input.monthsExperience !== undefined &&
+      input.monthsExperience !== null
+    ) {
       this.validateMonthRange(input.monthsExperience);
     }
 
@@ -156,7 +162,9 @@ export class ResourceSkillValidationService {
 
   private validateNonNegativeInteger(value: number, fieldLabel: string) {
     if (!Number.isInteger(value) || value < 0) {
-      throw new BadRequestException(`${fieldLabel} must be a non-negative integer`);
+      throw new BadRequestException(
+        `${fieldLabel} must be a non-negative integer`,
+      );
     }
   }
 

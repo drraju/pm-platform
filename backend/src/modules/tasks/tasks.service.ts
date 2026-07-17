@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -25,6 +26,11 @@ import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
 import { decoratePlanningTasks, getOperationalTasks } from './planning-rollup';
+import {
+  MilestoneQuery,
+  MilestoneQueryService,
+} from './milestone-query.service';
+import { MilestoneProjectionPage } from './milestone-projection';
 
 type AuthenticatedActor = AuthorizationActor;
 const teamMemberEditableTaskFields = new Set([
@@ -44,7 +50,63 @@ export class TasksService {
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
+    @Optional()
+    private readonly milestoneQueryService?: MilestoneQueryService,
   ) {}
+
+  findProjectMilestones(
+    projectId: string,
+    query: Omit<MilestoneQuery, 'projectIds'> = {},
+    actor?: ProjectVisibilityActor,
+  ): Promise<MilestoneProjectionPage> {
+    return this.requireMilestoneQueryService().findProjectMilestones(
+      projectId,
+      query,
+      actor,
+    );
+  }
+
+  findPortfolioMilestones(
+    query: MilestoneQuery = {},
+    actor?: ProjectVisibilityActor,
+  ): Promise<MilestoneProjectionPage> {
+    return this.requireMilestoneQueryService().findPortfolioMilestones(
+      query,
+      actor,
+    );
+  }
+
+  async completeMilestone(
+    id: string,
+    actualDate: string | undefined,
+    actor?: AuthenticatedActor,
+  ): Promise<Task> {
+    await this.ensureMilestone(id, actor);
+    return this.update(
+      id,
+      {
+        ...(actualDate
+          ? { actualEndDate: actualDate, actualStartDate: actualDate }
+          : {}),
+        status: TaskStatus.Done,
+      },
+      actor,
+    );
+  }
+
+  async reopenMilestone(
+    id: string,
+    status: Exclude<TaskStatus, TaskStatus.Done> = TaskStatus.InProgress,
+    actor?: AuthenticatedActor,
+  ): Promise<Task> {
+    await this.ensureMilestone(id, actor);
+    return this.update(id, { status }, actor);
+  }
+
+  async cancelMilestone(id: string, actor?: AuthenticatedActor): Promise<void> {
+    await this.ensureMilestone(id, actor);
+    return this.remove(id, actor);
+  }
 
   async create(
     createTaskDto: CreateTaskDto,
@@ -59,7 +121,12 @@ export class TasksService {
       normalizedInput.assigneeId,
     );
     const task = await this.tasksRepository.save(
-      this.tasksRepository.create(this.withNormalizedProgress(normalizedInput)),
+      this.tasksRepository.create({
+        ...this.withNormalizedProgress(normalizedInput),
+        ...(actor?.userId
+          ? { createdById: actor.userId, updatedById: actor.userId }
+          : {}),
+      }),
     );
     return this.decorateTask(task);
   }
@@ -176,6 +243,9 @@ export class TasksService {
       normalizedInput.assigneeId,
     );
     Object.assign(task, this.withNormalizedProgress(normalizedInput));
+    if (actor?.userId) {
+      task.updatedById = actor.userId;
+    }
     const savedTask = await this.tasksRepository.save(task);
     return this.decorateTask(savedTask);
   }
@@ -183,6 +253,10 @@ export class TasksService {
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
     const task = await this.findOne(id, actor);
     await this.ensureCanManageProject(task.projectId, actor);
+    if (actor?.userId) {
+      task.deletedById = actor.userId;
+      task.updatedById = actor.userId;
+    }
     await this.tasksRepository.softRemove(task);
   }
 
@@ -370,5 +444,22 @@ export class TasksService {
     }
 
     return normalizedInput;
+  }
+
+  private requireMilestoneQueryService(): MilestoneQueryService {
+    if (!this.milestoneQueryService) {
+      throw new Error('MilestoneQueryService is not configured');
+    }
+    return this.milestoneQueryService;
+  }
+
+  private async ensureMilestone(
+    id: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<void> {
+    const task = await this.findOne(id, actor);
+    if (task.taskKind !== TaskKind.Milestone) {
+      throw new BadRequestException(`Task ${id} is not a milestone`);
+    }
   }
 }

@@ -14,6 +14,8 @@ Update this file whenever a stage is completed. The tracker should reflect the l
 | Feature 1.2.4 – Skills Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Completed |
 | Feature 1.2.5 – Resource Availability & Capacity Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Complete | Pending | Stage 11 Complete (Ready for Stage 12) |
 | Feature 1.2.6 – Calendar Assignment | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Pending | Complete | Pending | Completed (Stage 13 approved; pending feature commit) |
+| Feature 1.3.1 – Enterprise Milestone Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete through Stage 6 | Pending | Complete | Pending | Pending | Complete | Pending | Backend Complete; Frontend Pending |
+| Feature 1.3.2 – Enterprise Dependency Management | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Complete | Not Required | Not Required | Complete | Pending | Feature Complete; Pending Feature Commit |
 
 ## Stage Guidance
 
@@ -40,6 +42,10 @@ Update this file whenever a stage is completed. The tracker should reflect the l
 - Link detailed artefacts from the feature's product, architecture, ADR, or roadmap documents rather than duplicating them here.
 
 ## Implementation Note
+
+Feature 1.3.1 is complete through Stage 6: persistence/domain, application services, projections and query services, REST transport contracts, RBAC reuse, Swagger, and backend tests are complete. Stage 9 and Stage 14 documentation alignment is recorded in [the feature summary](features/FEATURE_1_3_1_SUMMARY.md). Frontend delivery and subsequent integration, release-environment, review, approval, and commit stages remain pending.
+
+Feature 1.3.2 Enterprise Dependency Management completed its architecture, domain, application, REST, verification, and documentation stages. It adds derived dependency health, blocked-state and bounded impact projections without changing dependency persistence or scheduling algorithms. The verified implementation and limitations are recorded in [the feature completion report](features/FEATURE_1_3_2_SUMMARY.md). The final feature commit remains pending because the shared worktree contains concurrent feature changes.
 
 The persistence foundation for Feature 1.2.5 (Stage 4.1) was committed together with the final Feature 1.2.4 Skills Management commit (0c0bef2) because both features were developed concurrently.
 

@@ -38,3 +38,4 @@ REST APIs should follow these rules:
 
 Future APIs for resources, capacity, Gantt, and AI should use the same controller/DTO/service/repository structure.
 
+The canonical implementation conventions for this decision are maintained in the [REST API Design Standard](../API_DESIGN_STANDARD.md). Feature 1.3.1 validated the public DTO, internal projection, mapper, thin-controller, filtering, pagination, RBAC, and OpenAPI boundaries described there.

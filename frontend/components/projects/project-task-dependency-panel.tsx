@@ -5,6 +5,7 @@ import {
   ModalFormGrid,
   ModalFormSection,
 } from "@/components/ui/modal-form";
+import { ErrorState } from "@/components/ui/states";
 import type { ApiTask, ApiTaskDependency } from "@/features/projects";
 
 type DependencyMutationInput = {
@@ -258,9 +259,9 @@ export function ProjectTaskDependencyPanel({
               title="Dependency Detail"
             >
               {formError ? (
-                <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <ErrorState className="mb-4">
                   {formError}
-                </div>
+                </ErrorState>
               ) : null}
               <ModalFormGrid className="md:grid-cols-2">
                 <label className="block text-sm font-medium text-slate-700">

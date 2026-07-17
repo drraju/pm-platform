@@ -18,8 +18,11 @@ type TaskTypeInput = {
 };
 
 type TaskMutationInput = TaskTypeInput & {
+  actualEndDate?: string | null;
+  actualStartDate?: string | null;
   assigneeId?: string | null;
   dueDate?: string | null;
+  durationDays?: number | null;
   estimatedHours?: number | null;
   milestoneCategory?: MilestoneCategory | string | null;
   percentComplete?: number | null;
@@ -150,8 +153,9 @@ export class SchedulingFoundationService {
     }
     this.validateTaskTypeTransition(taskKind, existingTask);
     this.validateSummaryTaskMutation(taskKind, normalizedInput);
-    this.validateMilestoneTaskMutation(taskKind, normalizedInput);
     this.normalizeMilestoneTaskDates(taskKind, normalizedInput, existingTask);
+    this.normalizeMilestoneLifecycle(taskKind, normalizedInput, existingTask);
+    this.validateTaskDateConsistency(taskKind, normalizedInput, existingTask);
 
     return normalizedInput;
   }
@@ -454,6 +458,15 @@ export class SchedulingFoundationService {
       return;
     }
 
+    if (
+      typeof input.durationDays !== 'undefined' &&
+      input.durationDays !== null &&
+      input.durationDays !== 0
+    ) {
+      throw new BadRequestException('Milestone duration is always zero');
+    }
+    input.durationDays = 0;
+
     const hasStart = typeof input.plannedStartDate !== 'undefined';
     const hasEnd = typeof input.plannedEndDate !== 'undefined';
     const plannedStartDate = hasStart
@@ -596,23 +609,85 @@ export class SchedulingFoundationService {
     }
   }
 
-  private validateMilestoneTaskMutation(
+  private normalizeMilestoneLifecycle(
     taskKind: TaskKind,
     input: Partial<TaskMutationInput>,
+    existingTask?: TaskMutationInput,
   ) {
     if (taskKind !== TaskKind.Milestone) {
       return;
     }
 
-    if (typeof input.percentComplete !== 'undefined') {
+    const nextStatus =
+      input.status ?? existingTask?.status ?? TaskStatus.Backlog;
+    const wasComplete = existingTask?.status === TaskStatus.Done;
+
+    if (nextStatus === TaskStatus.Done) {
+      const completionDate =
+        input.actualEndDate ??
+        input.actualStartDate ??
+        existingTask?.actualEndDate ??
+        existingTask?.actualStartDate ??
+        input.plannedEndDate ??
+        existingTask?.plannedEndDate;
+      if (!completionDate) {
+        throw new BadRequestException(
+          'Milestone completion requires an actual or planned date',
+        );
+      }
+      input.status = TaskStatus.Done;
+      input.percentComplete = 100;
+      input.actualStartDate = completionDate;
+      input.actualEndDate = completionDate;
+      return;
+    }
+
+    if (input.percentComplete !== undefined && input.percentComplete !== 0) {
       throw new BadRequestException(
-        'Milestone progress is determined by scheduling state',
+        'Incomplete milestones must have zero percent complete',
       );
     }
 
-    if (typeof input.status !== 'undefined') {
+    input.percentComplete = 0;
+    if (wasComplete) {
+      input.actualStartDate = null;
+      input.actualEndDate = null;
+    }
+  }
+
+  private validateTaskDateConsistency(
+    taskKind: TaskKind,
+    input: Partial<TaskMutationInput>,
+    existingTask?: TaskMutationInput,
+  ) {
+    const plannedStartDate =
+      input.plannedStartDate === undefined
+        ? existingTask?.plannedStartDate
+        : input.plannedStartDate;
+    const plannedEndDate =
+      input.plannedEndDate === undefined
+        ? existingTask?.plannedEndDate
+        : input.plannedEndDate;
+    const actualStartDate =
+      input.actualStartDate === undefined
+        ? existingTask?.actualStartDate
+        : input.actualStartDate;
+    const actualEndDate =
+      input.actualEndDate === undefined
+        ? existingTask?.actualEndDate
+        : input.actualEndDate;
+
+    this.validateDateOrder(plannedStartDate, plannedEndDate);
+    this.validateDateOrder(actualStartDate, actualEndDate, 'actual');
+
+    if (
+      taskKind === TaskKind.Milestone &&
+      actualStartDate &&
+      actualEndDate &&
+      actualStartDate !== actualEndDate
+    ) {
       throw new BadRequestException(
-        'Milestone status is determined by scheduling state',
+        'Milestones must have matching actual start and end dates',
       );
     }
   }
@@ -815,16 +890,13 @@ export class SchedulingFoundationService {
   }
 
   private validateDateOrder(
-    plannedStartDate?: string | null,
-    plannedEndDate?: string | null,
+    startDate?: string | null,
+    endDate?: string | null,
+    dateType: 'planned' | 'actual' = 'planned',
   ) {
-    if (
-      plannedStartDate &&
-      plannedEndDate &&
-      plannedEndDate < plannedStartDate
-    ) {
+    if (startDate && endDate && endDate < startDate) {
       throw new BadRequestException(
-        'Planned finish date cannot be before planned start date',
+        `${dateType === 'actual' ? 'Actual' : 'Planned'} finish date cannot be before ${dateType} start date`,
       );
     }
   }

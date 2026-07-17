@@ -6,6 +6,8 @@ import { PermissionKey } from '../../../common/authz/permissions';
 import { PermissionsGuard } from '../../../common/authz/permissions.guard';
 import { PortfolioController } from '../portfolio.controller';
 import { PortfolioService } from '../portfolio.service';
+import { MilestoneQueryService } from '../../tasks/milestone-query.service';
+import { MilestoneResponseMapper } from '../../tasks/milestone-response.mapper';
 
 const permissionsByRoleName: Record<string, string[]> = {
   'Program Manager': [PermissionKey.DashboardView, PermissionKey.PortfolioView],
@@ -53,6 +55,14 @@ describe('PortfolioController authorization', () => {
           provide: PortfolioService,
           useValue: { getSummary: jest.fn() },
         },
+        {
+          provide: MilestoneQueryService,
+          useValue: { findPortfolioMilestones: jest.fn() },
+        },
+        {
+          provide: MilestoneResponseMapper,
+          useValue: { toListResponse: jest.fn(), toQuery: jest.fn() },
+        },
         Reflector,
         PermissionsGuard,
         {
@@ -75,6 +85,19 @@ describe('PortfolioController authorization', () => {
     },
   );
 
+  it('applies portfolio.view to the milestone endpoint', async () => {
+    await expect(
+      guard.canActivate(
+        createContext('Portfolio Manager', controller, 'findMilestones'),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      guard.canActivate(
+        createContext('Customer', controller, 'findMilestones'),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it.each(['Customer', 'Partner', 'Team Member'])(
     'denies %s from accessing portfolio reporting',
     async (roleName) => {
@@ -88,10 +111,11 @@ describe('PortfolioController authorization', () => {
 function createContext(
   roleName: string,
   controller: PortfolioController,
+  handler: 'getSummary' | 'findMilestones' = 'getSummary',
 ): ExecutionContext {
   return {
     getClass: () => PortfolioController,
-    getHandler: () => controller.getSummary,
+    getHandler: () => controller[handler],
     switchToHttp: () => ({
       getRequest: () => ({
         user: {

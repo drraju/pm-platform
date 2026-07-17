@@ -84,17 +84,12 @@ describe('ResourceSkillService', () => {
     const created = await service.createResourceSkill(input, actor);
 
     expect(resourceSkillsRepository.manager.transaction).toHaveBeenCalled();
-    expect(validationService.validateResolvedResourceSkill).toHaveBeenCalledWith(
-      input,
-      resourceSkillsRepository.manager,
-    );
+    expect(
+      validationService.validateResolvedResourceSkill,
+    ).toHaveBeenCalledWith(input, resourceSkillsRepository.manager);
     expect(
       validationService.ensureResourceSkillNotDuplicated,
-    ).toHaveBeenCalledWith(
-      input,
-      undefined,
-      resourceSkillsRepository.manager,
-    );
+    ).toHaveBeenCalledWith(input, undefined, resourceSkillsRepository.manager);
     expect(created).toEqual(
       expect.objectContaining({
         createdById: actor.userId,
@@ -120,7 +115,9 @@ describe('ResourceSkillService', () => {
       actor,
     );
 
-    expect(validationService.validateResolvedResourceSkill).toHaveBeenCalledWith(
+    expect(
+      validationService.validateResolvedResourceSkill,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         monthsExperience: 8,
         notes: null,

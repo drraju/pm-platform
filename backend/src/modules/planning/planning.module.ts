@@ -6,6 +6,7 @@ import { SchedulingFoundationService } from '../../common/scheduling/scheduling-
 import { ProjectsModule } from '../projects/projects.module';
 import { Project } from '../projects/entities/project.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { User } from '../users/entities/user.entity';
 import { PlanningScheduleSnapshot } from './entities/planning-schedule-snapshot.entity';
 import { PlanningTaskSchedule } from './entities/planning-task-schedule.entity';
@@ -22,12 +23,15 @@ import { ResourceWorkloadSnapshot } from './entities/resource-workload-snapshot.
 import { PlanningController } from './planning.controller';
 import { PlanningSnapshotModule } from './planning-snapshot.module';
 import { PlanningService } from './planning.service';
+import { PlanningWorkPackageDuplicationService } from './planning-work-package-duplication.service';
+import { TasksModule } from '../tasks/tasks.module';
 
 @Module({
   imports: [
     AuthzModule,
     PlanningSnapshotModule,
     ProjectsModule,
+    TasksModule,
     TypeOrmModule.forFeature([
       PlanningScheduleSnapshot,
       PlanningTaskSchedule,
@@ -37,6 +41,7 @@ import { PlanningService } from './planning.service';
       ResourceWorkloadSnapshot,
       Project,
       Task,
+      TaskDependency,
       User,
     ]),
   ],
@@ -50,6 +55,7 @@ import { PlanningService } from './planning.service';
     PlanningGraphBuilderService,
     PlanningScheduleEngineService,
     PlanningService,
+    PlanningWorkPackageDuplicationService,
     SchedulingContextFactory,
   ],
   exports: [

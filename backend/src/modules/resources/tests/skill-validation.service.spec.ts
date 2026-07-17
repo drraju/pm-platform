@@ -49,9 +49,9 @@ describe('SkillValidationService', () => {
   it('rejects duplicate active skill names', async () => {
     queryBuilder.getOne.mockResolvedValue({ id: 'skill-id' });
 
-    await expect(
-      service.ensureSkillNameIsUnique('TypeScript'),
-    ).rejects.toThrow(ConflictException);
+    await expect(service.ensureSkillNameIsUnique('TypeScript')).rejects.toThrow(
+      ConflictException,
+    );
   });
 
   it('accepts unique active skill names', async () => {

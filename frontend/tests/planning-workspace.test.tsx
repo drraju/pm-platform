@@ -1626,6 +1626,14 @@ describe("PlanningWorkspace", () => {
       taskType: "summary",
     });
     expect(await screen.findByDisplayValue("New Summary")).toHaveFocus();
+    await waitFor(() => {
+      const persistedState = JSON.parse(
+        window.localStorage.getItem(
+          "pm-platform.planningWorkspace.collapsedSummaryIds.project-1",
+        ) ?? "[]",
+      ) as string[];
+      expect(persistedState).toContain("task-summary-2");
+    });
   });
 
   it("creates a sibling milestone and immediately opens the title editor", async () => {
@@ -2275,7 +2283,7 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByDisplayValue("New Task")).toHaveFocus();
   });
 
-  it("adds a child as the last child and expands the parent", async () => {
+  it("adds a child without changing the parent's expansion state", async () => {
     const newSchedule = {
       ...orderingWorkspace.schedules[1],
       id: "schedule-6",
@@ -2323,9 +2331,13 @@ describe("PlanningWorkspace", () => {
       parentTaskId: "task-1",
       taskType: "task",
     });
+    await waitFor(() => expect(onCreateTask).toHaveBeenCalledTimes(1));
     expect(
-      await screen.findByRole("row", { name: /1\.3 New Task/ }),
+      screen.getByRole("button", { name: /expand planning/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /1\.3 New Task/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -2678,6 +2690,9 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
+    fireEvent.click(
+      screen.getByRole("button", { name: /collapse execution/i }),
+    );
     fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
     runStructureCommand("Move to Summary...");
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
@@ -2689,8 +2704,11 @@ describe("PlanningWorkspace", () => {
       });
     });
     expect(
-      screen.getByRole("row", { name: /2\.2 Design schedule/ }),
+      screen.getByRole("button", { name: /expand execution/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /2\.2 Design schedule/ }),
+    ).not.toBeInTheDocument();
     expect(onRefreshWorkspace).toHaveBeenCalled();
   });
 
@@ -2716,6 +2734,10 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /collapse execution/i }),
+    );
     fireEvent.click(screen.getByRole("row", { name: /2 Execution/ }));
     runStructureCommand("Move Up");
 
@@ -2723,6 +2745,18 @@ describe("PlanningWorkspace", () => {
       screen.getByRole("row", { name: /1 Execution/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Planning/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand execution/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand planning/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /Build API/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /Design schedule/ }),
+    ).not.toBeInTheDocument();
     await waitFor(() => {
       expect(onUpdateSchedule).toHaveBeenCalledWith("summary-2", {
         parentTaskId: null,
@@ -2823,7 +2857,7 @@ describe("PlanningWorkspace", () => {
     );
   });
 
-  it("resets expansion state when the planning workspace remounts", () => {
+  it("restores expansion state when the planning workspace remounts", async () => {
     function Harness() {
       const [refreshKey, setRefreshKey] = React.useState(0);
       return (
@@ -2850,9 +2884,228 @@ describe("PlanningWorkspace", () => {
       screen.queryByRole("row", { name: /1\.1 Design schedule/ }),
     ).not.toBeInTheDocument();
 
+    await waitFor(() =>
+      expect(
+        window.localStorage.getItem(
+          "pm-platform.planningWorkspace.collapsedSummaryIds.project-1",
+        ),
+      ).not.toBeNull(),
+    );
+
     fireEvent.click(screen.getByRole("button", { name: "Remount planning" }));
     expect(
-      screen.getByRole("row", { name: /1\.1 Design schedule/ }),
+      screen.queryByRole("row", { name: /1\.1 Design schedule/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand planning/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("preserves expansion state across refresh and auto-save schedule updates", () => {
+    const props = {
+      onCreateDependency: vi.fn(),
+      onCreateTask: vi.fn(),
+      onDeleteDependency: vi.fn(),
+      onUpdateSchedule: vi.fn(),
+    };
+    const { rerender } = render(
+      <PlanningWorkspace {...props} workspace={workspace} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    expect(
+      screen.queryByRole("row", { name: /1\.1 Design schedule/ }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <PlanningWorkspace
+        {...props}
+        isSaving
+        workspace={{
+          ...workspace,
+          schedules: workspace.schedules.map((schedule) => ({
+            ...schedule,
+            percentComplete: Number(schedule.percentComplete ?? 0) + 1,
+          })),
+        }}
+      />,
+    );
+    expect(screen.getByText("Saving…")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand planning/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /Design schedule/ }),
+    ).not.toBeInTheDocument();
+
+    rerender(<PlanningWorkspace {...props} workspace={{ ...workspace }} />);
+    expect(
+      screen.getByRole("button", { name: /expand planning/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /Design schedule/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("duplicates a Summary Task from its context menu and supports undo and redo", async () => {
+    const duplicatedWorkspace: ApiPlanningWorkspace = {
+      ...workspace,
+      schedules: [
+        ...workspace.schedules,
+        {
+          ...workspace.schedules[0],
+          id: "schedule-copy",
+          sequenceNumber: 2,
+          taskId: "summary-copy",
+          taskTitle: "Planning Wave 2",
+        },
+        {
+          ...workspace.schedules[1],
+          id: "schedule-child-copy",
+          parentTaskId: "summary-copy",
+          sequenceNumber: 1,
+          taskId: "task-copy",
+          taskTitle: "Design schedule",
+        },
+      ],
+    };
+    const onDuplicateWorkPackage = vi
+      .fn()
+      .mockResolvedValueOnce({
+        copiedTaskIds: ["summary-copy", "task-copy"],
+        newSummaryTaskId: "summary-copy",
+        workspace: duplicatedWorkspace,
+      })
+      .mockResolvedValueOnce({
+        copiedTaskIds: ["summary-copy-2", "task-copy-2"],
+        newSummaryTaskId: "summary-copy-2",
+        workspace: {
+          ...duplicatedWorkspace,
+          schedules: duplicatedWorkspace.schedules.map((schedule) =>
+            schedule.taskId === "summary-copy"
+              ? { ...schedule, id: "schedule-copy-2", taskId: "summary-copy-2" }
+              : schedule.taskId === "task-copy"
+                ? {
+                    ...schedule,
+                    id: "schedule-child-copy-2",
+                    parentTaskId: "summary-copy-2",
+                    taskId: "task-copy-2",
+                  }
+                : schedule,
+          ),
+        },
+      });
+    const onRemoveDuplicatedWorkPackage = vi.fn().mockResolvedValue(workspace);
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onDuplicateWorkPackage={onDuplicateWorkPackage}
+        onRemoveDuplicatedWorkPackage={onRemoveDuplicatedWorkPackage}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
+    expect(
+      screen.queryByRole("row", { name: /1\.1 Design schedule/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByRole("row", { name: /1 Planning/ }), {
+      clientX: 120,
+      clientY: 160,
+    });
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: /Duplicate Work Package/ }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Duplicate Work Package" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Copy child tasks/)).toBeChecked();
+    expect(screen.getByLabelText(/Copy planned dates/)).not.toBeChecked();
+    fireEvent.change(screen.getByLabelText(/New Summary Name/), {
+      target: { value: "Planning Wave 2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    await waitFor(() =>
+      expect(onDuplicateWorkPackage).toHaveBeenCalledWith(
+        "task-1",
+        expect.objectContaining({
+          copyChildTasks: true,
+          copyPlannedDates: false,
+          newSummaryName: "Planning Wave 2",
+          preserveInternalPredecessors: true,
+        }),
+      ),
+    );
+    expect(
+      await screen.findByRole("row", { name: /Planning Wave 2/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("button", { name: /expand planning wave 2/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("row", { name: /Design schedule/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand planning$/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /expand planning wave 2/i }),
+    );
+    expect(
+      screen.getByRole("button", { name: /collapse planning wave 2/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /Design schedule/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(
+      screen.getByLabelText("Planning split workspace").parentElement!,
+      { ctrlKey: true, key: "z" },
+    );
+    await waitFor(() =>
+      expect(onRemoveDuplicatedWorkPackage).toHaveBeenCalledWith(
+        "summary-copy",
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: /expand planning$/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.queryByRole("row", { name: /Design schedule/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(
+      screen.getByLabelText("Planning split workspace").parentElement!,
+      { ctrlKey: true, key: "Z", shiftKey: true },
+    );
+    await waitFor(() =>
+      expect(onDuplicateWorkPackage).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: /collapse planning wave 2/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("row", { name: /Planning Wave 2/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("row", { name: /Design schedule/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand planning$/i }),
     ).toBeInTheDocument();
   });
 });

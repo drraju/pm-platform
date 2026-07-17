@@ -73,7 +73,10 @@ export class ResourceSkillController {
     @Req() request: AuthenticatedRequest,
     @Body() input: CreateResourceSkillDto,
   ): Promise<ResourceSkillResponseDto> {
-    return this.resourceSkillApiService.createResourceSkill(input, request.user);
+    return this.resourceSkillApiService.createResourceSkill(
+      input,
+      request.user,
+    );
   }
 
   @Get()
@@ -140,7 +143,9 @@ export class ResourceSkillController {
   listResourceSkillsByResource(
     @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
   ): Promise<ResourceSkillResponseDto[]> {
-    return this.resourceSkillApiService.listResourceSkillsByResource(resourceId);
+    return this.resourceSkillApiService.listResourceSkillsByResource(
+      resourceId,
+    );
   }
 
   @Get('skill/:skillId')

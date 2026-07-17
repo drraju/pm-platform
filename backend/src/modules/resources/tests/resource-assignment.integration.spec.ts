@@ -63,7 +63,7 @@ class InMemoryRepository<T extends { id?: string; deletedAt?: Date | null }> {
     const persisted = await this.save({
       ...input,
       deletedAt: new Date('2026-07-10T00:00:00.000Z'),
-    } as T);
+    });
     return persisted;
   }
 
@@ -172,8 +172,9 @@ describe('ResourceAssignment API integration', () => {
         repositoryByEntity.get(entity)!.save(input),
       softRemove: (entity: Function, input: any) =>
         repositoryByEntity.get(entity)!.softRemove(input),
-      transaction: async (callback: (manager: typeof manager) => Promise<any>) =>
-        callback(manager),
+      transaction: async (
+        callback: (manager: typeof manager) => Promise<any>,
+      ) => callback(manager),
     };
 
     assignmentsRepository.manager = manager;
@@ -256,9 +257,9 @@ describe('ResourceAssignment API integration', () => {
       expect.objectContaining({ id: created.id }),
     );
 
-    await expect(controller.listAssignmentsByProject(project.id)).resolves.toEqual(
-      [expect.objectContaining({ id: created.id })],
-    );
+    await expect(
+      controller.listAssignmentsByProject(project.id),
+    ).resolves.toEqual([expect.objectContaining({ id: created.id })]);
     await expect(
       controller.listAssignmentsByResource(resource.id),
     ).resolves.toEqual([expect.objectContaining({ id: created.id })]);
@@ -373,7 +374,7 @@ async function seedProject(
   return repository.save({
     id,
     name: 'Project Atlas',
-    status: 'active' as Project['status'],
+    status: 'active',
   } as Project);
 }
 

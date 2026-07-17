@@ -42,11 +42,13 @@ Projects own delivery metadata such as name, status, start date, target end date
 
 ## Tasks
 
-Tasks belong to projects and may form a parent-child hierarchy. `task_kind` identifies standard tasks, summary tasks, and milestones. Milestones have constrained planned dates. Task dependencies are separate edges with FS, SS, FF, and SF dependency types.
+Tasks belong to projects and may form a parent-child hierarchy. `task_kind` identifies standard tasks, summary tasks, and milestones. A milestone remains a Task rather than a separate aggregate or table. Milestones have zero duration, matching planned and actual date pairs, validated categories, normalized completion/reopening behavior, and the same audit and dependency identity as other Tasks. Task dependencies are separate edges with FS, SS, FF, and SF dependency types.
 
 ## Planning
 
 Planning stores snapshots and task schedule rows. The Planning Workspace reads project, schedule, dependencies, resource allocations, and critical path data. Baselines are immutable snapshots of project task state.
+
+Planning remains scheduling authority for milestone forecast and critical-path outputs. The milestone projection combines Task, latest Planning schedule snapshot, current baseline, owner, and schedule analysis without persisting a duplicate read model.
 
 ## Calendars
 
@@ -72,4 +74,3 @@ Portfolio currently summarizes project health and delivery signals. Future roadm
 ## Notifications
 
 Notifications are user-scoped records with title, body, type, and `read_at`.
-

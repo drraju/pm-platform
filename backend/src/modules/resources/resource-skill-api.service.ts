@@ -11,9 +11,7 @@ import { ResourceSkillService } from './resource-skill.service';
 
 @Injectable()
 export class ResourceSkillApiService {
-  constructor(
-    private readonly resourceSkillService: ResourceSkillService,
-  ) {}
+  constructor(private readonly resourceSkillService: ResourceSkillService) {}
 
   async createResourceSkill(
     input: CreateResourceSkillDto,

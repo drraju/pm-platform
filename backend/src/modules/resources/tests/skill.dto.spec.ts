@@ -1,6 +1,10 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateSkillDto, QuerySkillsDto, UpdateSkillDto } from '../dto/skill.dto';
+import {
+  CreateSkillDto,
+  QuerySkillsDto,
+  UpdateSkillDto,
+} from '../dto/skill.dto';
 import { SkillStatus } from '../enums/skill-status.enum';
 
 describe('Skill DTO validation', () => {

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { HealthModule } from '../health/health.module';
@@ -15,11 +15,13 @@ import { ProjectVisibilityService } from './project-visibility.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { PlanningSnapshotModule } from '../planning/planning-snapshot.module';
+import { TasksModule } from '../tasks/tasks.module';
 
 @Module({
   imports: [
     HealthModule,
     PlanningSnapshotModule,
+    forwardRef(() => TasksModule),
     TypeOrmModule.forFeature([
       Project,
       ProjectBaseline,

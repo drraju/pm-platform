@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { LoadingSkeleton } from "@/components/ui/states";
 import type { ApiProject } from "@/features/projects";
 import { ProjectHeader } from "./project-header";
 import type { ProjectWorkspaceTabId } from "./project-tabs";
@@ -27,8 +28,8 @@ export function ProjectLayout({
 export function ProjectLayoutLoadingState() {
   return (
     <div className="space-y-6">
-      <section className="h-48 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-      <section className="h-80 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
+      <LoadingSkeleton className="h-48 rounded-md border border-slate-200 bg-white shadow-soft" />
+      <LoadingSkeleton className="h-80 rounded-md border border-slate-200 bg-white shadow-soft" />
     </div>
   );
 }

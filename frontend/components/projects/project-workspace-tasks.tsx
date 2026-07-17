@@ -1,10 +1,15 @@
 import React from "react";
+import { ActionGroup } from "@/components/ui/action-group";
 import { AppModal } from "@/components/ui/app-modal";
+import { SectionCard } from "@/components/ui/card";
 import {
   ModalForm,
   ModalFormGrid,
   ModalFormSection,
 } from "@/components/ui/modal-form";
+import { SectionHeader } from "@/components/ui/section-header";
+import { ErrorState } from "@/components/ui/states";
+import { CountBadge } from "@/components/ui/status-badge";
 import { ProjectTaskDependencyPanel } from "@/components/projects/project-task-dependency-panel";
 import type {
   ApiProjectMember,
@@ -334,22 +339,11 @@ export function ProjectWorkspaceTasks({
   });
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">
-            {isPlanningMode ? "Plan" : "Tasks"}
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {isPlanningMode
-              ? "Hierarchical project planning with summaries, tasks, milestones, and calculated rollups."
-              : "Track execution status, ownership, progress, actual dates, effort, and comments for approved project tasks."}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-            {hierarchy.rows.length}
-          </span>
+    <SectionCard>
+      <SectionHeader
+        action={
+          <ActionGroup>
+            <CountBadge value={hierarchy.rows.length} />
           {canCreateTask ? (
             <>
               <button
@@ -375,14 +369,22 @@ export function ProjectWorkspaceTasks({
               </button>
             </>
           ) : null}
-        </div>
-      </div>
+          </ActionGroup>
+        }
+        description={
+          isPlanningMode
+            ? "Hierarchical project planning with summaries, tasks, milestones, and calculated rollups."
+            : "Track execution status, ownership, progress, actual dates, effort, and comments for approved project tasks."
+        }
+        layout="wide"
+        title={isPlanningMode ? "Plan" : "Tasks"}
+      />
 
       <div className="mt-5 overflow-x-auto">
         {inlineError ? (
-          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <ErrorState className="mb-3">
             {inlineError}
-          </div>
+          </ErrorState>
         ) : null}
         <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -768,9 +770,9 @@ export function ProjectWorkspaceTasks({
               title={isPlanningMode ? "Planning Detail" : "Task Execution Detail"}
             >
               {formError ? (
-                <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <ErrorState className="mb-4">
                   {formError}
-                </div>
+                </ErrorState>
               ) : null}
 
               <ModalFormGrid className="md:grid-cols-2 xl:grid-cols-3">
@@ -1095,7 +1097,7 @@ export function ProjectWorkspaceTasks({
           tasks={tasks}
         />
       ) : null}
-    </section>
+    </SectionCard>
   );
 }
 

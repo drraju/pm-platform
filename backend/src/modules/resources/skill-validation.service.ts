@@ -38,7 +38,8 @@ export class SkillValidationService {
     skillId?: string,
     manager?: EntityManager,
   ) {
-    const skillsRepository = manager?.getRepository(Skill) ?? this.skillsRepository;
+    const skillsRepository =
+      manager?.getRepository(Skill) ?? this.skillsRepository;
     const existing = await skillsRepository
       .createQueryBuilder('skill')
       .where('LOWER(skill.name) = LOWER(:name)', { name: name.trim() })

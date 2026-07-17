@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ProjectHealthStatus } from '../health/dto/project-health.dto';
@@ -12,6 +12,8 @@ import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { TaskKind } from '../../common/enums/task-kind.enum';
+import { TasksService } from '../tasks/tasks.service';
 import {
   OpenIssuesByPriorityDto,
   OpenRisksBySeverityDto,
@@ -34,6 +36,8 @@ export class PortfolioService {
     private readonly tasksRepository: Repository<Task>,
     private readonly projectHealthService: ProjectHealthService,
     private readonly projectVisibilityService: ProjectVisibilityService,
+    @Optional()
+    private readonly canonicalTasksService?: TasksService,
   ) {}
 
   async getSummary(
@@ -111,7 +115,9 @@ export class PortfolioService {
     summary.openRisksBySeverity = this.countOpenRisksBySeverity(risks);
     summary.openIssuesByPriority = this.countOpenIssuesByPriority(issues);
     summary.overdueTasks = this.countOverdueTasks(tasks);
-    summary.upcomingMilestones = this.findUpcomingMilestones(tasks);
+    summary.upcomingMilestones = this.canonicalTasksService
+      ? await this.findProjectedUpcomingMilestones(projects, actor)
+      : this.findUpcomingMilestones(tasks);
 
     return summary;
   }
@@ -268,8 +274,37 @@ export class PortfolioService {
 
   private isUpcomingMilestoneCandidate(task: Task, today: string): boolean {
     return Boolean(
-      task.dueDate && task.dueDate >= today && task.status !== TaskStatus.Done,
+      task.taskKind === TaskKind.Milestone &&
+      task.dueDate &&
+      task.dueDate >= today &&
+      task.status !== TaskStatus.Done,
     );
+  }
+
+  private async findProjectedUpcomingMilestones(
+    projects: Project[],
+    actor?: ProjectVisibilityActor,
+  ): Promise<UpcomingMilestoneDto[]> {
+    const page = await this.canonicalTasksService!.findPortfolioMilestones(
+      {
+        pageSize: 10,
+        projectIds: projects.map((project) => project.id),
+        sortBy: 'forecastDate',
+        states: ['upcoming'],
+      },
+      actor,
+    );
+    const projectNames = new Map(
+      projects.map((project) => [project.id, project.name]),
+    );
+    return page.items.map((milestone) => ({
+      dueDate: (milestone.forecastDate ?? milestone.plannedDate) as string,
+      projectId: milestone.projectId,
+      projectName:
+        projectNames.get(milestone.projectId) ?? 'Unassigned project',
+      taskId: milestone.taskId,
+      title: milestone.title,
+    }));
   }
 
   private isOpen(status?: string | null): boolean {

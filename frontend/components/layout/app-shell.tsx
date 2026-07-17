@@ -57,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-surface text-ink">
+    <div className="min-h-screen bg-surface text-ink antialiased">
       <AppSidebar
         isCollapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed((value) => !value)}
@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div
         className={`transition-[padding] duration-200 ${
-          isSidebarCollapsed ? "lg:pl-20" : "lg:pl-64"
+          isSidebarCollapsed ? "lg:pl-[4.5rem]" : "lg:pl-60"
         }`}
       >
         <GlobalHeader
@@ -95,7 +95,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
         <WorkspaceContextBar pathname={pathname} />
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+          {children}
+        </main>
       </div>
     </div>
   );

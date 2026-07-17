@@ -7,6 +7,22 @@ This project also keeps detailed release documentation in
 
 ## Unreleased
 
+### Added
+
+- Added Enterprise Dependency Management read APIs for visible dependency detail and project dependency collections.
+- Added derived dependency health, blocked-state, and bounded downstream-impact projections.
+- Added dependency filtering, deterministic sorting, pagination, traversal limits, Swagger contracts, and architecture tests.
+
+### Changed
+
+- Preserved existing task-dependency mutation routes while establishing DTO-only enterprise dependency read contracts.
+- Improved dependency impact traversal to use a linear-time queue and retain complete graph context for detail reads.
+
+### Compatibility
+
+- No database migration or breaking API change is required for Feature 1.3.2.
+- Start-to-Finish and nonzero-offset dependencies remain readable but report unknown health until their scheduling mathematics are explicitly implemented.
+
 ### Documentation
 
 - Added root project governance documents:

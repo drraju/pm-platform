@@ -13,6 +13,7 @@ instead.
 | --- | --- | --- |
 | v1.1.1 | [Planning Engine Stabilization](v1.1.1-planning-engine-stabilization.md) | Planned stabilization path for scheduling correctness and resource readiness. |
 | v1.1.0 beta1 | [v1.1.0 beta1](v1.1.0-beta1.md) | Beta migration and release note artifact. |
+| Release 1.0 Feature 1.3.2 | [Enterprise Dependency Management](v1.0-feature-1.3.2-enterprise-dependency-management.md) | Release-ready dependency health, blocked-state, impact, projection, and REST capability. |
 
 ## v1.0.6 Planning Foundation
 

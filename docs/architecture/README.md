@@ -26,6 +26,10 @@ This directory documents the current PM Platform architecture and approved roadm
 | [10-ROADMAP.md](10-ROADMAP.md) | Completed, current, and future roadmap. |
 | [RESOURCE_ARCHITECTURE.md](RESOURCE_ARCHITECTURE.md) | Epic 1.2 Enterprise Resource Management architecture baseline. |
 | [FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md](FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md) | Feature-specific ADD for Feature 1.2.2 Resource CRUD API. |
+| [API_DESIGN_STANDARD.md](API_DESIGN_STANDARD.md) | Canonical REST naming, transport, validation, error, Swagger, and versioning standard. |
+| [FEATURE_1_3_1_ARCHITECTURE_NOTES.md](FEATURE_1_3_1_ARCHITECTURE_NOTES.md) | Enterprise Milestone Management ownership decisions and lessons. |
+| [Feature 1.3.1 Summary](../features/FEATURE_1_3_1_SUMMARY.md) | Implemented backend capability, APIs, tests, and remaining stages. |
+| [Feature 1.3.2 Completion Report](../features/FEATURE_1_3_2_SUMMARY.md) | Enterprise dependency ownership, projection architecture, APIs, verification, and deferred scheduling work. |
 
 ## Architecture Decision Records
 
@@ -42,6 +46,8 @@ This directory documents the current PM Platform architecture and approved roadm
 - [ADR-011 ERM Assignment Ownership](adr/ADR-011-erm-assignment-ownership.md)
 - [ADR-012 ERM Permissions and Visibility](adr/ADR-012-erm-permissions-visibility.md)
 - [ADR-013 ERM Planning Resource Transition](adr/ADR-013-erm-planning-resource-transition.md)
+
+The REST implementation standard governed by ADR-004 is [API Design Standard](API_DESIGN_STANDARD.md).
 
 ## Existing Detailed References
 
@@ -73,6 +79,8 @@ These existing documents remain useful detailed references:
 - Calendars own working hours, holidays, and exception days.
 - Resources own future capacity, availability, skills, and cost.
 - Planning consumes scheduling.
+- Tasks own milestone lifecycle mutations; Planning owns milestone schedules and snapshot orchestration.
+- `TaskDependency` remains canonical; `ProjectsService` owns dependency mutations and `DependencyQueryService` owns projected dependency reads.
 - Calendar and resource administration must not directly mutate schedules.
 - Database changes should be additive.
 - Feature work should follow requirements review, repository investigation, architecture gap analysis, ADR review, ADR approval when required, ADD, technical design review, Architecture Baseline Commit, implementation, implementation review, tests, Docker verification, Ubuntu verification, documentation update, and single-feature commit.

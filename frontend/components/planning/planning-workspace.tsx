@@ -8,6 +8,8 @@ import React, {
   useState,
 } from "react";
 import type {
+  ApiDuplicateWorkPackageInput,
+  ApiDuplicateWorkPackageResult,
   ApiPlanningTaskSchedule,
   ApiPlanningWorkspace,
   ApiMilestoneCategory,
@@ -16,6 +18,8 @@ import type {
   ApiTaskDependency,
   ApiTaskType,
 } from "@/lib/api/client";
+import { ToolbarGroup } from "@/components/ui/toolbar";
+import { usePlanningExpansionState } from "./planning-expansion-state";
 import { PlanningDetailPanel } from "./planning-detail-panel";
 
 type ZoomMode = "day" | "week" | "month" | "quarter";
@@ -67,8 +71,15 @@ type PlanningWorkspaceProps = {
   }) => Promise<ApiPlanningTaskSchedule>;
   onDeleteTask?: (taskId: string) => Promise<void>;
   onDeleteDependency: (dependencyId: string) => Promise<void>;
+  onDuplicateWorkPackage?: (
+    sourceSummaryTaskId: string,
+    input: ApiDuplicateWorkPackageInput,
+  ) => Promise<ApiDuplicateWorkPackageResult>;
   onRefreshWorkspace?: () => Promise<void>;
   onRegenerateWorkspace?: () => Promise<void>;
+  onRemoveDuplicatedWorkPackage?: (
+    summaryTaskId: string,
+  ) => Promise<ApiPlanningWorkspace>;
   onUpdateSchedule: (
     taskId: string,
     input: {
@@ -111,6 +122,26 @@ type SummaryDeleteDialogState = {
 type MoveToSummaryState = {
   destinationTaskId: string;
   taskId: string;
+};
+
+type DuplicateWorkPackageDialogState = {
+  input: ApiDuplicateWorkPackageInput;
+  sourceTaskId: string;
+};
+
+type WorkPackageContextMenuState = {
+  sourceTaskId: string;
+  x: number;
+  y: number;
+};
+
+type DuplicateHistoryEntry = {
+  duplicateCollapsedSummaryIndexes: number[];
+  duplicateSummaryTaskIds: string[];
+  duplicateSummaryTaskId: string;
+  input: ApiDuplicateWorkPackageInput;
+  selectedTaskIdBefore: string | null;
+  sourceTaskId: string;
 };
 
 type GridColumnDefinition = {
@@ -162,6 +193,29 @@ const preferenceKeys = {
   viewMode: "pm-platform.planningWorkspace.viewMode",
   zoom: "pm-platform.planningWorkspace.zoom",
 };
+type DuplicateBooleanOptionKey = Exclude<
+  keyof ApiDuplicateWorkPackageInput,
+  "newSummaryName"
+>;
+const duplicateOptionDefinitions: Array<{
+  key: DuplicateBooleanOptionKey;
+  label: string;
+}> = [
+  { key: "copyChildTasks", label: "Copy child tasks" },
+  { key: "preserveWbsHierarchy", label: "Preserve WBS hierarchy" },
+  { key: "preserveTaskDurations", label: "Preserve task durations" },
+  { key: "preserveEstimatedEffort", label: "Preserve estimated effort" },
+  {
+    key: "preserveInternalPredecessors",
+    label: "Preserve predecessors between copied tasks",
+  },
+  { key: "preserveMilestones", label: "Preserve milestones" },
+  { key: "preserveNotes", label: "Preserve notes" },
+  { key: "copyResourceAssignments", label: "Copy resource assignments" },
+  { key: "copyPlannedDates", label: "Copy planned dates" },
+  { key: "copyActualDates", label: "Copy actual dates" },
+];
+const unsupportedDuplicateOptions = ["Copy comments", "Copy attachments"];
 const gridColumns: GridColumnDefinition[] = [
   { defaultVisible: true, id: "wbs", label: "WBS", minWidth: 64 },
   {
@@ -301,8 +355,10 @@ export function PlanningWorkspace({
   onCreateTask,
   onDeleteTask = async () => {},
   onDeleteDependency,
+  onDuplicateWorkPackage,
   onRefreshWorkspace = async () => {},
   onRegenerateWorkspace = async () => {},
+  onRemoveDuplicatedWorkPackage,
   onUpdateSchedule,
   projectMembers = [],
   workspace,
@@ -334,7 +390,9 @@ export function PlanningWorkspace({
   const [isStructureMenuOpen, setIsStructureMenuOpen] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const expansionState = usePlanningExpansionState(workspace.project.id);
+  const expansionVersion = expansionState.getSnapshot();
+  const collapsedIds = expansionState.getCollapsedTaskIds();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskFocusId, setNewTaskFocusId] = useState<string | null>(null);
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
@@ -344,6 +402,16 @@ export function PlanningWorkspace({
     useState<SummaryDeleteDialogState | null>(null);
   const [moveToSummaryState, setMoveToSummaryState] =
     useState<MoveToSummaryState | null>(null);
+  const [duplicateWorkPackageDialog, setDuplicateWorkPackageDialog] =
+    useState<DuplicateWorkPackageDialogState | null>(null);
+  const [workPackageContextMenu, setWorkPackageContextMenu] =
+    useState<WorkPackageContextMenuState | null>(null);
+  const [duplicateUndoStack, setDuplicateUndoStack] = useState<
+    DuplicateHistoryEntry[]
+  >([]);
+  const [duplicateRedoStack, setDuplicateRedoStack] = useState<
+    DuplicateHistoryEntry[]
+  >([]);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isAddChildMenuOpen, setIsAddChildMenuOpen] = useState(false);
   const [dependencyDraft, setDependencyDraft] = useState({
@@ -368,6 +436,21 @@ export function PlanningWorkspace({
   useEffect(() => {
     setLocalSchedules(workspace.schedules);
   }, [workspace.schedules]);
+
+  useEffect(() => {
+    if (!workPackageContextMenu) {
+      return;
+    }
+    const closeMenu = () => setWorkPackageContextMenu(null);
+    document.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("blur", closeMenu);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("blur", closeMenu);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [workPackageContextMenu]);
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") {
@@ -415,7 +498,7 @@ export function PlanningWorkspace({
 
   const rows = useMemo(
     () => buildVisibleRows(localSchedules, collapsedIds),
-    [collapsedIds, localSchedules],
+    [collapsedIds, expansionVersion, localSchedules],
   );
   const summaryTaskIds = useMemo(
     () => getSummaryTaskIds(localSchedules),
@@ -577,23 +660,15 @@ export function PlanningWorkspace({
   }, [totalWidth]);
 
   function toggleCollapse(taskId: string) {
-    setCollapsedIds((currentIds) => {
-      const nextIds = new Set(currentIds);
-      if (nextIds.has(taskId)) {
-        nextIds.delete(taskId);
-      } else {
-        nextIds.add(taskId);
-      }
-      return nextIds;
-    });
+    expansionState.toggle(taskId);
   }
 
   function expandAll() {
-    setCollapsedIds(new Set());
+    expansionState.expandMany(summaryTaskIds);
   }
 
   function collapseAll() {
-    setCollapsedIds(new Set(summaryTaskIds));
+    expansionState.collapseMany(summaryTaskIds);
   }
 
   async function createTask(
@@ -619,13 +694,8 @@ export function PlanningWorkspace({
         ? currentSchedules
         : [...currentSchedules, schedule],
     );
-    const parentTaskId = createInput.parentTaskId ?? null;
-    if (parentTaskId) {
-      setCollapsedIds((currentIds) => {
-        const nextIds = new Set(currentIds);
-        nextIds.delete(parentTaskId);
-        return nextIds;
-      });
+    if (schedule.taskKind === "summary") {
+      expansionState.collapse(schedule.taskId);
     }
     setSelectedTaskId(keepSelectedTaskId ?? schedule.taskId);
     if (focusCreatedTask) {
@@ -641,6 +711,157 @@ export function PlanningWorkspace({
     setIsAddChildMenuOpen(false);
   }
 
+  function openDuplicateWorkPackageDialog(schedule: ApiPlanningTaskSchedule) {
+    if (schedule.taskKind !== "summary" || !onDuplicateWorkPackage) {
+      return;
+    }
+    setDuplicateWorkPackageDialog({
+      input: {
+        copyActualDates: false,
+        copyAttachments: false,
+        copyChildTasks: true,
+        copyComments: false,
+        copyPlannedDates: false,
+        copyResourceAssignments: false,
+        newSummaryName: `${getTaskTitle(schedule)} Copy`,
+        preserveEstimatedEffort: true,
+        preserveInternalPredecessors: true,
+        preserveMilestones: true,
+        preserveNotes: true,
+        preserveChecklists: true,
+        preserveTaskDurations: true,
+        preserveWbsHierarchy: true,
+      },
+      sourceTaskId: schedule.taskId,
+    });
+    setWorkPackageContextMenu(null);
+    setHierarchyError(null);
+  }
+
+  async function confirmDuplicateWorkPackage() {
+    if (!duplicateWorkPackageDialog || !onDuplicateWorkPackage) {
+      return;
+    }
+    const newSummaryName =
+      duplicateWorkPackageDialog.input.newSummaryName.trim();
+    if (!newSummaryName) {
+      setHierarchyError("New Summary Name is required.");
+      return;
+    }
+    const selectedTaskIdBefore = selectedTaskId;
+    try {
+      const input = {
+        ...duplicateWorkPackageDialog.input,
+        newSummaryName,
+      };
+      const result = await onDuplicateWorkPackage(
+        duplicateWorkPackageDialog.sourceTaskId,
+        input,
+      );
+      const duplicateSummaryTaskIds = getDuplicatedSummaryTaskIds(result);
+      setLocalSchedules(result.workspace.schedules);
+      setSelectedTaskId(result.newSummaryTaskId);
+      expansionState.collapseMany(duplicateSummaryTaskIds);
+      setDuplicateUndoStack((entries) => [
+        ...entries,
+        {
+          duplicateCollapsedSummaryIndexes: duplicateSummaryTaskIds.map(
+            (_, index) => index,
+          ),
+          duplicateSummaryTaskIds,
+          duplicateSummaryTaskId: result.newSummaryTaskId,
+          input,
+          selectedTaskIdBefore,
+          sourceTaskId: duplicateWorkPackageDialog.sourceTaskId,
+        },
+      ]);
+      setDuplicateRedoStack([]);
+      setDuplicateWorkPackageDialog(null);
+      setHierarchyError(null);
+      window.setTimeout(() => {
+        rowRefs.current.get(result.newSummaryTaskId)?.scrollIntoView?.({
+          block: "nearest",
+          inline: "nearest",
+        });
+      }, 0);
+    } catch (error) {
+      setHierarchyError(
+        error instanceof Error
+          ? error.message
+          : "Unable to duplicate the work package.",
+      );
+    }
+  }
+
+  async function undoDuplicateWorkPackage() {
+    const entry = duplicateUndoStack.at(-1);
+    if (!entry || !onRemoveDuplicatedWorkPackage) {
+      return;
+    }
+    try {
+      const nextWorkspace = await onRemoveDuplicatedWorkPackage(
+        entry.duplicateSummaryTaskId,
+      );
+      setLocalSchedules(nextWorkspace.schedules);
+      setSelectedTaskId(entry.selectedTaskIdBefore);
+      const duplicateCollapsedSummaryIndexes =
+        entry.duplicateSummaryTaskIds.flatMap((taskId, index) =>
+          expansionState.isCollapsed(taskId) ? [index] : [],
+        );
+      expansionState.expandMany(entry.duplicateSummaryTaskIds);
+      setDuplicateUndoStack((entries) => entries.slice(0, -1));
+      setDuplicateRedoStack((entries) => [
+        ...entries,
+        { ...entry, duplicateCollapsedSummaryIndexes },
+      ]);
+      setHierarchyError(null);
+    } catch (error) {
+      setHierarchyError(
+        error instanceof Error
+          ? error.message
+          : "Unable to undo the duplicated work package.",
+      );
+    }
+  }
+
+  async function redoDuplicateWorkPackage() {
+    const entry = duplicateRedoStack.at(-1);
+    if (!entry || !onDuplicateWorkPackage) {
+      return;
+    }
+    try {
+      const result = await onDuplicateWorkPackage(
+        entry.sourceTaskId,
+        entry.input,
+      );
+      const duplicateSummaryTaskIds = getDuplicatedSummaryTaskIds(result);
+      setLocalSchedules(result.workspace.schedules);
+      setSelectedTaskId(result.newSummaryTaskId);
+      expansionState.expandMany(duplicateSummaryTaskIds);
+      expansionState.collapseMany(
+        duplicateSummaryTaskIds.filter((_, index) =>
+          entry.duplicateCollapsedSummaryIndexes.includes(index),
+        ),
+      );
+      setDuplicateRedoStack((entries) => entries.slice(0, -1));
+      setDuplicateUndoStack((entries) => [
+        ...entries,
+        {
+          ...entry,
+          duplicateSummaryTaskIds,
+          duplicateSummaryTaskId: result.newSummaryTaskId,
+        },
+      ]);
+      setHierarchyError(null);
+    } catch (error) {
+      setHierarchyError(
+        error instanceof Error
+          ? error.message
+          : "Unable to redo the duplicated work package.",
+      );
+    }
+  }
+
   function handleRowKeyDown(
     event: React.KeyboardEvent<HTMLDivElement>,
     schedule: ApiPlanningTaskSchedule,
@@ -649,28 +870,14 @@ export function PlanningWorkspace({
     if (event.key === "ArrowLeft" && hasChildren) {
       event.preventDefault();
       setSelectedTaskId(schedule.taskId);
-      setCollapsedIds((currentIds) => {
-        if (currentIds.has(schedule.taskId)) {
-          return currentIds;
-        }
-        const nextIds = new Set(currentIds);
-        nextIds.add(schedule.taskId);
-        return nextIds;
-      });
+      expansionState.collapse(schedule.taskId);
       return;
     }
 
     if (event.key === "ArrowRight" && hasChildren) {
       event.preventDefault();
       setSelectedTaskId(schedule.taskId);
-      setCollapsedIds((currentIds) => {
-        if (!currentIds.has(schedule.taskId)) {
-          return currentIds;
-        }
-        const nextIds = new Set(currentIds);
-        nextIds.delete(schedule.taskId);
-        return nextIds;
-      });
+      expansionState.expand(schedule.taskId);
       return;
     }
 
@@ -687,6 +894,27 @@ export function PlanningWorkspace({
     }
 
     const primaryModifier = event.metaKey || event.ctrlKey;
+    if (
+      primaryModifier &&
+      event.shiftKey &&
+      event.key.toLowerCase() === "d" &&
+      selectedSchedule?.taskKind === "summary"
+    ) {
+      event.preventDefault();
+      openDuplicateWorkPackageDialog(selectedSchedule);
+      return;
+    }
+
+    if (primaryModifier && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) {
+        void redoDuplicateWorkPackage();
+      } else {
+        void undoDuplicateWorkPackage();
+      }
+      return;
+    }
+
     if (primaryModifier && event.key === "Enter") {
       event.preventDefault();
       if (event.shiftKey) {
@@ -1845,6 +2073,48 @@ export function PlanningWorkspace({
                   />
                   <span className="my-1 block border-t border-slate-100" />
                   <StructureMenuButton
+                    disabled={
+                      selectedSchedule?.taskKind !== "summary" ||
+                      !onDuplicateWorkPackage ||
+                      isSaving
+                    }
+                    label="Duplicate Work Package..."
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      if (selectedSchedule) {
+                        openDuplicateWorkPackageDialog(selectedSchedule);
+                      }
+                    }}
+                    shortcut="⌘⇧D"
+                  />
+                  <StructureMenuButton
+                    disabled={
+                      duplicateUndoStack.length === 0 ||
+                      !onRemoveDuplicatedWorkPackage ||
+                      isSaving
+                    }
+                    label="Undo Duplicate"
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      void undoDuplicateWorkPackage();
+                    }}
+                    shortcut="⌘Z"
+                  />
+                  <StructureMenuButton
+                    disabled={
+                      duplicateRedoStack.length === 0 ||
+                      !onDuplicateWorkPackage ||
+                      isSaving
+                    }
+                    label="Redo Duplicate"
+                    onClick={() => {
+                      setIsStructureMenuOpen(false);
+                      void redoDuplicateWorkPackage();
+                    }}
+                    shortcut="⌘⇧Z"
+                  />
+                  <span className="my-1 block border-t border-slate-100" />
+                  <StructureMenuButton
                     disabled={!hasSummaryTasks}
                     label="Expand All"
                     onClick={() => {
@@ -2138,6 +2408,18 @@ export function PlanningWorkspace({
                         onClick={() => {
                           setSelectedTaskId(schedule.taskId);
                           setHierarchyError(null);
+                        }}
+                        onContextMenu={(event) => {
+                          if (schedule.taskKind !== "summary") {
+                            return;
+                          }
+                          event.preventDefault();
+                          setSelectedTaskId(schedule.taskId);
+                          setWorkPackageContextMenu({
+                            sourceTaskId: schedule.taskId,
+                            x: event.clientX,
+                            y: event.clientY,
+                          });
                         }}
                         onDragEnd={() => setRowDragState(null)}
                         onDragOver={(event) =>
@@ -2608,6 +2890,150 @@ export function PlanningWorkspace({
         </div>
       </section>
 
+      {workPackageContextMenu ? (
+        <div
+          aria-label="Summary Task actions"
+          className="fixed z-50 w-60 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-xl"
+          onPointerDown={(event) => event.stopPropagation()}
+          role="menu"
+          style={{
+            left: Math.min(workPackageContextMenu.x, window.innerWidth - 256),
+            top: Math.min(workPackageContextMenu.y, window.innerHeight - 80),
+          }}
+        >
+          <button
+            className="flex w-full items-center justify-between rounded px-3 py-2 text-left font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            disabled={!onDuplicateWorkPackage || isSaving}
+            onClick={() => {
+              const sourceSchedule = localSchedules.find(
+                (schedule) =>
+                  schedule.taskId === workPackageContextMenu.sourceTaskId,
+              );
+              if (sourceSchedule) {
+                openDuplicateWorkPackageDialog(sourceSchedule);
+              }
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>Duplicate Work Package...</span>
+            <span aria-hidden className="text-[10px] text-slate-400">
+              ⌘⇧D
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {duplicateWorkPackageDialog ? (
+        <DialogBackdrop>
+          <DialogPanel title="Duplicate Work Package">
+            <label className="block text-sm font-semibold text-slate-700">
+              New Summary Name <span aria-hidden="true">*</span>
+              <input
+                autoFocus
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                maxLength={255}
+                onChange={(event) =>
+                  setDuplicateWorkPackageDialog((current) =>
+                    current
+                      ? {
+                          ...current,
+                          input: {
+                            ...current.input,
+                            newSummaryName: event.target.value,
+                          },
+                        }
+                      : current,
+                  )
+                }
+                required
+                value={duplicateWorkPackageDialog.input.newSummaryName}
+              />
+            </label>
+            <fieldset className="mt-4 grid gap-2 sm:grid-cols-2">
+              <legend className="mb-2 text-xs font-bold uppercase text-slate-500">
+                Copy options
+              </legend>
+              {duplicateOptionDefinitions.map((option) => (
+                <label
+                  className="flex min-h-8 items-start gap-2 text-sm text-slate-700"
+                  key={option.key}
+                >
+                  <input
+                    checked={Boolean(
+                      duplicateWorkPackageDialog.input[option.key],
+                    )}
+                    className="mt-0.5 size-4"
+                    onChange={(event) =>
+                      setDuplicateWorkPackageDialog((current) =>
+                        current
+                          ? {
+                              ...current,
+                              input: {
+                                ...current.input,
+                                [option.key]: event.target.checked,
+                              },
+                            }
+                          : current,
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+              <label
+                className="flex min-h-8 items-start gap-2 text-sm text-slate-400"
+                title="Planning tasks do not currently store checklists."
+              >
+                <input
+                  checked
+                  disabled
+                  className="mt-0.5 size-4"
+                  readOnly
+                  type="checkbox"
+                />
+                <span>Preserve checklists (when available)</span>
+              </label>
+              {unsupportedDuplicateOptions.map((label) => (
+                <label
+                  className="flex min-h-8 items-start gap-2 text-sm text-slate-400"
+                  key={label}
+                  title="This content type is not currently stored on Planning tasks."
+                >
+                  <input disabled className="mt-0.5 size-4" type="checkbox" />
+                  <span>{label} (not available)</span>
+                </label>
+              ))}
+            </fieldset>
+            <p className="mt-2 text-xs text-slate-500">
+              Only dependencies whose predecessor and successor are both copied
+              will be preserved. Audit history is never copied.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                className={toolbarButtonClassName}
+                onClick={() => setDuplicateWorkPackageDialog(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-flex h-8 items-center rounded-md bg-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
+                disabled={
+                  isSaving ||
+                  !duplicateWorkPackageDialog.input.newSummaryName.trim()
+                }
+                onClick={() => void confirmDuplicateWorkPackage()}
+                type="button"
+              >
+                Duplicate
+              </button>
+            </div>
+          </DialogPanel>
+        </DialogBackdrop>
+      ) : null}
+
       {summaryDeleteDialog ? (
         <DialogBackdrop>
           <DialogPanel title="Delete Summary">
@@ -2774,6 +3200,18 @@ function readBooleanPreference(key: string) {
   return readPreference(key) === "true";
 }
 
+function getDuplicatedSummaryTaskIds(result: ApiDuplicateWorkPackageResult) {
+  const copiedTaskIds = new Set(result.copiedTaskIds);
+  const duplicateSummaryTaskIds = new Set<string>();
+  for (const schedule of result.workspace.schedules) {
+    if (copiedTaskIds.has(schedule.taskId) && schedule.taskKind === "summary") {
+      duplicateSummaryTaskIds.add(schedule.taskId);
+    }
+  }
+  duplicateSummaryTaskIds.add(result.newSummaryTaskId);
+  return [...duplicateSummaryTaskIds];
+}
+
 function readVisibleColumnPreference(): GridColumnId[] {
   const value = readPreference(preferenceKeys.columns);
   if (!value) {
@@ -2806,27 +3244,6 @@ function getReactPointerClientX(event: React.PointerEvent<HTMLElement>) {
   const nativeClientX = (event.nativeEvent as PointerEvent | MouseEvent)
     .clientX;
   return Number.isFinite(event.clientX) ? event.clientX : nativeClientX;
-}
-
-function ToolbarGroup({
-  children,
-  label,
-}: {
-  children: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <div
-      aria-label={`${label} commands`}
-      className="flex items-center gap-1 border-l border-slate-200 pl-2 first:border-l-0 first:pl-0"
-      role="group"
-    >
-      <span className="mr-1 hidden text-[10px] font-bold uppercase tracking-wide text-slate-500 xl:inline">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
 }
 
 function StructureMenuButton({
@@ -3223,6 +3640,11 @@ function KeyboardHelp() {
           <span className="block">Enter or Space: select row</span>
           <span className="block">Enter: save inline edit</span>
           <span className="block">Escape: cancel inline edit</span>
+          <span className="block">
+            Cmd/Ctrl + Shift + D: duplicate selected Summary
+          </span>
+          <span className="block">Cmd/Ctrl + Z: undo duplicate</span>
+          <span className="block">Cmd/Ctrl + Shift + Z: redo duplicate</span>
           <span className="block">
             Tab: save and move to next editable cell
           </span>

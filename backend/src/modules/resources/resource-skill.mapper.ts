@@ -47,9 +47,7 @@ export class ResourceSkillMapper {
     };
   }
 
-  static toListInput(
-    input: QueryResourceSkillsDto,
-  ): ListResourceSkillsInput {
+  static toListInput(input: QueryResourceSkillsDto): ListResourceSkillsInput {
     return {
       includeArchived: input.includeArchived,
       proficiencyLevel: input.proficiencyLevel,
@@ -74,13 +72,15 @@ export class ResourceSkillMapper {
     };
   }
 
-  static toResponses(resourceSkills: ResourceSkill[]): ResourceSkillResponseDto[] {
-    return resourceSkills.map((resourceSkill) => this.toResponse(resourceSkill));
+  static toResponses(
+    resourceSkills: ResourceSkill[],
+  ): ResourceSkillResponseDto[] {
+    return resourceSkills.map((resourceSkill) =>
+      this.toResponse(resourceSkill),
+    );
   }
 
-  static fromCreateCommand(
-    input: CreateResourceSkillCommand,
-  ): ResourceSkill {
+  static fromCreateCommand(input: CreateResourceSkillCommand): ResourceSkill {
     return Object.assign(new ResourceSkill(), {
       monthsExperience: input.monthsExperience ?? null,
       notes: input.notes ?? null,
@@ -103,7 +103,8 @@ export class ResourceSkillMapper {
           : resourceSkill.monthsExperience,
       notes:
         input.notes !== undefined ? (input.notes ?? null) : resourceSkill.notes,
-      proficiencyLevel: input.proficiencyLevel ?? resourceSkill.proficiencyLevel,
+      proficiencyLevel:
+        input.proficiencyLevel ?? resourceSkill.proficiencyLevel,
       resourceId: input.resourceId ?? resourceSkill.resourceId,
       skillId: input.skillId ?? resourceSkill.skillId,
       status: input.status ?? resourceSkill.status,

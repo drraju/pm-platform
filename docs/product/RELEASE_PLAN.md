@@ -55,10 +55,18 @@ Capacity Policies use status-based archival and remain available by identifier w
 
 ## v1.3 Scope
 
+- Enterprise Milestone Management backend: lifecycle, persistence, projections, queries, portfolio integration, and REST API.
 - Approved integration between Resource Management, Calendar, Planning, and SchedulingContext.
 - Project resource allocation panel.
 - Calendar/resource context in planning analysis where approved.
 - No automatic leveling unless a separate ADR/ADD approves it.
+
+## v1.3 Implementation Status
+
+| Feature | Backend | Frontend | Documentation | Notes |
+| --- | --- | --- | --- | --- |
+| 1.3.1 Enterprise Milestone Management | Complete through Stage 6 | Pending | Updated | Milestones remain Tasks; Planning remains scheduling authority; project and portfolio query APIs are available. |
+| 1.3.2 Enterprise Dependency Management | Complete | Not in scope | Complete | Derived dependency health, blocked state, bounded impact, visibility-aware projections, and DTO-only REST APIs are release ready. No scheduling algorithms or persistence were changed. |
 
 ## v1.4 Scope
 

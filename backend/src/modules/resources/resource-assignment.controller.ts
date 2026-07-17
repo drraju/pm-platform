@@ -70,7 +70,10 @@ export class ResourceAssignmentController {
     @Req() request: AuthenticatedRequest,
     @Body() input: CreateResourceAssignmentDto,
   ): Promise<ResourceAssignmentResponseDto> {
-    return this.resourceAssignmentApiService.createAssignment(input, request.user);
+    return this.resourceAssignmentApiService.createAssignment(
+      input,
+      request.user,
+    );
   }
 
   @Patch(':id')
@@ -130,7 +133,9 @@ export class ResourceAssignmentController {
   listAssignmentsByProject(
     @Param('projectId', new ParseUUIDPipe()) projectId: string,
   ): Promise<ResourceAssignmentResponseDto[]> {
-    return this.resourceAssignmentApiService.listAssignmentsByProject(projectId);
+    return this.resourceAssignmentApiService.listAssignmentsByProject(
+      projectId,
+    );
   }
 
   @Get('resource/:resourceId')
@@ -142,6 +147,8 @@ export class ResourceAssignmentController {
   listAssignmentsByResource(
     @Param('resourceId', new ParseUUIDPipe()) resourceId: string,
   ): Promise<ResourceAssignmentResponseDto[]> {
-    return this.resourceAssignmentApiService.listAssignmentsByResource(resourceId);
+    return this.resourceAssignmentApiService.listAssignmentsByResource(
+      resourceId,
+    );
   }
 }

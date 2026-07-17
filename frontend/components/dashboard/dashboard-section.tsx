@@ -1,4 +1,7 @@
 import React from "react";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/states";
+import { CountBadge } from "@/components/ui/status-badge";
 
 type DashboardSectionProps<T> = {
   emptyMessage: string;
@@ -14,25 +17,29 @@ export function DashboardSection<T>({
   title,
 }: DashboardSectionProps<T>) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
+    <Card variant="subtle">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-          {items.length}
+        <h2 className="px-5 pt-4 text-base font-semibold text-slate-950 sm:px-6">
+          {title}
+        </h2>
+        <span className="mr-5 mt-4 sm:mr-6">
+          <CountBadge shape="pill" value={items.length} />
         </span>
       </div>
 
-      <div className="mt-4 divide-y divide-slate-100">
+      <div className="mt-3 divide-y divide-slate-100 px-5 pb-2 sm:px-6">
         {items.length === 0 ? (
-          <p className="py-5 text-sm text-slate-500">{emptyMessage}</p>
+          <EmptyState className="py-5 leading-6 text-slate-600">
+            {emptyMessage}
+          </EmptyState>
         ) : (
           items.map((item, index) => (
-            <div className="py-3" key={index}>
+            <div className="py-3.5" key={index}>
               {renderItem(item)}
             </div>
           ))
         )}
       </div>
-    </section>
+    </Card>
   );
 }

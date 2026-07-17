@@ -216,6 +216,29 @@ export type ApiPlanningWorkspace = {
   criticalPathTaskIds: string[];
 };
 
+export type ApiDuplicateWorkPackageInput = {
+  newSummaryName: string;
+  copyChildTasks?: boolean;
+  preserveWbsHierarchy?: boolean;
+  preserveTaskDurations?: boolean;
+  preserveEstimatedEffort?: boolean;
+  preserveInternalPredecessors?: boolean;
+  preserveMilestones?: boolean;
+  preserveNotes?: boolean;
+  preserveChecklists?: boolean;
+  copyResourceAssignments?: boolean;
+  copyPlannedDates?: boolean;
+  copyActualDates?: boolean;
+  copyComments?: boolean;
+  copyAttachments?: boolean;
+};
+
+export type ApiDuplicateWorkPackageResult = {
+  newSummaryTaskId: string;
+  copiedTaskIds: string[];
+  workspace: ApiPlanningWorkspace;
+};
+
 export type ApiProjectBaselineTask = {
   id: string;
   projectBaselineId: string;
@@ -440,7 +463,11 @@ export function getStoredSessionUser(): ApiSessionUser | null {
       sub?: string;
     };
 
-    if (!decodedPayload.sub || !decodedPayload.email || !decodedPayload.roleId) {
+    if (
+      !decodedPayload.sub ||
+      !decodedPayload.email ||
+      !decodedPayload.roleId
+    ) {
       return null;
     }
 
@@ -472,7 +499,9 @@ export function getStoredPermissionKeys() {
   }
 
   try {
-    const storedPermissions = window.localStorage.getItem("pm_platform_permissions");
+    const storedPermissions = window.localStorage.getItem(
+      "pm_platform_permissions",
+    );
     return storedPermissions ? (JSON.parse(storedPermissions) as string[]) : [];
   } catch {
     return [];
@@ -484,7 +513,10 @@ export function storeAuthMe(authMe: ApiAuthMe) {
     "pm_platform_permissions",
     JSON.stringify(authMe.permissions.map((permission) => permission.key)),
   );
-  window.localStorage.setItem("pm_platform_session_user", JSON.stringify(authMe.user));
+  window.localStorage.setItem(
+    "pm_platform_session_user",
+    JSON.stringify(authMe.user),
+  );
 }
 
 export async function apiRequest<T>(
@@ -533,11 +565,14 @@ export async function apiRequest<T>(
 }
 
 export function login(email: string, password: string) {
-  return apiRequest<{ accessToken: string; refreshToken: string }>("/auth/login", {
-    method: "POST",
-    token: null,
-    body: JSON.stringify({ email, password }),
-  });
+  return apiRequest<{ accessToken: string; refreshToken: string }>(
+    "/auth/login",
+    {
+      method: "POST",
+      token: null,
+      body: JSON.stringify({ email, password }),
+    },
+  );
 }
 
 export function getAuthMe() {
@@ -631,6 +666,30 @@ export function createPlanningTask(
       method: "POST",
       body: JSON.stringify(input),
     },
+  );
+}
+
+export function duplicatePlanningWorkPackage(
+  projectId: string,
+  sourceSummaryTaskId: string,
+  input: ApiDuplicateWorkPackageInput,
+) {
+  return apiRequest<ApiDuplicateWorkPackageResult>(
+    `/planning/projects/${projectId}/tasks/${sourceSummaryTaskId}/duplicate-work-package`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function removeDuplicatedPlanningWorkPackage(
+  projectId: string,
+  summaryTaskId: string,
+) {
+  return apiRequest<ApiPlanningWorkspace>(
+    `/planning/projects/${projectId}/work-packages/${summaryTaskId}`,
+    { method: "DELETE" },
   );
 }
 
@@ -804,7 +863,10 @@ export function createRole(input: { name: string; description?: string }) {
   });
 }
 
-export function updateRolePermissions(roleId: string, permissionKeys: string[]) {
+export function updateRolePermissions(
+  roleId: string,
+  permissionKeys: string[],
+) {
   return apiRequest<ApiRole>(`/users/roles/${roleId}/permissions`, {
     method: "PATCH",
     body: JSON.stringify({ permissionKeys }),
@@ -829,11 +891,13 @@ export function getTasks() {
   return apiRequest<ApiTask[]>("/tasks");
 }
 
-export function getMyTasks(input: {
-  priority?: string;
-  projectId?: string;
-  status?: ApiTask["status"];
-} = {}) {
+export function getMyTasks(
+  input: {
+    priority?: string;
+    projectId?: string;
+    status?: ApiTask["status"];
+  } = {},
+) {
   const params = new URLSearchParams();
   if (input.priority) {
     params.set("priority", input.priority);
@@ -992,7 +1056,9 @@ export function deleteProjectTask(projectId: string, taskId: string) {
 }
 
 export function getProjectTaskDependencies(projectId: string) {
-  return apiRequest<ApiTaskDependency[]>(`/projects/${projectId}/task-dependencies`);
+  return apiRequest<ApiTaskDependency[]>(
+    `/projects/${projectId}/task-dependencies`,
+  );
 }
 
 export function createProjectTaskDependency(
@@ -1004,10 +1070,13 @@ export function createProjectTaskDependency(
     lagDays?: number;
   },
 ) {
-  return apiRequest<ApiTaskDependency>(`/projects/${projectId}/task-dependencies`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return apiRequest<ApiTaskDependency>(
+    `/projects/${projectId}/task-dependencies`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function updateProjectTaskDependency(

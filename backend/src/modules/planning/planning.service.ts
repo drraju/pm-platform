@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
@@ -29,12 +30,17 @@ import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto
 import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { TasksService } from '../tasks/tasks.service';
 import { User } from '../users/entities/user.entity';
 import { CriticalPathDto } from './dto/critical-path.dto';
 import { CreatePortfolioDependencyDto } from './dto/create-portfolio-dependency.dto';
 import { CreatePlanningTaskDto } from './dto/create-planning-task.dto';
 import { CreateResourceAllocationDto } from './dto/create-resource-allocation.dto';
 import { CreateResourceCapacityDto } from './dto/create-resource-capacity.dto';
+import {
+  DuplicateWorkPackageDto,
+  DuplicateWorkPackageResultDto,
+} from './dto/duplicate-work-package.dto';
 import {
   PlanningWorkspaceDto,
   PlanningWorkspaceScheduleDto,
@@ -51,6 +57,7 @@ import { ResourceAllocation } from './entities/resource-allocation.entity';
 import { ResourceCapacity } from './entities/resource-capacity.entity';
 import { ResourceWorkloadSnapshot } from './entities/resource-workload-snapshot.entity';
 import { PlanningSnapshotService } from './planning-snapshot.service';
+import { PlanningWorkPackageDuplicationService } from './planning-work-package-duplication.service';
 import {
   PlanningScheduleEngineError,
   PlanningScheduleEngineService,
@@ -88,6 +95,9 @@ export class PlanningService {
     private readonly schedulingContextFactory: SchedulingContextFactory,
     private readonly planningScheduleEngineService: PlanningScheduleEngineService,
     private readonly planningSnapshotService: PlanningSnapshotService,
+    private readonly workPackageDuplicationService: PlanningWorkPackageDuplicationService,
+    @Optional()
+    private readonly canonicalTasksService?: TasksService,
   ) {}
 
   async getWorkspace(
@@ -260,6 +270,49 @@ export class PlanningService {
       { taskKind: schedule.taskKind ?? schedule.task?.taskKind },
       TaskKind.Standard,
     );
+    if (
+      taskKind === TaskKind.Milestone &&
+      schedule.task &&
+      this.canonicalTasksService
+    ) {
+      await this.canonicalTasksService.update(
+        schedule.taskId,
+        {
+          ...(input.ownerId !== undefined ? { assigneeId: input.ownerId } : {}),
+          ...(input.parentTaskId !== undefined
+            ? { parentTaskId: input.parentTaskId }
+            : {}),
+          ...(input.sequenceNumber !== undefined
+            ? { sequenceNumber: input.sequenceNumber }
+            : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.taskTitle !== undefined ? { title: input.taskTitle } : {}),
+          ...(input.milestoneCategory !== undefined
+            ? { milestoneCategory: input.milestoneCategory }
+            : {}),
+          ...(input.plannedStartDate !== undefined
+            ? { plannedStartDate: input.plannedStartDate }
+            : {}),
+          ...(input.plannedFinishDate !== undefined
+            ? { plannedEndDate: input.plannedFinishDate }
+            : {}),
+          ...(input.percentComplete !== undefined
+            ? { percentComplete: input.percentComplete }
+            : {}),
+        },
+        actor,
+      );
+      const rebuiltSnapshot =
+        await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+          projectId,
+          actor,
+        );
+      return this.requireWorkspaceSchedule(
+        rebuiltSnapshot,
+        schedule.taskId,
+        projectId,
+      );
+    }
     const normalizedSchedule =
       this.schedulingFoundationService.normalizeScheduleMutation(
         taskKind,
@@ -300,6 +353,7 @@ export class PlanningService {
         schedule.task.title = nextTitle;
       }
       schedule.task.dueDate = normalizedSchedule.plannedEndDate;
+      schedule.task.durationDays = normalizedSchedule.durationDays;
       schedule.task.milestoneCategory = normalizedSchedule.milestoneCategory;
       schedule.task.plannedEndDate = normalizedSchedule.plannedEndDate;
       schedule.task.plannedStartDate = normalizedSchedule.plannedStartDate;
@@ -348,6 +402,51 @@ export class PlanningService {
     }
 
     const latestSchedule = await this.ensureWorkspaceSnapshot(projectId, actor);
+    const requestedTaskKind =
+      this.schedulingFoundationService.normalizeTaskKind(
+        input,
+        TaskKind.Standard,
+      );
+    if (
+      requestedTaskKind === TaskKind.Milestone &&
+      this.canonicalTasksService
+    ) {
+      const parentTaskId = input.parentTaskId ?? null;
+      const siblings = await this.tasksRepository.find({
+        select: { sequenceNumber: true },
+        where: {
+          parentTaskId: parentTaskId ?? IsNull(),
+          projectId,
+        },
+      });
+      const sequenceNumber =
+        siblings.reduce(
+          (maximum, sibling) => Math.max(maximum, sibling.sequenceNumber ?? 0),
+          0,
+        ) + 1;
+      const plannedDate =
+        latestSchedule.projectStartDate ?? this.todayDateString();
+      const task = await this.canonicalTasksService.create(
+        {
+          milestoneCategory: input.milestoneCategory,
+          parentTaskId,
+          plannedEndDate: plannedDate,
+          plannedStartDate: plannedDate,
+          projectId,
+          sequenceNumber,
+          status: TaskStatus.Todo,
+          taskKind: TaskKind.Milestone,
+          title: input.title?.trim() || 'New Task',
+        },
+        actor,
+      );
+      const rebuiltSnapshot =
+        await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+          projectId,
+          actor,
+        );
+      return this.requireWorkspaceSchedule(rebuiltSnapshot, task.id, projectId);
+    }
 
     return this.scheduleSnapshotsRepository.manager.transaction(
       async (manager) => {
@@ -402,6 +501,7 @@ export class PlanningService {
           tasksRepository.create({
             createdById: actor?.userId,
             dueDate: plannedEndDate,
+            durationDays,
             milestoneCategory: normalizedTaskInput.milestoneCategory,
             parentTaskId,
             percentComplete: 0,
@@ -432,6 +532,39 @@ export class PlanningService {
         );
       },
     );
+  }
+
+  async duplicateWorkPackage(
+    projectId: string,
+    sourceSummaryTaskId: string,
+    input: DuplicateWorkPackageDto,
+    actor?: AuthenticatedActor,
+  ): Promise<DuplicateWorkPackageResultDto> {
+    await this.ensureCanManageProject(projectId, actor);
+    const result = await this.workPackageDuplicationService.duplicate(
+      projectId,
+      sourceSummaryTaskId,
+      input,
+      actor,
+    );
+    return {
+      ...result,
+      workspace: await this.getWorkspace(projectId, actor),
+    };
+  }
+
+  async removeDuplicatedWorkPackage(
+    projectId: string,
+    summaryTaskId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<PlanningWorkspaceDto> {
+    await this.ensureCanManageProject(projectId, actor);
+    await this.workPackageDuplicationService.removeDuplicatedWorkPackage(
+      projectId,
+      summaryTaskId,
+      actor,
+    );
+    return this.getWorkspace(projectId, actor);
   }
 
   captureBaseline(

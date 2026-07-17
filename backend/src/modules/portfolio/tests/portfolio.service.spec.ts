@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { ProjectHealthService } from '../../health/project-health.service';
 import { Project } from '../../projects/entities/project.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
@@ -141,6 +142,7 @@ describe('PortfolioService', () => {
         project: { name: 'Green Project' },
         projectId: 'green-project',
         status: TaskStatus.Todo,
+        taskKind: TaskKind.Milestone,
       },
       {
         id: 'next-task',
@@ -149,6 +151,16 @@ describe('PortfolioService', () => {
         project: { name: 'Red Project' },
         projectId: 'red-project',
         status: TaskStatus.InProgress,
+        taskKind: TaskKind.Milestone,
+      },
+      {
+        id: 'future-standard-task',
+        title: 'Future standard task',
+        dueDate: '2026-06-09',
+        project: { name: 'Green Project' },
+        projectId: 'green-project',
+        status: TaskStatus.Todo,
+        taskKind: TaskKind.Standard,
       },
       {
         id: 'done-upcoming-task',
@@ -157,6 +169,7 @@ describe('PortfolioService', () => {
         project: { name: 'Green Project' },
         projectId: 'green-project',
         status: TaskStatus.Done,
+        taskKind: TaskKind.Milestone,
       },
     ]);
 

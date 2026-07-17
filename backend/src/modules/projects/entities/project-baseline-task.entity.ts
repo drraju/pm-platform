@@ -1,6 +1,7 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { AuditableEntity } from '../../../common/entities/auditable.entity';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
+import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { Task } from '../../tasks/entities/task.entity';
 import { Project } from './project.entity';
 import { ProjectBaseline } from './project-baseline.entity';
@@ -24,6 +25,9 @@ export class ProjectBaselineTask extends AuditableEntity {
 
   @Column({ name: 'task_kind', type: 'varchar', default: TaskKind.Standard })
   taskKind: TaskKind;
+
+  @Column({ name: 'milestone_category', type: 'varchar', nullable: true })
+  milestoneCategory?: MilestoneCategory | null;
 
   @Column({ name: 'sequence_number', type: 'int', nullable: true })
   sequenceNumber?: number | null;

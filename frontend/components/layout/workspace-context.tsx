@@ -16,9 +16,10 @@ export function WorkspaceContextBar({ pathname }: { pathname: string }) {
   const context = getWorkspaceContext(pathname);
 
   return (
-    <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
-      <nav aria-label="Breadcrumb">
-        <ol className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+    <div className="border-b border-slate-200/80 bg-white">
+      <div className="mx-auto w-full max-w-[1800px] px-4 py-2.5 sm:px-6 lg:px-8">
+        <nav aria-label="Breadcrumb">
+          <ol className="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
           {context.breadcrumbs.map((breadcrumb, index) => {
             const isCurrent = index === context.breadcrumbs.length - 1;
 
@@ -40,16 +41,17 @@ export function WorkspaceContextBar({ pathname }: { pathname: string }) {
               </li>
             );
           })}
-        </ol>
-      </nav>
-      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <p
-          aria-label={`Current workspace: ${context.title}`}
-          className="text-lg font-semibold text-slate-950"
-        >
-          {context.title}
-        </p>
-        <p className="text-xs text-slate-500">{context.description}</p>
+          </ol>
+        </nav>
+        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+          <p
+            aria-label={`Current workspace: ${context.title}`}
+            className="text-base font-semibold tracking-tight text-slate-950"
+          >
+            {context.title}
+          </p>
+          <p className="text-sm text-slate-500">{context.description}</p>
+        </div>
       </div>
     </div>
   );

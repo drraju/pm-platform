@@ -93,7 +93,11 @@ describe('ResourceSkillController authorization', () => {
   it('allows resource skill managers and denies readers for write endpoints', async () => {
     await expect(
       guard.canActivate(
-        createContext('ResourceSkillManager', controller, 'createResourceSkill'),
+        createContext(
+          'ResourceSkillManager',
+          controller,
+          'createResourceSkill',
+        ),
       ),
     ).resolves.toBe(true);
     await expect(

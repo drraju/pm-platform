@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";
 import { SummaryCard } from "@/components/dashboard/summary-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { ContentGrid } from "@/components/ui/content-grid";
+import { ErrorState, LoadingSkeleton } from "@/components/ui/states";
 import {
   ProjectHealthBadge,
   ProjectHealthReasons,
@@ -68,27 +70,28 @@ function PageContent() {
   }, [router]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
-        description="A personal operating view of your assigned projects, task commitments, and owned RAID items."
-        eyebrow="User dashboard"
-        title="My dashboard"
+        description="Your assigned projects, delivery commitments, and items that need attention."
+        eyebrow="Home workspace"
+        title="Your work"
       />
 
       {isLoading ? <DashboardLoadingState /> : null}
 
       {!isLoading && error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </section>
+        <ErrorState variant="page">{error}</ErrorState>
       ) : null}
 
       {!isLoading && !error && dashboard ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <section
+            aria-label="Work summary"
+            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
+          >
             <SummaryCard
               href="/tasks"
-              label="Total Tasks"
+              label="Assigned"
               value={dashboard.taskSummary.total}
             />
             <SummaryCard
@@ -109,11 +112,11 @@ function PageContent() {
               tone="danger"
               value={dashboard.taskSummary.overdue}
             />
-            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-              <p className="text-sm font-medium text-slate-500">
-                Delivery Health
+            <section className="rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm">
+              <p className="text-sm font-medium text-slate-600">
+                Overall health
               </p>
-              <div className="mt-4">
+              <div className="mt-2.5">
                 <ProjectHealthBadge
                   reasons={dashboard.health.reasons}
                   status={dashboard.health.status}
@@ -124,32 +127,32 @@ function PageContent() {
           </section>
 
           <DashboardSection
-            emptyMessage="No assigned projects yet."
+            emptyMessage="No projects are assigned to you yet. New assignments will appear here."
             items={dashboard.assignedProjects}
             renderItem={(project) => <ProjectItem project={project} />}
-            title="Assigned Projects"
+            title="Assigned projects"
           />
 
-          <section className="grid gap-6 xl:grid-cols-3">
+          <ContentGrid columns={3} gap={4}>
             <DashboardSection
-              emptyMessage="No upcoming tasks due in the next 7 days."
+              emptyMessage="You're clear for the next 7 days."
               items={dashboard.upcomingTasks}
               renderItem={(task) => <TaskItem task={task} />}
-              title="Upcoming Tasks"
+              title="Upcoming tasks"
             />
             <DashboardSection
-              emptyMessage="No open risks owned by you."
+              emptyMessage="You have no open risks to review."
               items={dashboard.openRisks}
               renderItem={(risk) => <RiskItem risk={risk} />}
-              title="Open Risks"
+              title="Open risks"
             />
             <DashboardSection
-              emptyMessage="No open issues owned by you."
+              emptyMessage="You have no open issues to resolve."
               items={dashboard.openIssues}
               renderItem={(issue) => <IssueItem issue={issue} />}
-              title="Open Issues"
+              title="Open issues"
             />
-          </section>
+          </ContentGrid>
         </>
       ) : null}
     </div>
@@ -162,53 +165,68 @@ function PageLoading() {
 
 function DashboardLoadingState() {
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div aria-label="Loading Home workspace" className="space-y-5" role="status">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
-          <div
-            className="h-32 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
+          <LoadingSkeleton
+            className="h-28 rounded-lg bg-slate-200/70"
             key={index}
           />
         ))}
       </section>
-      <div className="h-72 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-      <section className="grid gap-6 xl:grid-cols-3">
+      <LoadingSkeleton className="h-64 rounded-lg bg-slate-200/70" />
+      <ContentGrid columns={3} gap={4}>
         {Array.from({ length: 3 }).map((_, index) => (
-          <div
-            className="h-64 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
+          <LoadingSkeleton
+            className="h-56 rounded-lg bg-slate-200/70"
             key={index}
           />
         ))}
-      </section>
+      </ContentGrid>
     </div>
   );
 }
 
 function ProjectItem({ project }: { project: ApiDashboardProject }) {
+  const healthStatus = project.health?.status ?? "GREEN";
+
   return (
-    <Link className="block text-sm" href={`/projects/${project.id}`}>
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="font-semibold text-slate-950">{project.name}</h3>
-          <p className="mt-1 text-slate-600">
-            Role: {formatLabel(project.role)}
-          </p>
-        </div>
-        <span className="shrink-0 capitalize text-slate-500">
-          <ProjectHealthBadge
-            reasons={project.health?.reasons}
-            status={project.health?.status ?? "GREEN"}
-          />
-        </span>
+    <article className="grid gap-3 text-sm md:grid-cols-[minmax(0,1.1fr)_minmax(7.5rem,0.55fr)_auto_minmax(0,1fr)_auto] md:items-center md:gap-4">
+      <div className="min-w-0">
+        <h3 className="truncate font-semibold text-slate-950">
+          {project.name}
+        </h3>
+        <p className="mt-0.5 text-slate-500 md:hidden">
+          {formatLabel(project.role)}
+        </p>
       </div>
-      <ProjectHealthReasons reasons={project.health?.reasons} />
-    </Link>
+      <p className="hidden capitalize text-slate-600 md:block">
+        {formatLabel(project.role)}
+      </p>
+      <ProjectHealthBadge
+        reasons={project.health?.reasons}
+        status={healthStatus}
+      />
+      <p className="min-w-0 leading-5 text-slate-600">
+        {getProjectInsight(project)}
+      </p>
+      <Link
+        aria-label={`Open project ${project.name}`}
+        className="inline-flex min-h-9 w-fit items-center rounded-md px-2.5 py-1.5 font-semibold text-brand transition hover:bg-brand/10"
+        href={`/projects/${project.id}`}
+      >
+        Open project
+      </Link>
+    </article>
   );
 }
 
 function TaskItem({ task }: { task: ApiDashboardTask }) {
   return (
-    <Link className="block text-sm" href="/tasks?timing=upcoming">
+    <Link
+      className="block rounded-md text-sm transition hover:bg-slate-50"
+      href="/tasks?timing=upcoming"
+    >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{task.title}</h3>
@@ -226,7 +244,10 @@ function TaskItem({ task }: { task: ApiDashboardTask }) {
 
 function RiskItem({ risk }: { risk: ApiDashboardRisk }) {
   return (
-    <Link className="block text-sm" href={`/risks?severity=${risk.severity}`}>
+    <Link
+      className="block rounded-md text-sm transition hover:bg-slate-50"
+      href={`/risks?severity=${risk.severity}`}
+    >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{risk.title}</h3>
@@ -244,7 +265,10 @@ function RiskItem({ risk }: { risk: ApiDashboardRisk }) {
 
 function IssueItem({ issue }: { issue: ApiDashboardIssue }) {
   return (
-    <Link className="block text-sm" href={`/issues?priority=${issue.priority}`}>
+    <Link
+      className="block rounded-md text-sm transition hover:bg-slate-50"
+      href={`/issues?priority=${issue.priority}`}
+    >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-950">{issue.title}</h3>
@@ -274,4 +298,18 @@ function formatDate(value: string | null) {
 
 function formatLabel(value: string) {
   return value.replaceAll("_", " ").toLowerCase();
+}
+
+function getProjectInsight(project: ApiDashboardProject) {
+  const primaryReason = project.health?.reasons?.find((reason) =>
+    Boolean(reason.trim()),
+  );
+
+  if (primaryReason) {
+    return primaryReason;
+  }
+
+  return (project.health?.status ?? "GREEN") === "GREEN"
+    ? "No immediate delivery concerns."
+    : "Review the latest project health update.";
 }

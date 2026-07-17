@@ -14,10 +14,12 @@ import {
 } from '@nestjs/common';
 import {
   ApiConflictResponse,
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
+  ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -53,6 +55,13 @@ import { Project } from './entities/project.entity';
 import { ProjectBaseline } from './entities/project-baseline.entity';
 import { ProjectsService } from './projects.service';
 import { Request } from 'express';
+import { MilestoneQueryDto } from '../tasks/dto/milestone-query.dto';
+import {
+  MilestoneListResponseDto,
+  MilestoneResponseDto,
+} from '../tasks/dto/milestone-response.dto';
+import { MilestoneQueryService } from '../tasks/milestone-query.service';
+import { MilestoneResponseMapper } from '../tasks/milestone-response.mapper';
 
 type AuthenticatedRequest = Request & {
   user: {
@@ -67,7 +76,11 @@ type AuthenticatedRequest = Request & {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('projects')
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(
+    private readonly projectsService: ProjectsService,
+    private readonly milestoneQueryService: MilestoneQueryService,
+    private readonly milestoneResponseMapper: MilestoneResponseMapper,
+  ) {}
 
   @Post()
   @RequirePermissions(PermissionKey.ProjectCreate)
@@ -181,6 +194,48 @@ export class ProjectsController {
       query,
       request.user,
     );
+  }
+
+  @Get(':projectId/milestones')
+  @RequirePermissions(PermissionKey.ProjectRead)
+  @ApiOperation({ summary: 'List project milestones' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiOkResponse({ type: MilestoneListResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid milestone query' })
+  @ApiForbiddenResponse({ description: 'Project access is required' })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  async findProjectMilestones(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Query() query: MilestoneQueryDto,
+  ): Promise<MilestoneListResponseDto> {
+    const result = await this.milestoneQueryService.findProjectMilestones(
+      projectId,
+      this.milestoneResponseMapper.toQuery(query),
+      request.user,
+    );
+    return this.milestoneResponseMapper.toListResponse(result);
+  }
+
+  @Get(':projectId/milestones/:taskId')
+  @RequirePermissions(PermissionKey.ProjectRead)
+  @ApiOperation({ summary: 'Get a project milestone' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'taskId', format: 'uuid' })
+  @ApiOkResponse({ type: MilestoneResponseDto })
+  @ApiForbiddenResponse({ description: 'Project access is required' })
+  @ApiNotFoundResponse({ description: 'Milestone not found' })
+  async findProjectMilestone(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ): Promise<MilestoneResponseDto> {
+    const result = await this.milestoneQueryService.findProjectMilestone(
+      projectId,
+      taskId,
+      request.user,
+    );
+    return this.milestoneResponseMapper.toResponse(result);
   }
 
   @Post(':projectId/tasks')

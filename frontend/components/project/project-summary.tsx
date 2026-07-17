@@ -1,6 +1,9 @@
 "use client";
 
 import React from "react";
+import { SectionCard } from "@/components/ui/card";
+import { ContentGrid } from "@/components/ui/content-grid";
+import { SectionHeader } from "@/components/ui/section-header";
 import type { ApiProject } from "@/features/projects";
 
 type ProjectSummaryProps = {
@@ -18,8 +21,8 @@ export function ProjectSummary({ project }: ProjectSummaryProps) {
   ].filter((item) => item.value);
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <h2 className="text-lg font-semibold text-slate-950">Project summary</h2>
+    <SectionCard>
+      <SectionHeader title="Project summary" />
       {items.length > 0 ? (
         <dl className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => (
@@ -38,7 +41,7 @@ export function ProjectSummary({ project }: ProjectSummaryProps) {
           Project summary details have not been added yet.
         </p>
       )}
-    </section>
+    </SectionCard>
   );
 }
 
@@ -50,8 +53,8 @@ export function ProjectWorkspacePlaceholder({
   title: string;
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+    <SectionCard>
+      <SectionHeader title={title} />
       <p className="mt-2 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
         Coming in Future Release
       </p>
@@ -59,28 +62,28 @@ export function ProjectWorkspacePlaceholder({
         {description ??
           "This workspace module is reserved for a future release and is intentionally read-only for now."}
       </p>
-    </section>
+    </SectionCard>
   );
 }
 
 export function ProjectOverviewPlaceholders() {
   return (
-    <section className="grid gap-4 xl:grid-cols-3">
+    <ContentGrid columns={3} gap={4}>
       <OverviewPlaceholder title="Recent activity" />
       <OverviewPlaceholder title="Recent RAID" />
       <OverviewPlaceholder title="Upcoming milestones" />
-    </section>
+    </ContentGrid>
   );
 }
 
 function OverviewPlaceholder({ title }: { title: string }) {
   return (
-    <article className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+    <SectionCard as="article">
+      <SectionHeader title={title} />
       <p className="mt-2 text-sm text-slate-500">
         This information will appear here when project activity is available.
       </p>
-    </article>
+    </SectionCard>
   );
 }
 

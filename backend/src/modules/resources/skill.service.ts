@@ -4,16 +4,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  FindOptionsWhere,
-  ILike,
-  Not,
-  Repository,
-} from 'typeorm';
+import { FindOptionsWhere, ILike, Not, Repository } from 'typeorm';
 import { AuthorizationActor } from '../../common/authz/authorization-policy.service';
 import { Skill } from './entities/skill.entity';
 import { SkillStatus } from './enums/skill-status.enum';
-import { ListSkillsInput, CreateSkillCommand, UpdateSkillCommand } from './skill.commands';
+import {
+  ListSkillsInput,
+  CreateSkillCommand,
+  UpdateSkillCommand,
+} from './skill.commands';
 import { SkillMapper } from './skill.mapper';
 import { SkillValidationService } from './skill-validation.service';
 
@@ -72,7 +71,9 @@ export class SkillService {
 
   async listSkills(input: ListSkillsInput = {}): Promise<Skill[]> {
     if (input.status) {
-      this.skillValidationService.validateResolvedSkill({ status: input.status });
+      this.skillValidationService.validateResolvedSkill({
+        status: input.status,
+      });
     }
 
     const where = this.buildSkillListWhere(input);

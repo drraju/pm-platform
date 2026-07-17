@@ -12,6 +12,12 @@ This backlog covers Epic 1.2 Enterprise Resource Management and adjacent roadmap
 | 1.2.6 Calendar Assignment | Completed | Nullable Resource-to-Enterprise-Calendar reference, assignment API, validation, audit behavior, RBAC, Swagger, migration 024, and automated/runtime verification. | Stage 13 approved and release approved. Assigned Calendar is the effective Calendar; inheritance, precedence, Planning integration, and Scheduling integration remain deferred. |
 | 1.2.4 Skills Management | Completed | Skill catalog persistence, resource-skill association persistence, DTOs, mappers, validation services, application services, REST API, ERM RBAC wiring, and backend test coverage. | Implementation and release verification completed and merged. |
 | 1.2.5 Resource Availability & Capacity Management | Release Ready | Resource Capacity Policy and Availability Override persistence, domain services, validation, REST APIs, ERM permissions, Swagger documentation, backend tests, and runtime verification. | Infrastructure, unit, integration, end-to-end, and documentation verification are complete. Stage 12 remains pending. Derived availability, utilization, remaining capacity, and scheduling integration remain deferred. |
+| 1.3.1 Enterprise Milestone Management | Backend Complete | Task-backed milestone lifecycle and persistence, application services, projection/query layer, baseline and Planning integration, project and portfolio REST APIs, Swagger, RBAC reuse, and backend tests. | Complete through Stage 6. Frontend and subsequent integration/release stages remain pending. |
+| 1.3.2 Enterprise Dependency Management | Completed | Derived dependency health and blocked state, bounded impact traversal, deterministic projections, visibility-aware application queries, DTO-only REST APIs, Swagger, and backend verification. | No migration or new repository. Lead/lag scheduling mathematics, calendar-aware offsets, frontend delivery, comments, and history remain deferred. |
+
+## Next Approved Feature
+
+Feature 1.3.2 is complete. Feature 1.3.3 must not begin until its requirements, scheduling-mathematics scope, and architecture boundaries complete the mandatory governance workflow.
 
 ## Must Have
 

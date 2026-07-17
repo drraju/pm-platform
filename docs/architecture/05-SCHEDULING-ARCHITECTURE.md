@@ -10,6 +10,7 @@ This is the most important boundary in PM Platform.
 | Planning | Snapshot orchestration, workspace read models, calls into scheduling | Calendar CRUD, resource calendars |
 | Calendars | Working days, working hours, holidays, exception days | Schedule calculation or mutation |
 | Resources | Future capacity, availability, skills, cost | CPM or automatic date movement |
+| Tasks | Milestone lifecycle, category, actual state, audit, persistence | CPM, forecast calculation, snapshot orchestration |
 
 ## Current Scheduling Flow
 
@@ -47,6 +48,10 @@ Rules:
 | PlanningCriticalPathService | Identify critical tasks. |
 | PlanningScheduleEngineService | Orchestrate graph, passes, float, and critical path. |
 
+## Milestone Boundary
+
+Milestones are zero-duration Task nodes. Enterprise milestone lifecycle and REST work does not change `SchedulingContext`, graph construction, forward pass, backward pass, float, or critical-path algorithms. Planning consumes engine output and rebuilds snapshots; the milestone projection reads forecast and criticality from those outputs. TasksService owns lifecycle mutation and never becomes a second scheduling authority.
+
 ## Calendar Boundary
 
 Enterprise Calendar currently manages administrative data. It must not call scheduling engine services or mutate planning schedules.
@@ -64,4 +69,3 @@ Resource capacity and allocations exist as planning foundations. Future overload
 - Calendar services updating PlanningTaskSchedule rows.
 - Resource services directly changing early/late dates.
 - Frontend triggering schedule mutation from calendar administration screens.
-
