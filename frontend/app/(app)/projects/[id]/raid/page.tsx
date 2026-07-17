@@ -3,7 +3,14 @@
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ProjectLayout, ProjectLayoutLoadingState } from "@/components/project";
+import {
+  ErrorState,
+  LoadingState,
+  WorkspaceContent,
+  WorkspaceHeader,
+  WorkspaceLayout,
+} from "@/components/foundation";
+import { ProjectLayout } from "@/components/project";
 import {
   RaidManagement,
   type RaidMutationInput,
@@ -149,7 +156,15 @@ export default function ProjectRaidPage() {
   }, [project]);
 
   if (isLoading || areMembersLoading) {
-    return <ProjectLayoutLoadingState />;
+    return (
+      <WorkspaceLayout>
+        <LoadingState
+          className="rounded-ui border border-ui-border bg-ui-surface p-5 shadow-ui-subtle"
+          label="Loading project RAID workspace"
+          rows={6}
+        />
+      </WorkspaceLayout>
+    );
   }
 
   const workspaceProject = project ?? {
@@ -159,32 +174,31 @@ export default function ProjectRaidPage() {
   };
 
   return (
-    <ProjectLayout activeTab="raid" project={workspaceProject}>
-      {error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </section>
-      ) : null}
-      {memberError ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {memberError}
-        </section>
-      ) : null}
-      <RaidManagement
-        emptyMessage="No RAID items have been added for this project."
-        fixedProjectId={projectId}
-        isSaving={isSaving}
-        items={raidItems}
-        onAddComment={handleAddRaidComment}
-        onCreate={handleCreateRaidItem}
-        onDelete={handleDeleteRaidItem}
-        onUpdate={handleUpdateRaidItem}
-        permissions={{ canCreate: true, canDelete: true, canUpdate: true }}
-        projectMembers={members}
-        projects={project ? [project] : []}
-        title="RAID"
-        users={memberUsers}
-      />
+    <ProjectLayout
+      activeTab="raid"
+      layout={WorkspaceLayout}
+      project={workspaceProject}
+      renderHeader={(content) => <WorkspaceHeader {...content} />}
+    >
+      <WorkspaceContent spacing="compact">
+        {error ? <ErrorState message={error} /> : null}
+        {memberError ? <ErrorState message={memberError} /> : null}
+        <RaidManagement
+          emptyMessage="No RAID items have been added for this project."
+          fixedProjectId={projectId}
+          isSaving={isSaving}
+          items={raidItems}
+          onAddComment={handleAddRaidComment}
+          onCreate={handleCreateRaidItem}
+          onDelete={handleDeleteRaidItem}
+          onUpdate={handleUpdateRaidItem}
+          permissions={{ canCreate: true, canDelete: true, canUpdate: true }}
+          projectMembers={members}
+          projects={project ? [project] : []}
+          title="RAID"
+          users={memberUsers}
+        />
+      </WorkspaceContent>
     </ProjectLayout>
   );
 }

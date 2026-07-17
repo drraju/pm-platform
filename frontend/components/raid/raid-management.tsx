@@ -2,6 +2,13 @@
 
 import React from "react";
 import { FormEvent, useMemo, useState } from "react";
+import {
+  EmptyState,
+  LoadingState,
+  StatusBadge,
+  SummaryCard,
+  WorkspaceSection,
+} from "@/components/foundation";
 import { AppModal } from "@/components/ui/app-modal";
 import {
   ModalForm,
@@ -157,16 +164,8 @@ export function RaidManagement({
   }
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {fixedType
-              ? `${formatType(fixedType)} register with ownership and status.`
-              : "Risks, assumptions, issues, and dependencies across visible projects."}
-          </p>
-        </div>
+    <SummaryCard
+      action={
         <div className="flex items-center gap-2">
           <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
             {visibleItems.length}
@@ -181,9 +180,20 @@ export function RaidManagement({
             </button>
           ) : null}
         </div>
-      </div>
+      }
+      description={
+        fixedType
+          ? `${formatType(fixedType)} register with ownership and status.`
+          : "Risks, assumptions, issues, and dependencies across visible projects."
+      }
+      title={title}
+    >
 
-      <div className="mt-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
+      <WorkspaceSection
+        className="grid gap-3 md:grid-cols-3"
+        padding="compact"
+        surface="subtle"
+      >
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Owner
           <select
@@ -230,7 +240,7 @@ export function RaidManagement({
             ))}
           </select>
         </label>
-      </div>
+      </WorkspaceSection>
 
       <div className="mt-5 overflow-x-auto">
         <table className="min-w-[980px] divide-y divide-slate-200 text-sm">
@@ -249,15 +259,19 @@ export function RaidManagement({
           <tbody className="divide-y divide-slate-100">
             {isLoading ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={8}>
-                  Loading RAID items...
+                <td className="px-3 py-5" colSpan={8}>
+                  <LoadingState
+                    compact
+                    label="Loading RAID items"
+                    rows={2}
+                  />
                 </td>
               </tr>
             ) : null}
             {!isLoading && visibleItems.length === 0 ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={8}>
-                  {emptyMessage}
+                <td className="px-3 py-5" colSpan={8}>
+                  <EmptyState compact title={emptyMessage} />
                 </td>
               </tr>
             ) : null}
@@ -292,10 +306,20 @@ export function RaidManagement({
                         {formatOwner(item)}
                       </td>
                       <td className="px-3 py-3 capitalize text-slate-600">
-                        {formatLabel(item.status)}
+                        <StatusBadge
+                          size="sm"
+                          tone={getStatusTone(item.status)}
+                        >
+                          {formatLabel(item.status)}
+                        </StatusBadge>
                       </td>
                       <td className="px-3 py-3 capitalize text-slate-600">
-                        {formatLabel(getSeverityValue(item))}
+                        <StatusBadge
+                          size="sm"
+                          tone={getSeverityTone(getSeverityValue(item))}
+                        >
+                          {formatLabel(getSeverityValue(item))}
+                        </StatusBadge>
                       </td>
                       <td className="px-3 py-3 text-slate-600">
                         {formatDetail(item)}
@@ -378,7 +402,7 @@ export function RaidManagement({
             </p>
         </AppModal>
       ) : null}
-    </section>
+    </SummaryCard>
   );
 }
 
@@ -811,6 +835,36 @@ function getSeverityValue(item: ApiRaidItem) {
     item.probability ??
     "medium"
   );
+}
+
+function getSeverityTone(value: string) {
+  switch (value) {
+    case "critical":
+      return "critical" as const;
+    case "high":
+      return "warning" as const;
+    default:
+      return "neutral" as const;
+  }
+}
+
+function getStatusTone(value?: string | null) {
+  switch (value) {
+    case "closed":
+    case "met":
+    case "resolved":
+    case "validated":
+      return "success" as const;
+    case "blocked":
+    case "invalidated":
+      return "critical" as const;
+    case "mitigating":
+    case "monitoring":
+    case "validating":
+      return "warning" as const;
+    default:
+      return "neutral" as const;
+  }
 }
 
 function getStatusFilterOptions(

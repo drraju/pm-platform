@@ -435,6 +435,14 @@ describe("Projects List navigation", () => {
       "aria-current",
       "page",
     );
+    expect(
+      screen
+        .getByRole("heading", {
+          level: 1,
+          name: "Selected Project Workspace",
+        })
+        .closest("header"),
+    ).toHaveClass("shadow-ui-subtle");
   });
 
   it("loads a professional placeholder for future workspace modules", async () => {
