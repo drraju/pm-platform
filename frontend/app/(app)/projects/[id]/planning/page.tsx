@@ -3,8 +3,15 @@
 import React from "react";
 import { Suspense, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import {
+  ErrorState,
+  LoadingState,
+  WorkspaceContent,
+  WorkspaceHeader,
+  WorkspaceLayout,
+} from "@/components/foundation";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
-import { ProjectLayout, ProjectLayoutLoadingState } from "@/components/project";
+import { ProjectLayout } from "@/components/project";
 import {
   createPlanningDependency,
   createPlanningTask,
@@ -26,7 +33,7 @@ import { useProjectMembers } from "@/hooks/use-project-members";
 
 export default function ProjectPlanningPage() {
   return (
-    <Suspense fallback={<PageLoading />}>
+    <Suspense fallback={<PageLoading standalone />}>
       <PageContent />
     </Suspense>
   );
@@ -270,6 +277,7 @@ function PageContent() {
   return (
     <ProjectLayout
       activeTab="planning"
+      layout={WorkspaceLayout}
       project={
         workspace?.project ?? {
           id: projectId,
@@ -277,40 +285,47 @@ function PageContent() {
           status: "active",
         }
       }
+      renderHeader={(content) => <WorkspaceHeader {...content} />}
     >
-      {error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </section>
-      ) : null}
-      {memberError ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {memberError}
-        </section>
-      ) : null}
+      <WorkspaceContent spacing="compact">
+        {error ? <ErrorState message={error} /> : null}
+        {memberError ? <ErrorState message={memberError} /> : null}
 
-      {isLoading || areMembersLoading ? <PageLoading /> : null}
+        {isLoading || areMembersLoading ? <PageLoading /> : null}
 
-      {!isLoading && !areMembersLoading && workspace ? (
-        <PlanningWorkspace
-          onDeleteTask={handleDeleteTask}
-          isSaving={isSaving}
-          onCreateDependency={handleCreateDependency}
-          onCreateTask={handleCreateTask}
-          onDeleteDependency={handleDeleteDependency}
-          onDuplicateWorkPackage={handleDuplicateWorkPackage}
-          onRefreshWorkspace={loadWorkspace}
-          onRegenerateWorkspace={handleRegenerateWorkspace}
-          onRemoveDuplicatedWorkPackage={handleRemoveDuplicatedWorkPackage}
-          onUpdateSchedule={handleUpdateSchedule}
-          projectMembers={members}
-          workspace={workspace}
-        />
-      ) : null}
+        {!isLoading && !areMembersLoading && workspace ? (
+          <PlanningWorkspace
+            onDeleteTask={handleDeleteTask}
+            isSaving={isSaving}
+            onCreateDependency={handleCreateDependency}
+            onCreateTask={handleCreateTask}
+            onDeleteDependency={handleDeleteDependency}
+            onDuplicateWorkPackage={handleDuplicateWorkPackage}
+            onRefreshWorkspace={loadWorkspace}
+            onRegenerateWorkspace={handleRegenerateWorkspace}
+            onRemoveDuplicatedWorkPackage={handleRemoveDuplicatedWorkPackage}
+            onUpdateSchedule={handleUpdateSchedule}
+            projectMembers={members}
+            workspace={workspace}
+          />
+        ) : null}
+      </WorkspaceContent>
     </ProjectLayout>
   );
 }
 
-function PageLoading() {
-  return <ProjectLayoutLoadingState />;
+function PageLoading({ standalone = false }: { standalone?: boolean }) {
+  const loadingState = (
+    <LoadingState
+      className="rounded-ui border border-ui-border bg-ui-surface p-5 shadow-ui-subtle"
+      label="Loading planning workspace"
+      rows={6}
+    />
+  );
+
+  return standalone ? (
+    <WorkspaceLayout>{loadingState}</WorkspaceLayout>
+  ) : (
+    loadingState
+  );
 }

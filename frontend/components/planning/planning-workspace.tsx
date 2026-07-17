@@ -18,6 +18,12 @@ import type {
   ApiTaskDependency,
   ApiTaskType,
 } from "@/lib/api/client";
+import {
+  EmptyState,
+  InfoCard,
+  StatusBadge,
+  WorkspaceSection,
+} from "@/components/foundation";
 import { ToolbarGroup } from "@/components/ui/toolbar";
 import { usePlanningExpansionState } from "./planning-expansion-state";
 import { PlanningDetailPanel } from "./planning-detail-panel";
@@ -1845,9 +1851,11 @@ export function PlanningWorkspace({
   }
 
   return (
-    <div
-      className="relative flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft"
+    <WorkspaceSection
+      className="relative flex max-h-[calc(100vh-12rem)] min-h-[640px] flex-col overflow-hidden"
       onKeyDown={handleWorkspaceKeyDown}
+      padding="none"
+      surface="card"
     >
       <section
         aria-label="Planning toolbar"
@@ -1866,12 +1874,15 @@ export function PlanningWorkspace({
               {workspace.snapshot?.projectFinishDate ?? "Unscheduled"}
             </p>
           </div>
-          <span
+          <StatusBadge
             aria-live="polite"
-            className="shrink-0 text-[11px] font-semibold text-slate-500"
+            className="shrink-0"
+            dot
+            size="sm"
+            tone={isSaving ? "warning" : "success"}
           >
             {isSaving ? "Saving…" : "Plan current"}
-          </span>
+          </StatusBadge>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
           <ToolbarGroup label="Create">
@@ -2329,12 +2340,14 @@ export function PlanningWorkspace({
           </ToolbarGroup>
         </div>
         {hierarchyError ? (
-          <div
-            className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+          <InfoCard
+            className="mt-3"
             role="alert"
+            title="Planning structure requires attention"
+            tone="warning"
           >
             {hierarchyError}
-          </div>
+          </InfoCard>
         ) : null}
       </section>
 
@@ -2459,15 +2472,12 @@ export function PlanningWorkspace({
                     );
                   })}
                   {rows.length === 0 ? (
-                    <div
-                      className="px-4 py-12 text-center text-sm text-slate-500"
+                    <EmptyState
+                      compact
+                      description="Add a task to start building the project WBS."
                       style={{ width: gridContentWidth }}
-                    >
-                      <p className="font-semibold text-slate-700">No Tasks</p>
-                      <p className="mt-1">
-                        Add a task to start building the project WBS.
-                      </p>
-                    </div>
+                      title="No Tasks"
+                    />
                   ) : null}
                 </div>
               ) : null}
@@ -2759,7 +2769,7 @@ export function PlanningWorkspace({
             </div>
 
             <section
-              className="m-3 grid gap-4 rounded-md border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr]"
+              className="m-3 grid gap-4 rounded-ui border border-ui-border bg-ui-surface p-4 shadow-ui-subtle lg:grid-cols-[1fr_1fr]"
               ref={dependencySectionRef}
             >
               <form
@@ -3120,7 +3130,7 @@ export function PlanningWorkspace({
         <span>Zoom: {zoomLabels[zoom]}</span>
         <span>Visible Tasks: {rows.length}</span>
       </footer>
-    </div>
+    </WorkspaceSection>
   );
 }
 

@@ -405,7 +405,7 @@ describe("Projects List navigation", () => {
           name: "Selected Project Workspace",
         })
         .closest("header"),
-    ).toHaveClass("shadow-soft");
+    ).toHaveClass("shadow-ui-subtle");
   });
 
   it("loads the project Tasks route", async () => {
