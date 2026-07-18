@@ -25,6 +25,10 @@ import {
   WorkspaceSection,
 } from "@/components/foundation";
 import { ToolbarGroup } from "@/components/ui/toolbar";
+import {
+  useDismissibleMenu,
+  useDropdownMenu,
+} from "@/hooks/use-dropdown-menu";
 import { usePlanningExpansionState } from "./planning-expansion-state";
 import { PlanningDetailPanel } from "./planning-detail-panel";
 
@@ -391,9 +395,9 @@ export function PlanningWorkspace({
       ? mergeColumnIds(savedColumns, floatColumnIds)
       : savedColumns;
   });
-  const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
-  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
-  const [isStructureMenuOpen, setIsStructureMenuOpen] = useState(false);
+  const columnsMenu = useDropdownMenu<HTMLSpanElement>();
+  const viewMenu = useDropdownMenu<HTMLSpanElement>();
+  const structureMenu = useDropdownMenu<HTMLSpanElement>();
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
   const expansionState = usePlanningExpansionState(workspace.project.id);
@@ -412,14 +416,20 @@ export function PlanningWorkspace({
     useState<DuplicateWorkPackageDialogState | null>(null);
   const [workPackageContextMenu, setWorkPackageContextMenu] =
     useState<WorkPackageContextMenuState | null>(null);
+  const workPackageMenu = useDismissibleMenu<HTMLDivElement>({
+    closeOnWindowBlur: true,
+    closeOnWindowResize: true,
+    isOpen: workPackageContextMenu !== null,
+    onClose: () => setWorkPackageContextMenu(null),
+  });
   const [duplicateUndoStack, setDuplicateUndoStack] = useState<
     DuplicateHistoryEntry[]
   >([]);
   const [duplicateRedoStack, setDuplicateRedoStack] = useState<
     DuplicateHistoryEntry[]
   >([]);
-  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
-  const [isAddChildMenuOpen, setIsAddChildMenuOpen] = useState(false);
+  const addMenu = useDropdownMenu<HTMLSpanElement>();
+  const addChildMenu = useDropdownMenu<HTMLSpanElement>();
   const [dependencyDraft, setDependencyDraft] = useState({
     dependencyType: "FS" as "FS" | "SS" | "FF",
     predecessorTaskId: "",
@@ -442,21 +452,6 @@ export function PlanningWorkspace({
   useEffect(() => {
     setLocalSchedules(workspace.schedules);
   }, [workspace.schedules]);
-
-  useEffect(() => {
-    if (!workPackageContextMenu) {
-      return;
-    }
-    const closeMenu = () => setWorkPackageContextMenu(null);
-    document.addEventListener("pointerdown", closeMenu);
-    window.addEventListener("blur", closeMenu);
-    window.addEventListener("resize", closeMenu);
-    return () => {
-      document.removeEventListener("pointerdown", closeMenu);
-      window.removeEventListener("blur", closeMenu);
-      window.removeEventListener("resize", closeMenu);
-    };
-  }, [workPackageContextMenu]);
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") {
@@ -713,8 +708,8 @@ export function PlanningWorkspace({
       setEditError(null);
       setNewTaskFocusId(schedule.taskId);
     }
-    setIsAddMenuOpen(false);
-    setIsAddChildMenuOpen(false);
+    addMenu.close();
+    addChildMenu.close();
   }
 
   function openDuplicateWorkPackageDialog(schedule: ApiPlanningTaskSchedule) {
@@ -1886,20 +1881,22 @@ export function PlanningWorkspace({
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
           <ToolbarGroup label="Create">
-            <span className="relative">
+            <span className="relative" ref={addMenu.containerRef}>
               <button
-                aria-expanded={isAddMenuOpen}
+                aria-expanded={addMenu.isOpen}
                 aria-haspopup="menu"
                 className={toolbarButtonClassName}
                 disabled={isSaving}
-                onClick={() => setIsAddMenuOpen((isOpen) => !isOpen)}
+                onClick={addMenu.toggle}
+                ref={addMenu.triggerRef}
                 type="button"
               >
                 Add <span aria-hidden>▾</span>
               </button>
-              {isAddMenuOpen ? (
+              {addMenu.isOpen ? (
                 <span
                   className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  onClickCapture={addMenu.onMenuClickCapture}
                   role="menu"
                 >
                   <AddMenuButton
@@ -1942,21 +1939,23 @@ export function PlanningWorkspace({
                 </span>
               ) : null}
             </span>
-            <span className="relative">
+            <span className="relative" ref={addChildMenu.containerRef}>
               <button
-                aria-expanded={isAddChildMenuOpen}
+                aria-expanded={addChildMenu.isOpen}
                 aria-haspopup="menu"
                 className={toolbarButtonClassName}
                 disabled={!canCreateChildForSelection || isSaving}
-                onClick={() => setIsAddChildMenuOpen((isOpen) => !isOpen)}
+                onClick={addChildMenu.toggle}
+                ref={addChildMenu.triggerRef}
                 title={addChildTooltip}
                 type="button"
               >
                 Add Child <span aria-hidden>▾</span>
               </button>
-              {isAddChildMenuOpen ? (
+              {addChildMenu.isOpen ? (
                 <span
                   className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  onClickCapture={addChildMenu.onMenuClickCapture}
                   role="menu"
                 >
                   <AddMenuButton
@@ -2031,27 +2030,29 @@ export function PlanningWorkspace({
             </button>
           </ToolbarGroup>
           <ToolbarGroup label="Structure">
-            <span className="relative">
+            <span className="relative" ref={structureMenu.containerRef}>
               <button
-                aria-expanded={isStructureMenuOpen}
+                aria-expanded={structureMenu.isOpen}
                 aria-haspopup="menu"
                 className={toolbarButtonClassName}
-                onClick={() => setIsStructureMenuOpen((isOpen) => !isOpen)}
+                onClick={structureMenu.toggle}
+                ref={structureMenu.triggerRef}
                 type="button"
               >
                 <CommandIcon name="structure" />
                 Structure <span aria-hidden>▾</span>
               </button>
-              {isStructureMenuOpen ? (
+              {structureMenu.isOpen ? (
                 <span
                   className="absolute left-0 top-9 z-30 w-52 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  onClickCapture={structureMenu.onMenuClickCapture}
                   role="menu"
                 >
                   <StructureMenuButton
                     disabled={!canMoveSelectionUp || isSaving}
                     label="Move Up"
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       void moveSelectedTask("up");
                     }}
                     shortcut="Alt+Shift+↑"
@@ -2060,7 +2061,7 @@ export function PlanningWorkspace({
                     disabled={!canMoveSelectionDown || isSaving}
                     label="Move Down"
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       void moveSelectedTask("down");
                     }}
                     shortcut="Alt+Shift+↓"
@@ -2069,7 +2070,7 @@ export function PlanningWorkspace({
                     disabled={!canMoveSelectionToParent || isSaving}
                     label="Move to Parent"
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       void moveSelectionToParent();
                     }}
                     shortcut="Alt+Shift+←"
@@ -2078,7 +2079,7 @@ export function PlanningWorkspace({
                     disabled={!canMoveSelectionToSummary || isSaving}
                     label="Move to Summary..."
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       openMoveToSummaryDialog();
                     }}
                   />
@@ -2091,7 +2092,7 @@ export function PlanningWorkspace({
                     }
                     label="Duplicate Work Package..."
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       if (selectedSchedule) {
                         openDuplicateWorkPackageDialog(selectedSchedule);
                       }
@@ -2106,7 +2107,7 @@ export function PlanningWorkspace({
                     }
                     label="Undo Duplicate"
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       void undoDuplicateWorkPackage();
                     }}
                     shortcut="⌘Z"
@@ -2119,7 +2120,7 @@ export function PlanningWorkspace({
                     }
                     label="Redo Duplicate"
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       void redoDuplicateWorkPackage();
                     }}
                     shortcut="⌘⇧Z"
@@ -2129,7 +2130,7 @@ export function PlanningWorkspace({
                     disabled={!hasSummaryTasks}
                     label="Expand All"
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       expandAll();
                     }}
                   />
@@ -2137,7 +2138,7 @@ export function PlanningWorkspace({
                     disabled={!hasSummaryTasks}
                     label="Collapse All"
                     onClick={() => {
-                      setIsStructureMenuOpen(false);
+                      structureMenu.close();
                       collapseAll();
                     }}
                   />
@@ -2223,22 +2224,21 @@ export function PlanningWorkspace({
             </select>
           </ToolbarGroup>
           <ToolbarGroup label="View">
-            <span className="relative">
+            <span className="relative" ref={viewMenu.containerRef}>
               <button
-                aria-expanded={isViewMenuOpen}
+                aria-expanded={viewMenu.isOpen}
                 aria-haspopup="menu"
                 className={toolbarButtonClassName}
-                onClick={() => {
-                  setIsColumnsMenuOpen(false);
-                  setIsViewMenuOpen((isOpen) => !isOpen);
-                }}
+                onClick={viewMenu.toggle}
+                ref={viewMenu.triggerRef}
                 type="button"
               >
                 View <span aria-hidden>▾</span>
               </button>
-              {isViewMenuOpen ? (
+              {viewMenu.isOpen ? (
                 <span
                   className="absolute right-0 top-9 z-30 w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  onClickCapture={viewMenu.onMenuClickCapture}
                   role="menu"
                 >
                   {[
@@ -2251,7 +2251,7 @@ export function PlanningWorkspace({
                       key={mode}
                       onClick={() => {
                         setViewMode(mode as PlanningViewMode);
-                        setIsViewMenuOpen(false);
+                        viewMenu.close();
                       }}
                       role="menuitemradio"
                       aria-checked={viewMode === mode}
@@ -2287,23 +2287,22 @@ export function PlanningWorkspace({
                 </span>
               ) : null}
             </span>
-            <span className="relative">
+            <span className="relative" ref={columnsMenu.containerRef}>
               <button
-                aria-expanded={isColumnsMenuOpen}
+                aria-expanded={columnsMenu.isOpen}
                 aria-haspopup="menu"
                 className={toolbarButtonClassName}
                 disabled={!showGrid}
-                onClick={() => {
-                  setIsViewMenuOpen(false);
-                  setIsColumnsMenuOpen((isOpen) => !isOpen);
-                }}
+                onClick={columnsMenu.toggle}
+                ref={columnsMenu.triggerRef}
                 type="button"
               >
                 Columns <span aria-hidden>▾</span>
               </button>
-              {isColumnsMenuOpen ? (
+              {columnsMenu.isOpen ? (
                 <span
                   className="absolute right-0 top-9 z-30 w-48 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  onClickCapture={columnsMenu.onMenuClickCapture}
                   role="menu"
                 >
                   {optionalGridColumns.map((column) => {
@@ -2904,7 +2903,9 @@ export function PlanningWorkspace({
         <div
           aria-label="Summary Task actions"
           className="fixed z-50 w-60 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-xl"
+          onClickCapture={workPackageMenu.onMenuClickCapture}
           onPointerDown={(event) => event.stopPropagation()}
+          ref={workPackageMenu.containerRef}
           role="menu"
           style={{
             left: Math.min(workPackageContextMenu.x, window.innerWidth - 256),
@@ -3627,20 +3628,21 @@ function MilestoneCategoryIcon({
 }
 
 function KeyboardHelp() {
-  const [isOpen, setIsOpen] = useState(false);
+  const dropdown = useDropdownMenu<HTMLSpanElement>();
 
   return (
-    <span className="relative">
+    <span className="relative" ref={dropdown.containerRef}>
       <button
-        aria-expanded={isOpen}
+        aria-expanded={dropdown.isOpen}
         aria-label="Keyboard help"
         className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={dropdown.toggle}
+        ref={dropdown.triggerRef}
         type="button"
       >
         ?
       </button>
-      {isOpen ? (
+      {dropdown.isOpen ? (
         <span className="absolute right-0 top-9 z-30 w-64 rounded-md border border-slate-200 bg-white p-3 text-left text-xs text-slate-600 shadow-lg">
           <span className="block font-semibold text-slate-900">
             Keyboard Shortcuts

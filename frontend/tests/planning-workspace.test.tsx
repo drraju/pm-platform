@@ -3018,10 +3018,18 @@ describe("PlanningWorkspace", () => {
       clientX: 120,
       clientY: 160,
     });
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByRole("row", { name: /1 Planning/ }), {
+      clientX: 120,
+      clientY: 160,
+    });
     fireEvent.click(
       screen.getByRole("menuitem", { name: /Duplicate Work Package/ }),
     );
 
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Duplicate Work Package" }),
     ).toBeInTheDocument();
