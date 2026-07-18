@@ -1,9 +1,12 @@
 "use client";
 
 import React from "react";
-import { SectionCard } from "@/components/ui/card";
-import { ContentGrid } from "@/components/ui/content-grid";
-import { SectionHeader } from "@/components/ui/section-header";
+import {
+  EmptyState,
+  InfoCard,
+  StatusBadge,
+  SummaryCard,
+} from "@/components/foundation";
 import type { ApiProject } from "@/features/projects";
 
 type ProjectSummaryProps = {
@@ -21,10 +24,9 @@ export function ProjectSummary({ project }: ProjectSummaryProps) {
   ].filter((item) => item.value);
 
   return (
-    <SectionCard>
-      <SectionHeader title="Project summary" />
+    <SummaryCard title="Project summary">
       {items.length > 0 ? (
-        <dl className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => (
             <div key={item.label}>
               <dt className="text-sm font-medium text-slate-500">
@@ -37,11 +39,15 @@ export function ProjectSummary({ project }: ProjectSummaryProps) {
           ))}
         </dl>
       ) : (
-        <p className="mt-3 text-sm text-slate-500">
-          Project summary details have not been added yet.
-        </p>
+        <EmptyState
+          as="div"
+          compact
+          description="Project summary details have not been added yet."
+          headingLevel={3}
+          title="No project summary"
+        />
       )}
-    </SectionCard>
+    </SummaryCard>
   );
 }
 
@@ -53,37 +59,15 @@ export function ProjectWorkspacePlaceholder({
   title: string;
 }) {
   return (
-    <SectionCard>
-      <SectionHeader title={title} />
-      <p className="mt-2 inline-flex rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+    <InfoCard as="section" headingLevel={2} title={title}>
+      <StatusBadge size="sm">
         Coming in Future Release
-      </p>
+      </StatusBadge>
       <p className="mt-2 text-sm text-slate-500">
         {description ??
           "This workspace module is reserved for a future release and is intentionally read-only for now."}
       </p>
-    </SectionCard>
-  );
-}
-
-export function ProjectOverviewPlaceholders() {
-  return (
-    <ContentGrid columns={3} gap={4}>
-      <OverviewPlaceholder title="Recent activity" />
-      <OverviewPlaceholder title="Recent RAID" />
-      <OverviewPlaceholder title="Upcoming milestones" />
-    </ContentGrid>
-  );
-}
-
-function OverviewPlaceholder({ title }: { title: string }) {
-  return (
-    <SectionCard as="article">
-      <SectionHeader title={title} />
-      <p className="mt-2 text-sm text-slate-500">
-        This information will appear here when project activity is available.
-      </p>
-    </SectionCard>
+    </InfoCard>
   );
 }
 

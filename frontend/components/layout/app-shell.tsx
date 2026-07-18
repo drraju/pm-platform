@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  CommandPalette,
+  createApplicationCommandRegistry,
+} from "@/features/commands";
 import {
   clearSession,
   type ApiAuthMe,
@@ -9,6 +13,11 @@ import {
   getStoredPermissionKeys,
   storeAuthMe,
 } from "@/features/auth";
+import {
+  createApplicationEntityRegistry,
+  EntityPresentationCatalog,
+  EntityRegistryProvider,
+} from "@/features/entity-search";
 import { AppSidebar } from "./app-sidebar";
 import { GlobalHeader } from "./global-header";
 import { WorkspaceContextBar } from "./workspace-context";
@@ -16,11 +25,26 @@ import { WorkspaceContextBar } from "./workspace-context";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [sessionProfile, setSessionProfile] = useState<ApiAuthMe | null>(null);
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
     getStoredPermissionKeys(),
+  );
+  const commandRegistry = useMemo(
+    () => createApplicationCommandRegistry({ pathname, permissionKeys }),
+    [pathname, permissionKeys],
+  );
+  const { entityPresentationCatalog, entityRegistry } = useMemo(
+    () => ({
+      entityPresentationCatalog: new EntityPresentationCatalog(),
+      entityRegistry: createApplicationEntityRegistry({
+        pathname,
+        permissionKeys,
+      }),
+    }),
+    [pathname, permissionKeys],
   );
 
   useEffect(() => {
@@ -51,54 +75,86 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    function handleCommandPaletteShortcut(event: KeyboardEvent) {
+      if (
+        event.key.toLowerCase() === "k" &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    }
+
+    document.addEventListener("keydown", handleCommandPaletteShortcut);
+    return () =>
+      document.removeEventListener("keydown", handleCommandPaletteShortcut);
+  }, []);
+
   function handleLogout() {
     clearSession();
     router.push("/login");
   }
 
   return (
-    <div className="min-h-screen bg-surface text-ink antialiased">
-      <AppSidebar
-        isCollapsed={isSidebarCollapsed}
-        onToggle={() => setIsSidebarCollapsed((value) => !value)}
-        pathname={pathname}
-        permissionKeys={permissionKeys}
-      />
-
-      {isMobileDrawerOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button
-            aria-label="Close navigation overlay"
-            className="absolute inset-0 bg-slate-950/40"
-            onClick={() => setIsMobileDrawerOpen(false)}
-            type="button"
-          />
-          <AppSidebar
-            isMobile
-            onClose={() => setIsMobileDrawerOpen(false)}
-            pathname={pathname}
-            permissionKeys={permissionKeys}
-          />
-        </div>
-      ) : null}
-
-      <div
-        className={`transition-[padding] duration-200 ${
-          isSidebarCollapsed ? "lg:pl-[4.5rem]" : "lg:pl-60"
-        }`}
-      >
-        <GlobalHeader
-          onLogout={handleLogout}
-          onOpenNavigation={() => setIsMobileDrawerOpen(true)}
+    <EntityRegistryProvider
+      presentationCatalog={entityPresentationCatalog}
+      registry={entityRegistry}
+    >
+      <div className="min-h-screen bg-surface text-ink antialiased">
+        <AppSidebar
+          isCollapsed={isSidebarCollapsed}
+          onToggle={() => setIsSidebarCollapsed((value) => !value)}
+          pathname={pathname}
           permissionKeys={permissionKeys}
-          sessionProfile={sessionProfile}
         />
-        <WorkspaceContextBar pathname={pathname} />
 
-        <main className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-          {children}
-        </main>
+        {isMobileDrawerOpen ? (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <button
+              aria-label="Close navigation overlay"
+              className="absolute inset-0 bg-slate-950/40"
+              onClick={() => setIsMobileDrawerOpen(false)}
+              type="button"
+            />
+            <AppSidebar
+              isMobile
+              onClose={() => setIsMobileDrawerOpen(false)}
+              pathname={pathname}
+              permissionKeys={permissionKeys}
+            />
+          </div>
+        ) : null}
+
+        <div
+          className={`transition-[padding] duration-200 ${
+            isSidebarCollapsed ? "lg:pl-[4.5rem]" : "lg:pl-60"
+          }`}
+        >
+          <GlobalHeader
+            onLogout={handleLogout}
+            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            onOpenNavigation={() => setIsMobileDrawerOpen(true)}
+            permissionKeys={permissionKeys}
+            sessionProfile={sessionProfile}
+          />
+          <WorkspaceContextBar pathname={pathname} />
+
+          <main className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+            {children}
+          </main>
+        </div>
+
+        <CommandPalette
+          entityPresentationCatalog={entityPresentationCatalog}
+          entityRegistry={entityRegistry}
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigate={(target) => router.push(target)}
+          registry={commandRegistry}
+        />
       </div>
-    </div>
+    </EntityRegistryProvider>
   );
 }

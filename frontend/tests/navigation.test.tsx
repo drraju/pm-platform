@@ -148,8 +148,8 @@ describe("AppShell", () => {
       screen.getByRole("link", { name: /enterprise calendars/i }),
     ).toHaveAttribute("href", "/calendar");
     expect(
-      screen.getByRole("searchbox", { name: /global search/i }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: /open command palette/i }),
+    ).toHaveAttribute("aria-haspopup", "dialog");
     expect(
       screen.getByRole("button", { name: /ai assistant/i }),
     ).toHaveAttribute("aria-disabled", "true");
@@ -233,6 +233,14 @@ describe("workspace route context", () => {
       description: "Project plan authoring and analysis",
       title: "Planning",
     });
+  });
+
+  it("preserves the project overview link on deep project routes", () => {
+    expect(getWorkspaceContext("/projects/project-1/raid").breadcrumbs).toEqual([
+      { href: "/projects", label: "Projects" },
+      { href: "/projects/project-1", label: "Project" },
+      { label: "Raid" },
+    ]);
   });
 
   it("maps project queues without losing their Projects workspace context", () => {

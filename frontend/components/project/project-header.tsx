@@ -4,7 +4,7 @@ import React from "react";
 import type { ApiProject } from "@/features/projects";
 import { ProjectTabs, type ProjectWorkspaceTabId } from "./project-tabs";
 
-export interface ProjectHeaderContent {
+interface ProjectHeaderContent {
   eyebrow: string;
   metadata: Array<{ id: string; label: string; value: React.ReactNode }>;
   navigation: React.ReactNode;

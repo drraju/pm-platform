@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -8,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectsPage from "@/app/(app)/projects/page";
+import { dispatchApplicationCommandAction } from "@/features/commands";
 
 const projectMocks = vi.hoisted(() => ({
   createProject: vi.fn(),
@@ -205,5 +207,18 @@ describe("ProjectsPage CRUD", () => {
     await waitFor(() => {
       expect(projectMocks.deleteProject).toHaveBeenCalledWith("project-1");
     });
+  });
+
+  it("opens the existing create dialog from a contextual command", async () => {
+    render(<ProjectsPage />);
+
+    await screen.findByRole("button", { name: /create project/i });
+    act(() => {
+      dispatchApplicationCommandAction({ type: "project.create" });
+    });
+
+    expect(
+      screen.getByRole("dialog", { name: /^create project$/i }),
+    ).toBeInTheDocument();
   });
 });

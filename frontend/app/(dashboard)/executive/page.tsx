@@ -2,12 +2,22 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { SummaryCard } from "@/components/dashboard/summary-card";
-import { PageHeader } from "@/components/layout/page-header";
 import {
-  ProjectHealthBadge,
-  ProjectHealthReasons,
-} from "@/components/projects/project-health-badge";
+  EmptyState,
+  ErrorState,
+  InfoCard,
+  KPIGrid,
+  LoadingState,
+  StatusBadge,
+  SummaryCard,
+  SummaryMetricCard,
+  WorkspaceContent,
+  WorkspaceHeader,
+  WorkspaceLayout,
+  WorkspaceSection,
+  type StatusBadgeTone,
+} from "@/components/foundation";
+import { ProjectHealthReasons } from "@/components/projects/project-health-badge";
 import {
   getAuthMe,
   getStoredPermissionKeys,
@@ -57,114 +67,168 @@ export default function ExecutiveDashboardPage() {
   const canViewExecutive = hasPermission(permissionKeys, "executive.view");
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        description="Read-only portfolio reporting for executives across project health, delivery attention, RAID exposure, and upcoming milestones."
+    <WorkspaceLayout>
+      <WorkspaceHeader
         eyebrow="Executive dashboard"
+        subtitle="Read-only portfolio reporting for executives across project health, delivery attention, RAID exposure, and upcoming milestones."
         title="Executive"
       />
 
-      {isLoading ? <ExecutiveLoadingState /> : null}
+      <WorkspaceContent>
+        {isLoading ? <ExecutiveLoadingState /> : null}
 
-      {!isLoading && error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </section>
-      ) : null}
+        {!isLoading && error ? (
+          <ErrorState
+            message={error}
+            title="Unable to load executive dashboard"
+          />
+        ) : null}
 
-      {!isLoading && !error && !canViewExecutive ? (
-        <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          You do not have permission to view the executive dashboard.
-        </section>
-      ) : null}
+        {!isLoading && !error && !canViewExecutive ? (
+          <InfoCard
+            as="section"
+            headingLevel={2}
+            title="Executive dashboard unavailable"
+            tone="warning"
+          >
+            You do not have permission to view the executive dashboard.
+          </InfoCard>
+        ) : null}
 
-      {!isLoading && !error && canViewExecutive && summary ? (
-        <>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard href="/projects" label="Total Projects" value={summary.totalProjects} />
-            <SummaryCard
-              href="/projects?health=GREEN"
-              label="Green Projects"
-              tone="success"
-              value={summary.greenProjects}
-            />
-            <SummaryCard
-              href="/projects?health=AMBER&sort=health_desc"
-              label="Amber Projects"
-              tone="warning"
-              value={summary.amberProjects}
-            />
-            <SummaryCard
-              href="/projects?health=RED&sort=health_desc"
-              label="Red Projects"
-              tone="danger"
-              value={summary.redProjects}
-            />
-          </section>
+        {!isLoading && !error && canViewExecutive && summary ? (
+          <>
+            <KPIGrid aria-label="Portfolio health summary">
+              <SummaryMetricCard
+                ariaLabel={`Total Projects: ${summary.totalProjects}`}
+                href="/projects"
+                title="Total Projects"
+                value={summary.totalProjects}
+              />
+              <SummaryMetricCard
+                ariaLabel={`Green Projects: ${summary.greenProjects}`}
+                href="/projects?health=GREEN"
+                title="Green Projects"
+                value={summary.greenProjects}
+                variant="success"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Amber Projects: ${summary.amberProjects}`}
+                href="/projects?health=AMBER&sort=health_desc"
+                title="Amber Projects"
+                value={summary.amberProjects}
+                variant="warning"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Red Projects: ${summary.redProjects}`}
+                href="/projects?health=RED&sort=health_desc"
+                title="Red Projects"
+                value={summary.redProjects}
+                variant="critical"
+              />
+            </KPIGrid>
 
-          <section className="grid gap-6 xl:grid-cols-3">
-            <SummaryCard
-              href="/risks?status=open"
-              label="Open Risks"
-              tone="danger"
-              value={getSeverityTotal(summary.openRisksBySeverity)}
-            />
-            <SummaryCard
-              href="/issues?status=open"
-              label="Open Issues"
-              tone="warning"
-              value={getSeverityTotal(summary.openIssuesByPriority)}
-            />
-            <SummaryCard
-              href="/tasks?scope=all&timing=overdue"
-              label="Overdue Tasks"
-              tone="danger"
-              value={summary.overdueTasks.total}
-            />
-          </section>
+            <WorkspaceSection
+              aria-label="Delivery attention summary"
+              className="grid gap-6 xl:grid-cols-3"
+              padding="none"
+            >
+              <SummaryMetricCard
+                ariaLabel={`Open Risks: ${getSeverityTotal(summary.openRisksBySeverity)}`}
+                href="/risks?status=open"
+                title="Open Risks"
+                value={getSeverityTotal(summary.openRisksBySeverity)}
+                variant="critical"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Open Issues: ${getSeverityTotal(summary.openIssuesByPriority)}`}
+                href="/issues?status=open"
+                title="Open Issues"
+                value={getSeverityTotal(summary.openIssuesByPriority)}
+                variant="warning"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Overdue Tasks: ${summary.overdueTasks.total}`}
+                href="/tasks?scope=all&timing=overdue"
+                title="Overdue Tasks"
+                value={summary.overdueTasks.total}
+                variant="critical"
+              />
+            </WorkspaceSection>
 
-          <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">
-                Projects Requiring Attention
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Read-only executive drill-down into projects with red or amber health.
-              </p>
-            </div>
-
-            {summary.projectsRequiringAttention.length === 0 ? (
-              <p className="mt-5 text-sm text-slate-500">
-                No projects currently require executive attention.
-              </p>
-            ) : (
-              <div className="mt-5 divide-y divide-slate-100">
-                {summary.projectsRequiringAttention.map((project) => (
-                  <AttentionProject key={project.id} project={project} />
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      ) : null}
-    </div>
+            <SummaryCard
+              description="Read-only executive drill-down into projects with red or amber health."
+              title="Projects Requiring Attention"
+            >
+              {summary.projectsRequiringAttention.length === 0 ? (
+                <EmptyState
+                  as="div"
+                  compact
+                  description="No projects currently require executive attention."
+                  headingLevel={3}
+                  title="No projects require attention"
+                />
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {summary.projectsRequiringAttention.map((project) => (
+                    <AttentionProject key={project.id} project={project} />
+                  ))}
+                </div>
+              )}
+            </SummaryCard>
+          </>
+        ) : null}
+      </WorkspaceContent>
+    </WorkspaceLayout>
   );
 }
 
 function ExecutiveLoadingState() {
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            className="h-32 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
-            key={index}
-          />
-        ))}
-      </section>
-      <div className="h-64 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft" />
-    </div>
+    <LoadingState
+      className="rounded-ui border border-ui-border bg-ui-surface p-5 shadow-ui-subtle"
+      label="Loading executive dashboard"
+      rows={6}
+    />
   );
+}
+
+type ExecutiveHealthStatus = ApiPortfolioProjectAttention["healthStatus"];
+
+const executiveHealthTones: Record<
+  ExecutiveHealthStatus,
+  StatusBadgeTone
+> = {
+  AMBER: "warning",
+  GREEN: "success",
+  RED: "critical",
+};
+
+function ExecutiveHealthBadge({
+  reasons,
+  status,
+}: {
+  reasons?: string[];
+  status: ExecutiveHealthStatus;
+}) {
+  const description =
+    reasons && reasons.length > 0
+      ? reasons.join(". ")
+      : "No health issues identified";
+
+  return (
+    <StatusBadge
+      description={description}
+      dot
+      title={description}
+      tone={executiveHealthTones[status]}
+    >
+      {formatHealthStatus(status)}
+    </StatusBadge>
+  );
+}
+
+function formatHealthStatus(status: ExecutiveHealthStatus) {
+  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 function AttentionProject({
@@ -182,7 +246,7 @@ function AttentionProject({
           <h3 className="font-semibold text-slate-950">{project.name}</h3>
           <ProjectHealthReasons reasons={project.reasons} />
         </div>
-        <ProjectHealthBadge
+        <ExecutiveHealthBadge
           reasons={project.reasons}
           status={project.healthStatus}
         />

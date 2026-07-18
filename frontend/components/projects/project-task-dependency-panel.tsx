@@ -164,11 +164,11 @@ export function ProjectTaskDependencyPanel({
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-white text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-3">Predecessor</th>
-              <th className="px-3 py-3">Type</th>
-              <th className="px-3 py-3">Successor</th>
-              <th className="px-3 py-3">Lag</th>
-              <th className="px-3 py-3">Actions</th>
+              <th className="px-3 py-3" scope="col">Predecessor</th>
+              <th className="px-3 py-3" scope="col">Type</th>
+              <th className="px-3 py-3" scope="col">Successor</th>
+              <th className="px-3 py-3" scope="col">Lag</th>
+              <th className="px-3 py-3" scope="col">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">

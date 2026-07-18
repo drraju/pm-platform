@@ -27,6 +27,11 @@ import {
   hasPermission,
   storeAuthMe,
 } from "@/features/auth";
+import { subscribeToApplicationCommandActions } from "@/features/commands";
+import {
+  createProjectEntityProvider,
+  useEntityProvider,
+} from "@/features/entity-search";
 import type {
   ApiAssignableUser,
   ApiProjectHealthStatus,
@@ -87,6 +92,11 @@ function PageContent() {
   const canCreateProject = hasPermission(permissionKeys, "project.create");
   const canEditProject = hasPermission(permissionKeys, "project.update");
   const canDeleteProject = hasPermission(permissionKeys, "project.delete");
+  const projectEntityProvider = useMemo(
+    () => createProjectEntityProvider(projects),
+    [projects],
+  );
+  useEntityProvider(projectEntityProvider);
 
   function syncProjectFilters(nextFilters: {
     health?: "all" | ApiProjectHealthStatus;
@@ -219,6 +229,21 @@ function PageContent() {
     setSelectedProject(null);
     setIsProjectModalOpen(false);
   }
+
+  useEffect(
+    () =>
+      subscribeToApplicationCommandActions((action) => {
+        if (
+          action.type === "project.create" &&
+          canCreateProject &&
+          hasSession
+        ) {
+          setSelectedProject(null);
+          setIsProjectModalOpen(true);
+        }
+      }),
+    [canCreateProject, hasSession],
+  );
 
   async function handleProjectSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -416,8 +416,11 @@ describe("Project workspace components", () => {
   });
 
   it("renders summary metrics", () => {
+    const onSelectMetric = vi.fn();
+
     render(
       <ProjectWorkspaceSummary
+        onSelectMetric={onSelectMetric}
         taskCounts={{ milestones: 0, phases: 1, tasks: 2 }}
         tasks={[
           {
@@ -441,6 +444,14 @@ describe("Project workspace components", () => {
     expect(screen.getByText("Summaries")).toBeInTheDocument();
     expect(screen.getByText("Tasks")).toBeInTheDocument();
     expect(screen.getByText("Milestones")).toBeInTheDocument();
+
+    const summariesMetric = screen.getByRole("link", {
+      name: "Summaries: 0. Open project plan",
+    });
+
+    expect(summariesMetric).toHaveAttribute("href", "#plan");
+    fireEvent.click(summariesMetric);
+    expect(onSelectMetric).toHaveBeenCalledWith("all");
   });
 
   it("renders zero planning metrics after the final task is removed", () => {
@@ -464,12 +475,14 @@ describe("Project workspace components", () => {
 
     expect(screen.getByText("Completion")).toBeInTheDocument();
     expect(screen.getByText("0%")).toBeInTheDocument();
-    expect(screen.getByText("Summaries").nextSibling).toHaveTextContent("0");
-    expect(screen.getByText("Tasks").nextSibling).toHaveTextContent("0");
-    expect(screen.getByText("Milestones").nextSibling).toHaveTextContent("0");
-    expect(screen.getByText("Planning Items").nextSibling).toHaveTextContent(
-      "0",
-    );
+    const planningSummary = screen.getByLabelText("Project planning summary");
+
+    for (const title of ["Summaries", "Tasks", "Milestones", "Planning Items"]) {
+      const metric = within(planningSummary).getByText(title).closest("section");
+
+      expect(metric).not.toBeNull();
+      expect(within(metric as HTMLElement).getByText("0")).toBeInTheDocument();
+    }
   });
 
   it("renders project health status and reasons", () => {

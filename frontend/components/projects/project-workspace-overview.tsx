@@ -7,9 +7,9 @@ import {
   SummaryCard,
   SummaryMetricCard,
   WorkspaceContent,
+  WorkspaceSection,
   type StatusBadgeTone,
 } from "@/components/foundation";
-import { ContentGrid } from "@/components/ui/content-grid";
 import type {
   ApiProjectDetails,
   ApiProjectMember,
@@ -68,9 +68,10 @@ export function ProjectWorkspaceOverview({
 
   return (
     <WorkspaceContent aria-label="Project overview">
-      <ContentGrid
+      <WorkspaceSection
         aria-label="Project health and timeline"
-        columns={2}
+        className="grid gap-6 xl:grid-cols-2"
+        padding="none"
       >
         <div className="xl:col-span-2">
           <SummaryCard
@@ -112,9 +113,13 @@ export function ProjectWorkspaceOverview({
             planningHref={`${basePath}/planning`}
           />
         </div>
-      </ContentGrid>
+      </WorkspaceSection>
 
-      <ContentGrid aria-label="Operational attention" columns={2}>
+      <WorkspaceSection
+        aria-label="Operational attention"
+        className="grid gap-6 xl:grid-cols-2"
+        padding="none"
+      >
         <SummaryCard
           action={
             <Link
@@ -202,11 +207,12 @@ export function ProjectWorkspaceOverview({
             when authoritative data is available.
           </p>
         </SummaryCard>
-      </ContentGrid>
+      </WorkspaceSection>
 
-      <ContentGrid
+      <WorkspaceSection
         aria-label="Upcoming milestones and recent activity"
-        columns={2}
+        className="grid gap-6 xl:grid-cols-2"
+        padding="none"
       >
         <SummaryCard
           action={
@@ -298,7 +304,7 @@ export function ProjectWorkspaceOverview({
             />
           )}
         </SummaryCard>
-      </ContentGrid>
+      </WorkspaceSection>
 
     </WorkspaceContent>
   );

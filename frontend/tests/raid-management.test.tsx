@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -10,6 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RaidManagement,
 } from "@/components/raid/raid-management";
+import { dispatchApplicationCommandAction } from "@/features/commands";
 
 const projects = [
   {
@@ -36,6 +38,31 @@ const permissions = {
 };
 
 describe("RaidManagement", () => {
+  it("opens the existing issue dialog from a contextual command", () => {
+    render(
+      <RaidManagement
+        emptyMessage="No RAID items yet."
+        items={[]}
+        onCreate={vi.fn()}
+        permissions={permissions}
+        projects={projects}
+        title="RAID"
+        users={users}
+      />,
+    );
+
+    act(() => {
+      dispatchApplicationCommandAction({
+        raidType: "issue",
+        type: "raid.create",
+      });
+    });
+
+    expect(
+      screen.getByRole("dialog", { name: /create issue/i }),
+    ).toBeInTheDocument();
+  });
+
   it("creates a risk from the modal", async () => {
     const onCreate = vi.fn();
 

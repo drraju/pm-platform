@@ -12,13 +12,13 @@ export type ProjectWorkspaceTabId =
   | "documents"
   | "reports";
 
-export type ProjectWorkspaceTab = {
+type ProjectWorkspaceTab = {
   href: string;
   id: ProjectWorkspaceTabId;
   label: string;
 };
 
-export function getProjectWorkspaceTabs(projectId: string): ProjectWorkspaceTab[] {
+function getProjectWorkspaceTabs(projectId: string): ProjectWorkspaceTab[] {
   const basePath = `/projects/${projectId}`;
 
   return [
@@ -48,10 +48,7 @@ export function ProjectTabs({
       aria-label="Project workspace"
       className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0"
     >
-      <div
-        className="flex min-w-max gap-1 border-b border-slate-200 md:min-w-0 md:flex-wrap"
-        role="tablist"
-      >
+      <div className="flex min-w-max gap-1 border-b border-slate-200 md:min-w-0 md:flex-wrap">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
 
@@ -65,7 +62,6 @@ export function ProjectTabs({
               }`}
               href={tab.href}
               key={tab.id}
-              role="tab"
             >
               {tab.label}
             </Link>

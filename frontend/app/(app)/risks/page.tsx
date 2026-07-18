@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -25,6 +25,11 @@ import {
 } from "@/features/raid";
 import { getRaidPermissions } from "@/features/raid/permissions";
 import { getAssignableUsers, type ApiAssignableUser } from "@/features/users";
+import {
+  createProjectEntityProvider,
+  createRaidEntityProvider,
+  useEntityProvider,
+} from "@/features/entity-search";
 
 export default function RisksPage() {
   return (
@@ -45,6 +50,16 @@ function PageContent() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const projectEntityProvider = useMemo(
+    () => createProjectEntityProvider(projects),
+    [projects],
+  );
+  const raidEntityProvider = useMemo(
+    () => createRaidEntityProvider(items),
+    [items],
+  );
+  useEntityProvider(projectEntityProvider);
+  useEntityProvider(raidEntityProvider);
 
   useEffect(() => {
     async function loadRisks() {

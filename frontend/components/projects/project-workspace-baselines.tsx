@@ -180,14 +180,14 @@ export function ProjectWorkspaceBaselines({
                     <table className="min-w-[980px] divide-y divide-slate-200 text-sm">
                       <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
-                          <th className="px-3 py-3">WBS</th>
-                          <th className="px-3 py-3">Plan Item</th>
-                          <th className="px-3 py-3">Baseline Dates</th>
-                          <th className="px-3 py-3">Current Dates</th>
-                          <th className="px-3 py-3">Date Variance</th>
-                          <th className="px-3 py-3">Baseline Hours</th>
-                          <th className="px-3 py-3">Current Hours</th>
-                          <th className="px-3 py-3">Hour Variance</th>
+                          <th className="px-3 py-3" scope="col">WBS</th>
+                          <th className="px-3 py-3" scope="col">Plan Item</th>
+                          <th className="px-3 py-3" scope="col">Baseline Dates</th>
+                          <th className="px-3 py-3" scope="col">Current Dates</th>
+                          <th className="px-3 py-3" scope="col">Date Variance</th>
+                          <th className="px-3 py-3" scope="col">Baseline Hours</th>
+                          <th className="px-3 py-3" scope="col">Current Hours</th>
+                          <th className="px-3 py-3" scope="col">Hour Variance</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">

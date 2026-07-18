@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   RaidManagement,
@@ -24,6 +24,11 @@ import {
 } from "@/features/raid";
 import { getRaidPermissions } from "@/features/raid/permissions";
 import { getAssignableUsers, type ApiAssignableUser } from "@/features/users";
+import {
+  createProjectEntityProvider,
+  createRaidEntityProvider,
+  useEntityProvider,
+} from "@/features/entity-search";
 
 export default function RaidPage() {
   const [items, setItems] = useState<ApiRaidItem[]>([]);
@@ -36,6 +41,16 @@ export default function RaidPage() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const projectEntityProvider = useMemo(
+    () => createProjectEntityProvider(projects),
+    [projects],
+  );
+  const raidEntityProvider = useMemo(
+    () => createRaidEntityProvider(items),
+    [items],
+  );
+  useEntityProvider(projectEntityProvider);
+  useEntityProvider(raidEntityProvider);
 
   async function loadData() {
     setError(null);

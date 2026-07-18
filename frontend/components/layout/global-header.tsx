@@ -5,6 +5,7 @@ import { hasAnyPermission } from "@/features/auth";
 
 type GlobalHeaderProps = {
   onLogout: () => void;
+  onOpenCommandPalette: () => void;
   onOpenNavigation: () => void;
   permissionKeys: string[];
   sessionProfile: ApiAuthMe | null;
@@ -12,6 +13,7 @@ type GlobalHeaderProps = {
 
 export function GlobalHeader({
   onLogout,
+  onOpenCommandPalette,
   onOpenNavigation,
   permissionKeys,
   sessionProfile,
@@ -33,19 +35,19 @@ export function GlobalHeader({
             Menu
           </button>
 
-          <label className="min-w-0 flex-1 md:max-w-2xl">
-            <span className="sr-only">Global search</span>
-            <input
-              aria-describedby="global-search-status"
-              className="h-9 w-full rounded-md border border-slate-200 bg-slate-50/80 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-500 focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/20"
-              placeholder="Search projects, tasks, and people"
-              readOnly
-              type="search"
-            />
-            <span className="sr-only" id="global-search-status">
-              Global search is a placeholder for a future sprint.
-            </span>
-          </label>
+          <button
+            aria-haspopup="dialog"
+            aria-keyshortcuts="Control+K Meta+K"
+            className="flex h-9 min-w-0 flex-1 items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/80 px-3 text-left text-sm text-slate-600 outline-none transition hover:border-slate-300 hover:bg-white focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/30 md:max-w-2xl"
+            onClick={onOpenCommandPalette}
+            type="button"
+          >
+            <span className="truncate">Search commands and workspaces</span>
+            <kbd className="hidden shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans text-xs text-slate-500 sm:inline">
+              Ctrl/⌘ K
+            </kbd>
+            <span className="sr-only">Open command palette</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-1.5">

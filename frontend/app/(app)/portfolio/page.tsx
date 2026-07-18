@@ -3,12 +3,21 @@
 import React from "react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { SummaryCard } from "@/components/dashboard/summary-card";
-import { PageHeader } from "@/components/layout/page-header";
 import {
-  ProjectHealthBadge,
-  ProjectHealthReasons,
-} from "@/components/projects/project-health-badge";
+  EmptyState,
+  ErrorState,
+  KPIGrid,
+  LoadingState,
+  StatusBadge,
+  SummaryCard,
+  SummaryMetricCard,
+  WorkspaceContent,
+  WorkspaceHeader,
+  WorkspaceLayout,
+  WorkspaceSection,
+  type StatusBadgeTone,
+} from "@/components/foundation";
+import { ProjectHealthReasons } from "@/components/projects/project-health-badge";
 import {
   getPortfolioSummary,
   type ApiPortfolioOverdueTasks,
@@ -44,73 +53,82 @@ export default function PortfolioPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        description="A portfolio-level view of project health across active delivery."
+    <WorkspaceLayout>
+      <WorkspaceHeader
         eyebrow="Portfolio dashboard"
+        subtitle="A portfolio-level view of project health across active delivery."
         title="Portfolio"
       />
 
-      {isLoading ? <PortfolioLoadingState /> : null}
+      <WorkspaceContent>
+        {isLoading ? <PortfolioLoadingState /> : null}
 
-      {!isLoading && error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </section>
-      ) : null}
+        {!isLoading && error ? (
+          <ErrorState message={error} title="Unable to load portfolio" />
+        ) : null}
 
-      {!isLoading && !error && summary ? (
-        <>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard href="/projects" label="Total Projects" value={summary.totalProjects} />
-            <SummaryCard
-              href="/projects?health=GREEN&sort=health_asc"
-              label="Green Projects"
-              tone="success"
-              value={summary.greenProjects}
+        {!isLoading && !error && summary ? (
+          <>
+            <KPIGrid aria-label="Portfolio summary">
+              <SummaryMetricCard
+                ariaLabel={`Total Projects: ${summary.totalProjects}`}
+                href="/projects"
+                title="Total Projects"
+                value={summary.totalProjects}
+              />
+              <SummaryMetricCard
+                ariaLabel={`Green Projects: ${summary.greenProjects}`}
+                href="/projects?health=GREEN&sort=health_asc"
+                title="Green Projects"
+                value={summary.greenProjects}
+                variant="success"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Amber Projects: ${summary.amberProjects}`}
+                href="/projects?health=AMBER&sort=health_desc"
+                title="Amber Projects"
+                value={summary.amberProjects}
+                variant="warning"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Red Projects: ${summary.redProjects}`}
+                href="/projects?health=RED&sort=health_desc"
+                title="Red Projects"
+                value={summary.redProjects}
+                variant="critical"
+              />
+            </KPIGrid>
+
+            <OpenRisksBySeverityWidget
+              openRisksBySeverity={summary.openRisksBySeverity}
             />
-            <SummaryCard
-              href="/projects?health=AMBER&sort=health_desc"
-              label="Amber Projects"
-              tone="warning"
-              value={summary.amberProjects}
+
+            <OpenIssuesByPriorityWidget
+              openIssuesByPriority={summary.openIssuesByPriority}
             />
-            <SummaryCard
-              href="/projects?health=RED&sort=health_desc"
-              label="Red Projects"
-              tone="danger"
-              value={summary.redProjects}
+
+            <OverdueTasksWidget overdueTasks={summary.overdueTasks} />
+
+            <UpcomingMilestonesWidget
+              milestones={summary.upcomingMilestones}
             />
-          </section>
 
-          <OpenRisksBySeverityWidget
-            openRisksBySeverity={summary.openRisksBySeverity}
-          />
+            {summary.totalProjects === 0 ? (
+              <EmptyState
+                description="No projects are available in the portfolio yet."
+                title="Portfolio is empty"
+              />
+            ) : null}
 
-          <OpenIssuesByPriorityWidget
-            openIssuesByPriority={summary.openIssuesByPriority}
-          />
-
-          <OverdueTasksWidget overdueTasks={summary.overdueTasks} />
-
-          <UpcomingMilestonesWidget
-            milestones={summary.upcomingMilestones}
-          />
-
-          {summary.totalProjects === 0 ? (
-            <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
-              No projects are available in the portfolio yet.
-            </section>
-          ) : null}
-
-          {summary.totalProjects > 0 ? (
-            <ProjectsRequiringAttentionWidget
-              projects={summary.projectsRequiringAttention}
-            />
-          ) : null}
-        </>
-      ) : null}
-    </div>
+            {summary.totalProjects > 0 ? (
+              <ProjectsRequiringAttentionWidget
+                projects={summary.projectsRequiringAttention}
+              />
+            ) : null}
+          </>
+        ) : null}
+      </WorkspaceContent>
+    </WorkspaceLayout>
   );
 }
 
@@ -120,28 +138,26 @@ function UpcomingMilestonesWidget({
   milestones: ApiPortfolioUpcomingMilestone[];
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-950">
-          Upcoming Milestones
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Incomplete tasks with the nearest upcoming due dates.
-        </p>
-      </div>
-
+    <SummaryCard
+      description="Incomplete tasks with the nearest upcoming due dates."
+      title="Upcoming Milestones"
+    >
       {milestones.length === 0 ? (
-        <p className="mt-5 text-sm text-slate-500">
-          No upcoming milestones are currently recorded.
-        </p>
+        <EmptyState
+          as="div"
+          compact
+          description="No upcoming milestones are currently recorded."
+          headingLevel={3}
+          title="No upcoming milestones"
+        />
       ) : (
-        <div className="mt-5 overflow-x-auto">
+        <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-3 py-3">Task Title</th>
-                <th className="px-3 py-3">Project Name</th>
-                <th className="px-3 py-3">Due Date</th>
+                <th className="px-3 py-3" scope="col">Task Title</th>
+                <th className="px-3 py-3" scope="col">Project Name</th>
+                <th className="px-3 py-3" scope="col">Due Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -167,7 +183,7 @@ function UpcomingMilestonesWidget({
           </table>
         </div>
       )}
-    </section>
+    </SummaryCard>
   );
 }
 
@@ -177,23 +193,22 @@ function OverdueTasksWidget({
   overdueTasks: ApiPortfolioOverdueTasks;
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
+    <WorkspaceSection surface="card">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">Overdue Tasks</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <h2 className="text-ui-section text-slate-950">Overdue Tasks</h2>
+          <p className="mt-1 text-sm text-slate-600">
             Portfolio-wide incomplete tasks past their due date.
           </p>
         </div>
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <p className="text-sm font-medium opacity-75">Total Overdue Tasks</p>
-          <Link
-            className="mt-2 inline-block text-3xl font-semibold hover:underline"
-            href="/tasks?scope=all&timing=overdue"
-          >
-            {overdueTasks.total}
-          </Link>
-        </div>
+        <SummaryMetricCard
+          ariaLabel={`Total Overdue Tasks: ${overdueTasks.total}`}
+          className="w-full lg:w-56"
+          href="/tasks?scope=all&timing=overdue"
+          title="Total Overdue Tasks"
+          value={overdueTasks.total}
+          variant="critical"
+        />
       </div>
 
       <div className="mt-6">
@@ -201,9 +216,14 @@ function OverdueTasksWidget({
           Projects with Overdue Tasks
         </h3>
         {overdueTasks.projects.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">
-            No overdue tasks are currently recorded.
-          </p>
+          <EmptyState
+            as="div"
+            className="mt-3"
+            compact
+            description="No overdue tasks are currently recorded."
+            headingLevel={4}
+            title="No overdue projects"
+          />
         ) : (
           <div className="mt-3 divide-y divide-slate-100">
             {overdueTasks.projects.map((project) => (
@@ -223,7 +243,7 @@ function OverdueTasksWidget({
           </div>
         )}
       </div>
-    </section>
+    </WorkspaceSection>
   );
 }
 
@@ -247,49 +267,52 @@ function OpenRisksBySeverityWidget({
     openRisksBySeverity.low;
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-950">
-          Open Risks by Severity
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Open risks grouped by impact severity.
-        </p>
-      </div>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
+    <SummaryCard
+      description="Open risks grouped by impact severity."
+      title="Open Risks by Severity"
+    >
+      <KPIGrid as="div">
+        <SummaryMetricCard
+          ariaLabel={`Critical Risks: ${openRisksBySeverity.critical}`}
           href="/risks?severity=critical&status=open"
-          label="Critical Risks"
-          tone="danger"
+          title="Critical Risks"
           value={openRisksBySeverity.critical}
+          variant="critical"
         />
-        <SummaryCard
+        <SummaryMetricCard
+          ariaLabel={`High Risks: ${openRisksBySeverity.high}`}
           href="/risks?severity=high&status=open"
-          label="High Risks"
-          tone="danger"
+          title="High Risks"
           value={openRisksBySeverity.high}
+          variant="critical"
         />
-        <SummaryCard
+        <SummaryMetricCard
+          ariaLabel={`Medium Risks: ${openRisksBySeverity.medium}`}
           href="/risks?severity=medium&status=open"
-          label="Medium Risks"
-          tone="warning"
+          title="Medium Risks"
           value={openRisksBySeverity.medium}
+          variant="warning"
         />
-        <SummaryCard
+        <SummaryMetricCard
+          ariaLabel={`Low Risks: ${openRisksBySeverity.low}`}
           href="/risks?severity=low&status=open"
-          label="Low Risks"
-          tone="success"
+          title="Low Risks"
           value={openRisksBySeverity.low}
+          variant="success"
         />
-      </section>
+      </KPIGrid>
 
       {totalOpenRisks === 0 ? (
-        <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
-          No open risks are currently recorded.
-        </section>
+        <EmptyState
+          as="div"
+          className="mt-4"
+          compact
+          description="No open risks are currently recorded."
+          headingLevel={3}
+          title="No open risks"
+        />
       ) : null}
-    </section>
+    </SummaryCard>
   );
 }
 
@@ -305,49 +328,52 @@ function OpenIssuesByPriorityWidget({
     openIssuesByPriority.low;
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-950">
-          Open Issues by Priority
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Open issues grouped by delivery priority.
-        </p>
-      </div>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
+    <SummaryCard
+      description="Open issues grouped by delivery priority."
+      title="Open Issues by Priority"
+    >
+      <KPIGrid as="div">
+        <SummaryMetricCard
+          ariaLabel={`Critical Issues: ${openIssuesByPriority.critical}`}
           href="/issues?priority=critical&status=open"
-          label="Critical Issues"
-          tone="danger"
+          title="Critical Issues"
           value={openIssuesByPriority.critical}
+          variant="critical"
         />
-        <SummaryCard
+        <SummaryMetricCard
+          ariaLabel={`High Priority Issues: ${openIssuesByPriority.high}`}
           href="/issues?priority=high&status=open"
-          label="High Priority Issues"
-          tone="danger"
+          title="High Priority Issues"
           value={openIssuesByPriority.high}
+          variant="critical"
         />
-        <SummaryCard
+        <SummaryMetricCard
+          ariaLabel={`Medium Priority Issues: ${openIssuesByPriority.medium}`}
           href="/issues?priority=medium&status=open"
-          label="Medium Priority Issues"
-          tone="warning"
+          title="Medium Priority Issues"
           value={openIssuesByPriority.medium}
+          variant="warning"
         />
-        <SummaryCard
+        <SummaryMetricCard
+          ariaLabel={`Low Priority Issues: ${openIssuesByPriority.low}`}
           href="/issues?priority=low&status=open"
-          label="Low Priority Issues"
-          tone="success"
+          title="Low Priority Issues"
           value={openIssuesByPriority.low}
+          variant="success"
         />
-      </section>
+      </KPIGrid>
 
       {totalOpenIssues === 0 ? (
-        <section className="rounded-md border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-soft">
-          No open issues are currently recorded.
-        </section>
+        <EmptyState
+          as="div"
+          className="mt-4"
+          compact
+          description="No open issues are currently recorded."
+          headingLevel={3}
+          title="No open issues"
+        />
       ) : null}
-    </section>
+    </SummaryCard>
   );
 }
 
@@ -357,27 +383,28 @@ function ProjectsRequiringAttentionWidget({
   projects: ApiPortfolioProjectAttention[];
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">
-            Projects Requiring Attention
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Amber and red projects across the portfolio.
-          </p>
-        </div>
-        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+    <SummaryCard
+      action={
+        <StatusBadge
+          aria-label={`${projects.length} projects requiring attention`}
+          size="sm"
+        >
           {projects.length}
-        </span>
-      </div>
-
+        </StatusBadge>
+      }
+      description="Amber and red projects across the portfolio."
+      title="Projects Requiring Attention"
+    >
       {projects.length === 0 ? (
-        <p className="mt-5 text-sm text-slate-500">
-          No amber or red projects require attention.
-        </p>
+        <EmptyState
+          as="div"
+          compact
+          description="No amber or red projects require attention."
+          headingLevel={3}
+          title="No projects require attention"
+        />
       ) : (
-        <div className="mt-5 divide-y divide-slate-100">
+        <div className="divide-y divide-slate-100">
           {projects.map((project) => (
             <Link
               className="block rounded-md px-3 py-4 transition hover:bg-slate-50"
@@ -388,7 +415,7 @@ function ProjectsRequiringAttentionWidget({
                 <h3 className="text-sm font-semibold text-slate-950">
                   {project.name}
                 </h3>
-                <ProjectHealthBadge
+                <PortfolioHealthBadge
                   reasons={project.reasons}
                   status={project.healthStatus}
                 />
@@ -398,19 +425,58 @@ function ProjectsRequiringAttentionWidget({
           ))}
         </div>
       )}
-    </section>
+    </SummaryCard>
   );
 }
 
 function PortfolioLoadingState() {
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div
-          className="h-32 animate-pulse rounded-md border border-slate-200 bg-white shadow-soft"
-          key={index}
-        />
-      ))}
-    </section>
+    <LoadingState
+      className="rounded-ui border border-ui-border bg-ui-surface p-5 shadow-ui-subtle"
+      label="Loading portfolio"
+      rows={4}
+    />
   );
+}
+
+type PortfolioHealthStatus = ApiPortfolioProjectAttention["healthStatus"];
+
+const portfolioHealthTones: Record<
+  PortfolioHealthStatus,
+  StatusBadgeTone
+> = {
+  AMBER: "warning",
+  GREEN: "success",
+  RED: "critical",
+};
+
+function PortfolioHealthBadge({
+  reasons,
+  status,
+}: {
+  reasons?: string[];
+  status: PortfolioHealthStatus;
+}) {
+  const formattedStatus = formatHealthStatus(status);
+
+  return (
+    <StatusBadge
+      description={`Project health status: ${formattedStatus}`}
+      dot
+      title={formatHealthTooltip(reasons)}
+      tone={portfolioHealthTones[status]}
+    >
+      {formattedStatus}
+    </StatusBadge>
+  );
+}
+
+function formatHealthStatus(status: PortfolioHealthStatus) {
+  return status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function formatHealthTooltip(reasons?: string[]) {
+  return reasons && reasons.length > 0
+    ? reasons.join("\n")
+    : "No health issues identified";
 }

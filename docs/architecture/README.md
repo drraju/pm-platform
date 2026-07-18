@@ -7,6 +7,7 @@ This directory documents the current PM Platform architecture and approved roadm
 - [Build Playbook](../BUILD_PLAYBOOK.md)
 - [00 Vision](00-VISION.md)
 - [01 System Architecture](01-SYSTEM-ARCHITECTURE.md)
+- [Frontend Platform Architecture](PLATFORM_ARCHITECTURE.md)
 - [05 Scheduling Architecture](05-SCHEDULING-ARCHITECTURE.md)
 
 ## Canonical Architecture Set
@@ -24,6 +25,7 @@ This directory documents the current PM Platform architecture and approved roadm
 | [08-DEVELOPMENT-WORKFLOW.md](08-DEVELOPMENT-WORKFLOW.md) | Mandatory feature workflow. |
 | [09-CODING-STANDARDS.md](09-CODING-STANDARDS.md) | Backend/frontend coding standards. |
 | [10-ROADMAP.md](10-ROADMAP.md) | Completed, current, and future roadmap. |
+| [PLATFORM_ARCHITECTURE.md](PLATFORM_ARCHITECTURE.md) | UI, command, entity, search, AI, governance, and authorization framework boundaries. |
 | [RESOURCE_ARCHITECTURE.md](RESOURCE_ARCHITECTURE.md) | Epic 1.2 Enterprise Resource Management architecture baseline. |
 | [FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md](FEATURE_1.2.2_RESOURCE_CRUD_API_ADD.md) | Feature-specific ADD for Feature 1.2.2 Resource CRUD API. |
 | [API_DESIGN_STANDARD.md](API_DESIGN_STANDARD.md) | Canonical REST naming, transport, validation, error, Swagger, and versioning standard. |
@@ -46,6 +48,7 @@ This directory documents the current PM Platform architecture and approved roadm
 - [ADR-011 ERM Assignment Ownership](adr/ADR-011-erm-assignment-ownership.md)
 - [ADR-012 ERM Permissions and Visibility](adr/ADR-012-erm-permissions-visibility.md)
 - [ADR-013 ERM Planning Resource Transition](adr/ADR-013-erm-planning-resource-transition.md)
+- [ADR-014 Client Platform Layering](adr/ADR-014-client-platform-layering.md)
 
 The REST implementation standard governed by ADR-004 is [API Design Standard](API_DESIGN_STANDARD.md).
 
@@ -71,6 +74,10 @@ These existing documents remain useful detailed references:
 | [Portfolio Engine](portfolio-engine.md) | Portfolio dashboard and cross-project direction. |
 | [Reporting Engine](reporting-engine.md) | Reporting architecture. |
 | [AI Assistant Architecture](ai-assistant.md) | AI direction and governance principles. |
+| [AI Platform Foundation](ai-platform.md) | Provider-neutral planning, context, governance, and authorization foundations. |
+| [Command Framework](command-framework.md) | Command registry and provider extension contracts. |
+| [Entity Search Foundation](entity-search.md) | Entity registry, provider, and search-presentation contracts. |
+| [Platform Developer Guide](../development/PLATFORM_DEVELOPER_GUIDE.md) | Supported extension workflows and verification checklist. |
 | [Role Visibility Matrix](role-visibility-matrix.md) | Role-based visibility expectations. |
 
 ## Non-Negotiable Boundaries

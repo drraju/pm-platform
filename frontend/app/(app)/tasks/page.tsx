@@ -17,6 +17,11 @@ import {
   storeAuthMe,
 } from "@/features/auth";
 import { getMyTasks, getTasks, updateTask, type ApiTask } from "@/features/tasks";
+import {
+  createProjectEntityProvider,
+  createTaskEntityProvider,
+  useEntityProvider,
+} from "@/features/entity-search";
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
   { label: "Backlog", value: "backlog" },
@@ -62,6 +67,16 @@ function PageContent() {
     requestedTiming === "overdue" || requestedTiming === "upcoming"
       ? requestedTiming
       : "all";
+  const projectEntityProvider = useMemo(
+    () => createProjectEntityProvider(projects),
+    [projects],
+  );
+  const taskEntityProvider = useMemo(
+    () => createTaskEntityProvider(tasks),
+    [tasks],
+  );
+  useEntityProvider(projectEntityProvider);
+  useEntityProvider(taskEntityProvider);
 
   function syncTaskFilters(nextFilters: {
     projectId?: string;

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import React from "react";
-import { SectionCard } from "@/components/ui/card";
-import { SectionHeader } from "@/components/ui/section-header";
+import { SummaryCard } from "@/components/foundation";
 
 export type TimelineSnapshotItem = {
   date: string;
@@ -20,26 +19,22 @@ export function TimelineSnapshot({
   planningHref,
 }: TimelineSnapshotProps) {
   return (
-    <SectionCard aria-labelledby="timeline-snapshot-title">
-      <SectionHeader
-        action={
-          <Link
+    <SummaryCard
+      action={
+        <Link
           className="shrink-0 text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
           href={planningHref}
         >
           Open in Planning
-          </Link>
-        }
-        description="Key Project checkpoints. Dates are not shown to scale."
-        descriptionSize="xs"
-        layout="timeline"
-        title="Timeline Snapshot"
-        titleId="timeline-snapshot-title"
-      />
+        </Link>
+      }
+      description="Key Project checkpoints. Dates are not shown to scale."
+      title="Timeline Snapshot"
+    >
 
       <ol
         aria-label="Project timeline checkpoints"
-        className="mt-6 grid gap-0 xl:grid-cols-5"
+        className="grid gap-0 xl:grid-cols-5"
       >
         {items.map((item, index) => (
           <li
@@ -77,6 +72,6 @@ export function TimelineSnapshot({
           </li>
         ))}
       </ol>
-    </SectionCard>
+    </SummaryCard>
   );
 }

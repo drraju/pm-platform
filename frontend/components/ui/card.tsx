@@ -24,7 +24,7 @@ const paddingStyles: Record<CardPadding, string> = {
   none: "",
 };
 
-export function Card({
+function Card({
   as = "section",
   children,
   className,

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   EmptyState,
   LoadingState,
@@ -15,6 +15,7 @@ import {
   ModalFormGrid,
   ModalFormSection,
 } from "@/components/ui/modal-form";
+import { subscribeToApplicationCommandActions } from "@/features/commands";
 import type {
   ApiAssignableUser,
   ApiProject,
@@ -22,9 +23,9 @@ import type {
   ApiRaidItem,
 } from "@/lib/api/client";
 
-export type RaidType = ApiRaidItem["type"];
+type RaidType = ApiRaidItem["type"];
 
-export type RaidPermissions = {
+type RaidPermissions = {
   canCreate: boolean;
   canDelete: boolean;
   canUpdate: boolean;
@@ -96,6 +97,7 @@ export function RaidManagement({
   users,
 }: RaidManagementProps) {
   const [editingItem, setEditingItem] = useState<ApiRaidItem | null>(null);
+  const [createType, setCreateType] = useState<RaidType | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deletingItem, setDeletingItem] = useState<ApiRaidItem | null>(null);
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -140,7 +142,11 @@ export function RaidManagement({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const input = formDataToRaidInput(formData, fixedType, fixedProjectId);
+    const input = formDataToRaidInput(
+      formData,
+      fixedType ?? createType ?? undefined,
+      fixedProjectId,
+    );
 
     if (editingItem && onUpdate) {
       await onUpdate(editingItem.id, input);
@@ -151,8 +157,30 @@ export function RaidManagement({
     if (onCreate) {
       await onCreate(input);
       setIsCreateOpen(false);
+      setCreateType(null);
     }
   }
+
+  useEffect(
+    () =>
+      subscribeToApplicationCommandActions((action) => {
+        if (
+          action.type !== "raid.create" ||
+          !canCreate ||
+          (fixedType && fixedType !== action.raidType) ||
+          (fixedProjectId &&
+            action.projectId &&
+            fixedProjectId !== action.projectId)
+        ) {
+          return;
+        }
+
+        setEditingItem(null);
+        setCreateType(action.raidType);
+        setIsCreateOpen(true);
+      }),
+    [canCreate, fixedProjectId, fixedType],
+  );
 
   async function handleDelete() {
     if (!deletingItem || !onDelete) {
@@ -173,7 +201,10 @@ export function RaidManagement({
           {canCreate ? (
             <button
               className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800"
-              onClick={() => setIsCreateOpen(true)}
+              onClick={() => {
+                setCreateType(null);
+                setIsCreateOpen(true);
+              }}
               type="button"
             >
               Create {fixedType ? formatType(fixedType) : "RAID item"}
@@ -246,14 +277,14 @@ export function RaidManagement({
         <table className="min-w-[980px] divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              {!fixedType ? <th className="px-3 py-3">Type</th> : null}
-              {!fixedProjectId ? <th className="px-3 py-3">Project</th> : null}
-              <th className="px-3 py-3">Title</th>
-              <th className="px-3 py-3">Owner</th>
-              <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">Priority</th>
-              <th className="px-3 py-3">Detail</th>
-              <th className="px-3 py-3 text-right">Actions</th>
+              {!fixedType ? <th className="px-3 py-3" scope="col">Type</th> : null}
+              {!fixedProjectId ? <th className="px-3 py-3" scope="col">Project</th> : null}
+              <th className="px-3 py-3" scope="col">Title</th>
+              <th className="px-3 py-3" scope="col">Owner</th>
+              <th className="px-3 py-3" scope="col">Status</th>
+              <th className="px-3 py-3" scope="col">Priority</th>
+              <th className="px-3 py-3" scope="col">Detail</th>
+              <th className="px-3 py-3 text-right" scope="col">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -357,12 +388,13 @@ export function RaidManagement({
       {isCreateOpen || editingItem ? (
         <RaidItemDialog
           fixedProjectId={fixedProjectId}
-          fixedType={fixedType}
+          fixedType={fixedType ?? createType ?? undefined}
           isSaving={isSaving}
           item={editingItem}
           onClose={() => {
             setEditingItem(null);
             setIsCreateOpen(false);
+            setCreateType(null);
           }}
           onAddComment={onAddComment}
           onSubmit={handleSubmit}

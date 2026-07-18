@@ -24,6 +24,11 @@ import {
 } from "@/features/raid";
 import { useProjectMembers } from "@/hooks/use-project-members";
 import type { ApiRaidItem } from "@/lib/api/client";
+import {
+  createProjectEntityProvider,
+  createRaidEntityProvider,
+  useEntityProvider,
+} from "@/features/entity-search";
 
 export default function ProjectRaidPage() {
   const params = useParams<{ id: string }>();
@@ -154,6 +159,16 @@ export default function ProjectRaidPage() {
       ...(project.dependencies ?? []),
     ];
   }, [project]);
+  const projectEntityProvider = useMemo(
+    () => createProjectEntityProvider(project ? [project] : []),
+    [project],
+  );
+  const raidEntityProvider = useMemo(
+    () => createRaidEntityProvider(raidItems),
+    [raidItems],
+  );
+  useEntityProvider(projectEntityProvider);
+  useEntityProvider(raidEntityProvider);
 
   if (isLoading || areMembersLoading) {
     return (

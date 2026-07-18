@@ -1,9 +1,9 @@
 import Link from "next/link";
 import React from "react";
 
-export type MetricCardTone = "danger" | "default" | "success" | "warning";
+type MetricCardTone = "danger" | "default" | "success" | "warning";
 
-export type MetricCardProps = {
+type MetricCardProps = {
   detail?: string;
   href?: string;
   label: string;

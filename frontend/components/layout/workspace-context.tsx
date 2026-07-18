@@ -20,27 +20,27 @@ export function WorkspaceContextBar({ pathname }: { pathname: string }) {
       <div className="mx-auto w-full max-w-[1800px] px-4 py-2.5 sm:px-6 lg:px-8">
         <nav aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
-          {context.breadcrumbs.map((breadcrumb, index) => {
-            const isCurrent = index === context.breadcrumbs.length - 1;
+            {context.breadcrumbs.map((breadcrumb, index) => {
+              const isCurrent = index === context.breadcrumbs.length - 1;
 
-            return (
-              <li
-                className="flex items-center gap-2"
-                key={`${breadcrumb.label}-${index}`}
-              >
-                {index > 0 ? <span aria-hidden="true">/</span> : null}
-                {breadcrumb.href && !isCurrent ? (
-                  <Link className="hover:text-slate-900" href={breadcrumb.href}>
-                    {breadcrumb.label}
-                  </Link>
-                ) : (
-                  <span aria-current={isCurrent ? "page" : undefined}>
-                    {breadcrumb.label}
-                  </span>
-                )}
-              </li>
-            );
-          })}
+              return (
+                <li
+                  className="flex items-center gap-2"
+                  key={`${breadcrumb.label}-${index}`}
+                >
+                  {index > 0 ? <span aria-hidden="true">/</span> : null}
+                  {breadcrumb.href && !isCurrent ? (
+                    <Link className="hover:text-slate-900" href={breadcrumb.href}>
+                      {breadcrumb.label}
+                    </Link>
+                  ) : (
+                    <span aria-current={isCurrent ? "page" : undefined}>
+                      {breadcrumb.label}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </nav>
         <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
@@ -94,6 +94,7 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
 
     return createContext("Project", "Single-project command center", [
       { href: "/projects", label: "Projects" },
+      ...(leaf ? [{ href: projectRoot, label: "Project" }] : []),
       { label: formatSegment(leaf) || "Overview" },
     ]);
   }

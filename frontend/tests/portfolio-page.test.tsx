@@ -152,7 +152,9 @@ describe("Portfolio page", () => {
     const overdueWidget = getSectionByHeading("Overdue Tasks");
     expectSummaryCardValue("Total Overdue Tasks", "12", overdueWidget);
     expect(
-      within(overdueWidget).getByRole("link", { name: "12" }),
+      within(overdueWidget).getByRole("link", {
+        name: "Total Overdue Tasks: 12",
+      }),
     ).toHaveAttribute("href", "/tasks?scope=all&timing=overdue");
     expect(
       within(overdueWidget).getByRole("link", {
@@ -298,7 +300,7 @@ function expectSummaryCardValue(
   value: string,
   container: HTMLElement = document.body,
 ) {
-  const card = within(container).getByText(label).closest("section, a, div");
+  const card = within(container).getByText(label).closest("a, section");
 
   expect(card).not.toBeNull();
   expect(within(card as HTMLElement).getByText(value)).toBeInTheDocument();

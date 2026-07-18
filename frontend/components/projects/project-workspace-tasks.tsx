@@ -439,20 +439,20 @@ export function ProjectWorkspaceTasks({
         <table className="min-w-[1480px] divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-3">WBS</th>
-              <th className="px-3 py-3">Task Name</th>
-              <th className="px-3 py-3">Assignee</th>
-              <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">Priority</th>
-              <th className="px-3 py-3">Progress</th>
-              <th className="px-3 py-3">Planned Start</th>
-              <th className="px-3 py-3">Planned End</th>
-              <th className="px-3 py-3">Actual Start</th>
-              <th className="px-3 py-3">Actual End</th>
-              <th className="px-3 py-3">Est. Hours</th>
-              <th className="px-3 py-3">Remaining</th>
-              <th className="px-3 py-3">Comments</th>
-              <th className="px-3 py-3">Actions</th>
+              <th className="px-3 py-3" scope="col">WBS</th>
+              <th className="px-3 py-3" scope="col">Task Name</th>
+              <th className="px-3 py-3" scope="col">Assignee</th>
+              <th className="px-3 py-3" scope="col">Status</th>
+              <th className="px-3 py-3" scope="col">Priority</th>
+              <th className="px-3 py-3" scope="col">Progress</th>
+              <th className="px-3 py-3" scope="col">Planned Start</th>
+              <th className="px-3 py-3" scope="col">Planned End</th>
+              <th className="px-3 py-3" scope="col">Actual Start</th>
+              <th className="px-3 py-3" scope="col">Actual End</th>
+              <th className="px-3 py-3" scope="col">Est. Hours</th>
+              <th className="px-3 py-3" scope="col">Remaining</th>
+              <th className="px-3 py-3" scope="col">Comments</th>
+              <th className="px-3 py-3" scope="col">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

@@ -362,23 +362,24 @@ describe("Projects List navigation", () => {
       }),
     ).toBeInTheDocument();
 
-    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(screen.getByRole("tab", { name: "Planning" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Planning" })).toHaveAttribute(
       "href",
       "/projects/project-123/planning",
     );
-    expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
       "href",
       "/projects/project-123/tasks",
     );
-    expect(screen.getByRole("tab", { name: "RAID" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
       "href",
       "/projects/project-123/raid",
     );
     expect(screen.getByText("Recent Activity")).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });
 
   it("loads the Planning route inside the Project Workspace", async () => {
@@ -391,7 +392,7 @@ describe("Projects List navigation", () => {
         "project-123",
       );
     });
-    expect(screen.getByRole("tab", { name: "Planning" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Planning" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -416,7 +417,7 @@ describe("Projects List navigation", () => {
     expect(
       await screen.findByText("Build workspace navigation"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Tasks" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -431,7 +432,7 @@ describe("Projects List navigation", () => {
       await screen.findByText("Supplier onboarding delay"),
     ).toBeInTheDocument();
     expect(screen.getByText("Integration outage")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "RAID" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -457,7 +458,7 @@ describe("Projects List navigation", () => {
     expect(
       screen.getByText(/Project document management and Google Drive linking/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Documents" })).toHaveAttribute(
       "aria-current",
       "page",
     );

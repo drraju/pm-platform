@@ -24,7 +24,7 @@ export function ProjectWorkspaceTable<TItem extends { id: string }>({
         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
             {columns.map((column) => (
-              <th className="px-3 py-3" key={column.header}>
+              <th className="px-3 py-3" key={column.header} scope="col">
                 {column.header}
               </th>
             ))}

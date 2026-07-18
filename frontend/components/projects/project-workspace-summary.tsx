@@ -1,5 +1,9 @@
 import React from "react";
-import { SummaryCard } from "@/components/dashboard/summary-card";
+import {
+  KPIGrid,
+  SummaryMetricCard,
+  type SummaryMetricCardVariant,
+} from "@/components/foundation";
 import type { ApiTask, ApiTaskCounts } from "@/features/projects";
 import { countPlanningItems } from "@/features/projects/planning";
 
@@ -21,34 +25,60 @@ export function ProjectWorkspaceSummary({
   };
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <SummaryCard
-        href={onSelectMetric ? "#plan" : undefined}
-        label="Summaries"
-        onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
+    <KPIGrid aria-label="Project planning summary">
+      <PlanningSummaryMetric
+        onSelect={onSelectMetric ? () => onSelectMetric("all") : undefined}
+        title="Summaries"
         value={summary.phases}
       />
-      <SummaryCard
-        href={onSelectMetric ? "#plan" : undefined}
-        label="Tasks"
-        onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
+      <PlanningSummaryMetric
+        onSelect={onSelectMetric ? () => onSelectMetric("all") : undefined}
+        title="Tasks"
         value={summary.tasks}
-        tone="success"
+        variant="success"
       />
-      <SummaryCard
-        href={onSelectMetric ? "#plan" : undefined}
-        label="Milestones"
-        onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
+      <PlanningSummaryMetric
+        onSelect={onSelectMetric ? () => onSelectMetric("all") : undefined}
+        title="Milestones"
         value={summary.milestones}
-        tone="warning"
+        variant="warning"
       />
-      <SummaryCard
-        href={onSelectMetric ? "#plan" : undefined}
-        label="Planning Items"
-        onClick={onSelectMetric ? () => onSelectMetric("all") : undefined}
+      <PlanningSummaryMetric
+        onSelect={onSelectMetric ? () => onSelectMetric("all") : undefined}
+        title="Planning Items"
         value={summary.phases + summary.tasks + summary.milestones}
-        tone="danger"
+        variant="critical"
       />
-    </section>
+    </KPIGrid>
+  );
+}
+
+function PlanningSummaryMetric({
+  onSelect,
+  title,
+  value,
+  variant,
+}: {
+  onSelect?: () => void;
+  title: string;
+  value: number;
+  variant?: SummaryMetricCardVariant;
+}) {
+  if (!onSelect) {
+    return (
+      <SummaryMetricCard title={title} value={value} variant={variant} />
+    );
+  }
+
+  return (
+    <div onClick={onSelect}>
+      <SummaryMetricCard
+        ariaLabel={`${title}: ${value}. Open project plan`}
+        href="#plan"
+        title={title}
+        value={value}
+        variant={variant}
+      />
+    </div>
   );
 }
