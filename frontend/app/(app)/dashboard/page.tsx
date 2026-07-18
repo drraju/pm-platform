@@ -4,10 +4,18 @@ import Link from "next/link";
 import React, { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";
-import { SummaryCard } from "@/components/dashboard/summary-card";
-import { PageHeader } from "@/components/layout/page-header";
-import { ContentGrid } from "@/components/ui/content-grid";
-import { ErrorState, LoadingSkeleton } from "@/components/ui/states";
+import {
+  ErrorState,
+  KPIGrid,
+  LoadingState,
+  StatusBadge,
+  SummaryMetricCard,
+  WorkspaceContent,
+  WorkspaceHeader,
+  WorkspaceLayout,
+  WorkspaceSection,
+  type StatusBadgeTone,
+} from "@/components/foundation";
 import {
   ProjectHealthBadge,
   ProjectHealthReasons,
@@ -70,92 +78,108 @@ function PageContent() {
   }, [router]);
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        description="Your assigned projects, delivery commitments, and items that need attention."
+    <WorkspaceLayout spacing="compact">
+      <WorkspaceHeader
         eyebrow="Home workspace"
+        subtitle="Your assigned projects, delivery commitments, and items that need attention."
         title="Your work"
       />
 
-      {isLoading ? <DashboardLoadingState /> : null}
+      <WorkspaceContent spacing="compact">
+        {isLoading ? <DashboardLoadingState /> : null}
 
-      {!isLoading && error ? (
-        <ErrorState variant="page">{error}</ErrorState>
-      ) : null}
+        {!isLoading && error ? (
+          <ErrorState message={error} title="Unable to load dashboard" />
+        ) : null}
 
-      {!isLoading && !error && dashboard ? (
-        <>
-          <section
-            aria-label="Work summary"
-            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
-          >
-            <SummaryCard
-              href="/tasks"
-              label="Assigned"
-              value={dashboard.taskSummary.total}
-            />
-            <SummaryCard
-              href="/tasks?status=in_progress"
-              label="In progress"
-              tone="warning"
-              value={dashboard.taskSummary.inProgress}
-            />
-            <SummaryCard
-              href="/tasks?status=blocked"
-              label="Blocked"
-              tone="danger"
-              value={dashboard.taskSummary.blocked}
-            />
-            <SummaryCard
-              href="/tasks?timing=overdue"
-              label="Overdue"
-              tone="danger"
-              value={dashboard.taskSummary.overdue}
-            />
-            <section className="rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm">
-              <p className="text-sm font-medium text-slate-600">
-                Overall health
-              </p>
-              <div className="mt-2.5">
-                <ProjectHealthBadge
-                  reasons={dashboard.health.reasons}
-                  status={dashboard.health.status}
-                />
-                <ProjectHealthReasons reasons={dashboard.health.reasons} />
-              </div>
-            </section>
-          </section>
+        {!isLoading && !error && dashboard ? (
+          <>
+            <KPIGrid
+              aria-label="Work summary"
+              className="xl:grid-cols-5"
+              columns={4}
+              gap="compact"
+            >
+              <SummaryMetricCard
+                ariaLabel={`Assigned tasks: ${dashboard.taskSummary.total}`}
+                href="/tasks"
+                title="Assigned"
+                value={dashboard.taskSummary.total}
+              />
+              <SummaryMetricCard
+                ariaLabel={`In progress tasks: ${dashboard.taskSummary.inProgress}`}
+                href="/tasks?status=in_progress"
+                title="In progress"
+                value={dashboard.taskSummary.inProgress}
+                variant="warning"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Blocked tasks: ${dashboard.taskSummary.blocked}`}
+                href="/tasks?status=blocked"
+                title="Blocked"
+                value={dashboard.taskSummary.blocked}
+                variant="critical"
+              />
+              <SummaryMetricCard
+                ariaLabel={`Overdue tasks: ${dashboard.taskSummary.overdue}`}
+                href="/tasks?timing=overdue"
+                title="Overdue"
+                value={dashboard.taskSummary.overdue}
+                variant="critical"
+              />
+              <WorkspaceSection
+                aria-label="Overall health"
+                padding="compact"
+                surface="card"
+              >
+                <p className="text-sm font-medium text-slate-600">
+                  Overall health
+                </p>
+                <div className="mt-2.5">
+                  <DashboardHealthBadge
+                    reasons={dashboard.health.reasons}
+                    status={dashboard.health.status}
+                  />
+                  <ProjectHealthReasons reasons={dashboard.health.reasons} />
+                </div>
+              </WorkspaceSection>
+            </KPIGrid>
 
-          <DashboardSection
-            emptyMessage="No projects are assigned to you yet. New assignments will appear here."
-            items={dashboard.assignedProjects}
-            renderItem={(project) => <ProjectItem project={project} />}
-            title="Assigned projects"
-          />
-
-          <ContentGrid columns={3} gap={4}>
             <DashboardSection
-              emptyMessage="You're clear for the next 7 days."
-              items={dashboard.upcomingTasks}
-              renderItem={(task) => <TaskItem task={task} />}
-              title="Upcoming tasks"
+              emptyMessage="No projects are assigned to you yet. New assignments will appear here."
+              items={dashboard.assignedProjects}
+              renderItem={(project) => <ProjectItem project={project} />}
+              title="Assigned projects"
             />
-            <DashboardSection
-              emptyMessage="You have no open risks to review."
-              items={dashboard.openRisks}
-              renderItem={(risk) => <RiskItem risk={risk} />}
-              title="Open risks"
-            />
-            <DashboardSection
-              emptyMessage="You have no open issues to resolve."
-              items={dashboard.openIssues}
-              renderItem={(issue) => <IssueItem issue={issue} />}
-              title="Open issues"
-            />
-          </ContentGrid>
-        </>
-      ) : null}
-    </div>
+
+            <WorkspaceSection
+              aria-label="Items needing attention"
+              className="grid gap-4 xl:grid-cols-3"
+              padding="none"
+            >
+              <DashboardSection
+                emptyMessage="You're clear for the next 7 days."
+                items={dashboard.upcomingTasks}
+                renderItem={(task) => <TaskItem task={task} />}
+                title="Upcoming tasks"
+              />
+              <DashboardSection
+                emptyMessage="You have no open risks to review."
+                items={dashboard.openRisks}
+                renderItem={(risk) => <RiskItem risk={risk} />}
+                title="Open risks"
+              />
+              <DashboardSection
+                emptyMessage="You have no open issues to resolve."
+                items={dashboard.openIssues}
+                renderItem={(issue) => <IssueItem issue={issue} />}
+                title="Open issues"
+              />
+            </WorkspaceSection>
+          </>
+        ) : null}
+      </WorkspaceContent>
+    </WorkspaceLayout>
   );
 }
 
@@ -165,26 +189,53 @@ function PageLoading() {
 
 function DashboardLoadingState() {
   return (
-    <div aria-label="Loading Home workspace" className="space-y-5" role="status">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <LoadingSkeleton
-            className="h-28 rounded-lg bg-slate-200/70"
-            key={index}
-          />
-        ))}
-      </section>
-      <LoadingSkeleton className="h-64 rounded-lg bg-slate-200/70" />
-      <ContentGrid columns={3} gap={4}>
-        {Array.from({ length: 3 }).map((_, index) => (
-          <LoadingSkeleton
-            className="h-56 rounded-lg bg-slate-200/70"
-            key={index}
-          />
-        ))}
-      </ContentGrid>
-    </div>
+    <LoadingState
+      className="rounded-ui border border-ui-border bg-ui-surface p-5 shadow-ui-subtle"
+      label="Loading Home workspace"
+      rows={6}
+    />
   );
+}
+
+type DashboardHealthStatus = NonNullable<
+  ApiDashboardProject["health"]
+>["status"];
+
+const dashboardHealthTones: Record<
+  DashboardHealthStatus,
+  StatusBadgeTone
+> = {
+  AMBER: "warning",
+  GREEN: "success",
+  RED: "critical",
+};
+
+function DashboardHealthBadge({
+  reasons,
+  status,
+}: {
+  reasons?: string[];
+  status: DashboardHealthStatus;
+}) {
+  const description =
+    reasons && reasons.length > 0
+      ? reasons.join(". ")
+      : "No health issues identified";
+
+  return (
+    <StatusBadge
+      description={description}
+      dot
+      title={description}
+      tone={dashboardHealthTones[status]}
+    >
+      {formatHealthStatus(status)}
+    </StatusBadge>
+  );
+}
+
+function formatHealthStatus(status: DashboardHealthStatus) {
+  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 function ProjectItem({ project }: { project: ApiDashboardProject }) {
