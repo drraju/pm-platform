@@ -195,6 +195,26 @@ describe("CalendarPage", () => {
     });
   });
 
+  it("announces calendar validation errors and focuses the invalid field", async () => {
+    render(<CalendarPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /\+ new calendar/i }));
+    const dialog = await screen.findByRole("dialog", { name: /new calendar/i });
+    const nameInput = within(dialog).getByLabelText("Name");
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /create calendar/i }),
+    );
+
+    const error = await within(dialog).findByRole("alert");
+    expect(error).toHaveTextContent("Calendar name is required.");
+    expect(nameInput).toHaveFocus();
+    expect(nameInput).toBeRequired();
+    expect(nameInput).toHaveAttribute("aria-invalid", "true");
+    expect(nameInput).toHaveAttribute("aria-describedby", error.id);
+    expect(calendarApiMocks.createCalendar).not.toHaveBeenCalled();
+  });
+
   it("opens the edit dialog and submits general changes", async () => {
     render(<CalendarPage />);
 

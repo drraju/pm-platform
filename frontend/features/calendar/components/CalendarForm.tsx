@@ -1,11 +1,19 @@
 "use client";
 
-import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import React, {
+  FormEvent,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ModalForm,
   ModalFormGrid,
   ModalFormSection,
 } from "@/components/ui/modal-form";
+import { ErrorState } from "@/components/ui/states";
 import { defaultCalendarForm, timezones } from "../constants";
 import type { CalendarInput, EnterpriseCalendar } from "../types";
 
@@ -34,6 +42,8 @@ export function CalendarForm({
   );
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState<string | null>(null);
+  const errorId = useId();
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setForm(initialForm);
@@ -44,6 +54,7 @@ export function CalendarForm({
     event.preventDefault();
     if (!form.name.trim()) {
       setError("Calendar name is required.");
+      nameInputRef.current?.focus();
       return;
     }
 
@@ -65,7 +76,7 @@ export function CalendarForm({
   }
 
   return (
-    <ModalForm onSubmit={handleSubmit}>
+    <ModalForm noValidate onSubmit={handleSubmit}>
       <ModalFormSection
         description="Maintain the enterprise working calendar metadata used by administration workflows."
         title="General"
@@ -74,10 +85,14 @@ export function CalendarForm({
           <label className="space-y-1">
             <span className="text-sm font-medium text-slate-700">Name</span>
             <input
+              aria-describedby={error ? errorId : undefined}
+              aria-invalid={error ? "true" : undefined}
               className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
               onChange={(event) =>
                 setForm((current) => ({ ...current, name: event.target.value }))
               }
+              ref={nameInputRef}
+              required
               value={form.name}
             />
           </label>
@@ -149,11 +164,7 @@ export function CalendarForm({
           </label>
         </div>
 
-        {error ? (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
+        {error ? <ErrorState id={errorId}>{error}</ErrorState> : null}
       </ModalFormSection>
 
       <div className="flex justify-end gap-3">

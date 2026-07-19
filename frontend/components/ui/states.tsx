@@ -47,9 +47,8 @@ export function ErrorState({
   children,
   className,
   variant = "inline",
-}: {
-  children: React.ReactNode;
-  className?: string;
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & {
   variant?: "inline" | "page";
 }) {
   return (
@@ -62,6 +61,7 @@ export function ErrorState({
         className,
       )}
       role="alert"
+      {...props}
     >
       {children}
     </div>
