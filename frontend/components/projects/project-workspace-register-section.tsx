@@ -36,6 +36,7 @@ export function ProjectWorkspaceRegisterSection({
       />
 
       <ProjectWorkspaceTable
+        ariaLabel={`${title} table`}
         columns={columns}
         emptyMessage={emptyMessage}
         isLoading={isLoading}

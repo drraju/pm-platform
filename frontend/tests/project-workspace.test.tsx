@@ -1678,6 +1678,7 @@ describe("Project workspace components", () => {
   it("renders workspace table loading state", () => {
     render(
       <ProjectWorkspaceTable
+        ariaLabel="Project records table"
         columns={[{ header: "Title", render: (item) => item.title }]}
         emptyMessage="No records yet."
         isLoading
@@ -1688,6 +1689,12 @@ describe("Project workspace components", () => {
     expect(
       screen.getByRole("columnheader", { name: "Title" }),
     ).toBeInTheDocument();
+    const scrollRegion = screen.getByRole("region", {
+      name: "Project records table",
+    });
+    expect(scrollRegion).toHaveAttribute("tabindex", "0");
+    expect(scrollRegion).toHaveClass("overflow-x-auto", "focus-visible:ring-2");
+    expect(within(scrollRegion).getByRole("table")).toHaveClass("min-w-[640px]");
     expect(screen.queryByText("No records yet.")).not.toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ export type ProjectWorkspaceTableColumn<TItem> = {
 };
 
 type ProjectWorkspaceTableProps<TItem extends { id: string }> = {
+  ariaLabel: string;
   columns: ProjectWorkspaceTableColumn<TItem>[];
   emptyMessage: string;
   isLoading?: boolean;
@@ -13,14 +14,20 @@ type ProjectWorkspaceTableProps<TItem extends { id: string }> = {
 };
 
 export function ProjectWorkspaceTable<TItem extends { id: string }>({
+  ariaLabel,
   columns,
   emptyMessage,
   isLoading = false,
   items,
 }: ProjectWorkspaceTableProps<TItem>) {
   return (
-    <div className="mt-5 overflow-x-auto">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
+    <div
+      aria-label={ariaLabel}
+      className="mt-5 overflow-x-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+      role="region"
+      tabIndex={0}
+    >
+      <table className="min-w-[640px] divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
             {columns.map((column) => (
