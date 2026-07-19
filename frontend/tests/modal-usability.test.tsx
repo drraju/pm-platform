@@ -123,6 +123,56 @@ describe("AppModal usability", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("moves and traps keyboard focus within the dialog", () => {
+    render(
+      <AppModal
+        footer={<button type="button">Save changes</button>}
+        labelledById="focus-title"
+        onClose={vi.fn()}
+        title="Focus modal"
+      >
+        <input aria-label="Project name" />
+      </AppModal>,
+    );
+
+    const closeButton = screen.getByRole("button", { name: /close focus modal/i });
+    const input = screen.getByRole("textbox", { name: /project name/i });
+    const saveButton = screen.getByRole("button", { name: /save changes/i });
+
+    expect(closeButton).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(input).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(saveButton).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(closeButton).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(saveButton).toHaveFocus();
+  });
+
+  it("restores focus to the invoking control when the dialog unmounts", () => {
+    const { rerender } = render(<button type="button">Open modal</button>);
+    const trigger = screen.getByRole("button", { name: /open modal/i });
+    trigger.focus();
+
+    rerender(
+      <>
+        <button type="button">Open modal</button>
+        <AppModal
+          labelledById="restore-title"
+          onClose={vi.fn()}
+          title="Restore modal"
+        >
+          Content
+        </AppModal>
+      </>,
+    );
+    expect(screen.getByRole("button", { name: /close restore modal/i })).toHaveFocus();
+
+    rerender(<button type="button">Open modal</button>);
+    expect(screen.getByRole("button", { name: /open modal/i })).toHaveFocus();
+  });
+
   it("keeps task save actions outside the scrollable form body", () => {
     render(
       <ProjectWorkspaceTasks

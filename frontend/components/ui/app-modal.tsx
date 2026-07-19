@@ -1,6 +1,15 @@
 "use client";
 
-import React, { useEffect, type ReactNode } from "react";
+import React, { useEffect, useRef, type ReactNode } from "react";
+
+const focusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
 
 type AppModalProps = {
   bodyClassName?: string;
@@ -23,16 +32,61 @@ export function AppModal({
   title,
   widthClassName = "max-w-3xl",
 }: AppModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    function getFocusableElements() {
+      return Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
+      );
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose();
+        event.preventDefault();
+        onCloseRef.current();
+        return;
       }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const currentIndex = focusableElements.findIndex(
+        (element) => element === document.activeElement,
+      );
+      const direction = event.shiftKey ? -1 : 1;
+      const nextIndex =
+        currentIndex === -1
+          ? 0
+          : (currentIndex + direction + focusableElements.length) %
+            focusableElements.length;
+
+      event.preventDefault();
+      focusableElements[nextIndex]?.focus();
     }
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    getFocusableElements()[0]?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, []);
 
   return (
     <div
@@ -40,6 +94,7 @@ export function AppModal({
       aria-modal="true"
       className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-3 py-4 sm:px-4 sm:py-6"
       data-testid="app-modal-overlay"
+      ref={dialogRef}
       role="dialog"
     >
       <section
