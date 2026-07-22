@@ -4,6 +4,11 @@ import { EnterpriseCalendarException } from '../modules/calendars/entities/enter
 import { EnterpriseCalendar } from '../modules/calendars/entities/enterprise-calendar.entity';
 import { Notification } from '../modules/notifications/entities/notification.entity';
 import { PlanningScheduleSnapshot } from '../modules/planning/entities/planning-schedule-snapshot.entity';
+import {
+  GoogleDriveConnection,
+  GoogleDriveDocumentMetadata,
+  GoogleDriveProjectFolder,
+} from '../integrations/providers/google-drive/entities';
 import { PlanningTaskSchedule } from '../modules/planning/entities/planning-task-schedule.entity';
 import { PortfolioDependency } from '../modules/planning/entities/portfolio-dependency.entity';
 import { ResourceAllocation } from '../modules/planning/entities/resource-allocation.entity';
@@ -57,6 +62,9 @@ export const databaseEntities: Function[] = [
   ResourceCapacity,
   PlanningScheduleSnapshot,
   ResourceWorkloadSnapshot,
+  GoogleDriveConnection,
+  GoogleDriveProjectFolder,
+  GoogleDriveDocumentMetadata,
   Risk,
   Issue,
   Assumption,

@@ -34,7 +34,7 @@ export default function ProjectReportsPage() {
 
   return (
     <ProjectLayout
-      activeTab="reports"
+      activeTab="calendar"
       project={project ?? { id: projectId, name: "Project Reports", status: "active" }}
     >
       <ProjectWorkspacePlaceholder

@@ -66,7 +66,7 @@ export default function ProjectTeamPage() {
   };
 
   return (
-    <ProjectLayout activeTab="team" project={workspaceProject}>
+    <ProjectLayout activeTab="resources" project={workspaceProject}>
       {error ? (
         <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}

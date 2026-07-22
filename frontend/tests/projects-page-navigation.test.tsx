@@ -378,6 +378,18 @@ describe("Projects List navigation", () => {
       "href",
       "/projects/project-123/raid",
     );
+    expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/team",
+    );
+    expect(screen.getByRole("link", { name: "Calendar" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/reports",
+    );
+    expect(screen.getByRole("link", { name: "AI (future)" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/reports",
+    );
     expect(screen.getByText("Recent Activity")).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });
@@ -446,17 +458,35 @@ describe("Projects List navigation", () => {
     ).toHaveClass("shadow-ui-subtle");
   });
 
-  it("loads a professional placeholder for future workspace modules", async () => {
+  it("loads the project Documents route", async () => {
     window.history.pushState({}, "", "/projects/project-123/documents");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        headers: { get: vi.fn(() => null) },
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            connection: null,
+            folders: [],
+            projectFolder: null,
+            provider: "Google Drive",
+            status: "not_connected",
+          }),
+        ),
+      }),
+    );
 
     render(<ProjectDocumentsPage />);
 
     expect(
-      await screen.findByRole("heading", { name: "Documents" }),
+      await screen.findByRole("heading", {
+        name: "Google Workspace is not connected.",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Coming in Future Release")).toBeInTheDocument();
     expect(
-      screen.getByText(/Project document management and Google Drive linking/),
+      screen.getByRole("button", { name: "Connect Google Workspace" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Documents" })).toHaveAttribute(
       "aria-current",

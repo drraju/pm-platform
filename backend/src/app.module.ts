@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
+import { IntegrationPlatformModule } from './integrations';
 import { GoogleDriveModule } from './modules/integrations/google-drive/google-drive.module';
 import { SlackModule } from './modules/integrations/slack/slack.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -38,6 +39,7 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     DashboardModule,
     PortfolioModule,
     HealthModule,
+    IntegrationPlatformModule,
     NotificationsModule,
     SlackModule,
     GoogleDriveModule,

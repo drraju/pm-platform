@@ -5,9 +5,13 @@ import {
   createProjectTask,
   createProject,
   createProjectTaskDependency,
+  connectGoogleWorkspace,
+  createGoogleProjectFolder,
   getAssignableUsers,
   getAuthMe,
+  getGoogleDocuments,
   getPermissions,
+  getProjectDocumentWorkspace,
   createRaidItem,
   deleteProject,
   deleteProjectTaskDependency,
@@ -145,6 +149,77 @@ describe("project API client", () => {
     await getProjectBaseline("project-1", "baseline-1");
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://localhost:3001/projects/project-1/baselines/baseline-1",
+      expect.any(Object),
+    );
+  });
+
+  it("loads the project document workspace", async () => {
+    const fetchMock = mockFetch({
+      connection: null,
+      folders: [],
+      projectFolder: null,
+      provider: "Google Drive",
+      status: "not_connected",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getProjectDocumentWorkspace("project-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/integrations/google/workspace/project-1",
+      expect.any(Object),
+    );
+  });
+
+  it("starts Google Workspace connection and creates project folders", async () => {
+    const fetchMock = mockFetch({ status: "authorization_required" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await connectGoogleWorkspace({
+      connectedByUserId: "user-1",
+      state: "project-1",
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/integrations/google/connect",
+      expect.objectContaining({
+        body: JSON.stringify({
+          connectedByUserId: "user-1",
+          state: "project-1",
+        }),
+        method: "POST",
+      }),
+    );
+
+    await createGoogleProjectFolder({
+      connectionId: "connection-1",
+      projectId: "project-1",
+      projectName: "ERP",
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/integrations/google/project-folder",
+      expect.objectContaining({
+        body: JSON.stringify({
+          connectionId: "connection-1",
+          projectId: "project-1",
+          projectName: "ERP",
+        }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("loads Google document metadata for selected folders", async () => {
+    const fetchMock = mockFetch([{ id: "doc-1", name: "Plan" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getGoogleDocuments({
+      connectionId: "connection-1",
+      folderId: "folder-1",
+      projectId: "project-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/integrations/google/documents?connectionId=connection-1&folderId=folder-1&projectId=project-1",
       expect.any(Object),
     );
   });

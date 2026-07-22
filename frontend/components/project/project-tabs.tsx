@@ -7,10 +7,11 @@ export type ProjectWorkspaceTabId =
   | "overview"
   | "planning"
   | "tasks"
+  | "resources"
+  | "calendar"
   | "raid"
-  | "team"
   | "documents"
-  | "reports";
+  | "ai";
 
 type ProjectWorkspaceTab = {
   href: string;
@@ -25,10 +26,11 @@ function getProjectWorkspaceTabs(projectId: string): ProjectWorkspaceTab[] {
     { href: basePath, id: "overview", label: "Overview" },
     { href: `${basePath}/planning`, id: "planning", label: "Planning" },
     { href: `${basePath}/tasks`, id: "tasks", label: "Tasks" },
+    { href: `${basePath}/team`, id: "resources", label: "Resources" },
+    { href: `${basePath}/reports`, id: "calendar", label: "Calendar" },
     { href: `${basePath}/raid`, id: "raid", label: "RAID" },
-    { href: `${basePath}/team`, id: "team", label: "Team" },
     { href: `${basePath}/documents`, id: "documents", label: "Documents" },
-    { href: `${basePath}/reports`, id: "reports", label: "Reports" },
+    { href: `${basePath}/reports`, id: "ai", label: "AI (future)" },
   ];
 }
 

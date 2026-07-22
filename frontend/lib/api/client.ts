@@ -428,6 +428,57 @@ export type ApiPortfolioUpcomingMilestone = {
   dueDate: string;
 };
 
+export type ApiGoogleDriveConnection = {
+  connectedAccountEmail: string;
+  driveId?: string | null;
+  driveName?: string | null;
+  driveType: "my_drive" | "shared_drive";
+  id: string;
+  lastConnectedAt?: string | null;
+  rootFolderId?: string | null;
+  rootFolderUrl?: string | null;
+  status: string;
+};
+
+export type ApiGoogleDocumentFolder = {
+  id: string;
+  name: string;
+  webUrl: string;
+};
+
+export type ApiGoogleProjectFolder = {
+  connectionId: string;
+  folderId: string;
+  folderUrl?: string | null;
+  projectId: string;
+  projectName: string;
+  rootFolderId: string;
+};
+
+export type ApiProjectDocumentWorkspace = {
+  connection: ApiGoogleDriveConnection | null;
+  folders: ApiGoogleDocumentFolder[];
+  projectFolder: ApiGoogleProjectFolder | null;
+  provider: string;
+  status: "connected" | "not_connected";
+};
+
+export type ApiGoogleDocumentMetadata = {
+  createdTime?: string | null;
+  folderId: string;
+  id: string;
+  md5Checksum?: string | null;
+  mimeType?: string | null;
+  modifiedTime?: string | null;
+  name: string;
+  ownerEmail?: string | null;
+  projectId?: string | null;
+  providerDocumentId: string;
+  size?: string | null;
+  version?: string | null;
+  webUrl?: string | null;
+};
+
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
@@ -614,6 +665,65 @@ export function getProject(projectId: string) {
 export function getPlanningWorkspace(projectId: string) {
   return apiRequest<ApiPlanningWorkspace>(
     `/planning/projects/${projectId}/workspace`,
+  );
+}
+
+export function getProjectDocumentWorkspace(projectId: string) {
+  return apiRequest<ApiProjectDocumentWorkspace>(
+    `/integrations/google/workspace/${projectId}`,
+  );
+}
+
+export function connectGoogleWorkspace(input: {
+  connectedByUserId?: string;
+  redirectUri?: string;
+  state?: string;
+}) {
+  return apiRequest<{ authorizationUrl: string; status: string }>(
+    "/integrations/google/connect",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function createGoogleProjectFolder(input: {
+  connectionId?: string;
+  createdByUserId?: string;
+  projectId: string;
+  projectName: string;
+}) {
+  return apiRequest<ApiGoogleProjectFolder>(
+    "/integrations/google/project-folder",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function getGoogleDocuments(input: {
+  connectionId?: string;
+  folderId?: string;
+  projectId?: string;
+}) {
+  const params = new URLSearchParams();
+  if (input.connectionId) {
+    params.set("connectionId", input.connectionId);
+  }
+  if (input.folderId) {
+    params.set("folderId", input.folderId);
+  }
+  if (input.projectId) {
+    params.set("projectId", input.projectId);
+  }
+
+  const queryString = params.toString();
+  return apiRequest<ApiGoogleDocumentMetadata[]>(
+    queryString
+      ? `/integrations/google/documents?${queryString}`
+      : "/integrations/google/documents",
   );
 }
 
