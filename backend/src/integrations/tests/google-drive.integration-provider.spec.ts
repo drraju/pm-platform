@@ -54,6 +54,10 @@ function createProvider(input?: {
     decrypt: jest.fn(() => 'refresh-token'),
     encrypt: jest.fn(() => 'encrypted-refresh-token'),
   };
+  const oauthStateService = {
+    createState: jest.fn(() => 'signed-state'),
+    validateState: jest.fn(),
+  };
   const connection =
     typeof input?.connection === 'undefined'
       ? {
@@ -74,6 +78,7 @@ function createProvider(input?: {
     connectionRepository as never,
     projectFolderRepository as never,
     documentMetadataRepository as never,
+    oauthStateService as never,
   );
 
   (google.drive as jest.Mock).mockReturnValue(input?.drive ?? {});
@@ -82,6 +87,7 @@ function createProvider(input?: {
     connectionRepository,
     documentMetadataRepository,
     oauthService,
+    oauthStateService,
     projectFolderRepository,
     provider,
     tokenVault,
@@ -113,6 +119,66 @@ describe('GoogleDriveIntegrationProvider', () => {
     expect(oauthService.getAuthorizationUrl).toHaveBeenCalledWith({
       redirectUri: undefined,
       state: 'state-1',
+    });
+  });
+
+  it('initiates OAuth with a generated signed state', () => {
+    const { oauthService, oauthStateService, provider } = createProvider();
+
+    expect(provider.initiateGoogleOAuth()).toEqual({
+      authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+      state: 'signed-state',
+    });
+    expect(oauthStateService.createState).toHaveBeenCalledTimes(1);
+    expect(oauthService.getAuthorizationUrl).toHaveBeenCalledWith({
+      state: 'signed-state',
+    });
+  });
+
+  it('validates OAuth callback state before exchanging the code', async () => {
+    const drive = {
+      about: {
+        get: jest.fn(() =>
+          Promise.resolve({
+            data: { user: { emailAddress: 'user@example.com' } },
+          }),
+        ),
+      },
+      files: {
+        create: jest.fn(() =>
+          Promise.resolve({
+            data: {
+              id: 'root-folder',
+              webViewLink: 'https://drive.google.com/drive/folders/root-folder',
+            },
+          }),
+        ),
+        list: jest.fn(() => Promise.resolve({ data: { files: [] } })),
+      },
+    };
+    const { connectionRepository, oauthService, oauthStateService, provider } =
+      createProvider({
+        connection: null,
+        drive,
+      });
+    connectionRepository.create.mockImplementation(
+      (input: Partial<GoogleDriveConnection>) => ({
+        ...input,
+        id: 'connection-1',
+      }),
+    );
+
+    await provider.completeGoogleOAuth({
+      code: 'authorization-code',
+      state: 'signed-state',
+    });
+
+    expect(oauthStateService.validateState).toHaveBeenCalledWith(
+      'signed-state',
+    );
+    expect(oauthService.exchangeCode).toHaveBeenCalledWith({
+      authorizationCode: 'authorization-code',
+      redirectUri: undefined,
     });
   });
 

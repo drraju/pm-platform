@@ -9,6 +9,8 @@ import {
   GoogleDriveIntegrationProvider,
   GoogleDriveProjectFolder,
   GoogleDriveOAuthService,
+  GoogleOAuthController,
+  GoogleOAuthStateService,
   GoogleTokenVault,
 } from './providers';
 
@@ -20,9 +22,10 @@ import {
       GoogleDriveDocumentMetadata,
     ]),
   ],
-  controllers: [GoogleDriveIntegrationController],
+  controllers: [GoogleDriveIntegrationController, GoogleOAuthController],
   providers: [
     GoogleDriveOAuthService,
+    GoogleOAuthStateService,
     GoogleTokenVault,
     GoogleDriveIntegrationProvider,
     {

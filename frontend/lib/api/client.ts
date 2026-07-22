@@ -674,16 +674,11 @@ export function getProjectDocumentWorkspace(projectId: string) {
   );
 }
 
-export function connectGoogleWorkspace(input: {
-  connectedByUserId?: string;
-  redirectUri?: string;
-  state?: string;
-}) {
-  return apiRequest<{ authorizationUrl: string; status: string }>(
+export function connectGoogleWorkspace() {
+  return apiRequest<{ authorizationUrl: string; state: string }>(
     "/integrations/google/connect",
     {
       method: "POST",
-      body: JSON.stringify(input),
     },
   );
 }

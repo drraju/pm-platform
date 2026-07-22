@@ -62,10 +62,7 @@ export default function ProjectDocumentsPage() {
   async function handleConnect() {
     setError(null);
     try {
-      const result = await connectGoogleWorkspace({
-        connectedByUserId: getStoredSessionUser()?.userId,
-        state: projectId,
-      });
+      const result = await connectGoogleWorkspace();
       if (result.authorizationUrl) {
         window.location.assign(result.authorizationUrl);
       }

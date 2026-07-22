@@ -172,23 +172,20 @@ describe("project API client", () => {
   });
 
   it("starts Google Workspace connection and creates project folders", async () => {
-    const fetchMock = mockFetch({ status: "authorization_required" });
+    const fetchMock = mockFetch({
+      authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+      state: "signed-state",
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    await connectGoogleWorkspace({
-      connectedByUserId: "user-1",
-      state: "project-1",
-    });
+    await connectGoogleWorkspace();
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://localhost:3001/integrations/google/connect",
       expect.objectContaining({
-        body: JSON.stringify({
-          connectedByUserId: "user-1",
-          state: "project-1",
-        }),
         method: "POST",
       }),
     );
+    expect(fetchMock.mock.calls.at(-1)?.[1]).not.toHaveProperty("body");
 
     await createGoogleProjectFolder({
       connectionId: "connection-1",

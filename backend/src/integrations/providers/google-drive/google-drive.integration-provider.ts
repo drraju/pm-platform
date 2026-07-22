@@ -40,6 +40,7 @@ import {
 } from './google-drive.constants';
 import { mapGoogleFileToMetadata } from './google-drive.mapper';
 import { GoogleDriveOAuthService } from './google-drive-oauth.service';
+import { GoogleOAuthStateService } from './google-oauth-state.service';
 import { GoogleTokenVault } from './google-token-vault.service';
 
 type GoogleDriveDescriptor = Readonly<{
@@ -75,6 +76,7 @@ export class GoogleDriveIntegrationProvider implements IntegrationProviderAdapte
     private readonly projectFolderRepository: Repository<GoogleDriveProjectFolder>,
     @InjectRepository(GoogleDriveDocumentMetadata)
     private readonly documentMetadataRepository: Repository<GoogleDriveDocumentMetadata>,
+    private readonly oauthStateService: GoogleOAuthStateService,
   ) {}
 
   authenticate(
@@ -235,6 +237,24 @@ export class GoogleDriveIntegrationProvider implements IntegrationProviderAdapte
   getAuthorizationUrl(input: GoogleConnectDto): string {
     return this.oauthService.getAuthorizationUrl({
       redirectUri: input.redirectUri,
+      state: input.state,
+    });
+  }
+
+  initiateGoogleOAuth() {
+    const state = this.oauthStateService.createState();
+
+    return {
+      authorizationUrl: this.oauthService.getAuthorizationUrl({ state }),
+      state,
+    };
+  }
+
+  completeGoogleOAuth(input: { code: string; state: string }) {
+    this.oauthStateService.validateState(input.state);
+
+    return this.connectGoogleDrive({
+      authorizationCode: input.code,
       state: input.state,
     });
   }

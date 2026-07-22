@@ -1,11 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IntegrationProviderRegistry } from '../../application';
 import { IntegrationConnection, ProviderType } from '../../domain';
-import {
-  GoogleConnectDto,
-  GoogleDocumentsQueryDto,
-  GoogleProjectFolderDto,
-} from './dto';
+import { GoogleDocumentsQueryDto, GoogleProjectFolderDto } from './dto';
 import { GoogleDriveIntegrationProvider } from './google-drive.integration-provider';
 
 @Controller('integrations/google')
@@ -13,8 +9,8 @@ export class GoogleDriveIntegrationController {
   constructor(private readonly registry: IntegrationProviderRegistry) {}
 
   @Post('connect')
-  connect(@Body() input: GoogleConnectDto) {
-    return this.provider().connectGoogleDrive(input);
+  connect() {
+    return this.provider().initiateGoogleOAuth();
   }
 
   @Get('drives')

@@ -3,6 +3,26 @@ import { GoogleDriveIntegrationProvider } from '../providers/google-drive';
 import { ProviderType } from '..';
 
 describe('GoogleDriveIntegrationController', () => {
+  it('initiates Google OAuth without reading a request body', () => {
+    const provider = {
+      initiateGoogleOAuth: jest.fn(() => ({
+        authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+        state: 'signed-state',
+      })),
+    };
+    const registry = {
+      resolve: jest.fn(() => provider),
+    };
+    const controller = new GoogleDriveIntegrationController(registry as never);
+
+    expect(controller.connect()).toEqual({
+      authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+      state: 'signed-state',
+    });
+    expect(registry.resolve).toHaveBeenCalledWith(ProviderType.GOOGLE_DRIVE);
+    expect(provider.initiateGoogleOAuth).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves Google Drive provider through the registry for workspace APIs', () => {
     const provider = {
       getProjectWorkspace: jest.fn(() => ({ status: 'not_connected' })),
