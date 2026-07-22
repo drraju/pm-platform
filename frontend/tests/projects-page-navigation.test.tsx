@@ -521,7 +521,7 @@ describe("Projects List navigation", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "External Document Links",
+        name: "Documents",
       }),
     ).toBeInTheDocument();
     expect(

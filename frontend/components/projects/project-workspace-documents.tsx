@@ -1,13 +1,8 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import {
-  EmptyState,
-  StatusBadge,
-  SummaryCard,
-  WorkspaceContent,
-  WorkspaceSection,
-} from "@/components/foundation";
+import { EmptyState, StatusBadge, WorkspaceContent } from "@/components/foundation";
+import { AppModal } from "@/components/ui/app-modal";
 import type {
   ApiAssignableUser,
   ApiDocumentApprovalStatus,
@@ -142,16 +137,19 @@ export function ProjectWorkspaceDocuments({
   const [formState, setFormState] = useState<DocumentFormState>(() =>
     initialFormState(storageProviders, documentTypes, categories),
   );
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
 
-  const summaryCards = useMemo(
+  const kpis = useMemo(
     () => [
-      ["Total Documents", summary?.totalDocuments ?? documents.length],
-      ["Approved", summary?.approved ?? 0],
-      ["Draft", summary?.draft ?? 0],
-      ["Under Review", summary?.underReview ?? 0],
-      ["Overdue Reviews", summary?.overdueReviews ?? 0],
-    ],
+      ["Total", summary?.totalDocuments ?? documents.length, "neutral"],
+      ["Approved", summary?.approved ?? 0, "success"],
+      ["Under Review", summary?.underReview ?? 0, "warning"],
+      ["Draft", summary?.draft ?? 0, "neutral"],
+      ["Overdue", summary?.overdueReviews ?? 0, "critical"],
+    ] as const,
     [documents.length, summary],
   );
 
@@ -165,6 +163,7 @@ export function ProjectWorkspaceDocuments({
     setUrlError(null);
     await onCreateDocument(formState);
     setFormState(initialFormState(storageProviders, documentTypes, categories));
+    setIsAddModalOpen(false);
   }
 
   function updateField<K extends keyof DocumentFormState>(
@@ -181,223 +180,110 @@ export function ProjectWorkspaceDocuments({
     onFiltersChange({ ...filters, [field]: value });
   }
 
+  function closeAddModal() {
+    setUrlError(null);
+    setIsAddModalOpen(false);
+  }
+
   return (
     <WorkspaceContent aria-label="Project documents">
-      <WorkspaceSection
-        aria-label="External document summary"
-        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"
-        padding="none"
+      <section
+        aria-label="Document summary"
+        className="grid grid-cols-2 gap-3 md:grid-cols-5"
       >
-        {summaryCards.map(([label, value]) => (
-          <SummaryCard headingLevel={2} key={label} title={label}>
-            <p className="text-3xl font-semibold text-slate-950">{value}</p>
-          </SummaryCard>
-        ))}
-      </WorkspaceSection>
-
-      <WorkspaceSection
-        aria-label="External document link controls"
-        className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.3fr)]"
-        padding="none"
-      >
-        <SummaryCard
-          description="Documents are stored as external links only. PM Platform does not authenticate with external repositories."
-          headingLevel={2}
-          title="External Document Links"
-        >
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <MetadataItem label="Project" value={project.name} />
-            <MetadataItem label="Linked Documents" value={documents.length} />
-            <MetadataItem
-              label="Authentication"
-              value="Not used for external storage"
-            />
-            <div>
-              <dt className="text-xs font-semibold uppercase text-slate-500">
-                Architecture
-              </dt>
-              <dd className="mt-1">
-                <StatusBadge dot tone="success">
-                  Metadata only
-                </StatusBadge>
-              </dd>
-            </div>
-          </dl>
-          <DocumentBreakdown
-            heading="By Storage Provider"
-            values={summary?.byStorageProvider}
-          />
-          <DocumentBreakdown heading="By Category" values={summary?.byCategory} />
-        </SummaryCard>
-
-        <SummaryCard headingLevel={2} title="Add Document Link">
-          <form className="grid gap-4" onSubmit={handleSubmit}>
-            <label className="grid gap-1 text-sm font-semibold text-slate-700">
-              Title
-              <input
-                className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
-                onChange={(event) => updateField("title", event.target.value)}
-                required
-                type="text"
-                value={formState.title}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-semibold text-slate-700">
-              External URL
-              <input
-                aria-describedby={urlError ? "document-url-error" : undefined}
-                className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
-                onChange={(event) =>
-                  updateField("externalUrl", event.target.value)
-                }
-                pattern="https?://.*"
-                required
-                type="url"
-                value={formState.externalUrl}
-              />
-              {urlError ? (
-                <span
-                  className="text-xs font-normal text-red-700"
-                  id="document-url-error"
-                >
-                  {urlError}
-                </span>
-              ) : null}
-            </label>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <SelectField
-                label="Storage Provider"
-                onChange={(value) =>
-                  updateField(
-                    "storageProvider",
-                    value as ApiDocumentStorageProvider,
-                  )
-                }
-                value={formState.storageProvider}
-              >
-                {storageProviders.map((provider) => (
-                  <option key={provider.value} value={provider.value}>
-                    {provider.label}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField
-                label="Document Type"
-                onChange={(value) => updateField("documentType", value)}
-                value={formState.documentType}
-              >
-                {documentTypes.map((documentType) => (
-                  <option key={documentType.id} value={documentType.name}>
-                    {documentType.name}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField
-                label="Category"
-                onChange={(value) => updateField("category", value)}
-                value={formState.category}
-              >
-                {categories.map((category) => (
-                  <option key={category.id} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField
-                label="Owner"
-                onChange={(value) => updateField("ownerId", value)}
-                value={formState.ownerId}
-              >
-                <option value="">Unassigned</option>
-                {owners.map((owner) => (
-                  <option key={owner.id} value={owner.id}>
-                    {formatOwner(owner)}
-                  </option>
-                ))}
-              </SelectField>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Version
-                <input
-                  className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  onChange={(event) =>
-                    updateField("version", event.target.value)
-                  }
-                  type="text"
-                  value={formState.version}
-                />
-              </label>
-              <SelectField
-                label="Approval Status"
-                onChange={(value) =>
-                  updateField(
-                    "approvalStatus",
-                    value as ApiDocumentApprovalStatus,
-                  )
-                }
-                value={formState.approvalStatus}
-              >
-                {approvalStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {formatLabel(status)}
-                  </option>
-                ))}
-              </SelectField>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Last Reviewed
-                <input
-                  className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  onChange={(event) =>
-                    updateField("lastReviewedAt", event.target.value)
-                  }
-                  type="date"
-                  value={formState.lastReviewedAt}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Next Review
-                <input
-                  className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  onChange={(event) =>
-                    updateField("nextReviewAt", event.target.value)
-                  }
-                  type="date"
-                  value={formState.nextReviewAt}
-                />
-              </label>
-            </div>
-            <label className="grid gap-1 text-sm font-semibold text-slate-700">
-              Description
-              <textarea
-                className="min-h-24 rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
-                onChange={(event) =>
-                  updateField("description", event.target.value)
-                }
-                value={formState.description}
-              />
-            </label>
-            <button
-              className="w-fit rounded-sm bg-brand px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-slate-300"
-              disabled={isSaving}
-              type="submit"
+        {kpis.map(([label, value, tone]) => (
+          <div
+            className="min-h-[74px] rounded-sm border border-slate-200 bg-white px-3 py-3 shadow-ui-subtle"
+            key={label}
+          >
+            <p className="text-xs font-semibold uppercase text-slate-500">
+              {label}
+            </p>
+            <p
+              className={`mt-1 text-2xl font-semibold ${getKpiToneClass(tone)}`}
             >
-              Add Document Link
-            </button>
-          </form>
-        </SummaryCard>
-      </WorkspaceSection>
+              {value}
+            </p>
+          </div>
+        ))}
+      </section>
 
-      <WorkspaceSection aria-label="Document filters" padding="none">
-        <SummaryCard headingLevel={2} title="Filters">
-          <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
-            <label className="grid gap-1 text-sm font-semibold text-slate-700">
-              Search Title
-              <input
-                className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
-                onChange={(event) => updateFilter("title", event.target.value)}
-                type="search"
-                value={filters.title}
-              />
-            </label>
+      <section
+        aria-label="Document workspace toolbar"
+        className="rounded-sm border border-slate-200 bg-white shadow-ui-subtle"
+      >
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Documents</h2>
+            <p className="text-sm text-slate-500">
+              {project.name} document links and review metadata.
+            </p>
+          </div>
+          <button
+            className="w-fit rounded-sm bg-brand px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+            onClick={() => setIsAddModalOpen(true)}
+            type="button"
+          >
+            Add Document
+          </button>
+        </div>
+
+        <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(220px,1fr)_180px_220px_200px_auto] lg:items-end">
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Search
+            <input
+              className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
+              onChange={(event) => updateFilter("title", event.target.value)}
+              placeholder="Title"
+              type="search"
+              value={filters.title}
+            />
+          </label>
+          <FilterSelect
+            label="Status"
+            onChange={(value) => updateFilter("approvalStatus", value)}
+            value={filters.approvalStatus}
+          >
+            {approvalStatuses.map((status) => (
+              <option key={status} value={status}>
+                {formatLabel(status)}
+              </option>
+            ))}
+          </FilterSelect>
+          <FilterSelect
+            label="Type"
+            onChange={(value) => updateFilter("documentType", value)}
+            value={filters.documentType}
+          >
+            {documentTypes.map((documentType) => (
+              <option key={documentType.id} value={documentType.name}>
+                {documentType.name}
+              </option>
+            ))}
+          </FilterSelect>
+          <FilterSelect
+            label="Owner"
+            onChange={(value) => updateFilter("ownerId", value)}
+            value={filters.ownerId}
+          >
+            {owners.map((owner) => (
+              <option key={owner.id} value={owner.id}>
+                {formatOwner(owner)}
+              </option>
+            ))}
+          </FilterSelect>
+          <button
+            aria-expanded={isMoreFiltersOpen}
+            className="rounded-sm border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            onClick={() => setIsMoreFiltersOpen((current) => !current)}
+            type="button"
+          >
+            More Filters {isMoreFiltersOpen ? "▲" : "▼"}
+          </button>
+        </div>
+
+        {isMoreFiltersOpen ? (
+          <div className="grid gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 md:grid-cols-3 xl:grid-cols-4">
             <label className="grid gap-1 text-sm font-semibold text-slate-700">
               Search Description
               <input
@@ -421,28 +307,6 @@ export function ProjectWorkspaceDocuments({
               ))}
             </FilterSelect>
             <FilterSelect
-              label="Approval Status"
-              onChange={(value) => updateFilter("approvalStatus", value)}
-              value={filters.approvalStatus}
-            >
-              {approvalStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {formatLabel(status)}
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              label="Document Type"
-              onChange={(value) => updateFilter("documentType", value)}
-              value={filters.documentType}
-            >
-              {documentTypes.map((documentType) => (
-                <option key={documentType.id} value={documentType.name}>
-                  {documentType.name}
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
               label="Category"
               onChange={(value) => updateFilter("category", value)}
               value={filters.category}
@@ -450,17 +314,6 @@ export function ProjectWorkspaceDocuments({
               {categories.map((category) => (
                 <option key={category.id} value={category.name}>
                   {category.name}
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              label="Owner"
-              onChange={(value) => updateFilter("ownerId", value)}
-              value={filters.ownerId}
-            >
-              {owners.map((owner) => (
-                <option key={owner.id} value={owner.id}>
-                  {formatOwner(owner)}
                 </option>
               ))}
             </FilterSelect>
@@ -508,126 +361,339 @@ export function ProjectWorkspaceDocuments({
               <option value="DESC">Descending</option>
             </SelectField>
             <button
-              className="self-end rounded-sm border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
+              className="self-end rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
               onClick={() => onFiltersChange(createDefaultDocumentFilters())}
               type="button"
             >
               Clear Filters
             </button>
           </div>
-        </SummaryCard>
-      </WorkspaceSection>
+        ) : null}
 
-      <WorkspaceSection aria-label="Project document grid" padding="none">
-        {documents.length === 0 ? (
-          <EmptyState
-            description="No document links match the current project and filters."
-            headingLevel={2}
-            title="No documents found."
+        <div className="border-t border-slate-200">
+          {documents.length === 0 ? (
+            <div className="min-h-[420px] px-4 py-10">
+              <EmptyState
+                description="No document links match the current project and filters."
+                headingLevel={2}
+                title="No documents found."
+              />
+            </div>
+          ) : (
+            <DocumentGrid documents={documents} />
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-sm border border-slate-200 bg-white px-4 py-2 shadow-ui-subtle">
+        <button
+          aria-expanded={isInfoOpen}
+          className="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
+          onClick={() => setIsInfoOpen((current) => !current)}
+          type="button"
+        >
+          <span>Document Workspace Details</span>
+          <span aria-hidden="true">{isInfoOpen ? "▲" : "▼"}</span>
+        </button>
+        {isInfoOpen ? (
+          <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 text-sm text-slate-600 md:grid-cols-3">
+            <MetadataItem label="Authentication" value="Not used" />
+            <MetadataItem label="Architecture" value="Metadata only" />
+            <MetadataItem label="Linked Documents" value={documents.length} />
+            <DocumentBreakdown
+              heading="By Storage Provider"
+              values={summary?.byStorageProvider}
+            />
+            <DocumentBreakdown heading="By Category" values={summary?.byCategory} />
+          </div>
+        ) : null}
+      </section>
+
+      {isAddModalOpen ? (
+        <AppModal
+          description="Add metadata for a provider-independent external document link."
+          footer={
+            <>
+              <button
+                className="rounded-sm border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                onClick={closeAddModal}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-sm bg-brand px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-slate-300"
+                disabled={isSaving}
+                form="document-link-form"
+                type="submit"
+              >
+                Add Document Link
+              </button>
+            </>
+          }
+          labelledById="document-link-dialog-title"
+          onClose={closeAddModal}
+          title="Add Document"
+          widthClassName="max-w-4xl"
+        >
+          <DocumentForm
+            categories={categories}
+            formState={formState}
+            handleSubmit={handleSubmit}
+            owners={owners}
+            storageProviders={storageProviders}
+            documentTypes={documentTypes}
+            updateField={updateField}
+            urlError={urlError}
           />
-        ) : (
-          <DocumentGrid documents={documents} />
-        )}
-      </WorkspaceSection>
+        </AppModal>
+      ) : null}
     </WorkspaceContent>
+  );
+}
+
+function DocumentForm({
+  categories,
+  documentTypes,
+  formState,
+  handleSubmit,
+  owners,
+  storageProviders,
+  updateField,
+  urlError,
+}: {
+  categories: ApiDocumentReference[];
+  documentTypes: ApiDocumentReference[];
+  formState: DocumentFormState;
+  handleSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  owners: ApiAssignableUser[];
+  storageProviders: ApiStorageProviderReference[];
+  updateField: <K extends keyof DocumentFormState>(
+    field: K,
+    value: DocumentFormState[K],
+  ) => void;
+  urlError: string | null;
+}) {
+  return (
+    <form className="grid gap-4" id="document-link-form" onSubmit={handleSubmit}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+          Title
+          <input
+            className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
+            onChange={(event) => updateField("title", event.target.value)}
+            required
+            type="text"
+            value={formState.title}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+          External URL
+          <input
+            aria-describedby={urlError ? "document-url-error" : undefined}
+            className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
+            onChange={(event) => updateField("externalUrl", event.target.value)}
+            pattern="https?://.*"
+            required
+            type="url"
+            value={formState.externalUrl}
+          />
+          {urlError ? (
+            <span
+              className="text-xs font-normal text-red-700"
+              id="document-url-error"
+            >
+              {urlError}
+            </span>
+          ) : null}
+        </label>
+        <SelectField
+          label="Storage Provider"
+          onChange={(value) =>
+            updateField("storageProvider", value as ApiDocumentStorageProvider)
+          }
+          value={formState.storageProvider}
+        >
+          {storageProviders.map((provider) => (
+            <option key={provider.value} value={provider.value}>
+              {provider.label}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="Document Type"
+          onChange={(value) => updateField("documentType", value)}
+          value={formState.documentType}
+        >
+          {documentTypes.map((documentType) => (
+            <option key={documentType.id} value={documentType.name}>
+              {documentType.name}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="Category"
+          onChange={(value) => updateField("category", value)}
+          value={formState.category}
+        >
+          {categories.map((category) => (
+            <option key={category.id} value={category.name}>
+              {category.name}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="Owner"
+          onChange={(value) => updateField("ownerId", value)}
+          value={formState.ownerId}
+        >
+          <option value="">Unassigned</option>
+          {owners.map((owner) => (
+            <option key={owner.id} value={owner.id}>
+              {formatOwner(owner)}
+            </option>
+          ))}
+        </SelectField>
+        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+          Version
+          <input
+            className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
+            onChange={(event) => updateField("version", event.target.value)}
+            type="text"
+            value={formState.version}
+          />
+        </label>
+        <SelectField
+          label="Approval Status"
+          onChange={(value) =>
+            updateField("approvalStatus", value as ApiDocumentApprovalStatus)
+          }
+          value={formState.approvalStatus}
+        >
+          {approvalStatuses.map((status) => (
+            <option key={status} value={status}>
+              {formatLabel(status)}
+            </option>
+          ))}
+        </SelectField>
+        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+          Last Reviewed
+          <input
+            className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
+            onChange={(event) =>
+              updateField("lastReviewedAt", event.target.value)
+            }
+            type="date"
+            value={formState.lastReviewedAt}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+          Next Review
+          <input
+            className="rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
+            onChange={(event) => updateField("nextReviewAt", event.target.value)}
+            type="date"
+            value={formState.nextReviewAt}
+          />
+        </label>
+      </div>
+      <label className="grid gap-1 text-sm font-semibold text-slate-700">
+        Description
+        <textarea
+          className="min-h-24 rounded-sm border border-slate-300 px-3 py-2 font-normal focus:outline-none focus:ring-2 focus:ring-brand/30"
+          onChange={(event) => updateField("description", event.target.value)}
+          value={formState.description}
+        />
+      </label>
+    </form>
   );
 }
 
 function DocumentGrid({ documents }: { documents: ApiProjectDocument[] }) {
   return (
-    <SummaryCard headingLevel={2} title="Document Grid">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-          <caption className="sr-only">External project document links</caption>
-          <thead>
-            <tr>
-              {[
-                "Title",
-                "Category",
-                "Type",
-                "Owner",
-                "Provider",
-                "Version",
-                "Approval",
-                "Review",
-                "Audit",
-                "Open",
-              ].map((heading) => (
-                <th
-                  className="px-3 py-2 font-semibold text-slate-600"
-                  key={heading}
-                  scope="col"
-                >
-                  {heading}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {documents.map((document) => (
-              <tr key={document.id}>
-                <td className="px-3 py-3">
-                  <p className="font-semibold text-slate-950">
-                    {document.title}
-                  </p>
-                  {document.description ? (
-                    <p className="mt-1 max-w-md text-xs text-slate-500">
-                      {document.description}
-                    </p>
-                  ) : null}
-                </td>
-                <td className="px-3 py-3 text-slate-600">
-                  {document.category ?? "Uncategorized"}
-                </td>
-                <td className="px-3 py-3 text-slate-600">
-                  {document.documentType}
-                </td>
-                <td className="px-3 py-3 text-slate-600">
-                  {document.owner?.displayName ?? "Unassigned"}
-                </td>
-                <td className="px-3 py-3 text-slate-600">
-                  {document.storageProviderLabel}
-                </td>
-                <td className="px-3 py-3 text-slate-600">
-                  {document.version ?? "Unavailable"}
-                </td>
-                <td className="px-3 py-3">
-                  <StatusBadge tone={approvalTone(document.approvalStatus)}>
-                    {formatLabel(document.approvalStatus)}
-                  </StatusBadge>
-                </td>
-                <td className="px-3 py-3">
-                  <StatusBadge tone={reviewTone(document.reviewStatus)}>
-                    {formatLabel(document.reviewStatus)}
-                  </StatusBadge>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Next: {formatDate(document.nextReviewAt)}
-                  </p>
-                </td>
-                <td className="px-3 py-3 text-xs text-slate-500">
-                  <p>Created By: {document.createdBy?.displayName ?? "System"}</p>
-                  <p>
-                    Last Updated By:{" "}
-                    {document.updatedBy?.displayName ?? "System"}
-                  </p>
-                </td>
-                <td className="px-3 py-3">
-                  <a
-                    aria-label={`Open ${document.title} in a new tab`}
-                    className="rounded-sm font-semibold text-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-                    href={document.externalUrl}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                  >
-                    Open
-                  </a>
-                </td>
-              </tr>
+    <div className="max-h-[min(64vh,720px)] min-h-[520px] overflow-auto">
+      <table className="min-w-[1180px] divide-y divide-slate-200 text-left text-sm">
+        <caption className="sr-only">External project document links</caption>
+        <thead className="sticky top-0 z-10 bg-slate-50">
+          <tr>
+            {[
+              "Title",
+              "Category",
+              "Type",
+              "Owner",
+              "Provider",
+              "Version",
+              "Approval",
+              "Review",
+              "Audit",
+            ].map((heading) => (
+              <th
+                className="px-3 py-2 font-semibold text-slate-600"
+                key={heading}
+                scope="col"
+              >
+                {heading}
+              </th>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </SummaryCard>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {documents.map((document) => (
+            <tr className="align-top hover:bg-slate-50/70" key={document.id}>
+              <td className="max-w-[280px] px-3 py-3">
+                <a
+                  aria-label={`Open ${document.title} in a new tab`}
+                  className="cursor-pointer rounded-sm font-semibold text-brand underline-offset-2 hover:text-brand-dark hover:underline focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  href={document.externalUrl}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                  title="Open document"
+                >
+                  {document.title}
+                </a>
+                {document.description ? (
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                    {document.description}
+                  </p>
+                ) : null}
+              </td>
+              <td className="px-3 py-3 text-slate-600">
+                {document.category ?? "Uncategorized"}
+              </td>
+              <td className="px-3 py-3 text-slate-600">
+                {document.documentType}
+              </td>
+              <td className="px-3 py-3 text-slate-600">
+                {document.owner?.displayName ?? "Unassigned"}
+              </td>
+              <td className="px-3 py-3 text-slate-600">
+                {document.storageProviderLabel}
+              </td>
+              <td className="px-3 py-3 text-slate-600">
+                {document.version ?? "Unavailable"}
+              </td>
+              <td className="px-3 py-3">
+                <StatusBadge tone={approvalTone(document.approvalStatus)}>
+                  {formatLabel(document.approvalStatus)}
+                </StatusBadge>
+              </td>
+              <td className="px-3 py-3">
+                <StatusBadge tone={reviewTone(document.reviewStatus)}>
+                  {formatLabel(document.reviewStatus)}
+                </StatusBadge>
+                <p className="mt-1 text-xs text-slate-500">
+                  {formatDate(document.nextReviewAt)}
+                </p>
+              </td>
+              <td className="px-3 py-3 text-xs text-slate-500">
+                <p>Created: {document.createdBy?.displayName ?? "System"}</p>
+                <p>Updated: {document.updatedBy?.displayName ?? "System"}</p>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -644,11 +710,11 @@ function DocumentBreakdown({
   }
 
   return (
-    <div className="mt-5">
+    <div>
       <h3 className="text-xs font-semibold uppercase text-slate-500">
         {heading}
       </h3>
-      <dl className="mt-2 grid gap-2">
+      <dl className="mt-2 grid gap-1">
         {entries.map(([label, value]) => (
           <div className="flex justify-between gap-4 text-sm" key={label}>
             <dt className="text-slate-600">{label}</dt>
@@ -729,11 +795,7 @@ function formatLabel(value: string) {
 }
 
 function formatOwner(owner: ApiAssignableUser) {
-  return (
-    owner.displayName ??
-    `${owner.firstName} ${owner.lastName}`.trim() ??
-    owner.email
-  );
+  return owner.displayName ?? `${owner.firstName} ${owner.lastName}`.trim() ?? owner.email;
 }
 
 function formatDate(value?: string | null) {
@@ -763,6 +825,19 @@ function reviewTone(status: ApiDocumentReviewStatus) {
     return "warning";
   }
   return "critical";
+}
+
+function getKpiToneClass(tone: "critical" | "neutral" | "success" | "warning") {
+  if (tone === "success") {
+    return "text-status-success-strong";
+  }
+  if (tone === "warning") {
+    return "text-status-warning-strong";
+  }
+  if (tone === "critical") {
+    return "text-status-danger";
+  }
+  return "text-slate-950";
 }
 
 function isHttpUrl(value: string) {

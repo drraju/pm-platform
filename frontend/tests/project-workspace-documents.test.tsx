@@ -54,7 +54,7 @@ const summary = {
 };
 
 describe("ProjectWorkspaceDocuments", () => {
-  it("renders the metadata-only empty state and enterprise summary controls", () => {
+  it("renders the compact working view with collapsed details and add modal entry", () => {
     render(
       <ProjectWorkspaceDocuments
         categories={categories}
@@ -70,11 +70,14 @@ describe("ProjectWorkspaceDocuments", () => {
       />,
     );
 
+    expect(screen.getByRole("heading", { name: "Documents" })).toBeVisible();
+    const summaryRegion = screen.getByLabelText("Document summary");
+    expect(within(summaryRegion).getByText("Total")).toBeVisible();
+    expect(within(summaryRegion).getByText("Under Review")).toBeVisible();
+    expect(screen.queryByText("Metadata only")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "External Document Links" }),
-    ).toBeVisible();
-    expect(screen.getByText("Metadata only")).toBeVisible();
-    expect(screen.getByText("Total Documents")).toBeVisible();
+      screen.getByRole("button", { name: "More Filters ▼" }),
+    ).toHaveAttribute("aria-expanded", "false");
     expect(
       screen.getByRole("heading", { name: "No documents found." }),
     ).toBeVisible();
@@ -130,23 +133,32 @@ describe("ProjectWorkspaceDocuments", () => {
     expect(
       within(table).getByRole("columnheader", { name: "Owner" }),
     ).toBeVisible();
+    expect(
+      within(table).queryByRole("columnheader", { name: "Open" }),
+    ).not.toBeInTheDocument();
     const link = screen.getByRole("link", {
       name: "Open ADR-015 in a new tab",
     });
     expect(link).toHaveAttribute("href", "https://example.com/adr-015");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveAttribute("title", "Open document");
+    expect(link).toHaveTextContent("ADR-015");
 
-    fireEvent.change(screen.getByLabelText("Title"), {
+    fireEvent.click(screen.getByRole("button", { name: "Add Document" }));
+    const dialog = screen.getByRole("dialog", { name: "Add Document" });
+    fireEvent.change(within(dialog).getByLabelText("Title"), {
       target: { value: "Delivery Plan" },
     });
-    fireEvent.change(screen.getByLabelText("External URL"), {
+    fireEvent.change(within(dialog).getByLabelText("External URL"), {
       target: { value: "https://example.com/delivery-plan" },
     });
-    fireEvent.change(screen.getAllByLabelText("Owner")[0], {
+    fireEvent.change(within(dialog).getByLabelText("Owner"), {
       target: { value: "user-1" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "Add Document Link" }));
+    const form = dialog.querySelector("#document-link-form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form as HTMLFormElement);
 
     await waitFor(() => {
       expect(onCreateDocument).toHaveBeenCalledWith(
@@ -179,15 +191,21 @@ describe("ProjectWorkspaceDocuments", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Title"), {
+    fireEvent.click(screen.getByRole("button", { name: "Add Document" }));
+    const dialog = screen.getByRole("dialog", { name: "Add Document" });
+    fireEvent.change(within(dialog).getByLabelText("Title"), {
       target: { value: "Unsafe Link" },
     });
-    fireEvent.change(screen.getByLabelText("External URL"), {
+    fireEvent.change(within(dialog).getByLabelText("External URL"), {
       target: { value: "javascript:alert(1)" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "Add Document Link" }));
+    const form = dialog.querySelector("#document-link-form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form as HTMLFormElement);
 
-    expect(screen.getByText("Enter a valid http:// or https:// URL.")).toBeVisible();
+    expect(
+      within(dialog).getByText("Enter a valid http:// or https:// URL."),
+    ).toBeVisible();
     expect(onCreateDocument).not.toHaveBeenCalled();
   });
 });
