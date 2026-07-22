@@ -1,4 +1,5 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { IntegrationProviderRegistry } from '../../application';
 import { ProviderType } from '../../domain';
 import { GoogleOAuthCallbackDto } from './dto';
@@ -8,10 +9,23 @@ import { GoogleDriveIntegrationProvider } from './google-drive.integration-provi
 export class GoogleOAuthController {
   constructor(private readonly registry: IntegrationProviderRegistry) {}
 
-  @Get('callback')
-  callback(@Query() query: GoogleOAuthCallbackDto) {
-    return this.provider().completeGoogleOAuth(query);
+@Get('callback')
+async callback(
+  @Query() query: GoogleOAuthCallbackDto,
+  @Res() res: Response,
+) {
+  try {
+    await this.provider().completeGoogleOAuth(query);
+
+    return res.redirect(
+      'http://localhost:3000/settings/integrations?google=connected',
+    );
+  } catch {
+    return res.redirect(
+      'http://localhost:3000/settings/integrations?google=failed',
+    );
   }
+}
 
   private provider(): GoogleDriveIntegrationProvider {
     return this.registry.resolve(

@@ -45,4 +45,28 @@ export class GoogleOAuthCallbackDto {
   @IsString()
   @IsNotEmpty()
   state: string;
+
+  @IsOptional()
+  @IsString()
+  scope?: string;
+
+  @IsOptional()
+  @IsString()
+  iss?: string;
+
+  @IsOptional()
+  @IsString()
+  authuser?: string;
+
+  @IsOptional()
+  @IsString()
+  prompt?: string;
+
+  @IsOptional()
+  @IsString()
+  error?: string;
+
+  @IsOptional()
+  @IsString()
+  error_description?: string;
 }
