@@ -10,16 +10,16 @@ export class GoogleDriveProjectFolder extends BaseEntity {
   @Column({ name: 'connection_id', type: 'uuid' })
   connectionId: string;
 
-  @Column({ name: 'project_name' })
+  @Column({ name: 'project_name', type: 'varchar' })
   projectName: string;
 
-  @Column({ name: 'folder_id' })
+  @Column({ name: 'folder_id', type: 'varchar' })
   folderId: string;
 
-  @Column({ name: 'folder_url' })
+  @Column({ name: 'folder_url', type: 'text' })
   folderUrl: string;
 
-  @Column({ name: 'root_folder_id' })
+  @Column({ name: 'root_folder_id', type: 'varchar' })
   rootFolderId: string;
 
   @Column({ name: 'created_by_user_id', type: 'uuid', nullable: true })
