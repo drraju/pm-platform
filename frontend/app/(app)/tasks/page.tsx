@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { TaskTable } from "@/components/tasks/task-table";
@@ -98,7 +98,7 @@ function PageContent() {
     }
   }
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setError(null);
     setIsLoading(true);
     try {
@@ -130,11 +130,11 @@ function PageContent() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [scopeFilter]);
 
   useEffect(() => {
     void loadData();
-  }, [scopeFilter]);
+  }, [loadData]);
 
   async function handleUpdateTask(
     taskId: string,

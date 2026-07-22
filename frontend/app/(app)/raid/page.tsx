@@ -10,7 +10,6 @@ import {
   getAuthMe,
   getStoredPermissionKeys,
   getStoredSessionUser,
-  hasPermission,
   storeAuthMe,
 } from "@/features/auth";
 import { getProjects, type ApiProject } from "@/features/projects";

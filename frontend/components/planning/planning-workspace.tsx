@@ -499,7 +499,9 @@ export function PlanningWorkspace({
 
   const rows = useMemo(
     () => buildVisibleRows(localSchedules, collapsedIds),
-    [collapsedIds, expansionVersion, localSchedules],
+    // The expansion manager mutates a stable Set and publishes expansionVersion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [expansionVersion, localSchedules],
   );
   const summaryTaskIds = useMemo(
     () => getSummaryTaskIds(localSchedules),
@@ -1896,18 +1898,17 @@ export function PlanningWorkspace({
               {addMenu.isOpen ? (
                 <span
                   className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                  onClickCapture={addMenu.onMenuClickCapture}
                   role="menu"
                 >
                   <AddMenuButton
                     icon={<TaskTypeIcon taskKind="standard" />}
                     label="Task"
-                    onClick={() =>
+                    onClick={() => {
                       void createTask({
                         parentTaskId: selectedSchedule?.parentTaskId ?? null,
                         taskType: "task",
-                      })
-                    }
+                      });
+                    }}
                   />
                   <AddMenuButton
                     icon={<TaskTypeIcon taskKind="summary" />}
@@ -1955,7 +1956,6 @@ export function PlanningWorkspace({
               {addChildMenu.isOpen ? (
                 <span
                   className="absolute left-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                  onClickCapture={addChildMenu.onMenuClickCapture}
                   role="menu"
                 >
                   <AddMenuButton
@@ -2045,7 +2045,7 @@ export function PlanningWorkspace({
               {structureMenu.isOpen ? (
                 <span
                   className="absolute left-0 top-9 z-30 w-52 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                  onClickCapture={structureMenu.onMenuClickCapture}
+                  onClick={structureMenu.onMenuClick}
                   role="menu"
                 >
                   <StructureMenuButton
@@ -2238,7 +2238,7 @@ export function PlanningWorkspace({
               {viewMenu.isOpen ? (
                 <span
                   className="absolute right-0 top-9 z-30 w-44 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                  onClickCapture={viewMenu.onMenuClickCapture}
+                  onClick={viewMenu.onMenuClick}
                   role="menu"
                 >
                   {[
@@ -2302,7 +2302,7 @@ export function PlanningWorkspace({
               {columnsMenu.isOpen ? (
                 <span
                   className="absolute right-0 top-9 z-30 w-48 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
-                  onClickCapture={columnsMenu.onMenuClickCapture}
+                  onClick={columnsMenu.onMenuClick}
                   role="menu"
                 >
                   {optionalGridColumns.map((column) => {
@@ -2903,7 +2903,7 @@ export function PlanningWorkspace({
         <div
           aria-label="Summary Task actions"
           className="fixed z-50 w-60 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-xl"
-          onClickCapture={workPackageMenu.onMenuClickCapture}
+          onClick={workPackageMenu.onMenuClick}
           onPointerDown={(event) => event.stopPropagation()}
           ref={workPackageMenu.containerRef}
           role="menu"

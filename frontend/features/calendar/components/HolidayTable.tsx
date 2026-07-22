@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   createHoliday,
   deleteHoliday,
@@ -19,13 +19,13 @@ export function HolidayTable({ calendarId }: HolidayTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadRows() {
+  const loadRows = useCallback(async () => {
     setRows(await getHolidays(calendarId));
-  }
+  }, [calendarId]);
 
   useEffect(() => {
     void loadRows();
-  }, [calendarId]);
+  }, [loadRows]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

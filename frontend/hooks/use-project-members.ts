@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addProjectMember,
   getProjectMembers,
@@ -14,26 +14,50 @@ type ProjectMemberMutation = {
   userId: string;
 };
 
+const emptyProjectMembers: ApiProjectMember[] = [];
+
+function createProjectMemberKey(members: ApiProjectMember[]) {
+  return JSON.stringify(
+    members.map((member) => ({
+      displayName: member.user?.displayName ?? null,
+      email: member.user?.email ?? null,
+      firstName: member.user?.firstName ?? null,
+      id: member.id,
+      lastName: member.user?.lastName ?? null,
+      role: member.role,
+      status: member.user?.status ?? null,
+      userId: member.userId,
+    })),
+  );
+}
+
 export function useProjectMembers(
   projectId: string,
-  initialMembers: ApiProjectMember[] = [],
+  initialMembers: ApiProjectMember[] = emptyProjectMembers,
 ) {
   const [members, setMembers] = useState<ApiProjectMember[]>(initialMembers);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const initialMemberKey = useMemo(
-    () =>
-      initialMembers
-        .map((member) => `${member.id}:${member.userId}:${member.role}`)
-        .join("|"),
-    [initialMembers],
-  );
+  const initialMemberKey = createProjectMemberKey(initialMembers);
+  const stableInitialMembersRef = useRef({
+    key: initialMemberKey,
+    members: initialMembers,
+  });
+
+  if (stableInitialMembersRef.current.key !== initialMemberKey) {
+    stableInitialMembersRef.current = {
+      key: initialMemberKey,
+      members: initialMembers,
+    };
+  }
+
+  const stableInitialMembers = stableInitialMembersRef.current.members;
 
   useEffect(() => {
-    setMembers(initialMembers);
-  }, [initialMemberKey]);
+    setMembers(stableInitialMembers);
+  }, [stableInitialMembers]);
 
   const loadMembers = useCallback(async () => {
     if (!projectId) {

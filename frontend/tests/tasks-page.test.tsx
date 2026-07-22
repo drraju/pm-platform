@@ -87,7 +87,7 @@ describe("Tasks page", () => {
     const dueToday = today.toISOString().slice(0, 10);
     const futureDate = new Date(today.getTime() + 7 * oneDay).toISOString().slice(0, 10);
 
-    taskMocks.getTasks.mockResolvedValue([
+    const visibleTasks = [
       {
         dueDate: overdueDate,
         id: "task-overdue",
@@ -112,8 +112,10 @@ describe("Tasks page", () => {
         status: "todo",
         title: "Plan executive readout",
       },
-    ]);
-    taskMocks.getMyTasks.mockResolvedValue([]);
+    ];
+
+    taskMocks.getTasks.mockResolvedValue(visibleTasks);
+    taskMocks.getMyTasks.mockResolvedValue(visibleTasks);
 
     render(<TasksPage />);
 
@@ -139,7 +141,7 @@ describe("Tasks page", () => {
     const overdueDate = new Date(today.getTime() - oneDay).toISOString().slice(0, 10);
     const futureDate = new Date(today.getTime() + 7 * oneDay).toISOString().slice(0, 10);
 
-    taskMocks.getTasks.mockResolvedValue([
+    const visibleTasks = [
       {
         dueDate: overdueDate,
         id: "task-overdue",
@@ -156,8 +158,10 @@ describe("Tasks page", () => {
         status: "todo",
         title: "Plan executive readout",
       },
-    ]);
-    taskMocks.getMyTasks.mockResolvedValue([]);
+    ];
+
+    taskMocks.getTasks.mockResolvedValue(visibleTasks);
+    taskMocks.getMyTasks.mockResolvedValue(visibleTasks);
 
     render(<TasksPage />);
 
@@ -179,7 +183,7 @@ describe("Tasks page", () => {
     const overdueDate = new Date(today.getTime() - oneDay).toISOString().slice(0, 10);
     const futureDate = new Date(today.getTime() + 7 * oneDay).toISOString().slice(0, 10);
 
-    taskMocks.getTasks.mockResolvedValue([
+    const visibleTasks = [
       {
         dueDate: overdueDate,
         id: "task-overdue",
@@ -196,8 +200,10 @@ describe("Tasks page", () => {
         status: "todo",
         title: "Plan executive readout",
       },
-    ]);
-    taskMocks.getMyTasks.mockResolvedValue([]);
+    ];
+
+    taskMocks.getTasks.mockResolvedValue(visibleTasks);
+    taskMocks.getMyTasks.mockResolvedValue(visibleTasks);
 
     const { rerender } = render(<TasksPage />);
 
@@ -205,9 +211,10 @@ describe("Tasks page", () => {
       expect(taskMocks.getMyTasks).toHaveBeenCalled();
     });
 
-    act(() => {
+    await act(async () => {
       window.history.pushState({}, "", "/tasks?scope=all&timing=overdue");
       rerender(<TasksPage />);
+      await Promise.resolve();
     });
 
     await waitFor(() => {
@@ -217,17 +224,27 @@ describe("Tasks page", () => {
     expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
     expect(screen.queryByText("Plan executive readout")).not.toBeInTheDocument();
 
-    act(() => {
+    await act(async () => {
       window.history.replaceState({}, "", "/tasks");
       rerender(<TasksPage />);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(taskMocks.getMyTasks).toHaveBeenCalledTimes(2);
     });
 
     expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
     expect(screen.getByText("Plan executive readout")).toBeInTheDocument();
 
-    act(() => {
+    await act(async () => {
       window.history.replaceState({}, "", "/tasks?scope=all&timing=overdue");
       rerender(<TasksPage />);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(taskMocks.getTasks).toHaveBeenCalledTimes(2);
     });
 
     expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();

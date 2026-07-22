@@ -98,7 +98,7 @@ export function useDismissibleMenu<
     isOpen,
   ]);
 
-  const onMenuClickCapture = useCallback(
+  const onMenuClick = useCallback(
     (event: MouseEvent<ContainerElement>) => {
       if (!(event.target instanceof Element)) {
         return;
@@ -125,7 +125,7 @@ export function useDismissibleMenu<
     close,
     closeWithoutFocus,
     containerRef,
-    onMenuClickCapture,
+    onMenuClick,
   } as const;
 }
 
@@ -165,7 +165,7 @@ export function useDropdownMenu<
     close: dismissibleMenu.close,
     containerRef: dismissibleMenu.containerRef,
     isOpen,
-    onMenuClickCapture: dismissibleMenu.onMenuClickCapture,
+    onMenuClick: dismissibleMenu.onMenuClick,
     open,
     toggle,
     triggerRef,

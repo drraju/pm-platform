@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   ErrorState,
@@ -52,7 +52,7 @@ function PageContent() {
     members,
   } = useProjectMembers(projectId, workspace?.project.members ?? []);
 
-  async function loadWorkspace() {
+  const loadWorkspace = useCallback(async () => {
     setError(null);
     setIsLoading(true);
     try {
@@ -66,11 +66,11 @@ function PageContent() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [projectId]);
 
   useEffect(() => {
     void loadWorkspace();
-  }, [projectId]);
+  }, [loadWorkspace]);
 
   async function handleUpdateSchedule(
     taskId: string,

@@ -218,7 +218,7 @@ describe("ProjectsPage CRUD", () => {
     });
 
     expect(
-      screen.getByRole("dialog", { name: /^create project$/i }),
+      await screen.findByRole("dialog", { name: /^create project$/i }),
     ).toBeInTheDocument();
   });
 });

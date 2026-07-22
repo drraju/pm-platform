@@ -24,7 +24,7 @@ function TestDropdown({
         {label}
       </button>
       {dropdown.isOpen ? (
-        <div onClickCapture={dropdown.onMenuClickCapture} role="menu">
+        <div onClick={dropdown.onMenuClick} role="menu">
           <button onClick={onSelect} role="menuitem" type="button">
             Select {label}
           </button>
