@@ -36,7 +36,9 @@ Host
 | PostgreSQL | Host, port, database, user, and password. |
 | Backend | API port, JWT configuration, CORS origin, and database connection. |
 | Frontend | API base URL and public runtime configuration. |
-| Integrations | Slack and Google Drive credentials when enabled. |
+| Integrations | Slack credentials when enabled. Document links do not require external storage credentials. |
+
+Document links do not require OAuth client IDs, API keys, provider refresh tokens, webhook secrets, or synchronization workers. Deployments only need the database migrations that create document reference data and project document metadata.
 
 ### Deployment Steps
 
@@ -56,6 +58,7 @@ Host
 - Migrations should be idempotent where possible.
 - New indexes should be reviewed for large-table impact.
 - Destructive changes require explicit approval and rollback planning.
+- Document reference data migrations should be idempotent and preserve existing project document metadata by mapping display values into reference rows.
 
 ### Rollback Considerations
 

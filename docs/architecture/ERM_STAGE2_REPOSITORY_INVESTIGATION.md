@@ -71,7 +71,7 @@ Observed backend bounded contexts:
 | Portfolio | `backend/src/modules/portfolio` | Portfolio summary metrics derived from projects, risks, issues, tasks, and project health. |
 | Dashboard | `backend/src/modules/dashboard` | User dashboard and executive/project health signals. |
 | Notifications | `backend/src/modules/notifications` | Notification CRUD/service behavior. |
-| Integrations | `backend/src/modules/integrations/slack`, `backend/src/modules/integrations/google-drive` | Integration boundary modules for Slack and Google Drive. |
+| Integrations | `backend/src/modules/integrations/slack`, `backend/src/modules/documents` | Slack remains a non-document integration boundary; documents use provider-independent external links. |
 | Health | `backend/src/modules/health` | Health endpoints, startup validation, migration runner, operational health. |
 
 Not found:
@@ -87,7 +87,7 @@ Application module registration is in `backend/src/app.module.ts`.
 
 Observed imports:
 
-- `AppModule` imports TypeORM, `AuthzModule`, `AuthModule`, `CalendarModule`, `UsersModule`, `ProjectsModule`, `TasksModule`, `PlanningModule`, `RisksModule`, `RaidModule`, `DashboardModule`, `PortfolioModule`, `HealthModule`, `NotificationsModule`, `SlackModule`, and `GoogleDriveModule`.
+- `AppModule` imports TypeORM, `AuthzModule`, `AuthModule`, `CalendarModule`, `UsersModule`, `ProjectsModule`, `TasksModule`, `PlanningModule`, `RisksModule`, `RaidModule`, `DashboardModule`, `PortfolioModule`, `DocumentsModule`, `HealthModule`, `NotificationsModule`, and `SlackModule`.
 - `PlanningModule` imports `AuthzModule`, `PlanningSnapshotModule`, `ProjectsModule`, and TypeORM repositories for Planning, Project, Task, and User entities.
 - `PlanningModule` provides Scheduling Engine services and `SchedulingContextFactory`.
 - Public `CalendarModule` imports `AuthzModule`, internal `modules/calendars` module, and calendar repositories.
@@ -152,7 +152,8 @@ graph TD
   AppModule --> RisksModule["RisksModule"]
   AppModule --> NotificationsModule["NotificationsModule"]
   AppModule --> HealthModule["HealthModule"]
-  AppModule --> Integrations["Slack / Google Drive Modules"]
+  AppModule --> DocumentsModule["DocumentsModule"]
+  AppModule --> Integrations["Slack Module"]
 
   CalendarApiModule --> AuthzModule["AuthzModule"]
   CalendarApiModule --> CalendarDomainModule["modules/calendars"]
@@ -299,7 +300,7 @@ Layering observations:
 | Portfolio | Portfolio summary metrics | Projects, Risks, Issues, Tasks, ProjectHealthService, ProjectVisibilityService | Frontend portfolio page, executive drilldowns |
 | Dashboard | User/executive dashboard signals | Projects, ProjectMembers, Tasks, Risks, Issues, ProjectHealthService, ProjectVisibilityService | Frontend dashboard/executive pages |
 | Notifications | Notification records and APIs | Users | Frontend notifications |
-| Integrations | Slack and Google Drive integration boundaries | Integration entities, provider enums | Integration endpoints and future feature surfaces |
+| Integrations | Slack integration boundary and external document links | Slack entity, ProjectDocument metadata | Slack endpoints and document metadata APIs |
 | Health | Operational health, migration runner, startup validation | PostgreSQL, Redis, MinIO, SQL migrations | Docker health flow, frontend health route |
 
 Relationship observations:

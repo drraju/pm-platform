@@ -42,7 +42,7 @@ This document lists current beta limitations confirmed from the repository and e
 | --- | --- | --- |
 | Notifications | Preview | `/notifications` displays an empty state; notification delivery and read-state workflows are not implemented. |
 | Slack | Planned | Backend module shell exists without usable controller routes or frontend workflow. |
-| Google Drive | Planned | Backend module shell exists without usable controller routes or frontend workflow. |
+| External document links | Beta | Project document metadata and external URLs are supported without provider authentication. |
 
 ## Navigation and Search
 
@@ -79,4 +79,3 @@ Use the active UAT bug log for detailed test findings:
 | Actual |  |
 | Severity | Critical / High / Medium / Low |
 | Screenshot | Attach image or paste link |
-

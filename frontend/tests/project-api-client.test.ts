@@ -2,16 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addProjectMember,
   captureProjectBaseline,
+  getDocumentCategories,
+  createProjectDocument,
   createProjectTask,
   createProject,
   createProjectTaskDependency,
-  connectGoogleWorkspace,
-  createGoogleProjectFolder,
   getAssignableUsers,
   getAuthMe,
-  getGoogleDocuments,
+  getDocumentStorageProviders,
+  getDocumentTypes,
   getPermissions,
-  getProjectDocumentWorkspace,
+  getProjectDocumentSummary,
+  getProjectDocuments,
   createRaidItem,
   deleteProject,
   deleteProjectTaskDependency,
@@ -153,71 +155,83 @@ describe("project API client", () => {
     );
   });
 
-  it("loads the project document workspace", async () => {
-    const fetchMock = mockFetch({
-      connection: null,
-      folders: [],
-      projectFolder: null,
-      provider: "Google Drive",
-      status: "not_connected",
-    });
+  it("loads project document links and storage providers", async () => {
+    const fetchMock = mockFetch([{ id: "document-1", title: "ADR-015" }]);
     vi.stubGlobal("fetch", fetchMock);
 
-    await getProjectDocumentWorkspace("project-1");
+    await getProjectDocuments("project-1", {
+      approvalStatus: "APPROVED",
+      category: "Architecture",
+      documentType: "Architecture Diagram",
+      reviewStatus: "CURRENT",
+      sortBy: "title",
+      sortDirection: "ASC",
+      storageProvider: "CONFLUENCE",
+      title: "ADR",
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/integrations/google/workspace/project-1",
+      "http://localhost:3001/projects/project-1/documents?approvalStatus=APPROVED&category=Architecture&documentType=Architecture+Diagram&reviewStatus=CURRENT&sortBy=title&sortDirection=ASC&storageProvider=CONFLUENCE&title=ADR",
+      expect.any(Object),
+    );
+
+    await getDocumentStorageProviders();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/documents/storage-providers",
+      expect.any(Object),
+    );
+
+    await getDocumentTypes();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/documents/document-types",
+      expect.any(Object),
+    );
+
+    await getDocumentCategories();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/documents/categories",
+      expect.any(Object),
+    );
+
+    await getProjectDocumentSummary("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/documents/summary",
       expect.any(Object),
     );
   });
 
-  it("starts Google Workspace connection and creates project folders", async () => {
-    const fetchMock = mockFetch({
-      authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-      state: "signed-state",
-    });
+  it("creates project document links with metadata only", async () => {
+    const fetchMock = mockFetch({ id: "document-1", title: "ADR-015" });
     vi.stubGlobal("fetch", fetchMock);
 
-    await connectGoogleWorkspace();
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://localhost:3001/integrations/google/connect",
-      expect.objectContaining({
-        method: "POST",
-      }),
-    );
-    expect(fetchMock.mock.calls.at(-1)?.[1]).not.toHaveProperty("body");
-
-    await createGoogleProjectFolder({
-      connectionId: "connection-1",
+    await createProjectDocument({
+      category: "Architecture",
+      description: "Approved decision",
+      documentType: "Architecture Diagram",
+      externalUrl: "https://example.com/adr-015",
+      ownerId: "user-1",
       projectId: "project-1",
-      projectName: "ERP",
+      storageProvider: "CONFLUENCE",
+      title: "ADR-015",
+      version: "1.0",
     });
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://localhost:3001/integrations/google/project-folder",
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/documents",
       expect.objectContaining({
         body: JSON.stringify({
-          connectionId: "connection-1",
+          category: "Architecture",
+          description: "Approved decision",
+          documentType: "Architecture Diagram",
+          externalUrl: "https://example.com/adr-015",
+          ownerId: "user-1",
           projectId: "project-1",
-          projectName: "ERP",
+          storageProvider: "CONFLUENCE",
+          title: "ADR-015",
+          version: "1.0",
         }),
         method: "POST",
       }),
-    );
-  });
-
-  it("loads Google document metadata for selected folders", async () => {
-    const fetchMock = mockFetch([{ id: "doc-1", name: "Plan" }]);
-    vi.stubGlobal("fetch", fetchMock);
-
-    await getGoogleDocuments({
-      connectionId: "connection-1",
-      folderId: "folder-1",
-      projectId: "project-1",
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/integrations/google/documents?connectionId=connection-1&folderId=folder-1&projectId=project-1",
-      expect.any(Object),
     );
   });
 

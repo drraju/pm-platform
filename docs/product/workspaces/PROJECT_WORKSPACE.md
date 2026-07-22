@@ -119,7 +119,19 @@ Team manages project membership and project roles. It does not duplicate global 
 
 ## Documents
 
-Documents provide project artifacts and future integration surfaces for Google Drive and other repositories. Documents are project-scoped and permission-aware.
+Documents provide project artifact references as provider-independent external links. Documents are project-scoped, permission-aware, and store metadata plus a URL only; PM Platform does not authenticate with external storage providers.
+
+Document records use enterprise reference data rather than arbitrary provider logic:
+
+- Storage provider is a typed enum value displayed as a friendly label.
+- Document type and category are reference tables seeded with common delivery artifacts and designed for future administration.
+- Owner, Created By, and Last Updated By reference PM Platform users.
+- Approval status follows `DRAFT`, `UNDER_REVIEW`, `APPROVED`, `SUPERSEDED`, and `ARCHIVED`.
+- Review status is derived at runtime from Last Reviewed and Next Review dates: Current, Review Due Soon, Overdue, or Never Reviewed.
+- Link status is stored as `UNKNOWN` for future link validation; no validation calls are made to external providers.
+- External URLs must use `http://` or `https://` and open in a new tab with `noopener noreferrer`.
+
+The Documents tab supports summary cards, provider/category breakdowns, advanced composed filters, and sorting across title, version, owner, created/updated dates, review dates, and approval status.
 
 ## Reports
 

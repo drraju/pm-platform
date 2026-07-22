@@ -1,7 +1,16 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ProjectWorkspaceDocuments } from "@/components/projects/project-workspace-documents";
+import {
+  createDefaultDocumentFilters,
+  ProjectWorkspaceDocuments,
+} from "@/components/projects/project-workspace-documents";
 
 const project = {
   id: "project-1",
@@ -9,119 +18,176 @@ const project = {
   status: "active",
 };
 
-describe("ProjectWorkspaceDocuments", () => {
-  it("shows the Google Workspace empty state when not connected", () => {
-    const onConnect = vi.fn();
+const storageProviders = [
+  { label: "Confluence", value: "CONFLUENCE" as const },
+  { label: "Other", value: "OTHER" as const },
+];
 
+const documentTypes = [
+  { id: "type-1", name: "Architecture Diagram" },
+  { id: "type-2", name: "Other" },
+];
+
+const categories = [
+  { id: "category-1", name: "Architecture" },
+  { id: "category-2", name: "Other" },
+];
+
+const owners = [
+  {
+    displayName: "Avery Owner",
+    email: "avery@example.com",
+    firstName: "Avery",
+    id: "user-1",
+    lastName: "Owner",
+  },
+];
+
+const summary = {
+  approved: 1,
+  byCategory: { Architecture: 1 },
+  byStorageProvider: { Confluence: 1 },
+  draft: 0,
+  overdueReviews: 0,
+  totalDocuments: 1,
+  underReview: 0,
+};
+
+describe("ProjectWorkspaceDocuments", () => {
+  it("renders the metadata-only empty state and enterprise summary controls", () => {
     render(
       <ProjectWorkspaceDocuments
+        categories={categories}
         documents={[]}
-        onConnect={onConnect}
-        onCreateWorkspace={vi.fn()}
-        onRefresh={vi.fn()}
-        onSelectFolder={vi.fn()}
+        documentTypes={documentTypes}
+        filters={createDefaultDocumentFilters()}
+        onCreateDocument={vi.fn()}
+        onFiltersChange={vi.fn()}
+        owners={owners}
         project={project}
-        workspace={{
-          connection: null,
-          folders: [],
-          projectFolder: null,
-          provider: "Google Drive",
-          status: "not_connected",
-        }}
+        storageProviders={storageProviders}
+        summary={{ ...summary, totalDocuments: 0 }}
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Connect Google Workspace" }),
-    );
-
     expect(
-      screen.getByRole("heading", {
-        name: "Google Workspace is not connected.",
-      }),
+      screen.getByRole("heading", { name: "External Document Links" }),
     ).toBeVisible();
-    expect(onConnect).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Metadata only")).toBeVisible();
+    expect(screen.getByText("Total Documents")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "No documents found." }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /connect/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("renders connection status, folder tree, and accessible document grid", () => {
-    const onSelectFolder = vi.fn();
+  it("creates document links and opens external URLs securely", async () => {
+    const onCreateDocument = vi.fn();
 
     render(
       <ProjectWorkspaceDocuments
+        categories={categories}
         documents={[
           {
-            folderId: "folder-1",
-            id: "metadata-1",
-            mimeType: "application/pdf",
-            modifiedTime: "2026-07-22T09:00:00.000Z",
-            name: "Architecture Decision Record.pdf",
-            ownerEmail: "owner@example.com",
-            providerDocumentId: "doc-1",
-            version: "12",
-            webUrl: "https://drive.google.com/file/d/doc-1/view",
+            approvalStatus: "APPROVED",
+            category: "Architecture",
+            categoryId: "category-1",
+            createdBy: { displayName: "Casey Creator", email: "casey@example.com", id: "user-2" },
+            description: "Approved platform decision.",
+            documentType: "Architecture Diagram",
+            documentTypeId: "type-1",
+            externalUrl: "https://example.com/adr-015",
+            id: "document-1",
+            linkStatus: "UNKNOWN",
+            nextReviewAt: "2099-07-01T00:00:00.000Z",
+            owner: { displayName: "Avery Owner", email: "avery@example.com", id: "user-1" },
+            ownerId: "user-1",
+            projectId: "project-1",
+            reviewStatus: "CURRENT",
+            storageProvider: "CONFLUENCE",
+            storageProviderLabel: "Confluence",
+            title: "ADR-015",
+            updatedBy: null,
+            version: "1.0",
           },
         ]}
-        onConnect={vi.fn()}
-        onCreateWorkspace={vi.fn()}
-        onRefresh={vi.fn()}
-        onSelectFolder={onSelectFolder}
+        documentTypes={documentTypes}
+        filters={createDefaultDocumentFilters()}
+        onCreateDocument={onCreateDocument}
+        onFiltersChange={vi.fn()}
+        owners={owners}
         project={project}
-        selectedFolderId="folder-1"
-        workspace={{
-          connection: {
-            connectedAccountEmail: "workspace@example.com",
-            driveType: "shared_drive",
-            id: "connection-1",
-            rootFolderId: "root-folder",
-            rootFolderUrl: "https://drive.google.com/drive/folders/root-folder",
-            status: "connected",
-          },
-          folders: [
-            {
-              id: "folder-1",
-              name: "01 Business",
-              webUrl: "https://drive.google.com/business",
-            },
-            {
-              id: "folder-2",
-              name: "02 Architecture",
-              webUrl: "https://drive.google.com/architecture",
-            },
-          ],
-          projectFolder: {
-            connectionId: "connection-1",
-            folderId: "project-folder",
-            folderUrl: "https://drive.google.com/project",
-            projectId: "project-1",
-            projectName: "ERP Modernization",
-            rootFolderId: "root-folder",
-          },
-          provider: "Google Drive",
-          status: "connected",
-        }}
+        storageProviders={storageProviders}
+        summary={summary}
       />,
     );
 
-    expect(screen.getByText("workspace@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Shared Drive")).toBeInTheDocument();
-    expect(
-      screen.getByRole("tree", { name: "Project document folders" }),
-    ).toBeInTheDocument();
-
     const table = screen.getByRole("table", {
-      name: "Google Drive document metadata",
+      name: "External project document links",
     });
-    expect(within(table).getByRole("columnheader", { name: "Name" })).toBeVisible();
-    expect(within(table).getByRole("columnheader", { name: "Open" })).toBeVisible();
     expect(
-      screen.getByRole("link", {
-        name: "Open Architecture Decision Record.pdf in Google Drive",
-      }),
-    ).toHaveAttribute("href", "https://drive.google.com/file/d/doc-1/view");
+      within(table).getByRole("columnheader", { name: "Owner" }),
+    ).toBeVisible();
+    const link = screen.getByRole("link", {
+      name: "Open ADR-015 in a new tab",
+    });
+    expect(link).toHaveAttribute("href", "https://example.com/adr-015");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
 
-    fireEvent.click(screen.getByRole("treeitem", { name: "Open 02 Architecture folder" }));
-    expect(onSelectFolder).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "folder-2" }),
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Delivery Plan" },
+    });
+    fireEvent.change(screen.getByLabelText("External URL"), {
+      target: { value: "https://example.com/delivery-plan" },
+    });
+    fireEvent.change(screen.getAllByLabelText("Owner")[0], {
+      target: { value: "user-1" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: "Add Document Link" }));
+
+    await waitFor(() => {
+      expect(onCreateDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          documentType: "Architecture Diagram",
+          externalUrl: "https://example.com/delivery-plan",
+          ownerId: "user-1",
+          storageProvider: "CONFLUENCE",
+          title: "Delivery Plan",
+        }),
+      );
+    });
+  });
+
+  it("rejects non-http URLs before submission", () => {
+    const onCreateDocument = vi.fn();
+
+    render(
+      <ProjectWorkspaceDocuments
+        categories={categories}
+        documents={[]}
+        documentTypes={documentTypes}
+        filters={createDefaultDocumentFilters()}
+        onCreateDocument={onCreateDocument}
+        onFiltersChange={vi.fn()}
+        owners={owners}
+        project={project}
+        storageProviders={storageProviders}
+        summary={summary}
+      />,
     );
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Unsafe Link" },
+    });
+    fireEvent.change(screen.getByLabelText("External URL"), {
+      target: { value: "javascript:alert(1)" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: "Add Document Link" }));
+
+    expect(screen.getByText("Enter a valid http:// or https:// URL.")).toBeVisible();
+    expect(onCreateDocument).not.toHaveBeenCalled();
   });
 });

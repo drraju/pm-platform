@@ -54,6 +54,25 @@ Large list endpoints should support pagination with total counts. Defaults shoul
 
 Use query parameters for filters and sorting. Document supported fields and ensure indexed backend access for high-volume queries.
 
+## Document Link API
+
+The document API is provider-independent and metadata-only:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /documents/storage-providers` | Returns enum values and friendly labels. |
+| `GET /documents/document-types` | Returns active document type reference values. |
+| `GET /documents/categories` | Returns active category reference values. |
+| `GET /projects/:projectId/documents` | Lists project documents with composed filters and sorting. |
+| `GET /projects/:projectId/documents/summary` | Returns summary counts for dashboard cards. |
+| `POST /documents` | Creates a project document link. |
+| `PATCH /documents/:documentId` | Updates metadata for a document link. |
+| `DELETE /documents/:documentId` | Soft-deletes a document link. |
+
+Supported document filters include storage provider, approval status, document type, category, owner, review status, version, title search, and description search. Supported sorts include title, version, owner, created date, updated date, last reviewed, next review, and approval status.
+
+`externalUrl` must validate as `http://` or `https://`. The API must not accept provider credentials, OAuth state, webhook data, provider-native file IDs, or synchronization payloads.
+
 ## Security
 
 - Require JWT for protected endpoints.

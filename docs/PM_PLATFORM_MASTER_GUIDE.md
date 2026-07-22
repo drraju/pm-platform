@@ -15,7 +15,7 @@ The platform supports:
 - RAID management.
 - Portfolio and executive dashboards.
 - Notifications.
-- Slack and Google Drive integration boundaries.
+- Slack integration boundaries and provider-independent external document links.
 - Enterprise Calendar administration.
 - Docker-based deployment with PostgreSQL, Redis, and MinIO.
 
@@ -31,7 +31,7 @@ flowchart LR
   API --> Redis[(Redis)]
   API --> MinIO[(MinIO)]
   API --> Scheduling[Scheduling Engine]
-  API --> Integrations[Slack / Google Drive Modules]
+  API --> Integrations[Slack / External Document Links]
 ```
 
 Core stack:

@@ -47,7 +47,7 @@ PostgreSQL
 
 External integrations
     |-- Slack
-    `-- Google Drive
+    `-- External document links
 ```
 
 ### Logical Domains
@@ -60,7 +60,13 @@ External integrations
 | Planning | Snapshot schedules, Gantt workspace, critical path, and resource allocation foundations. |
 | RAID | Risks, assumptions, issues, dependencies, comments, and audit history. |
 | Dashboards | User, executive, and portfolio-level summaries. |
-| Integrations | Slack and Google Drive integration surfaces. |
+| Integrations | Slack integration surface and provider-independent external document links. |
+
+### External Document Links
+
+The Documents module is a provider-independent metadata capability. It stores project document title, description, version, owner, approval status, review dates, storage provider enum, document type reference, category reference, and external URL. It never stores provider credentials, OAuth state, API tokens, webhooks, binary content, or synchronization state.
+
+Reference tables seed document types and categories so future administration can add values without code changes. Review status is calculated at runtime from review metadata, while link status is currently `UNKNOWN` and reserved for future broken-link validation.
 
 ### Deployment Architecture
 

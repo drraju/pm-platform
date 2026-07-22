@@ -8,7 +8,7 @@ Features:
 - Kanban
 - Timeline/Gantt
 - Slack integration
-- Google Drive integration
+- External document links
 - PostgreSQL backend
 - Docker deployment
 

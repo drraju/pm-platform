@@ -13,7 +13,7 @@ Completed or current platform areas:
 - RAID: risks, assumptions, issues, dependencies, comments, history.
 - Portfolio: executive and portfolio summaries.
 - Notifications.
-- Integrations: Slack and Google Drive stubs/modules.
+- Integrations: Slack boundary plus provider-independent external document links.
 - Enterprise Calendar: domain model, REST API, and administration UI.
 
 ## Architectural North Star
@@ -33,4 +33,3 @@ The approved roadmap moves from Enterprise Calendar foundations into resource ma
 | Reviewability | Features are designed, implemented, tested, and committed one at a time. |
 | Operational clarity | Docker, health checks, migrations, and tests are part of the architecture. |
 | AI readiness | Documentation and prompts should make future assistant work safer and more consistent. |
-

@@ -43,13 +43,12 @@ external providers.
 | Workspace | Knowledge container for a project. | Belongs to Project; has root Folder; has many Documents. |
 | Project | Existing delivery project aggregate. | Has zero or one active Workspace. |
 | Folder | Logical document hierarchy node. | Belongs to Workspace; optional parent Folder; has child Folders and Documents. |
-| Document | Metadata record for a provider-hosted document. | Belongs to Workspace, Project, Folder, Category, Provider, StorageConnection; has versions, tags, links, permissions, indexes. |
+| Document | Metadata record for an externally hosted document link. | Belongs to Project; stores title, category, type, version, status, storage provider label, and URL. |
 | DocumentVersion | Version metadata for a Document. | Belongs to Document; may reference provider version id and checksum. |
 | DocumentCategory | Controlled taxonomy such as Business, Architecture, Delivery, Testing, Release, Operations. | Used by Documents and Templates. |
 | DocumentTag | Flexible project or enterprise tag. | Many-to-many with Documents. |
 | DocumentLink | Relationship between documents or external URLs. | Source Document to target Document or external URL. |
-| ExternalStorageProvider | Provider definition such as Google Drive, SharePoint, OneDrive, S3, MinIO, Local. | Has many StorageConnections and provider capability metadata. |
-| StorageConnection | Configured connection to a provider for a tenant, project, or workspace. | Belongs to Provider; used by Workspaces, Folders, and Documents. |
+| ExternalStorageProvider | Provider label such as Google Drive, SharePoint, OneDrive, Confluence, GitHub, Dropbox, Network Share, or Other. | Used for classification only; PM Platform does not authenticate with storage providers. |
 | DocumentPermission | Document-level permission grant or restriction. | Belongs to Document; references user, role, team, customer, or project membership scope. |
 | KnowledgeIndex | Search and future AI indexing metadata. | Belongs to Document and optionally DocumentVersion. |
 | DocumentTemplate | Reusable document template metadata. | Belongs to Category and Provider; can be applied to Folder or Workspace blueprint. |
@@ -71,7 +70,6 @@ Document many --- 1 Workspace
 Document many --- 0..1 Folder
 Document many --- 0..1 DocumentCategory
 Document many --- 1 ExternalStorageProvider
-Document many --- 0..1 StorageConnection
 Document 1 --- many DocumentVersions
 Document many --- many DocumentTags
 Document 1 --- many DocumentLinks
@@ -80,7 +78,6 @@ Document 1 --- many KnowledgeIndex records
 
 DocumentTemplate many --- 0..1 DocumentCategory
 DocumentTemplate many --- 1 ExternalStorageProvider
-StorageConnection many --- 1 ExternalStorageProvider
 ```
 
 ## Document Metadata Model
@@ -94,10 +91,8 @@ document. The model must not include binary file content.
 | workspaceId | UUID | Yes | Knowledge workspace that owns the document. |
 | projectId | UUID | Yes | Project context for authorization and navigation. |
 | folderId | UUID nullable | No | Logical PM Platform folder. |
-| provider | enum | Yes | Provider key such as google_drive, sharepoint, onedrive, s3, minio, local. |
-| providerDocumentId | string | Yes | Provider-native file or document id. |
-| providerFolderId | string nullable | No | Provider-native folder id for the containing folder. |
-| storageConnectionId | UUID nullable | No | Configured provider connection used for access. |
+| storageProvider | enum/string | Yes | Configurable provider label such as Google Drive, SharePoint, OneDrive, Confluence, GitHub, Dropbox, Network Share, or Other. |
+| externalUrl | string | Yes | External URL opened in a new browser tab. |
 | title | string | Yes | Display title. |
 | description | string nullable | No | Business description or abstract. |
 | categoryId | UUID nullable | No | Controlled category reference. |
@@ -452,9 +447,8 @@ Potential future capabilities:
 | Feature | Description | Dependencies | Estimated Complexity |
 | --- | --- | --- | --- |
 | 1.4.1 Knowledge Domain | Define domain entities, metadata model, lifecycle, categories, tags, permissions, and templates. | ADR-015 | High |
-| 1.4.2 Storage Provider Framework | Define provider registry, capability model, connection metadata, and provider interface contracts. | 1.4.1 | High |
-| 1.4.3 Google Drive Integration | Implement first provider adapter, authentication, folder/document operations, and reconciliation policy. | 1.4.2, security review | High |
-| 1.4.4 Document Workspace | Add project document workspace UX, configurable folder blueprint, and document navigation. | 1.4.1, 1.4.2 | High |
+| 1.4.2 External Document Links | Store provider-independent document metadata and external URLs without storage-provider authentication. | 1.4.1 | Medium |
+| 1.4.3 Document Workspace | Add project document workspace UX for metadata entry and external URL navigation. | 1.4.2 | Medium |
 | 1.4.5 Metadata APIs | Add API layer for metadata-only workspace, folder, document, version, category, tag, and permission operations. | 1.4.1 | Medium |
 | 1.4.6 Search | Implement metadata search and provider search routing with permission filtering. | 1.4.2, 1.4.5 | Medium |
 | 1.4.7 Versioning | Add document version registration, supersession, comparison metadata, and provider revision tracking. | 1.4.5 | Medium |

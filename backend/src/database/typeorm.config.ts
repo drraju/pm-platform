@@ -2,13 +2,13 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
 import { EnterpriseCalendarException } from '../modules/calendars/entities/enterprise-calendar-exception.entity';
 import { EnterpriseCalendar } from '../modules/calendars/entities/enterprise-calendar.entity';
+import {
+  DocumentCategory,
+  DocumentType,
+  ProjectDocument,
+} from '../modules/documents/entities';
 import { Notification } from '../modules/notifications/entities/notification.entity';
 import { PlanningScheduleSnapshot } from '../modules/planning/entities/planning-schedule-snapshot.entity';
-import {
-  GoogleDriveConnection,
-  GoogleDriveDocumentMetadata,
-  GoogleDriveProjectFolder,
-} from '../integrations/providers/google-drive/entities';
 import { PlanningTaskSchedule } from '../modules/planning/entities/planning-task-schedule.entity';
 import { PortfolioDependency } from '../modules/planning/entities/portfolio-dependency.entity';
 import { ResourceAllocation } from '../modules/planning/entities/resource-allocation.entity';
@@ -37,7 +37,9 @@ import { RolePermission } from '../modules/users/entities/role-permission.entity
 import { Role } from '../modules/users/entities/role.entity';
 import { User } from '../modules/users/entities/user.entity';
 
-export const databaseEntities: Function[] = [
+type EntityConstructor = abstract new (...args: never[]) => unknown;
+
+export const databaseEntities: EntityConstructor[] = [
   User,
   Role,
   Permission,
@@ -62,9 +64,9 @@ export const databaseEntities: Function[] = [
   ResourceCapacity,
   PlanningScheduleSnapshot,
   ResourceWorkloadSnapshot,
-  GoogleDriveConnection,
-  GoogleDriveProjectFolder,
-  GoogleDriveDocumentMetadata,
+  DocumentCategory,
+  DocumentType,
+  ProjectDocument,
   Risk,
   Issue,
   Assumption,

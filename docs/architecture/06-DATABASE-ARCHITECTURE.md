@@ -36,7 +36,14 @@ Rules:
 | RAID | `risks`, `issues`, `assumptions`, `dependencies`, `raid_comments`, `raid_history_entries` |
 | Planning | `planning_schedule_snapshots`, `planning_task_schedules`, `resource_capacities`, `resource_allocations`, `resource_workload_snapshots`, `portfolio_dependencies` |
 | Calendars | `enterprise_calendars`, `enterprise_calendar_exceptions` |
+| Documents | `project_documents`, `document_types`, `document_categories` |
 | Notifications | `notifications` |
+
+## Document Metadata Schema
+
+Documents are metadata-only records. `project_documents` stores project scope, title, description, version, owner, audit user IDs, approval status, review dates, storage provider enum, link status, and external URL. `document_types` and `document_categories` are reference tables seeded by migration and designed for future administration.
+
+External document URLs are application-validated as `http://` or `https://` only. PM Platform does not persist OAuth state, provider tokens, webhook cursors, synchronization checkpoints, provider-native file IDs, or binary content.
 
 ## Audit and Soft Delete
 
@@ -70,4 +77,3 @@ No database views or materialized views are currently documented in the schema. 
 ## Future Multi-Tenancy
 
 The current codebase does not have a general organization table or tenant column across all domain entities. Enterprise Calendar API work currently uses a default organization boundary at the service/API layer. SaaS multi-tenancy is a future roadmap item and will require an explicit tenant model, migration strategy, authorization policy, and data isolation design.
-

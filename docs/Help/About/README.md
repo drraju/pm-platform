@@ -28,7 +28,7 @@ PM Platform is a self-hosted enterprise project management platform for project 
 | Planning | Stabilize schedule calculations, dependency validation, critical path, and performance. |
 | Resource Management | Add capacity planning, allocations, utilization views, and leveling workflows. |
 | Portfolio Planning | Add cross-project dependencies, roadmap views, and scenario planning. |
-| Integrations | Implement Slack and Google Drive workflows beyond current backend shells. |
+| Integrations | Keep Slack separate and use provider-independent external document links for project documents. |
 | Notifications | Add notification delivery, read state, and event-driven alerts. |
 | AI Project Manager | Explore AI-assisted planning, risk detection, status summarization, and delivery recommendations. |
 

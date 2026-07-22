@@ -45,7 +45,7 @@ The feature matrix provides a shared view of platform maturity. It distinguishes
 | Resource Management | Planned | Depends on planning engine stabilization. |
 | Portfolio planning | Future | Cross-project roadmap and scenario planning. |
 | Slack integration | Foundation | Integration surface exists; workflow depth may expand. |
-| Google Drive integration | Foundation | Integration surface exists; document workflow depth may expand. |
+| External document links | Foundation | Project documents store metadata and external URLs without provider authentication. |
 | PostgreSQL backend | Complete | TypeORM and PostgreSQL persistence. |
 | Docker deployment | Complete | Docker Compose deployment path. |
 | AI-assisted project management | Future | Long-term roadmap capability. |

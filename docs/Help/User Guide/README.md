@@ -55,7 +55,7 @@ Use this guide to:
 | Users | Beta | Limited | User administration is available to roles with user or role management permissions. |
 | Notifications | Preview | No | Notifications page exists as an empty-state placeholder. |
 | Slack | Preview | No | Backend shell exists; no usable workflow or frontend integration is implemented. |
-| Google Drive | Preview | No | Backend shell exists; no usable workflow or frontend integration is implemented. |
+| External document links | Beta | Yes | Project documents store metadata and external URLs only; PM Platform does not authenticate with storage providers. |
 | Kanban | Planned | No | Project Kanban route redirects to Tasks. |
 | Project Timeline route | Planned | No | Project Timeline route redirects to Projects; use Planning Workspace for the current Gantt view. |
 
@@ -387,7 +387,6 @@ Screenshot placeholder:
 | Are RAID dependencies the same as schedule dependencies? | No. RAID dependencies are governance records; Planning Workspace dependencies are schedule links. |
 | Can I edit every project? | Editing depends on role permissions and project membership context. |
 | Can contributors update tasks? | Yes, contributors can update assigned task details where permissions allow. |
-| Are Slack and Google Drive available? | Not yet. Backend shells exist, but usable integration workflows are not implemented. |
+| Are Slack and external document links available? | Slack is not yet a usable workflow. External document links are available for project document metadata and URLs without storage-provider authentication. |
 | Are notifications available? | The Notifications page exists as an empty-state placeholder. |
 | Where should beta issues be logged? | Use the feedback template in the [UAT Test Guide](../../releases/UAT-v1.0.0-beta2-Test-Guide.md) or the active UAT bug log process. |
-

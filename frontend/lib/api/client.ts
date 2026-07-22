@@ -428,55 +428,83 @@ export type ApiPortfolioUpcomingMilestone = {
   dueDate: string;
 };
 
-export type ApiGoogleDriveConnection = {
-  connectedAccountEmail: string;
-  driveId?: string | null;
-  driveName?: string | null;
-  driveType: "my_drive" | "shared_drive";
-  id: string;
-  lastConnectedAt?: string | null;
-  rootFolderId?: string | null;
-  rootFolderUrl?: string | null;
-  status: string;
-};
+export type ApiDocumentStorageProvider =
+  | "GOOGLE_DRIVE"
+  | "SHAREPOINT"
+  | "ONEDRIVE"
+  | "CONFLUENCE"
+  | "GITHUB"
+  | "DROPBOX"
+  | "NETWORK_SHARE"
+  | "OTHER";
 
-export type ApiGoogleDocumentFolder = {
+export type ApiDocumentApprovalStatus =
+  | "DRAFT"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "SUPERSEDED"
+  | "ARCHIVED";
+
+export type ApiDocumentReviewStatus =
+  | "CURRENT"
+  | "REVIEW_DUE_SOON"
+  | "OVERDUE"
+  | "NEVER_REVIEWED";
+
+export type ApiDocumentLinkStatus = "UNKNOWN";
+
+export type ApiDocumentReference = {
   id: string;
   name: string;
-  webUrl: string;
 };
 
-export type ApiGoogleProjectFolder = {
-  connectionId: string;
-  folderId: string;
-  folderUrl?: string | null;
+export type ApiStorageProviderReference = {
+  label: string;
+  value: ApiDocumentStorageProvider;
+};
+
+export type ApiDocumentUserSummary = {
+  displayName: string;
+  email: string;
+  id: string;
+};
+
+export type ApiProjectDocument = {
+  approvalStatus: ApiDocumentApprovalStatus;
+  category?: string | null;
+  categoryId?: string | null;
+  createdAt?: string;
+  createdBy?: ApiDocumentUserSummary | null;
+  createdById?: string | null;
+  description?: string | null;
+  documentType: string;
+  documentTypeId?: string;
+  externalUrl: string;
+  id: string;
+  lastReviewedAt?: string | null;
+  linkStatus: ApiDocumentLinkStatus;
+  nextReviewAt?: string | null;
+  owner?: ApiDocumentUserSummary | null;
+  ownerId?: string | null;
   projectId: string;
-  projectName: string;
-  rootFolderId: string;
-};
-
-export type ApiProjectDocumentWorkspace = {
-  connection: ApiGoogleDriveConnection | null;
-  folders: ApiGoogleDocumentFolder[];
-  projectFolder: ApiGoogleProjectFolder | null;
-  provider: string;
-  status: "connected" | "not_connected";
-};
-
-export type ApiGoogleDocumentMetadata = {
-  createdTime?: string | null;
-  folderId: string;
-  id: string;
-  md5Checksum?: string | null;
-  mimeType?: string | null;
-  modifiedTime?: string | null;
-  name: string;
-  ownerEmail?: string | null;
-  projectId?: string | null;
-  providerDocumentId: string;
-  size?: string | null;
+  reviewStatus: ApiDocumentReviewStatus;
+  storageProvider: ApiDocumentStorageProvider;
+  storageProviderLabel: string;
+  title: string;
+  updatedAt?: string;
+  updatedBy?: ApiDocumentUserSummary | null;
+  updatedById?: string | null;
   version?: string | null;
-  webUrl?: string | null;
+};
+
+export type ApiProjectDocumentSummary = {
+  approved: number;
+  byCategory: Record<string, number>;
+  byStorageProvider: Record<string, number>;
+  draft: number;
+  overdueReviews: number;
+  totalDocuments: number;
+  underReview: number;
 };
 
 type RequestOptions = RequestInit & {
@@ -668,58 +696,103 @@ export function getPlanningWorkspace(projectId: string) {
   );
 }
 
-export function getProjectDocumentWorkspace(projectId: string) {
-  return apiRequest<ApiProjectDocumentWorkspace>(
-    `/integrations/google/workspace/${projectId}`,
+export function getDocumentStorageProviders() {
+  return apiRequest<ApiStorageProviderReference[]>(
+    "/documents/storage-providers",
   );
 }
 
-export function connectGoogleWorkspace() {
-  return apiRequest<{ authorizationUrl: string; state: string }>(
-    "/integrations/google/connect",
-    {
-      method: "POST",
-    },
+export function getDocumentTypes() {
+  return apiRequest<ApiDocumentReference[]>("/documents/document-types");
+}
+
+export function getDocumentCategories() {
+  return apiRequest<ApiDocumentReference[]>("/documents/categories");
+}
+
+export function getProjectDocumentSummary(projectId: string) {
+  return apiRequest<ApiProjectDocumentSummary>(
+    `/projects/${projectId}/documents/summary`,
   );
 }
 
-export function createGoogleProjectFolder(input: {
-  connectionId?: string;
-  createdByUserId?: string;
-  projectId: string;
-  projectName: string;
-}) {
-  return apiRequest<ApiGoogleProjectFolder>(
-    "/integrations/google/project-folder",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
-}
-
-export function getGoogleDocuments(input: {
-  connectionId?: string;
-  folderId?: string;
-  projectId?: string;
-}) {
+export function getProjectDocuments(
+  projectId: string,
+  input: {
+    approvalStatus?: string;
+    category?: string;
+    description?: string;
+    documentType?: string;
+    ownerId?: string;
+    reviewStatus?: string;
+    sortBy?: string;
+    sortDirection?: "ASC" | "DESC";
+    storageProvider?: string;
+    title?: string;
+    version?: string;
+  } = {},
+) {
   const params = new URLSearchParams();
-  if (input.connectionId) {
-    params.set("connectionId", input.connectionId);
+  if (input.approvalStatus) {
+    params.set("approvalStatus", input.approvalStatus);
   }
-  if (input.folderId) {
-    params.set("folderId", input.folderId);
+  if (input.category) {
+    params.set("category", input.category);
   }
-  if (input.projectId) {
-    params.set("projectId", input.projectId);
+  if (input.description) {
+    params.set("description", input.description);
+  }
+  if (input.documentType) {
+    params.set("documentType", input.documentType);
+  }
+  if (input.ownerId) {
+    params.set("ownerId", input.ownerId);
+  }
+  if (input.reviewStatus) {
+    params.set("reviewStatus", input.reviewStatus);
+  }
+  if (input.sortBy) {
+    params.set("sortBy", input.sortBy);
+  }
+  if (input.sortDirection) {
+    params.set("sortDirection", input.sortDirection);
+  }
+  if (input.storageProvider) {
+    params.set("storageProvider", input.storageProvider);
+  }
+  if (input.title) {
+    params.set("title", input.title);
+  }
+  if (input.version) {
+    params.set("version", input.version);
   }
 
   const queryString = params.toString();
-  return apiRequest<ApiGoogleDocumentMetadata[]>(
+  return apiRequest<ApiProjectDocument[]>(
     queryString
-      ? `/integrations/google/documents?${queryString}`
-      : "/integrations/google/documents",
+      ? `/projects/${projectId}/documents?${queryString}`
+      : `/projects/${projectId}/documents`,
   );
+}
+
+export function createProjectDocument(input: {
+  approvalStatus?: ApiDocumentApprovalStatus;
+  category?: string | null;
+  description?: string | null;
+  documentType: string;
+  externalUrl: string;
+  lastReviewedAt?: string | null;
+  nextReviewAt?: string | null;
+  ownerId?: string | null;
+  projectId: string;
+  storageProvider: ApiDocumentStorageProvider;
+  title: string;
+  version?: string | null;
+}) {
+  return apiRequest<ApiProjectDocument>("/documents", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function regeneratePlanningWorkspace(projectId: string) {

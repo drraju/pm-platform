@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed.
+Superseded by the External Document Links architecture.
+
+Refined by the Enterprise Readiness document architecture stage: document links now use typed storage-provider values, configurable document type/category reference data, user ownership and audit references, approval lifecycle metadata, runtime review status, and `UNKNOWN` link status for future validation.
 
 ## Date
 
@@ -21,10 +23,10 @@ addition to tasks, RAID records, schedules, teams, and dashboards.
 The platform must support business, architecture, delivery, testing, release,
 operations, and provider-hosted documents. It must not store binary files in
 PostgreSQL. PostgreSQL stores metadata, lifecycle, permission, indexing, and
-relationship records only. Document content remains in external storage
-providers such as Google Drive, SharePoint, OneDrive, Amazon S3, MinIO, or
-local storage. Google Drive is the first intended provider, but the domain and
-application architecture must stay provider agnostic.
+relationship records only. Document content remains outside PM Platform. The
+current product architecture stores provider-independent document metadata and
+external URLs only, and it does not authenticate with external storage
+providers.
 
 The knowledge platform also becomes the foundation for future AI retrieval,
 RAG, document summarization, comparison, and agentic delivery assistance. This
@@ -38,11 +40,8 @@ Documents may exist outside the platform, but PM Platform has no canonical
 metadata, folder structure, lifecycle, provider abstraction, version model,
 document permission policy, search boundary, or AI-ready knowledge index.
 
-Without a provider-agnostic architecture, the first document integration would
-couple project knowledge directly to Google Drive behavior and make future
-SharePoint, OneDrive, S3, MinIO, or local storage support difficult. Without a
-metadata-first model, future AI features would either require unsafe direct
-provider access or inconsistent document discovery.
+Without a metadata-first model, future AI features would either require unsafe
+direct provider access or inconsistent document discovery.
 
 ## Goals
 
@@ -52,8 +51,8 @@ provider access or inconsistent document discovery.
   and lifecycle states.
 - Store document metadata in PostgreSQL while keeping binary files and document
   bodies in external providers.
-- Keep provider operations behind an abstraction that can support Google Drive
-  first and additional providers later.
+- Keep storage-provider labels configurable while avoiding provider
+  authentication or SDK dependencies in PM Platform.
 - Support configurable default project folder blueprints.
 - Support metadata search, provider search, and future semantic search as
   separate responsibilities.
@@ -66,8 +65,7 @@ provider access or inconsistent document discovery.
 
 - No binary document storage in PostgreSQL.
 - No document content extraction implementation.
-- No Google Drive, SharePoint, S3, MinIO, OneDrive, or local provider adapter
-  implementation.
+- No external storage provider adapter implementation.
 - No database migration, API, worker, UI, queue, or production code.
 - No AI model calls, embeddings, vector database, RAG pipeline, or agent
   executor.
@@ -105,11 +103,11 @@ Provider metadata is authoritative for:
 - Provider-native modified timestamps when returned by the provider.
 - Provider-native sharing state outside PM Platform control.
 
-### 3. Provider adapters are replaceable infrastructure
+### 3. External storage providers are metadata labels
 
-Application services depend on a storage provider interface, not on Google
-Drive or any other provider SDK. Provider-specific adapters live in
-infrastructure and translate PM Platform commands into provider operations.
+Application services store the selected storage provider label and an external
+URL. PM Platform does not exchange tokens, call provider SDKs, or synchronize
+provider content.
 
 ### 4. Folder blueprints are configurable
 
@@ -161,28 +159,20 @@ External providers store:
 
 ## Provider Strategy
 
-Google Drive is the first intended provider. The domain remains provider
-agnostic through an `ExternalStorageProvider` model and a storage provider
-interface. Each provider adapter declares capability support, authentication
-type, identifier format, and operation behavior.
+The active strategy is provider-independent external links. PM Platform records
+the user-selected provider label and opens the external URL in a new browser
+tab.
 
-Provider capability differences are expected. For example, local storage may
-not support provider-native sharing, S3 may not support document preview
-without a separate preview service, and Google Drive may expose native Docs
-metadata differently from uploaded binary files.
-
-The application layer must treat provider operations as fallible, auditable,
-and eventually consistent with PM Platform metadata.
+Provider capability differences remain outside PM Platform because the platform
+does not call provider APIs or manage provider-native permissions.
 
 ## Security
 
 - Access to project documents requires project membership, platform role
   permissions, and document-level permission checks.
-- Provider credentials are scoped to storage connections and must be encrypted
-  or delegated to a secure secret store before implementation.
+- No provider credentials, callbacks, tokens, or webhook secrets are stored for
+  document links.
 - PM Platform permissions do not replace provider-native authorization.
-- Provider callbacks, tokens, and webhook events must be verified before
-  mutating metadata.
 - AI visibility is denied unless explicitly enabled by document policy.
 - Deleted, archived, rejected, or superseded documents must not be retrieved by
   future AI features unless an explicit audit or comparison use case allows it.
@@ -209,7 +199,7 @@ implementation.
 
 | Risk | Mitigation |
 | --- | --- |
-| Provider lock-in through Google Drive-first implementation | Keep provider SDKs behind infrastructure adapters and test against the interface contract. |
+| Provider lock-in through provider-specific implementations | Store provider labels and external URLs only; do not depend on provider SDKs. |
 | Metadata drift between PM Platform and provider | Use provider refresh, checksum, modified date, and reconciliation metadata. |
 | Inconsistent permissions between provider and platform | Treat PM Platform permissions as required but not sufficient; provider access failures remain possible and auditable. |
 | AI exposure of sensitive documents | Default `aiVisible` to false or policy-controlled and enforce permission filtering before retrieval. |
@@ -222,7 +212,7 @@ implementation.
 | Alternative | Reason rejected |
 | --- | --- |
 | Store binary files in PostgreSQL | Increases database size, backup complexity, and operational risk; violates the metadata-only requirement. |
-| Build directly on Google Drive entities | Creates provider lock-in and makes SharePoint, OneDrive, S3, MinIO, and local storage harder to support. |
+| Build directly on provider-specific entities | Creates provider lock-in and makes provider-independent document links harder to support. |
 | Treat provider folders as the only hierarchy | Prevents PM Platform from maintaining configurable project blueprints and provider-independent navigation. |
 | Use provider search only | Cannot support consistent metadata filters, lifecycle filtering, permission filtering, or future semantic search. |
 | Make all approved documents AI-visible | Creates privacy and governance risk; AI visibility must be explicit and permission-aware. |

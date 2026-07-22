@@ -9,9 +9,8 @@ import { createTypeOrmOptions } from './database/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 import { HealthModule } from './modules/health/health.module';
-import { IntegrationPlatformModule } from './integrations';
-import { GoogleDriveModule } from './modules/integrations/google-drive/google-drive.module';
 import { SlackModule } from './modules/integrations/slack/slack.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PlanningModule } from './modules/planning/planning.module';
@@ -38,11 +37,10 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     RaidModule,
     DashboardModule,
     PortfolioModule,
+    DocumentsModule,
     HealthModule,
-    IntegrationPlatformModule,
     NotificationsModule,
     SlackModule,
-    GoogleDriveModule,
   ],
   controllers: [AppController],
   providers: [

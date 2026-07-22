@@ -15,7 +15,8 @@ This document describes the current implementation plus roadmap items that are e
 | RAID | Risk, Issue, Assumption, Dependency, RaidComment, RaidHistoryEntry | Delivery risk and governance tracking. |
 | Portfolio | PortfolioSummary DTO/service | Cross-project summary view. |
 | Notifications | Notification | User notifications. |
-| Integrations | SlackIntegration, GoogleDriveIntegration stubs | Integration module boundaries. |
+| Documents | ProjectDocument | Project-scoped document metadata and external links without storage-provider authentication. |
+| Integrations | SlackIntegration stub | Non-document integration boundary. |
 
 ## Relationships
 

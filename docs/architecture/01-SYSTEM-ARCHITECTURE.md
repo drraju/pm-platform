@@ -12,7 +12,7 @@ flowchart LR
   API --> Redis[(Redis)]
   API --> MinIO[(MinIO)]
   API --> Slack[Slack Integration Module]
-  API --> Drive[Google Drive Integration Module]
+  API --> Docs[External Document Links]
 ```
 
 ## Runtime Services
@@ -39,6 +39,7 @@ flowchart TB
   Portfolio[Portfolio]
   Dashboard[Dashboards]
   Notifications[Notifications]
+  Documents[External Document Links]
   Integrations[Integrations]
 
   Projects --> Tasks
@@ -50,6 +51,7 @@ flowchart TB
   Dashboard --> Projects
   Auth --> Projects
   Auth --> Planning
+  Projects --> Documents
 ```
 
 ## API Shape
@@ -97,4 +99,3 @@ Potential future integration points:
 - Schedule quality review.
 
 AI must not become scheduling authority.
-

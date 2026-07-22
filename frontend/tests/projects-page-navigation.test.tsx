@@ -462,19 +462,58 @@ describe("Projects List navigation", () => {
     window.history.pushState({}, "", "/projects/project-123/documents");
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        headers: { get: vi.fn(() => null) },
-        ok: true,
-        status: 200,
-        text: vi.fn().mockResolvedValue(
-          JSON.stringify({
-            connection: null,
-            folders: [],
-            projectFolder: null,
-            provider: "Google Drive",
-            status: "not_connected",
-          }),
-        ),
+      vi.fn((url: string) => {
+        let responseBody: unknown = [
+          {
+            approvalStatus: "APPROVED",
+            category: "Project Management",
+            categoryId: "category-1",
+            documentType: "Project Charter",
+            documentTypeId: "type-1",
+            externalUrl: "https://example.com/delivery-plan",
+            id: "document-1",
+            linkStatus: "UNKNOWN",
+            owner: null,
+            projectId: "project-123",
+            reviewStatus: "NEVER_REVIEWED",
+            storageProvider: "SHAREPOINT",
+            storageProviderLabel: "SharePoint",
+            title: "Delivery Plan",
+          },
+        ];
+        if (url.endsWith("/documents/storage-providers")) {
+          responseBody = [
+            { label: "SharePoint", value: "SHAREPOINT" },
+            { label: "Other", value: "OTHER" },
+          ];
+        }
+        if (url.endsWith("/documents/document-types")) {
+          responseBody = [{ id: "type-1", name: "Project Charter" }];
+        }
+        if (url.endsWith("/documents/categories")) {
+          responseBody = [{ id: "category-1", name: "Project Management" }];
+        }
+        if (url.endsWith("/users/assignable")) {
+          responseBody = [];
+        }
+        if (url.endsWith("/documents/summary")) {
+          responseBody = {
+            approved: 1,
+            byCategory: { "Project Management": 1 },
+            byStorageProvider: { SharePoint: 1 },
+            draft: 0,
+            overdueReviews: 0,
+            totalDocuments: 1,
+            underReview: 0,
+          };
+        }
+
+        return Promise.resolve({
+          headers: { get: vi.fn(() => null) },
+          ok: true,
+          status: 200,
+          text: vi.fn().mockResolvedValue(JSON.stringify(responseBody)),
+        });
       }),
     );
 
@@ -482,11 +521,11 @@ describe("Projects List navigation", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Google Workspace is not connected.",
+        name: "External Document Links",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Connect Google Workspace" }),
+      screen.getByRole("link", { name: "Open Delivery Plan in a new tab" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Documents" })).toHaveAttribute(
       "aria-current",

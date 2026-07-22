@@ -160,7 +160,7 @@ is blocked, what changed, what is critical, and what needs a decision.
 ### Integrations
 
 - Slack workflows.
-- Google Drive workflows.
+- External document links across configured storage providers.
 - Future enterprise authentication and notification channels.
 
 ## Product Differentiators

@@ -1,49 +1,81 @@
 "use client";
 
-import React from "react";
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ErrorState } from "@/components/foundation";
 import {
   ProjectLayout,
   ProjectLayoutLoadingState,
 } from "@/components/project";
-import { ProjectWorkspaceDocuments } from "@/components/projects/project-workspace-documents";
+import {
+  createDefaultDocumentFilters,
+  ProjectWorkspaceDocuments,
+  type DocumentFilters,
+} from "@/components/projects/project-workspace-documents";
 import { getProject, type ApiProjectDetails } from "@/features/projects";
 import {
-  connectGoogleWorkspace,
-  createGoogleProjectFolder,
-  getGoogleDocuments,
-  getProjectDocumentWorkspace,
-  getStoredSessionUser,
-  type ApiGoogleDocumentFolder,
-  type ApiGoogleDocumentMetadata,
-  type ApiProjectDocumentWorkspace,
+  createProjectDocument,
+  getAssignableUsers,
+  getDocumentCategories,
+  getDocumentStorageProviders,
+  getDocumentTypes,
+  getProjectDocuments,
+  getProjectDocumentSummary,
+  type ApiAssignableUser,
+  type ApiDocumentReference,
+  type ApiDocumentStorageProvider,
+  type ApiProjectDocument,
+  type ApiProjectDocumentSummary,
+  type ApiStorageProviderReference,
 } from "@/lib/api/client";
 
 export default function ProjectDocumentsPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
-  const [documents, setDocuments] = useState<ApiGoogleDocumentMetadata[]>([]);
+  const [categories, setCategories] = useState<ApiDocumentReference[]>([]);
+  const [documents, setDocuments] = useState<ApiProjectDocument[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<ApiDocumentReference[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [project, setProject] = useState<ApiProjectDetails | null>(null);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [workspace, setWorkspace] = useState<ApiProjectDocumentWorkspace | null>(
-    null,
+  const [filters, setFilters] = useState<DocumentFilters>(() =>
+    createDefaultDocumentFilters(),
   );
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [owners, setOwners] = useState<ApiAssignableUser[]>([]);
+  const [project, setProject] = useState<ApiProjectDetails | null>(null);
+  const [storageProviders, setStorageProviders] = useState<
+    ApiStorageProviderReference[]
+  >([]);
+  const [summary, setSummary] = useState<ApiProjectDocumentSummary | null>(null);
 
   const loadWorkspace = useCallback(async () => {
     setError(null);
     setIsLoading(true);
     try {
-      const [projectDetails, documentWorkspace] = await Promise.all([
+      const [
+        projectDetails,
+        projectDocuments,
+        providers,
+        types,
+        categoryValues,
+        assignableUsers,
+        documentSummary,
+      ] = await Promise.all([
         getProject(projectId),
-        getProjectDocumentWorkspace(projectId),
+        getProjectDocuments(projectId, compactFilters(filters)),
+        getDocumentStorageProviders(),
+        getDocumentTypes(),
+        getDocumentCategories(),
+        getAssignableUsers(),
+        getProjectDocumentSummary(projectId),
       ]);
       setProject(projectDetails);
-      setWorkspace(documentWorkspace);
+      setDocuments(projectDocuments);
+      setStorageProviders(providers);
+      setDocumentTypes(types);
+      setCategories(categoryValues);
+      setOwners(assignableUsers);
+      setSummary(documentSummary);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -53,95 +85,53 @@ export default function ProjectDocumentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [filters, projectId]);
 
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
 
-  async function handleConnect() {
+  async function handleCreateDocument(input: {
+    approvalStatus: ApiProjectDocument["approvalStatus"];
+    category: string;
+    description: string;
+    documentType: string;
+    externalUrl: string;
+    lastReviewedAt: string;
+    nextReviewAt: string;
+    ownerId: string;
+    storageProvider: ApiDocumentStorageProvider;
+    title: string;
+    version: string;
+  }) {
     setError(null);
+    setIsSaving(true);
     try {
-      const result = await connectGoogleWorkspace();
-      if (result.authorizationUrl) {
-        window.location.assign(result.authorizationUrl);
-      }
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to start Google Workspace connection",
-      );
-    }
-  }
-
-  async function handleCreateWorkspace() {
-    if (!project) {
-      return;
-    }
-
-    setError(null);
-    setIsRefreshing(true);
-    try {
-      await createGoogleProjectFolder({
-        connectionId: workspace?.connection?.id,
-        createdByUserId: getStoredSessionUser()?.userId,
+      await createProjectDocument({
+        approvalStatus: input.approvalStatus,
+        category: input.category || null,
+        description: input.description || null,
+        documentType: input.documentType,
+        externalUrl: input.externalUrl,
+        lastReviewedAt: input.lastReviewedAt || null,
+        nextReviewAt: input.nextReviewAt || null,
+        ownerId: input.ownerId || null,
         projectId,
-        projectName: project.name,
+        storageProvider: input.storageProvider,
+        title: input.title,
+        version: input.version || null,
       });
       await loadWorkspace();
     } catch (requestError) {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to create Google Drive project workspace",
+          : "Unable to create document link",
       );
+      throw requestError;
     } finally {
-      setIsRefreshing(false);
+      setIsSaving(false);
     }
-  }
-
-  async function loadDocuments(folder: ApiGoogleDocumentFolder, force = false) {
-    if (!workspace?.connection || (!force && folder.id === selectedFolderId)) {
-      return;
-    }
-
-    setError(null);
-    setIsRefreshing(true);
-    setSelectedFolderId(folder.id);
-    try {
-      setDocuments(
-        await getGoogleDocuments({
-          connectionId: workspace.connection.id,
-          folderId: folder.id,
-          projectId,
-        }),
-      );
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to load Google Drive documents",
-      );
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
-
-  async function handleSelectFolder(folder: ApiGoogleDocumentFolder) {
-    await loadDocuments(folder);
-  }
-
-  async function handleRefresh() {
-    if (workspace?.folders.length) {
-      const selectedFolder =
-        workspace.folders.find((folder) => folder.id === selectedFolderId) ??
-        workspace.folders[0];
-      await loadDocuments(selectedFolder, true);
-      return;
-    }
-
-    await loadWorkspace();
   }
 
   if (isLoading) {
@@ -153,30 +143,29 @@ export default function ProjectDocumentsPage() {
     name: "Project Documents",
     status: "active",
   };
-  const documentWorkspace =
-    workspace ??
-    ({
-      connection: null,
-      folders: [],
-      projectFolder: null,
-      provider: "Google Drive",
-      status: "not_connected",
-    } satisfies ApiProjectDocumentWorkspace);
 
   return (
     <ProjectLayout activeTab="documents" project={workspaceProject}>
       {error ? <ErrorState message={error} /> : null}
       <ProjectWorkspaceDocuments
+        categories={categories}
         documents={documents}
-        isRefreshing={isRefreshing}
-        onConnect={handleConnect}
-        onCreateWorkspace={handleCreateWorkspace}
-        onRefresh={handleRefresh}
-        onSelectFolder={handleSelectFolder}
+        documentTypes={documentTypes}
+        filters={filters}
+        isSaving={isSaving}
+        onCreateDocument={handleCreateDocument}
+        onFiltersChange={setFilters}
+        owners={owners}
         project={workspaceProject}
-        selectedFolderId={selectedFolderId}
-        workspace={documentWorkspace}
+        storageProviders={storageProviders}
+        summary={summary}
       />
     </ProjectLayout>
+  );
+}
+
+function compactFilters(filters: DocumentFilters) {
+  return Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== ""),
   );
 }
