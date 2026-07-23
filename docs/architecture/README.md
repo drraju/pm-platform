@@ -1,3 +1,70 @@
+# Architecture Documentation
+
+This folder contains the technical architecture of the PM Platform.
+
+Architecture documentation explains **how** the platform is designed and why significant architectural decisions were made.
+
+---
+
+## Documents
+
+### ARCHITECTURE.md
+
+High-level architecture overview.
+
+---
+
+### PLATFORM_ARCHITECTURE.md
+
+Detailed platform architecture including layers, components and interactions.
+
+---
+
+### ADR/
+
+Architecture Decision Records (ADRs).
+
+Each ADR documents a significant architectural decision, its rationale, alternatives and consequences.
+
+---
+
+### API Standards
+
+Platform API design standards.
+
+---
+
+### Integration Architecture
+
+Provider-independent integration architecture.
+
+---
+
+### Data Architecture
+
+Logical data model and platform information architecture.
+
+---
+
+## Intended Audience
+
+* Software Architects
+* Developers
+* Technical Leads
+* AI Development Assistants
+
+---
+
+## Reading Order
+
+1. ARCHITECTURE.md
+2. PLATFORM_ARCHITECTURE.md
+3. Relevant ADRs
+4. Supporting architecture documents
+
+Architecture documentation evolves as the platform evolves.
+### old doc continue which needs replacement later
+
 # PM Platform Architecture
 
 This directory documents the current PM Platform architecture and approved roadmap guardrails. It is intended for new developers, architecture reviewers, future AI coding assistants, and enterprise stakeholders.
@@ -32,6 +99,11 @@ This directory documents the current PM Platform architecture and approved roadm
 | [FEATURE_1_3_1_ARCHITECTURE_NOTES.md](FEATURE_1_3_1_ARCHITECTURE_NOTES.md) | Enterprise Milestone Management ownership decisions and lessons. |
 | [Feature 1.3.1 Summary](../features/FEATURE_1_3_1_SUMMARY.md) | Implemented backend capability, APIs, tests, and remaining stages. |
 | [Feature 1.3.2 Completion Report](../features/FEATURE_1_3_2_SUMMARY.md) | Enterprise dependency ownership, projection architecture, APIs, verification, and deferred scheduling work. |
+| [STAB-IAM-001 Requirements Review](STAB_IAM_001_REQUIREMENTS_REVIEW.md) | IAM stabilization scope, constraints, protected modules, and required tests. |
+| [STAB-IAM-001 Repository Investigation and Gap Analysis](STAB_IAM_001_REPOSITORY_INVESTIGATION_AND_GAP_ANALYSIS.md) | Current auth, user, role, permission, password, and login gaps. |
+| [STAB-IAM-001 ADR Review](STAB_IAM_001_ADR_REVIEW.md) | Existing ADR coverage and new IAM ADR requirement. |
+| [STAB-IAM-001 Architecture Design](STAB_IAM_001_ARCHITECTURE_DESIGN.md) | Proposed enterprise IAM, password lifecycle, role taxonomy, and RBAC architecture. |
+| [STAB-IAM-001 Technical Design Review](STAB_IAM_001_TECHNICAL_DESIGN_REVIEW.md) | Architecture review outcome, open decisions, and implementation gate. |
 
 ## Architecture Decision Records
 
@@ -49,6 +121,7 @@ This directory documents the current PM Platform architecture and approved roadm
 - [ADR-012 ERM Permissions and Visibility](adr/ADR-012-erm-permissions-visibility.md)
 - [ADR-013 ERM Planning Resource Transition](adr/ADR-013-erm-planning-resource-transition.md)
 - [ADR-014 Client Platform Layering](adr/ADR-014-client-platform-layering.md)
+- [ADR-016 Enterprise IAM and Permission-Based RBAC](adr/ADR-016-enterprise-iam-rbac.md)
 
 The REST implementation standard governed by ADR-004 is [API Design Standard](API_DESIGN_STANDARD.md).
 

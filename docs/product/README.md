@@ -1,5 +1,52 @@
 # Product Documentation
 
+The Product folder defines **what** the PM Platform delivers.
+
+It contains product requirements, feature specifications and functional documentation.
+
+---
+
+## Contents
+
+Typical documents include:
+
+* Product Backlog
+* Feature Specifications
+* Epics
+* User Stories
+* Acceptance Criteria
+* Feature Progress
+* Functional Requirements
+
+---
+
+## Intended Audience
+
+* Product Managers
+* Business Analysts
+* Developers
+* QA Engineers
+
+---
+
+## Objectives
+
+Product documentation defines:
+
+* Business requirements
+* Functional behaviour
+* User expectations
+* Acceptance criteria
+* Feature scope
+
+Every implemented feature should be traceable back to product documentation.
+
+
+## Old README.md content to be replaced/ merged later
+
+
+# Product Documentation
+
 This directory contains the current product documentation for PM Platform.
 
 ## Current Product Documents

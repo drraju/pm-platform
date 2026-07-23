@@ -1,3 +1,148 @@
+
+# PM Platform Documentation
+
+PM Platform is an enterprise Project, Portfolio, Delivery, Resource and Customer Success Management Platform designed for modern enterprises.
+
+This documentation is the primary source of truth for product vision, architecture, engineering practices, deployment and user guidance.
+
+---
+
+# Documentation Structure
+
+| Area | Purpose |
+|------|---------|
+| Vision | Product vision, strategy and guiding principles |
+| Roadmap | Product planning and release planning |
+| Product | Requirements, epics and feature specifications |
+| Architecture | Platform architecture and ADRs |
+| Engineering | Development, testing, deployment and build guidance |
+| User Guide | End-user and administrator documentation |
+| Operations | Releases, upgrades and troubleshooting |
+
+---
+
+# Quick Navigation
+
+## Vision
+
+- PRODUCT_VISION
+- PRODUCT_STRATEGY
+- PLATFORM_PRINCIPLES
+- DESIGN_PRINCIPLES
+
+Location:
+
+docs/vision/
+
+---
+
+## Architecture
+
+- Architecture
+- Architecture Index
+- ADR Index
+- Build Playbook
+
+---
+
+## Product
+
+- Feature Progress
+- Product Backlog
+- Release Plan
+
+---
+
+## API
+
+- API Design Standard
+- API Guidelines
+- Enterprise Dependency API
+
+---
+
+## Engineering
+
+- Development
+- Testing
+- Deployment
+- Docker
+- Installation
+
+---
+
+## Releases
+
+- Release Notes
+
+---
+
+# Recommended Reading
+
+## Product Managers
+
+1. PRODUCT_VISION
+2. PRODUCT_STRATEGY
+3. Product Backlog
+4. Release Plan
+
+---
+
+## Architects
+
+1. PRODUCT_VISION
+2. PLATFORM_PRINCIPLES
+3. Architecture
+4. ADRs
+
+---
+
+## Developers
+
+1. Build Playbook
+2. Architecture
+3. ADRs
+4. Feature Specification
+
+---
+
+## QA
+
+1. Feature Specification
+2. Testing
+3. Release Notes
+
+---
+
+# Development Lifecycle
+
+All major functionality follows the stage-gated engineering process:
+
+Requirements
+→ Investigation
+→ Architecture
+→ Design
+→ Implementation
+→ Verification
+→ Testing
+→ Documentation
+→ Release
+
+---
+
+# Documentation Governance
+
+Before implementing a major feature:
+
+- Verify alignment with PRODUCT_VISION.
+- Review PLATFORM_PRINCIPLES.
+- Review relevant ADRs.
+- Determine whether a new ADR is required.
+- Update documentation alongside implementation.
+
+
+## OLD README.md content. Will be merged or removed later
+
 # PM Platform Documentation
 
 PM Platform is an enterprise project management platform for managing projects,

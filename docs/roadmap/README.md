@@ -1,3 +1,48 @@
+# Roadmap Documentation
+
+The Roadmap folder contains planning documentation for future platform evolution.
+
+These documents answer **when** capabilities will be delivered.
+
+---
+
+## Contents
+
+Typical documents include:
+
+* Product Roadmap
+* Release Plan
+* Milestone Planning
+* Epic Scheduling
+* Release Themes
+* Version Planning
+
+---
+
+## Intended Audience
+
+* Product Managers
+* Delivery Managers
+* Architects
+* Executive Stakeholders
+
+---
+
+## Objectives
+
+The roadmap provides visibility into:
+
+* Planned capabilities
+* Strategic priorities
+* Release sequencing
+* Delivery milestones
+* Long-term platform evolution
+
+Roadmaps are planning documents and may change as priorities evolve.
+
+## Old roadmap content to be removed / merged later
+
+
 # PM Platform Roadmap
 
 This directory is the canonical home for PM Platform roadmap documentation.
