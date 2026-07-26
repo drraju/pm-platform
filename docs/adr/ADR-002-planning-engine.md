@@ -50,3 +50,4 @@ This decision enables critical path, baselines, calendars, portfolio Gantt, reso
 
 - [Planning Engine v2](../architecture/planning-engine-v2.md)
 - [ADR-005 Scheduling Authority](./ADR-005-scheduling-authority.md)
+
