@@ -18,6 +18,9 @@ export class User extends TimestampedEntity {
   @Column({ name: 'password_hash', select: false })
   passwordHash: string;
 
+  @Column({ name: 'password_changed_at', type: 'timestamptz', nullable: true })
+  passwordChangedAt?: Date | null;
+
   @Column({ name: 'role_id', type: 'uuid' })
   roleId: string;
 

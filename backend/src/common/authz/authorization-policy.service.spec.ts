@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../enums/project-role.enum';
+import { UserRole } from '../enums/user-role.enum';
 import { ProjectMember } from '../../modules/projects/entities/project-member.entity';
 import { Project } from '../../modules/projects/entities/project.entity';
 import { Task } from '../../modules/tasks/entities/task.entity';
@@ -19,9 +20,8 @@ type MockRepository<T extends object = object> = Partial<
 const projectId = 'project-1';
 
 const permissionsByRoleName: Record<string, PermissionKey[]> = {
-  SUPER_ADMIN: Object.values(PermissionKey),
-  Admin: Object.values(PermissionKey),
-  'Program Manager': [
+  [UserRole.PlatformAdmin]: Object.values(PermissionKey),
+  [UserRole.PortfolioManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
     PermissionKey.PortfolioView,
@@ -39,23 +39,14 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.TaskReassign,
     PermissionKey.TaskUpdate,
   ],
-  'Portfolio Manager': [
-    PermissionKey.DashboardView,
-    PermissionKey.ExecutiveView,
-    PermissionKey.PortfolioView,
-    PermissionKey.ProjectRead,
-    PermissionKey.ProjectUpdate,
-    PermissionKey.RaidRead,
-    PermissionKey.TaskUpdate,
-  ],
-  Executive: [
+  [UserRole.Executive]: [
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
     PermissionKey.PortfolioView,
     PermissionKey.ProjectRead,
     PermissionKey.RaidRead,
   ],
-  'Project Manager': [
+  [UserRole.ProjectManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectCreate,
     PermissionKey.ProjectDelete,
@@ -72,21 +63,7 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.TaskReassign,
     PermissionKey.TaskUpdate,
   ],
-  'Delivery Lead': [
-    PermissionKey.DashboardView,
-    PermissionKey.ProjectRead,
-    PermissionKey.ProjectTeamManage,
-    PermissionKey.ProjectUpdate,
-    PermissionKey.RaidCreate,
-    PermissionKey.RaidRead,
-    PermissionKey.RaidUpdate,
-    PermissionKey.TaskComment,
-    PermissionKey.TaskCreate,
-    PermissionKey.TaskDelete,
-    PermissionKey.TaskReassign,
-    PermissionKey.TaskUpdate,
-  ],
-  'Team Member': [
+  [UserRole.TeamMember]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectRead,
     PermissionKey.RaidCreate,
@@ -96,7 +73,7 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.TaskReassign,
     PermissionKey.TaskUpdate,
   ],
-  Partner: [
+  [UserRole.Partner]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectRead,
     PermissionKey.RaidRead,
@@ -104,7 +81,7 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.TaskReassign,
     PermissionKey.TaskUpdate,
   ],
-  Customer: [
+  [UserRole.Customer]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectRead,
     PermissionKey.RaidRead,
@@ -197,16 +174,13 @@ describe('AuthorizationPolicyService', () => {
   });
 
   it.each([
-    ['SUPER_ADMIN', true],
-    ['Admin', true],
-    ['Program Manager', true],
-    ['Portfolio Manager', true],
-    ['Executive', true],
-    ['Project Manager', false],
-    ['Delivery Lead', false],
-    ['Team Member', false],
-    ['Partner', false],
-    ['Customer', false],
+    [UserRole.PlatformAdmin, true],
+    [UserRole.PortfolioManager, true],
+    [UserRole.Executive, true],
+    [UserRole.ProjectManager, false],
+    [UserRole.TeamMember, false],
+    [UserRole.Partner, false],
+    [UserRole.Customer, false],
   ])('evaluates portfolio access for %s', async (roleName, expected) => {
     await expect(service.canViewPortfolio(actor(roleName))).resolves.toBe(
       expected,
@@ -214,16 +188,13 @@ describe('AuthorizationPolicyService', () => {
   });
 
   it.each([
-    ['SUPER_ADMIN', true],
-    ['Admin', true],
-    ['Program Manager', true],
-    ['Portfolio Manager', true],
-    ['Executive', true],
-    ['Project Manager', false],
-    ['Delivery Lead', false],
-    ['Team Member', false],
-    ['Partner', false],
-    ['Customer', false],
+    [UserRole.PlatformAdmin, true],
+    [UserRole.PortfolioManager, true],
+    [UserRole.Executive, true],
+    [UserRole.ProjectManager, false],
+    [UserRole.TeamMember, false],
+    [UserRole.Partner, false],
+    [UserRole.Customer, false],
   ])('evaluates executive access for %s', async (roleName, expected) => {
     await expect(service.canViewExecutive(actor(roleName))).resolves.toBe(
       expected,
@@ -231,11 +202,9 @@ describe('AuthorizationPolicyService', () => {
   });
 
   it.each([
-    'SUPER_ADMIN',
-    'Admin',
-    'Program Manager',
-    'Portfolio Manager',
-    'Executive',
+    UserRole.PlatformAdmin,
+    UserRole.PortfolioManager,
+    UserRole.Executive,
   ])(
     'grants all-project visibility to %s through centralized policy',
     async (roleName) => {
@@ -254,7 +223,7 @@ describe('AuthorizationPolicyService', () => {
     await expect(
       service.canViewProject(
         projectId,
-        actor('Team Member', 'user-team-member'),
+        actor(UserRole.TeamMember, 'user-team-member'),
       ),
     ).resolves.toBe(true);
   });
@@ -263,7 +232,10 @@ describe('AuthorizationPolicyService', () => {
     assignedTaskKeys.add(`${projectId}:user-partner`);
 
     await expect(
-      service.canViewProject(projectId, actor('Partner', 'user-partner')),
+      service.canViewProject(
+        projectId,
+        actor(UserRole.Partner, 'user-partner'),
+      ),
     ).resolves.toBe(true);
   });
 
@@ -271,25 +243,27 @@ describe('AuthorizationPolicyService', () => {
     assignedTaskKeys.add(`${projectId}:user-customer`);
 
     await expect(
-      service.canViewProject(projectId, actor('Customer', 'user-customer')),
+      service.canViewProject(
+        projectId,
+        actor(UserRole.Customer, 'user-customer'),
+      ),
     ).resolves.toBe(false);
   });
 
-  it('allows project management for project managers, delivery leads, and owners via policy checks', async () => {
+  it('allows project management for project managers and owners via policy checks', async () => {
     membershipsByKey.set(`${projectId}:user-pm`, ProjectRole.Manager);
-    membershipsByKey.set(`${projectId}:user-dl`, ProjectRole.Manager);
     projectGovernorAssignments.add(`${projectId}:ownerId:user-owner`);
 
     await expect(
-      service.canManageProject(projectId, actor('Project Manager', 'user-pm')),
-    ).resolves.toBe(true);
-    await expect(
-      service.canManageProject(projectId, actor('Delivery Lead', 'user-dl')),
+      service.canManageProject(
+        projectId,
+        actor(UserRole.ProjectManager, 'user-pm'),
+      ),
     ).resolves.toBe(true);
     await expect(
       service.canManageProject(
         projectId,
-        actor('Project Manager', 'user-owner'),
+        actor(UserRole.ProjectManager, 'user-owner'),
       ),
     ).resolves.toBe(true);
   });
@@ -308,19 +282,19 @@ describe('AuthorizationPolicyService', () => {
     await expect(
       service.canManageProject(
         projectId,
-        actor('Project Manager', 'user-business-owner'),
+        actor(UserRole.ProjectManager, 'user-business-owner'),
       ),
     ).resolves.toBe(true);
     await expect(
       service.canManageProject(
         projectId,
-        actor('Delivery Lead', 'user-delivery-lead'),
+        actor(UserRole.ProjectManager, 'user-delivery-lead'),
       ),
     ).resolves.toBe(true);
     await expect(
       service.canManageProject(
         projectId,
-        actor('Program Manager', 'user-executive-sponsor'),
+        actor(UserRole.PortfolioManager, 'user-executive-sponsor'),
       ),
     ).resolves.toBe(true);
   });
@@ -329,37 +303,45 @@ describe('AuthorizationPolicyService', () => {
     projectGovernorAssignments.add(`${projectId}:executiveSponsorId:user-exec`);
 
     await expect(
-      service.canManageProject(projectId, actor('Executive', 'user-exec')),
+      service.canManageProject(
+        projectId,
+        actor(UserRole.Executive, 'user-exec'),
+      ),
     ).resolves.toBe(false);
   });
 
   it('restricts project deletion to roles that have explicit delete permission', async () => {
     membershipsByKey.set(`${projectId}:user-pm`, ProjectRole.Manager);
-    membershipsByKey.set(`${projectId}:user-dl`, ProjectRole.Manager);
 
     await expect(
-      service.canDeleteProject(projectId, actor('Project Manager', 'user-pm')),
+      service.canDeleteProject(
+        projectId,
+        actor(UserRole.ProjectManager, 'user-pm'),
+      ),
     ).resolves.toBe(true);
-    await expect(
-      service.canDeleteProject(projectId, actor('Delivery Lead', 'user-dl')),
-    ).resolves.toBe(false);
   });
 
   it('grants broad task and RAID management only to project governors', async () => {
-    membershipsByKey.set(`${projectId}:user-dl`, ProjectRole.Manager);
+    membershipsByKey.set(`${projectId}:user-pm`, ProjectRole.Manager);
     membershipsByKey.set(`${projectId}:user-team`, ProjectRole.Contributor);
 
     await expect(
-      service.canManageTask(projectId, actor('Delivery Lead', 'user-dl')),
+      service.canManageTask(
+        projectId,
+        actor(UserRole.ProjectManager, 'user-pm'),
+      ),
     ).resolves.toBe(true);
     await expect(
-      service.canManageRaid(projectId, actor('Delivery Lead', 'user-dl')),
+      service.canManageRaid(
+        projectId,
+        actor(UserRole.ProjectManager, 'user-pm'),
+      ),
     ).resolves.toBe(true);
     await expect(
-      service.canManageTask(projectId, actor('Team Member', 'user-team')),
+      service.canManageTask(projectId, actor(UserRole.TeamMember, 'user-team')),
     ).resolves.toBe(false);
     await expect(
-      service.canManageRaid(projectId, actor('Team Member', 'user-team')),
+      service.canManageRaid(projectId, actor(UserRole.TeamMember, 'user-team')),
     ).resolves.toBe(false);
   });
 });

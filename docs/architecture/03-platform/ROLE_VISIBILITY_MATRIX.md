@@ -1,21 +1,18 @@
 # Role Visibility Matrix
 
-Last updated: 2026-06-12
+Last updated: 2026-07-26
 
 ## Project Visibility
 
 | Role | Project List Visibility | Project Detail Visibility |
 | --- | --- | --- |
-| `SUPER_ADMIN` | All projects | All projects |
-| `Admin` | All projects | All projects |
-| `Program Manager` | All projects | All projects |
-| `Portfolio Manager` | All projects | All projects |
-| `Executive` | All projects, read-only by permissions | All projects, read-only by permissions |
-| `Project Manager` | Projects owned by the user, projects where the user is a member, and projects containing tasks assigned to the user | Same visible project set |
-| `Delivery Lead` | Projects owned by the user, projects where the user is a member, and projects containing tasks assigned to the user | Same visible project set |
-| `Team Member` | Projects where the user is a member and projects containing tasks assigned to the user | Same visible project set |
-| `Partner` | Projects where the user is a member or explicitly assigned at project level | Same visible project set |
-| `Customer` | Projects where the user is a member or explicitly assigned at project level | Same visible project set |
+| `PLATFORM_ADMIN` | All projects | All projects |
+| `PORTFOLIO_MANAGER` | All projects | All projects |
+| `PROJECT_MANAGER` | Projects owned by the user, projects where the user is a manager/member, and projects containing tasks assigned to the user | Same visible project set |
+| `TEAM_MEMBER` | Projects where the user is a member and projects containing tasks assigned to the user | Same visible project set |
+| `EXECUTIVE` | All projects, read-only by permissions | All projects, read-only by permissions |
+| `CUSTOMER` | Projects where the user is a member or explicitly assigned at project level | Same visible project set |
+| `PARTNER` | Projects where the user is a member or explicitly assigned at project level | Same visible project set |
 
 ## Project Detail Data
 

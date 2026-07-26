@@ -1,8 +1,16 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiUnauthorizedResponse,
+  ApiBadRequestResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthMeDto } from './dto/auth-me.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SessionDto } from './dto/session.dto';
@@ -38,5 +46,24 @@ export class AuthController {
   @ApiOkResponse({ type: AuthMeDto })
   getMe(@Req() request: AuthenticatedRequest): Promise<AuthMeDto> {
     return this.authService.getMe(request.user.userId);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: ChangePasswordResponseDto })
+  @ApiBadRequestResponse({ description: 'Password validation failed' })
+  @ApiUnauthorizedResponse({ description: 'Unable to change password' })
+  changePassword(
+    @Req() request: AuthenticatedRequest,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ): Promise<ChangePasswordResponseDto> {
+    return this.authService.changePassword(
+      request.user.userId,
+      changePasswordDto,
+      {
+        ipAddress: request.ip,
+        userAgent: request.get('user-agent'),
+      },
+    );
   }
 }

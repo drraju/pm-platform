@@ -9,6 +9,11 @@ import {
   Repository,
 } from 'typeorm';
 import { createDataSourceOptions } from '../src/database/typeorm.config';
+import {
+  canonicalUserRoles,
+  UserRole,
+  userRoleDescriptions,
+} from '../src/common/enums/user-role.enum';
 import { ProjectRole } from '../src/common/enums/project-role.enum';
 import { RaidType } from '../src/common/enums/raid-type.enum';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
@@ -48,42 +53,42 @@ const users = [
     email: 'program.manager@example.com',
     firstName: 'Amelia',
     lastName: 'Grant',
-    roleName: 'Program Manager',
+    roleName: UserRole.PortfolioManager,
   },
   {
     id: seedUuid('user-project-manager'),
     email: 'project.manager@example.com',
     firstName: 'Marcus',
     lastName: 'Shah',
-    roleName: 'Project Manager',
+    roleName: UserRole.ProjectManager,
   },
   {
     id: seedUuid('user-delivery-lead'),
     email: 'delivery.lead@example.com',
     firstName: 'Nora',
     lastName: 'Bennett',
-    roleName: 'Delivery Lead',
+    roleName: UserRole.ProjectManager,
   },
   {
     id: seedUuid('user-technical-lead'),
     email: 'technical.lead@example.com',
     firstName: 'Theo',
     lastName: 'Ivers',
-    roleName: 'Technical Lead',
+    roleName: UserRole.TeamMember,
   },
   {
     id: seedUuid('user-engineer'),
     email: 'engineer@example.com',
     firstName: 'Priya',
     lastName: 'Kapoor',
-    roleName: 'Engineer',
+    roleName: UserRole.TeamMember,
   },
   {
     id: seedUuid('user-qa-engineer'),
     email: 'qa.engineer@example.com',
     firstName: 'Elliot',
     lastName: 'Reed',
-    roleName: 'QA Engineer',
+    roleName: UserRole.TeamMember,
   },
 ];
 
@@ -93,7 +98,7 @@ const superAdminUser = {
   firstName: 'Super',
   lastName: 'Admin',
   password: process.env.SEED_SUPER_ADMIN_PASSWORD ?? 'admin',
-  roleName: 'SUPER_ADMIN',
+  roleName: UserRole.PlatformAdmin,
 };
 
 const allSeedUsers = [superAdminUser, ...users];
@@ -273,9 +278,9 @@ const permissions = [
   },
 ] as const;
 
-const permissionsByRoleName: Record<string, PermissionKey[]> = {
-  SUPER_ADMIN: permissions.map((permission) => permission.key),
-  'Program Manager': [
+const permissionsByRoleName: Record<UserRole, PermissionKey[]> = {
+  [UserRole.PlatformAdmin]: permissions.map((permission) => permission.key),
+  [UserRole.PortfolioManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
     PermissionKey.PortfolioView,
@@ -314,7 +319,7 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.TaskComment,
     PermissionKey.NotificationRead,
   ],
-  'Project Manager': [
+  [UserRole.ProjectManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectCreate,
     PermissionKey.ProjectDelete,
@@ -352,37 +357,7 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.TaskComment,
     PermissionKey.NotificationRead,
   ],
-  'Delivery Lead': [
-    PermissionKey.DashboardView,
-    PermissionKey.ProjectRead,
-    PermissionKey.ProjectTeamManage,
-    PermissionKey.ProjectUpdate,
-    PermissionKey.RaidCreate,
-    PermissionKey.RaidRead,
-    PermissionKey.RaidUpdate,
-    PermissionKey.ResourceAvailabilityCreate,
-    PermissionKey.ResourceAvailabilityRead,
-    PermissionKey.ResourceAvailabilityUpdate,
-    PermissionKey.ResourceCapacityCreate,
-    PermissionKey.ResourceCapacityRead,
-    PermissionKey.ResourceCapacityUpdate,
-    PermissionKey.ResourceCreate,
-    PermissionKey.ResourceRead,
-    PermissionKey.ResourceSkillCreate,
-    PermissionKey.ResourceSkillRead,
-    PermissionKey.ResourceSkillUpdate,
-    PermissionKey.ResourceUpdate,
-    PermissionKey.SkillCreate,
-    PermissionKey.SkillRead,
-    PermissionKey.SkillUpdate,
-    PermissionKey.TaskCreate,
-    PermissionKey.TaskUpdate,
-    PermissionKey.TaskDelete,
-    PermissionKey.TaskReassign,
-    PermissionKey.TaskComment,
-    PermissionKey.NotificationRead,
-  ],
-  'Technical Lead': [
+  [UserRole.TeamMember]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectRead,
     PermissionKey.RaidCreate,
@@ -398,34 +373,27 @@ const permissionsByRoleName: Record<string, PermissionKey[]> = {
     PermissionKey.TaskComment,
     PermissionKey.NotificationRead,
   ],
-  Engineer: [
+  [UserRole.Executive]: [
     PermissionKey.DashboardView,
+    PermissionKey.ExecutiveView,
+    PermissionKey.PortfolioView,
     PermissionKey.ProjectRead,
-    PermissionKey.RaidCreate,
     PermissionKey.RaidRead,
-    PermissionKey.RaidUpdate,
-    PermissionKey.ResourceAvailabilityRead,
-    PermissionKey.ResourceCapacityRead,
-    PermissionKey.ResourceRead,
-    PermissionKey.ResourceSkillRead,
-    PermissionKey.SkillRead,
-    PermissionKey.TaskUpdate,
-    PermissionKey.TaskReassign,
-    PermissionKey.TaskComment,
     PermissionKey.NotificationRead,
   ],
-  'QA Engineer': [
+  [UserRole.Customer]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectRead,
-    PermissionKey.RaidCreate,
     PermissionKey.RaidRead,
-    PermissionKey.RaidUpdate,
-    PermissionKey.ResourceAvailabilityRead,
-    PermissionKey.ResourceCapacityRead,
-    PermissionKey.ResourceRead,
-    PermissionKey.TaskUpdate,
-    PermissionKey.TaskReassign,
+    PermissionKey.NotificationRead,
+  ],
+  [UserRole.Partner]: [
+    PermissionKey.DashboardView,
+    PermissionKey.ProjectRead,
+    PermissionKey.RaidRead,
     PermissionKey.TaskComment,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskUpdate,
     PermissionKey.NotificationRead,
   ],
 };
@@ -708,16 +676,16 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
   const superAdminPasswordHash = await bcrypt.hash(superAdminUser.password, 10);
 
   const roles: Role[] = [];
-  for (const user of allSeedUsers) {
+  for (const roleName of canonicalUserRoles) {
     roles.push(
       await saveSeedEntity(
         roleRepository,
-        seedUuid(`role-${user.roleName}`),
+        seedUuid(`role-${roleName}`),
         {
-          name: user.roleName,
-          description: `Development seed role for ${user.roleName}`,
+          name: roleName,
+          description: userRoleDescriptions[roleName],
         },
-        { name: user.roleName },
+        { name: roleName },
       ),
     );
   }
@@ -790,7 +758,7 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
           lastName: user.lastName,
           roleId: rolesByName.get(user.roleName)?.id,
           status: 'active',
-        }) as unknown as User,
+        }),
       ),
     );
   }

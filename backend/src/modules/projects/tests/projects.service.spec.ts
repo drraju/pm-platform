@@ -8,6 +8,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
+import { UserRole } from '../../../common/enums/user-role.enum';
 import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
@@ -630,7 +631,7 @@ describe('ProjectsService', () => {
           lastName: 'Doe',
           passwordHash: 'hashed-password',
           role: {
-            name: 'Project Manager',
+            name: UserRole.ProjectManager,
           },
         },
       },
@@ -648,7 +649,7 @@ describe('ProjectsService', () => {
           firstName: 'Jane',
           lastName: 'Doe',
           displayName: 'Jane Doe',
-          role: 'Project Manager',
+          role: UserRole.ProjectManager,
         },
       },
     ]);

@@ -1,4 +1,5 @@
 import { DataSource } from 'typeorm';
+import { UserRole } from '../src/common/enums/user-role.enum';
 import { ProjectRole } from '../src/common/enums/project-role.enum';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
 import {
@@ -23,12 +24,12 @@ describe('Seed data verification', () => {
 
   it('contains realistic named users, projects, and project teams', () => {
     expect(developmentSeedData.users.map((user) => user.roleName)).toEqual([
-      'Program Manager',
-      'Project Manager',
-      'Delivery Lead',
-      'Technical Lead',
-      'Engineer',
-      'QA Engineer',
+      UserRole.PortfolioManager,
+      UserRole.ProjectManager,
+      UserRole.ProjectManager,
+      UserRole.TeamMember,
+      UserRole.TeamMember,
+      UserRole.TeamMember,
     ]);
     expect(developmentSeedData.projects.map((project) => project.name)).toEqual(
       [

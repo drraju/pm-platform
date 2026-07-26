@@ -1,27 +1,20 @@
 import type { ApiAuthMe } from "@/lib/api/client";
+import { hasPermission } from "./permissions";
 
 const EXECUTIVE_ROUTE = "/executive";
 const PORTFOLIO_ROUTE = "/portfolio";
 const USER_DASHBOARD_ROUTE = "/dashboard";
 
 export function getDefaultDashboardPath(authMe: ApiAuthMe) {
-  const primaryRoleName = getPrimaryRoleName(authMe);
+  const permissionKeys = authMe.permissions.map((permission) => permission.key);
 
-  if (primaryRoleName === "executive") {
+  if (hasPermission(permissionKeys, "executive.view")) {
     return EXECUTIVE_ROUTE;
   }
 
-  if (primaryRoleName === "portfolio manager") {
+  if (hasPermission(permissionKeys, "portfolio.view")) {
     return PORTFOLIO_ROUTE;
   }
 
   return USER_DASHBOARD_ROUTE;
-}
-
-function getPrimaryRoleName(authMe: ApiAuthMe) {
-  return (
-    authMe.user.role?.name?.trim().toLowerCase() ??
-    authMe.roles[0]?.name?.trim().toLowerCase() ??
-    ""
-  );
 }

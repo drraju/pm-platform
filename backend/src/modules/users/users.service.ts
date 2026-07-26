@@ -94,6 +94,36 @@ export class UsersService {
       .getOne();
   }
 
+  findAuthenticationUserById(userId: string): Promise<User | null> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.id = :userId', { userId })
+      .getOne();
+  }
+
+  findTokenValidationUser(userId: string): Promise<User | null> {
+    return this.usersRepository.findOne({
+      select: { id: true, passwordChangedAt: true, status: true },
+      where: { id: userId },
+    });
+  }
+
+  async updatePassword(
+    userId: string,
+    passwordHash: string,
+    passwordChangedAt = new Date(),
+  ): Promise<void> {
+    const result = await this.usersRepository.update(
+      { id: userId },
+      { passwordChangedAt, passwordHash },
+    );
+
+    if (!result.affected) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+  }
+
   async findRoles(): Promise<RoleResponseDto[]> {
     const roles = await this.rolesRepository.find({
       order: { name: 'ASC' },

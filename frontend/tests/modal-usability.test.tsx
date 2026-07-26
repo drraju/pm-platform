@@ -54,7 +54,7 @@ vi.mock("@/features/projects", () => ({
       firstName: "Ava",
       id: "user-1",
       lastName: "Patel",
-      role: "Project Manager",
+      role: "PROJECT_MANAGER",
     },
   ]),
   getProjectBaseline: vi.fn(async () => ({
@@ -107,13 +107,19 @@ describe("AppModal usability", () => {
     expect(screen.getByTestId("app-modal-header")).toHaveClass("sticky");
     expect(screen.getByTestId("app-modal-body")).toHaveClass("overflow-y-auto");
     expect(screen.getByTestId("app-modal-footer")).toHaveClass("sticky");
-    expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /save changes/i }),
+    ).toBeInTheDocument();
   });
 
   it("closes on Escape for keyboard accessibility", () => {
     const onClose = vi.fn();
     render(
-      <AppModal labelledById="escape-title" onClose={onClose} title="Escape modal">
+      <AppModal
+        labelledById="escape-title"
+        onClose={onClose}
+        title="Escape modal"
+      >
         Content
       </AppModal>,
     );
@@ -135,7 +141,9 @@ describe("AppModal usability", () => {
       </AppModal>,
     );
 
-    const closeButton = screen.getByRole("button", { name: /close focus modal/i });
+    const closeButton = screen.getByRole("button", {
+      name: /close focus modal/i,
+    });
     const input = screen.getByRole("textbox", { name: /project name/i });
     const saveButton = screen.getByRole("button", { name: /save changes/i });
 
@@ -167,7 +175,9 @@ describe("AppModal usability", () => {
         </AppModal>
       </>,
     );
-    expect(screen.getByRole("button", { name: /close restore modal/i })).toHaveFocus();
+    expect(
+      screen.getByRole("button", { name: /close restore modal/i }),
+    ).toHaveFocus();
 
     rerender(<button type="button">Open modal</button>);
     expect(screen.getByRole("button", { name: /open modal/i })).toHaveFocus();
@@ -191,13 +201,17 @@ describe("AppModal usability", () => {
     expect(
       within(footer).getByRole("button", { name: /save changes/i }),
     ).toBeInTheDocument();
-    expect(within(footer).getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+    expect(
+      within(footer).getByRole("button", { name: /cancel/i }),
+    ).toBeInTheDocument();
   });
 
   it("keeps project form actions in the sticky footer", async () => {
     render(<ProjectsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /create project/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /create project/i }),
+    );
 
     expect(screen.getByTestId("app-modal-panel")).toHaveClass("max-h-[90vh]");
     expect(screen.getByTestId("app-modal-header")).toHaveClass("sticky");
@@ -236,6 +250,8 @@ describe("AppModal usability", () => {
     expect(
       within(footer).getByRole("button", { name: /^create$/i }),
     ).toBeInTheDocument();
-    expect(within(footer).getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+    expect(
+      within(footer).getByRole("button", { name: /cancel/i }),
+    ).toBeInTheDocument();
   });
 });

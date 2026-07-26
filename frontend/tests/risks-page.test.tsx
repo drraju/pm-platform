@@ -14,25 +14,31 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/features/auth", () => ({
   getAuthMe: vi.fn(async () => ({
     permissions: [{ id: "permission-raid-read", key: "raid.read" }],
-    roles: [{ id: "role-1", name: "Executive", permissions: [] }],
+    roles: [{ id: "role-1", name: "EXECUTIVE", permissions: [] }],
     user: {
       email: "executive@example.com",
       firstName: "Executive",
       id: "user-1",
       lastName: "User",
-      role: { id: "role-1", name: "Executive", permissions: [] },
+      role: { id: "role-1", name: "EXECUTIVE", permissions: [] },
       status: "active",
     },
   })),
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
     permissionKeys.includes(requiredPermission),
   getStoredPermissionKeys: () => ["raid.read"],
-  getStoredSessionUser: () => ({ email: "executive@example.com", roleId: "role-1", userId: "user-1" }),
+  getStoredSessionUser: () => ({
+    email: "executive@example.com",
+    roleId: "role-1",
+    userId: "user-1",
+  }),
   storeAuthMe: vi.fn(),
 }));
 
 vi.mock("@/features/projects", () => ({
-  getProjects: vi.fn(async () => [{ id: "project-1", name: "Core Platform", status: "active" }]),
+  getProjects: vi.fn(async () => [
+    { id: "project-1", name: "Core Platform", status: "active" },
+  ]),
 }));
 
 vi.mock("@/features/raid", () => ({
@@ -98,7 +104,9 @@ describe("Risks page", () => {
 
     expect(screen.getByText("Budget runway reduction")).toBeInTheDocument();
     expect(screen.getByText("Vendor readiness")).toBeInTheDocument();
-    expect(screen.queryByText("Resolved migration blocker")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Resolved migration blocker"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
@@ -138,6 +146,8 @@ describe("Risks page", () => {
     rerender(<RisksPage />);
 
     expect(screen.getByText("Budget runway reduction")).toBeInTheDocument();
-    expect(screen.queryByText("Resolved migration blocker")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Resolved migration blocker"),
+    ).not.toBeInTheDocument();
   });
 });

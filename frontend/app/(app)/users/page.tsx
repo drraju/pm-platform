@@ -47,7 +47,11 @@ export default function UsersPage() {
         ),
       );
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to load users");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to load users",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +76,11 @@ export default function UsersPage() {
       await loadData();
       setToast("Role created.");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to create role");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create role",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -97,7 +105,11 @@ export default function UsersPage() {
       await loadData();
       setToast("User created.");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Unable to create user");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create user",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -161,7 +173,10 @@ export default function UsersPage() {
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <form className="rounded-md border border-slate-200 bg-white p-5 shadow-soft" onSubmit={handleCreateUser}>
+        <form
+          className="rounded-md border border-slate-200 bg-white p-5 shadow-soft"
+          onSubmit={handleCreateUser}
+        >
           <h2 className="text-lg font-semibold text-slate-950">Add user</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {[
@@ -171,7 +186,9 @@ export default function UsersPage() {
               ["password", "Password", "password"],
             ].map(([name, label, type]) => (
               <label className="block" key={name}>
-                <span className="text-sm font-medium text-slate-700">{label}</span>
+                <span className="text-sm font-medium text-slate-700">
+                  {label}
+                </span>
                 <input
                   className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                   minLength={name === "password" ? 8 : undefined}
@@ -219,10 +236,15 @@ export default function UsersPage() {
           </button>
         </form>
 
-        <form className="rounded-md border border-slate-200 bg-white p-5 shadow-soft" onSubmit={handleCreateRole}>
+        <form
+          className="rounded-md border border-slate-200 bg-white p-5 shadow-soft"
+          onSubmit={handleCreateRole}
+        >
           <h2 className="text-lg font-semibold text-slate-950">Add role</h2>
           <label className="mt-4 block">
-            <span className="text-sm font-medium text-slate-700">Role name</span>
+            <span className="text-sm font-medium text-slate-700">
+              Role name
+            </span>
             <input
               className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
               name="name"
@@ -230,7 +252,9 @@ export default function UsersPage() {
             />
           </label>
           <label className="mt-4 block">
-            <span className="text-sm font-medium text-slate-700">Description</span>
+            <span className="text-sm font-medium text-slate-700">
+              Description
+            </span>
             <input
               className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
               name="description"
@@ -254,9 +278,13 @@ export default function UsersPage() {
           <span>Status</span>
         </div>
         <div className="divide-y divide-slate-100">
-          {isLoading ? <p className="px-4 py-6 text-sm text-slate-500">Loading users...</p> : null}
+          {isLoading ? (
+            <p className="px-4 py-6 text-sm text-slate-500">Loading users...</p>
+          ) : null}
           {!isLoading && users.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">No users have been created yet.</p>
+            <p className="px-4 py-6 text-sm text-slate-500">
+              No users have been created yet.
+            </p>
           ) : null}
           {users.map((user) => (
             <article
@@ -267,7 +295,9 @@ export default function UsersPage() {
                 {user.firstName} {user.lastName}
               </h2>
               <span className="text-slate-600">{user.email}</span>
-              <span className="text-slate-600">{user.role?.name ?? "Unassigned"}</span>
+              <span className="text-slate-600">
+                {user.role?.name ?? "Unassigned"}
+              </span>
               <span className="capitalize text-slate-700">{user.status}</span>
             </article>
           ))}
@@ -360,35 +390,6 @@ export default function UsersPage() {
   );
 }
 
-const roleMatrixOrder = [
-  "SUPER_ADMIN",
-  "Admin",
-  "Program Manager",
-  "Project Manager",
-  "Delivery Lead",
-  "Team Member",
-  "Engineer",
-  "QA Engineer",
-  "Executive",
-  "Customer",
-  "Partner",
-];
-
 function orderRolesForMatrix(roles: ApiRole[]) {
-  return [...roles].sort((left, right) => {
-    const leftIndex = roleMatrixOrder.indexOf(left.name);
-    const rightIndex = roleMatrixOrder.indexOf(right.name);
-
-    if (leftIndex === -1 && rightIndex === -1) {
-      return left.name.localeCompare(right.name);
-    }
-    if (leftIndex === -1) {
-      return 1;
-    }
-    if (rightIndex === -1) {
-      return -1;
-    }
-
-    return leftIndex - rightIndex;
-  });
+  return [...roles].sort((left, right) => left.name.localeCompare(right.name));
 }

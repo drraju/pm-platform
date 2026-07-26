@@ -16,6 +16,6 @@ export class AssignableUserResponseDto {
   @ApiProperty({ example: 'Jane Doe' })
   displayName: string;
 
-  @ApiPropertyOptional({ example: 'Project Manager' })
+  @ApiPropertyOptional({ example: 'PROJECT_MANAGER' })
   role?: string | null;
 }

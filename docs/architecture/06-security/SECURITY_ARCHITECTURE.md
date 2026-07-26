@@ -75,6 +75,12 @@ RBAC should support:
 
 Passwords must be hashed with an approved adaptive hashing algorithm. Plaintext passwords must never be logged, stored, exported, or seeded outside secure development fixtures.
 
+## Change Password
+
+Authenticated users can change their own password through `POST /auth/change-password`. The workflow verifies the current password before accepting a replacement, enforces the backend password policy, rejects password reuse, and records `users.password_changed_at` when the hash is updated. Password material is never logged; the audit integration point records only the event type, user id, timestamp, IP address, and user agent.
+
+Existing JWTs issued before `password_changed_at` are rejected by the JWT strategy. The frontend clears local authentication state after a successful change and sends the user back to login.
+
 ## JWT
 
 JWTs should be short-lived enough to limit exposure and include only necessary identity claims. Sensitive authorization decisions should use server-side role and permission lookups.

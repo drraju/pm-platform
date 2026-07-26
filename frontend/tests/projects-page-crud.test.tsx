@@ -20,14 +20,14 @@ const projectMocks = vi.hoisted(() => ({
       firstName: "Ava",
       id: "user-1",
       lastName: "Patel",
-      role: "Project Manager",
+      role: "PROJECT_MANAGER",
     },
     {
       email: "liam@example.com",
       firstName: "Liam",
       id: "user-2",
       lastName: "Wong",
-      role: "Executive",
+      role: "EXECUTIVE",
     },
   ]),
   getProject: vi.fn(async (projectId: string) => ({
@@ -168,7 +168,9 @@ describe("ProjectsPage CRUD", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /edit/i }));
 
-    expect(await screen.findByDisplayValue("ERP Modernization")).toBeInTheDocument();
+    expect(
+      await screen.findByDisplayValue("ERP Modernization"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toHaveValue(
       "Finance transformation delivery.",
     );
@@ -197,8 +199,12 @@ describe("ProjectsPage CRUD", () => {
     render(<ProjectsPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: /delete/i }));
-    const deleteDialog = screen.getByRole("dialog", { name: /delete project/i });
-    expect(within(deleteDialog).getByText(/confirm deletion of/i)).toBeInTheDocument();
+    const deleteDialog = screen.getByRole("dialog", {
+      name: /delete project/i,
+    });
+    expect(
+      within(deleteDialog).getByText(/confirm deletion of/i),
+    ).toBeInTheDocument();
 
     fireEvent.click(
       within(deleteDialog).getByRole("button", { name: /^delete project$/i }),

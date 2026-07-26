@@ -76,6 +76,12 @@ export function GlobalHeader({
           >
             AI Assistant
           </button>
+          <Link
+            className="hidden min-h-9 items-center rounded-md px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950 sm:inline-flex"
+            href="/settings/change-password"
+          >
+            Settings
+          </Link>
 
           <div className="ml-1 hidden text-right xl:block">
             <p className="max-w-40 truncate text-sm font-medium text-slate-900">

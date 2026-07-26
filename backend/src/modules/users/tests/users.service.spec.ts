@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { UserRole } from '../../../common/enums/user-role.enum';
 import { Permission } from '../entities/permission.entity';
 import { Role } from '../entities/role.entity';
 import { User } from '../entities/user.entity';
@@ -92,7 +93,7 @@ describe('UsersService', () => {
         firstName: 'Ava',
         lastName: 'Patel',
         passwordHash: 'hashed-password',
-        role: { id: 'role-1', name: 'Project Manager' },
+        role: { id: 'role-1', name: UserRole.ProjectManager },
         roleId: 'role-1',
         status: 'active',
       },
@@ -112,7 +113,7 @@ describe('UsersService', () => {
         firstName: 'Ava',
         lastName: 'Patel',
         displayName: 'Ava Patel',
-        role: 'Project Manager',
+        role: UserRole.ProjectManager,
       },
     ]);
     expect(JSON.stringify(result)).not.toContain('passwordHash');

@@ -4,30 +4,30 @@ import { Test } from '@nestjs/testing';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { PermissionKey } from '../../../common/authz/permissions';
 import { PermissionsGuard } from '../../../common/authz/permissions.guard';
+import { UserRole } from '../../../common/enums/user-role.enum';
 import { PortfolioController } from '../portfolio.controller';
 import { PortfolioService } from '../portfolio.service';
 import { MilestoneQueryService } from '../../tasks/milestone-query.service';
 import { MilestoneResponseMapper } from '../../tasks/milestone-response.mapper';
 
 const permissionsByRoleName: Record<string, string[]> = {
-  'Program Manager': [PermissionKey.DashboardView, PermissionKey.PortfolioView],
-  'Portfolio Manager': [
+  [UserRole.PortfolioManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
     PermissionKey.PortfolioView,
   ],
-  Executive: [
+  [UserRole.Executive]: [
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
     PermissionKey.PortfolioView,
   ],
-  Customer: [PermissionKey.DashboardView, PermissionKey.ProjectRead],
-  Partner: [
+  [UserRole.Customer]: [PermissionKey.DashboardView, PermissionKey.ProjectRead],
+  [UserRole.Partner]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectRead,
     PermissionKey.RaidRead,
   ],
-  'Team Member': [
+  [UserRole.TeamMember]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectRead,
     PermissionKey.TaskUpdate,
@@ -76,7 +76,7 @@ describe('PortfolioController authorization', () => {
     guard = moduleRef.get(PermissionsGuard);
   });
 
-  it.each(['Program Manager', 'Portfolio Manager', 'Executive'])(
+  it.each([UserRole.PortfolioManager, UserRole.Executive])(
     'allows %s to access portfolio reporting',
     async (roleName) => {
       await expect(
@@ -88,17 +88,17 @@ describe('PortfolioController authorization', () => {
   it('applies portfolio.view to the milestone endpoint', async () => {
     await expect(
       guard.canActivate(
-        createContext('Portfolio Manager', controller, 'findMilestones'),
+        createContext(UserRole.PortfolioManager, controller, 'findMilestones'),
       ),
     ).resolves.toBe(true);
     await expect(
       guard.canActivate(
-        createContext('Customer', controller, 'findMilestones'),
+        createContext(UserRole.Customer, controller, 'findMilestones'),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it.each(['Customer', 'Partner', 'Team Member'])(
+  it.each([UserRole.Customer, UserRole.Partner, UserRole.TeamMember])(
     'denies %s from accessing portfolio reporting',
     async (roleName) => {
       await expect(

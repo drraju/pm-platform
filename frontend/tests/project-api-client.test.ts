@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addProjectMember,
   captureProjectBaseline,
+  changePassword,
   getDocumentCategories,
   createProjectDocument,
   createProjectTask,
@@ -38,7 +39,10 @@ import {
   updateRaidItem,
 } from "@/lib/api/client";
 
-function mockFetch(response: unknown, init: { status?: number; ok?: boolean } = {}) {
+function mockFetch(
+  response: unknown,
+  init: { status?: number; ok?: boolean } = {},
+) {
   const status = init.status ?? 200;
   const ok = init.ok ?? status < 400;
   const text =
@@ -438,7 +442,7 @@ describe("project API client", () => {
         firstName: "Ava",
         id: "user-1",
         lastName: "Patel",
-        role: "Project Manager",
+        role: "PROJECT_MANAGER",
       },
     ]);
     vi.stubGlobal("fetch", fetchMock);
@@ -450,7 +454,7 @@ describe("project API client", () => {
         firstName: "Ava",
         id: "user-1",
         lastName: "Patel",
-        role: "Project Manager",
+        role: "PROJECT_MANAGER",
       },
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
@@ -622,7 +626,9 @@ describe("project API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(deleteRaidItem("risk-1")).resolves.toBeUndefined();
-    await expect(deleteProjectTask("project-1", "task-1")).resolves.toBeUndefined();
+    await expect(
+      deleteProjectTask("project-1", "task-1"),
+    ).resolves.toBeUndefined();
     await expect(deleteProject("project-1")).resolves.toBeUndefined();
   });
 
@@ -645,19 +651,51 @@ describe("project API client", () => {
   it("loads the authenticated permission profile", async () => {
     const fetchMock = mockFetch({
       permissions: [{ id: "permission-1", key: "task.create" }],
-      roles: [{ id: "role-1", name: "Project Manager" }],
+      roles: [{ id: "role-1", name: "PROJECT_MANAGER" }],
       user: { id: "user-1", email: "pm@example.com" },
     });
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getAuthMe()).resolves.toEqual({
       permissions: [{ id: "permission-1", key: "task.create" }],
-      roles: [{ id: "role-1", name: "Project Manager" }],
+      roles: [{ id: "role-1", name: "PROJECT_MANAGER" }],
       user: { id: "user-1", email: "pm@example.com" },
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/auth/me",
       expect.any(Object),
+    );
+  });
+
+  it("changes the authenticated user's password", async () => {
+    const fetchMock = mockFetch({
+      message: "Password changed successfully. Please sign in again.",
+      requiresLogin: true,
+      success: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      changePassword({
+        confirmPassword: "NewPass1!",
+        currentPassword: "OldPass1!",
+        newPassword: "NewPass1!",
+      }),
+    ).resolves.toEqual({
+      message: "Password changed successfully. Please sign in again.",
+      requiresLogin: true,
+      success: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/change-password",
+      expect.objectContaining({
+        body: JSON.stringify({
+          confirmPassword: "NewPass1!",
+          currentPassword: "OldPass1!",
+          newPassword: "NewPass1!",
+        }),
+        method: "POST",
+      }),
     );
   });
 

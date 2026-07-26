@@ -69,13 +69,13 @@ vi.mock("@/features/auth", () => ({
       { id: "permission-task-update-any", key: "task.update" },
       { id: "permission-task-comment", key: "task.comment" },
     ],
-    roles: [{ id: "role-executive", name: "Executive", permissions: [] }],
+    roles: [{ id: "role-executive", name: "EXECUTIVE", permissions: [] }],
     user: {
       email: "executive@example.com",
       firstName: "Executive",
       id: "user-executive",
       lastName: "User",
-      role: { id: "role-executive", name: "Executive", permissions: [] },
+      role: { id: "role-executive", name: "EXECUTIVE", permissions: [] },
       status: "active",
     },
   })),
@@ -199,7 +199,7 @@ describe("Executive dashboard drilldown consistency", () => {
           ? { reasons: ["No health issues identified"], status: "GREEN" }
           : projectId === "project-amber-1"
             ? { reasons: ["1 high risk open"], status: "AMBER" }
-          : { reasons: ["1 critical issue open"], status: "RED" },
+            : { reasons: ["1 critical issue open"], status: "RED" },
       id: projectId,
       members: [],
     }));
@@ -215,7 +215,9 @@ describe("Executive dashboard drilldown consistency", () => {
       "href",
       "/projects?health=RED&sort=health_desc",
     );
-    expect(within(redProjectsWidget as HTMLAnchorElement).getByText("2")).toBeInTheDocument();
+    expect(
+      within(redProjectsWidget as HTMLAnchorElement).getByText("2"),
+    ).toBeInTheDocument();
 
     fireEvent.click(redProjectsWidget as HTMLAnchorElement);
     expect(window.location.pathname + window.location.search).toBe(
@@ -366,7 +368,10 @@ describe("Executive dashboard drilldown consistency", () => {
     });
 
     const greenProjectsWidget = screen.getByText("Green Projects").closest("a");
-    expect(greenProjectsWidget).toHaveAttribute("href", "/projects?health=GREEN");
+    expect(greenProjectsWidget).toHaveAttribute(
+      "href",
+      "/projects?health=GREEN",
+    );
     expect(
       within(greenProjectsWidget as HTMLAnchorElement).getByText("1"),
     ).toBeInTheDocument();
@@ -400,17 +405,29 @@ describe("Executive dashboard drilldown consistency", () => {
       openIssuesByPriority: { critical: 0, high: 0, medium: 0, low: 0 },
       overdueTasks: {
         total: 2,
-        projects: [{ projectId: "project-1", projectName: "Core Platform", overdueTaskCount: 2 }],
+        projects: [
+          {
+            projectId: "project-1",
+            projectName: "Core Platform",
+            overdueTaskCount: 2,
+          },
+        ],
       },
       upcomingMilestones: [],
     });
 
     const today = new Date();
     const oneDay = 24 * 60 * 60 * 1000;
-    const overdueDateOne = new Date(today.getTime() - oneDay).toISOString().slice(0, 10);
-    const overdueDateTwo = new Date(today.getTime() - 2 * oneDay).toISOString().slice(0, 10);
+    const overdueDateOne = new Date(today.getTime() - oneDay)
+      .toISOString()
+      .slice(0, 10);
+    const overdueDateTwo = new Date(today.getTime() - 2 * oneDay)
+      .toISOString()
+      .slice(0, 10);
     const dueToday = today.toISOString().slice(0, 10);
-    const futureDate = new Date(today.getTime() + oneDay).toISOString().slice(0, 10);
+    const futureDate = new Date(today.getTime() + oneDay)
+      .toISOString()
+      .slice(0, 10);
 
     projectMocks.getProjects.mockResolvedValue([
       {
@@ -466,7 +483,9 @@ describe("Executive dashboard drilldown consistency", () => {
       "href",
       "/tasks?scope=all&timing=overdue",
     );
-    expect(within(overdueTasksWidget as HTMLAnchorElement).getByText("2")).toBeInTheDocument();
+    expect(
+      within(overdueTasksWidget as HTMLAnchorElement).getByText("2"),
+    ).toBeInTheDocument();
 
     fireEvent.click(overdueTasksWidget as HTMLAnchorElement);
     expect(window.location.pathname + window.location.search).toBe(
@@ -483,9 +502,13 @@ describe("Executive dashboard drilldown consistency", () => {
 
     const visibleTaskCards = screen.getAllByRole("article");
     expect(visibleTaskCards).toHaveLength(2);
-    expect(screen.getByText("Resolve vendor cutover blocker")).toBeInTheDocument();
+    expect(
+      screen.getByText("Resolve vendor cutover blocker"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Approve recovery plan")).toBeInTheDocument();
-    expect(screen.queryByText("Prepare steering readout")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Prepare steering readout"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Confirm rollout notes")).not.toBeInTheDocument();
   });
 });

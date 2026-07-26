@@ -32,17 +32,21 @@ vi.mock("@/features/auth", () => ({
       { id: "permission-task-update-any", key: "task.update" },
       { id: "permission-task-comment", key: "task.comment" },
     ],
-    roles: [{ id: "role-1", name: "Executive", permissions: [] }],
+    roles: [{ id: "role-1", name: "EXECUTIVE", permissions: [] }],
     user: {
       email: "executive@example.com",
       firstName: "Executive",
       id: "user-1",
       lastName: "User",
-      role: { id: "role-1", name: "Executive", permissions: [] },
+      role: { id: "role-1", name: "EXECUTIVE", permissions: [] },
       status: "active",
     },
   })),
-  getStoredPermissionKeys: () => ["project.read", "task.update", "task.comment"],
+  getStoredPermissionKeys: () => [
+    "project.read",
+    "task.update",
+    "task.comment",
+  ],
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
     permissionKeys.includes(requiredPermission),
   storeAuthMe: vi.fn(),
@@ -83,9 +87,13 @@ describe("Tasks page", () => {
 
     const today = new Date();
     const oneDay = 24 * 60 * 60 * 1000;
-    const overdueDate = new Date(today.getTime() - oneDay).toISOString().slice(0, 10);
+    const overdueDate = new Date(today.getTime() - oneDay)
+      .toISOString()
+      .slice(0, 10);
     const dueToday = today.toISOString().slice(0, 10);
-    const futureDate = new Date(today.getTime() + 7 * oneDay).toISOString().slice(0, 10);
+    const futureDate = new Date(today.getTime() + 7 * oneDay)
+      .toISOString()
+      .slice(0, 10);
 
     const visibleTasks = [
       {
@@ -125,9 +133,15 @@ describe("Tasks page", () => {
 
     expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("All visible tasks")).toBeInTheDocument();
-    expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
-    expect(screen.queryByText("Prepare steering update")).not.toBeInTheDocument();
-    expect(screen.queryByText("Plan executive readout")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Resolve collector rollout blocker"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Prepare steering update"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Plan executive readout"),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(1);
     expect(window.location.search).toBe("?scope=all&timing=overdue");
   });
@@ -138,8 +152,12 @@ describe("Tasks page", () => {
 
     const today = new Date();
     const oneDay = 24 * 60 * 60 * 1000;
-    const overdueDate = new Date(today.getTime() - oneDay).toISOString().slice(0, 10);
-    const futureDate = new Date(today.getTime() + 7 * oneDay).toISOString().slice(0, 10);
+    const overdueDate = new Date(today.getTime() - oneDay)
+      .toISOString()
+      .slice(0, 10);
+    const futureDate = new Date(today.getTime() + 7 * oneDay)
+      .toISOString()
+      .slice(0, 10);
 
     const visibleTasks = [
       {
@@ -170,8 +188,12 @@ describe("Tasks page", () => {
     });
 
     expect(screen.getByDisplayValue("All visible tasks")).toBeInTheDocument();
-    expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
-    expect(screen.queryByText("Plan executive readout")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Resolve collector rollout blocker"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Plan executive readout"),
+    ).not.toBeInTheDocument();
     expect(window.location.pathname + window.location.search).toBe(
       "/tasks?scope=all&timing=overdue",
     );
@@ -180,8 +202,12 @@ describe("Tasks page", () => {
   it("restores overdue filters after browser back and forward navigation", async () => {
     const today = new Date();
     const oneDay = 24 * 60 * 60 * 1000;
-    const overdueDate = new Date(today.getTime() - oneDay).toISOString().slice(0, 10);
-    const futureDate = new Date(today.getTime() + 7 * oneDay).toISOString().slice(0, 10);
+    const overdueDate = new Date(today.getTime() - oneDay)
+      .toISOString()
+      .slice(0, 10);
+    const futureDate = new Date(today.getTime() + 7 * oneDay)
+      .toISOString()
+      .slice(0, 10);
 
     const visibleTasks = [
       {
@@ -221,8 +247,12 @@ describe("Tasks page", () => {
       expect(taskMocks.getTasks).toHaveBeenCalled();
     });
 
-    expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
-    expect(screen.queryByText("Plan executive readout")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Resolve collector rollout blocker"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Plan executive readout"),
+    ).not.toBeInTheDocument();
 
     await act(async () => {
       window.history.replaceState({}, "", "/tasks");
@@ -234,7 +264,9 @@ describe("Tasks page", () => {
       expect(taskMocks.getMyTasks).toHaveBeenCalledTimes(2);
     });
 
-    expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
+    expect(
+      screen.getByText("Resolve collector rollout blocker"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Plan executive readout")).toBeInTheDocument();
 
     await act(async () => {
@@ -247,7 +279,11 @@ describe("Tasks page", () => {
       expect(taskMocks.getTasks).toHaveBeenCalledTimes(2);
     });
 
-    expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
-    expect(screen.queryByText("Plan executive readout")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Resolve collector rollout blocker"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Plan executive readout"),
+    ).not.toBeInTheDocument();
   });
 });

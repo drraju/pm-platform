@@ -36,12 +36,13 @@ concepts.
 
 Platform security roles are:
 
-- System Administrator
-- Portfolio Manager
-- Project Manager
-- Team Member
-- Executive
-- External User
+- `PLATFORM_ADMIN`
+- `PORTFOLIO_MANAGER`
+- `PROJECT_MANAGER`
+- `TEAM_MEMBER`
+- `EXECUTIVE`
+- `CUSTOMER`
+- `PARTNER`
 
 Job titles are user-profile metadata. Examples include Engineer, QA Engineer,
 Technical Lead, Architect, Scrum Master, Business Analyst, and Product Owner.
@@ -140,4 +141,3 @@ Expected implementation shape:
 - [STAB-IAM-001 ADR Review](../STAB_IAM_001_ADR_REVIEW.md)
 - [Security Architecture](../07-SECURITY-ARCHITECTURE.md)
 - [Development Workflow](../08-DEVELOPMENT-WORKFLOW.md)
-

@@ -22,17 +22,18 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/features/auth", () => ({
   getAuthMe: authMocks.getAuthMe,
   getDefaultDashboardPath: (authMe: {
+    permissions: Array<{ key: string }>;
     roles: Array<{ name: string }>;
     user: { role?: { name: string } | null };
   }) => {
-    const roleName =
-      authMe.user.role?.name?.toLowerCase() ?? authMe.roles[0]?.name?.toLowerCase() ?? "";
-
-    if (roleName === "executive") {
+    const permissionKeys = authMe.permissions.map(
+      (permission) => permission.key,
+    );
+    if (permissionKeys.includes("executive.view")) {
       return "/executive";
     }
 
-    if (roleName === "portfolio manager") {
+    if (permissionKeys.includes("portfolio.view")) {
       return "/portfolio";
     }
 
@@ -61,14 +62,14 @@ describe("Login page", () => {
 
   it("routes executive users to the executive dashboard after login", async () => {
     authMocks.getAuthMe.mockResolvedValue({
-      permissions: [],
-      roles: [{ id: "role-executive", name: "Executive", permissions: [] }],
+      permissions: [{ id: "permission-executive", key: "executive.view" }],
+      roles: [{ id: "role-executive", name: "EXECUTIVE", permissions: [] }],
       user: {
         email: "executive@example.com",
         firstName: "Executive",
         id: "user-executive",
         lastName: "User",
-        role: { id: "role-executive", name: "Executive", permissions: [] },
+        role: { id: "role-executive", name: "EXECUTIVE", permissions: [] },
         status: "active",
       },
     });
@@ -90,8 +91,10 @@ describe("Login page", () => {
 
   it("routes portfolio managers to the portfolio dashboard after login", async () => {
     authMocks.getAuthMe.mockResolvedValue({
-      permissions: [],
-      roles: [{ id: "role-portfolio", name: "Portfolio Manager", permissions: [] }],
+      permissions: [{ id: "permission-portfolio", key: "portfolio.view" }],
+      roles: [
+        { id: "role-portfolio", name: "PORTFOLIO_MANAGER", permissions: [] },
+      ],
       user: {
         email: "portfolio.manager@example.com",
         firstName: "Portfolio",
@@ -99,7 +102,7 @@ describe("Login page", () => {
         lastName: "Manager",
         role: {
           id: "role-portfolio",
-          name: "Portfolio Manager",
+          name: "PORTFOLIO_MANAGER",
           permissions: [],
         },
         status: "active",

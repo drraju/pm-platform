@@ -77,7 +77,7 @@ describe("AppShell", () => {
     });
   });
 
-  it("renders primary navigation and page content for a program manager", async () => {
+  it("renders primary navigation and page content for a portfolio manager", async () => {
     authMocks.getAuthMe.mockResolvedValue({
       permissions: [
         { id: "permission-dashboard", key: "dashboard.view" },
@@ -88,13 +88,13 @@ describe("AppShell", () => {
         { id: "permission-raid-read", key: "raid.read" },
         { id: "permission-notification-read", key: "notification.read" },
       ],
-      roles: [{ id: "role-1", name: "Program Manager", permissions: [] }],
+      roles: [{ id: "role-1", name: "PORTFOLIO_MANAGER", permissions: [] }],
       user: {
         email: "program.manager@example.com",
-        firstName: "Program",
+        firstName: "Portfolio",
         id: "user-1",
         lastName: "Manager",
-        role: { id: "role-1", name: "Program Manager", permissions: [] },
+        role: { id: "role-1", name: "PORTFOLIO_MANAGER", permissions: [] },
         status: "active",
       },
     });
@@ -106,7 +106,7 @@ describe("AppShell", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByText("Program Manager")).toHaveLength(2);
+      expect(screen.getByText("PORTFOLIO_MANAGER")).toBeInTheDocument();
     });
 
     expect(
@@ -164,34 +164,34 @@ describe("AppShell", () => {
     expect(screen.getByText("Workspace content")).toBeInTheDocument();
   });
 
-  it("shows engineer navigation without executive-only links", async () => {
+  it("shows team member navigation without executive-only links", async () => {
     authMocks.getAuthMe.mockResolvedValue({
       permissions: [
         { id: "permission-dashboard", key: "dashboard.view" },
         { id: "permission-project-read", key: "project.read" },
-        { id: "permission-task-update-own", key: "project-tasks:update:own" },
-        { id: "permission-raid-read-assigned", key: "raid:read:assigned" },
+        { id: "permission-task-update", key: "task.update" },
+        { id: "permission-raid-read", key: "raid.read" },
         { id: "permission-notification-read", key: "notification.read" },
       ],
-      roles: [{ id: "role-2", name: "Engineer", permissions: [] }],
+      roles: [{ id: "role-2", name: "TEAM_MEMBER", permissions: [] }],
       user: {
-        email: "engineer@example.com",
-        firstName: "Elena",
+        email: "team.member@example.com",
+        firstName: "Team",
         id: "user-2",
-        lastName: "Ng",
-        role: { id: "role-2", name: "Engineer", permissions: [] },
+        lastName: "Member",
+        role: { id: "role-2", name: "TEAM_MEMBER", permissions: [] },
         status: "active",
       },
     });
 
     render(
       <AppShell>
-        <h1>Engineer workspace</h1>
+        <h1>Team member workspace</h1>
       </AppShell>,
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Engineer")).toBeInTheDocument();
+      expect(screen.getByText("TEAM_MEMBER")).toBeInTheDocument();
     });
 
     expect(screen.getByRole("link", { name: /projects/i })).toHaveAttribute(
@@ -236,11 +236,13 @@ describe("workspace route context", () => {
   });
 
   it("preserves the project overview link on deep project routes", () => {
-    expect(getWorkspaceContext("/projects/project-1/raid").breadcrumbs).toEqual([
-      { href: "/projects", label: "Projects" },
-      { href: "/projects/project-1", label: "Project" },
-      { label: "Raid" },
-    ]);
+    expect(getWorkspaceContext("/projects/project-1/raid").breadcrumbs).toEqual(
+      [
+        { href: "/projects", label: "Projects" },
+        { href: "/projects/project-1", label: "Project" },
+        { label: "Raid" },
+      ],
+    );
   });
 
   it("maps project queues without losing their Projects workspace context", () => {

@@ -1,4 +1,5 @@
 export {
+  changePassword,
   clearSession,
   getAuthMe,
   getStoredAccessToken,

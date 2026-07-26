@@ -13,13 +13,13 @@ vi.mock("@/features/auth", () => ({
       { id: "permission-executive-view", key: "executive.view" },
       { id: "permission-project-read", key: "project.read" },
     ],
-    roles: [{ id: "role-1", name: "Executive", permissions: [] }],
+    roles: [{ id: "role-1", name: "EXECUTIVE", permissions: [] }],
     user: {
       email: "executive@example.com",
       firstName: "Executive",
       id: "user-1",
       lastName: "User",
-      role: { id: "role-1", name: "Executive", permissions: [] },
+      role: { id: "role-1", name: "EXECUTIVE", permissions: [] },
       status: "active",
     },
   })),
@@ -71,7 +71,10 @@ describe("Executive dashboard page", () => {
     });
 
     const overdueLink = screen.getByText("Overdue Tasks").closest("a");
-    expect(overdueLink).toHaveAttribute("href", "/tasks?scope=all&timing=overdue");
+    expect(overdueLink).toHaveAttribute(
+      "href",
+      "/tasks?scope=all&timing=overdue",
+    );
     expect(screen.getByText("Open Risks").closest("a")).toHaveAttribute(
       "href",
       "/risks?status=open",

@@ -658,6 +658,21 @@ export function getAuthMe() {
   return apiRequest<ApiAuthMe>("/auth/me");
 }
 
+export function changePassword(input: {
+  confirmPassword: string;
+  currentPassword: string;
+  newPassword: string;
+}) {
+  return apiRequest<{
+    message: string;
+    requiresLogin: boolean;
+    success: boolean;
+  }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function register(input: {
   email: string;
   firstName: string;
