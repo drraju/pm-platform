@@ -20,6 +20,19 @@ export class UserResponseDto {
   @ApiProperty()
   status: string;
 
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiPropertyOptional()
+  lastLoginAt?: Date | null;
+
+  @ApiProperty()
+  accountHistory: Array<{
+    action: string;
+    administratorId: string;
+    timestamp: string;
+  }>;
+
   @ApiPropertyOptional({ type: RoleResponseDto })
   role?: RoleResponseDto | null;
 }

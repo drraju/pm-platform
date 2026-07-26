@@ -19,6 +19,14 @@ export type ApiUser = {
   firstName: string;
   lastName: string;
   status: string;
+  accountHistory?: Array<{
+    action: string;
+    administratorId: string;
+    timestamp: string;
+  }>;
+  createdAt?: string;
+  lastLoginAt?: string | null;
+  roleId?: string;
   role?: ApiRole | null;
 };
 
@@ -644,7 +652,11 @@ export async function apiRequest<T>(
 }
 
 export function login(email: string, password: string) {
-  return apiRequest<{ accessToken: string; refreshToken: string }>(
+  return apiRequest<{
+    accessToken: string;
+    refreshToken: string;
+    requiresPasswordChange?: boolean;
+  }>(
     "/auth/login",
     {
       method: "POST",
@@ -671,48 +683,6 @@ export function changePassword(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
-}
-
-export function requestPasswordReset(email: string) {
-  return apiRequest<{
-    message: string;
-    success: boolean;
-  }>("/auth/forgot-password", {
-    method: "POST",
-    token: null,
-    body: JSON.stringify({ email }),
-  });
-}
-
-export function resetPassword(input: {
-  confirmPassword: string;
-  newPassword: string;
-  token: string;
-}) {
-  return apiRequest<{
-    message: string;
-    success: boolean;
-  }>("/auth/reset-password", {
-    method: "POST",
-    token: null,
-    body: JSON.stringify(input),
-  });
-}
-
-export function register(input: {
-  email: string;
-  firstName: string;
-  lastName: string;
-  password: string;
-}) {
-  return apiRequest<{ accessToken: string; refreshToken: string }>(
-    "/auth/register",
-    {
-      method: "POST",
-      token: null,
-      body: JSON.stringify(input),
-    },
-  );
 }
 
 export function getProjects(
@@ -1131,6 +1101,44 @@ export function createUser(input: {
   return apiRequest<ApiUser>("/users", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function updateUser(
+  userId: string,
+  input: Partial<{
+    email: string;
+    firstName: string;
+    lastName: string;
+    roleId: string;
+    status: string;
+  }>,
+) {
+  return apiRequest<ApiUser>(`/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function enableUser(userId: string) {
+  return apiRequest<ApiUser>(`/users/${userId}/enable`, {
+    method: "POST",
+  });
+}
+
+export function disableUser(userId: string) {
+  return apiRequest<ApiUser>(`/users/${userId}/disable`, {
+    method: "POST",
+  });
+}
+
+export function adminResetUserPassword(
+  userId: string,
+  temporaryPassword: string,
+) {
+  return apiRequest<ApiUser>(`/users/${userId}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ temporaryPassword }),
   });
 }
 

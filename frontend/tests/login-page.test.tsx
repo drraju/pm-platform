@@ -6,7 +6,6 @@ import LoginPage from "@/app/(auth)/login/page";
 const authMocks = vi.hoisted(() => ({
   getAuthMe: vi.fn(),
   login: vi.fn(),
-  register: vi.fn(),
   storeAuthMe: vi.fn(),
   storeSession: vi.fn(),
 }));
@@ -40,7 +39,6 @@ vi.mock("@/features/auth", () => ({
     return "/dashboard";
   },
   login: authMocks.login,
-  register: authMocks.register,
   storeAuthMe: authMocks.storeAuthMe,
   storeSession: authMocks.storeSession,
 }));
@@ -50,7 +48,6 @@ describe("Login page", () => {
     routerPush.mockReset();
     authMocks.getAuthMe.mockReset();
     authMocks.login.mockReset();
-    authMocks.register.mockReset();
     authMocks.storeAuthMe.mockReset();
     authMocks.storeSession.mockReset();
 
@@ -82,7 +79,7 @@ describe("Login page", () => {
     fireEvent.change(screen.getByLabelText(/password/i), {
       target: { value: "Password123!" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
 
     await waitFor(() => {
       expect(routerPush).toHaveBeenCalledWith("/executive");
@@ -117,18 +114,22 @@ describe("Login page", () => {
     fireEvent.change(screen.getByLabelText(/password/i), {
       target: { value: "Password123!" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
 
     await waitFor(() => {
       expect(routerPush).toHaveBeenCalledWith("/portfolio");
     });
   });
 
-  it("links to forgot password from sign in mode", () => {
+  it("shows administrator contact guidance for forgotten passwords", () => {
     render(<LoginPage />);
 
+    fireEvent.click(screen.getByRole("button", { name: /forgot password/i }));
+
     expect(
-      screen.getByRole("link", { name: /forgot password/i }),
-    ).toHaveAttribute("href", "/forgot-password");
+      screen.getByText(
+        "If you have forgotten your password, please contact your PM Platform Administrator.",
+      ),
+    ).toBeInTheDocument();
   });
 });

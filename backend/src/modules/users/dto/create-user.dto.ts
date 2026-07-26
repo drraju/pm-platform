@@ -20,17 +20,16 @@ export class CreateUserDto {
   @IsString()
   lastName: string;
 
-  @ApiProperty({ minLength: 8, required: false })
-  @IsOptional()
+  @ApiProperty({ minLength: 8 })
   @IsString()
   @MinLength(8)
-  password?: string;
+  password: string;
 
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   roleId: string;
 
-  @ApiProperty({ default: 'active', required: false })
+  @ApiProperty({ default: 'first_login_pending', required: false })
   @IsOptional()
   @IsString()
   status?: string;

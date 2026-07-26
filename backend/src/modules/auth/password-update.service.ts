@@ -67,7 +67,12 @@ export class PasswordUpdateService {
     const passwordHash = await this.passwordService.hashPassword(
       changePasswordDto.newPassword,
     );
-    await this.usersService.updatePassword(userId, passwordHash);
+    await this.usersService.updatePassword(
+      userId,
+      passwordHash,
+      new Date(),
+      'active',
+    );
     this.recordPasswordChangeAudit(userId, auditContext);
 
     return {
@@ -106,11 +111,42 @@ export class PasswordUpdateService {
     const passwordHash = await this.passwordService.hashPassword(
       resetPasswordInput.newPassword,
     );
-    await this.usersService.updatePassword(userId, passwordHash);
+    await this.usersService.updatePassword(
+      userId,
+      passwordHash,
+      new Date(),
+      'active',
+    );
     this.recordPasswordChangeAudit(userId, {
       ...auditContext,
       event: 'PasswordResetPasswordChanged',
     });
+  }
+
+  async adminResetPassword(
+    userId: string,
+    temporaryPassword: string,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<void> {
+    this.validateNewPassword(temporaryPassword);
+
+    const passwordHash =
+      await this.passwordService.hashPassword(temporaryPassword);
+    await this.usersService.updatePassword(
+      userId,
+      passwordHash,
+      new Date(),
+      'first_login_pending',
+    );
+    this.recordPasswordChangeAudit(userId, {
+      ...auditContext,
+      event: 'PasswordResetByAdministrator',
+    });
+  }
+
+  async hashTemporaryPassword(temporaryPassword: string): Promise<string> {
+    this.validateNewPassword(temporaryPassword);
+    return this.passwordService.hashPassword(temporaryPassword);
   }
 
   private validateNewPassword(password: string): void {

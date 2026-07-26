@@ -9,7 +9,7 @@ import {
   WorkspaceHeader,
   WorkspaceLayout,
 } from "@/components/foundation";
-import { changePassword, clearSession } from "@/features/auth";
+import { changePassword, clearSession, getAuthMe } from "@/features/auth";
 
 type FormErrors = {
   confirmPassword?: string;
@@ -22,6 +22,7 @@ export default function ChangePasswordPage() {
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isFirstLoginPending, setIsFirstLoginPending] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -33,6 +34,28 @@ export default function ChangePasswordPage() {
     },
     [],
   );
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSessionState() {
+      try {
+        const authMe = await getAuthMe();
+        if (isMounted) {
+          setIsFirstLoginPending(authMe.user.status === "first_login_pending");
+        }
+      } catch {
+        if (isMounted) {
+          setIsFirstLoginPending(false);
+        }
+      }
+    }
+
+    void loadSessionState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,7 +105,11 @@ export default function ChangePasswordPage() {
       <WorkspaceHeader
         eyebrow="User settings"
         title="Change Password"
-        subtitle="Update your account password and sign in again to continue working."
+        subtitle={
+          isFirstLoginPending
+            ? "Change your temporary password before continuing."
+            : "Update your account password and sign in again to continue working."
+        }
       />
 
       <WorkspaceContent as="section">
@@ -134,14 +161,16 @@ export default function ChangePasswordPage() {
           ) : null}
 
           <div className="flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-4">
-            <button
-              className="min-h-10 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              disabled={isSaving}
-              onClick={handleCancel}
-              type="button"
-            >
-              Cancel
-            </button>
+            {isFirstLoginPending ? null : (
+              <button
+                className="min-h-10 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                disabled={isSaving}
+                onClick={handleCancel}
+                type="button"
+              >
+                Cancel
+              </button>
+            )}
             <button
               className="min-h-10 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isSaving}

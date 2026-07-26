@@ -6,6 +6,7 @@ import ChangePasswordPage from "@/app/(app)/settings/change-password/page";
 const authMocks = vi.hoisted(() => ({
   changePassword: vi.fn(),
   clearSession: vi.fn(),
+  getAuthMe: vi.fn(),
 }));
 
 const routerPush = vi.fn();
@@ -19,12 +20,19 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/features/auth", () => ({
   changePassword: authMocks.changePassword,
   clearSession: authMocks.clearSession,
+  getAuthMe: authMocks.getAuthMe,
 }));
 
 describe("ChangePasswordPage", () => {
   beforeEach(() => {
     authMocks.changePassword.mockReset();
     authMocks.clearSession.mockReset();
+    authMocks.getAuthMe.mockReset();
+    authMocks.getAuthMe.mockResolvedValue({
+      permissions: [],
+      roles: [],
+      user: { id: "user-1", status: "active" },
+    });
     routerPush.mockReset();
   });
 

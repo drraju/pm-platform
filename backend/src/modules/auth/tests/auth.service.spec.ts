@@ -1,22 +1,14 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { UserRole } from '../../../common/enums/user-role.enum';
-import { Role } from '../../users/entities/role.entity';
 import { User } from '../../users/entities/user.entity';
 import { UsersService } from '../../users/users.service';
 import { AuthService } from '../auth.service';
 import { PasswordPolicyService } from '../password-policy.service';
-import { PasswordResetService } from '../password-reset.service';
 import { PasswordUpdateService } from '../password-update.service';
 import { PasswordService } from '../password.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
-
-type MockRepository<T extends object = object> = Partial<
-  Record<keyof Repository<T>, jest.Mock>
->;
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -26,6 +18,7 @@ describe('AuthService', () => {
     findAuthenticationUserById: jest.Mock;
     findByEmail: jest.Mock;
     getSessionProfile: jest.Mock;
+    recordLogin: jest.Mock;
     updatePassword: jest.Mock;
   };
 
@@ -35,15 +28,8 @@ describe('AuthService', () => {
       findAuthenticationUserById: jest.fn(),
       findByEmail: jest.fn(),
       getSessionProfile: jest.fn(),
+      recordLogin: jest.fn(),
       updatePassword: jest.fn(),
-    };
-
-    const rolesRepository: MockRepository<Role> = {
-      create: jest.fn((input: Partial<Role>) => input),
-      findOne: jest.fn().mockResolvedValue({ id: 'role-project-manager' }),
-      save: jest.fn((input: Partial<Role>) =>
-        Promise.resolve({ ...input, id: 'role-new' }),
-      ),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -53,13 +39,6 @@ describe('AuthService', () => {
         PasswordService,
         PasswordUpdateService,
         {
-          provide: PasswordResetService,
-          useValue: {
-            requestPasswordReset: jest.fn(),
-            resetPassword: jest.fn(),
-          },
-        },
-        {
           provide: UsersService,
           useValue: usersService,
         },
@@ -68,10 +47,6 @@ describe('AuthService', () => {
           useValue: {
             sign: jest.fn(() => 'signed-token'),
           },
-        },
-        {
-          provide: getRepositoryToken(Role),
-          useValue: rolesRepository,
         },
       ],
     }).compile();
@@ -102,6 +77,8 @@ describe('AuthService', () => {
     expect(usersService.updatePassword).toHaveBeenCalledWith(
       'user-1',
       expect.any(String),
+      expect.any(Date),
+      'active',
     );
     const [, savedHash] = usersService.updatePassword.mock.calls[0] as [
       string,
@@ -164,27 +141,37 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('uses the centralized password service during registration and defaults to PROJECT_MANAGER', async () => {
-    usersService.findByEmail.mockResolvedValue(null);
-    usersService.create.mockResolvedValue({
-      email: 'new@example.com',
+  it('marks first-login-pending sessions for forced password change', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'new.user@example.com',
       id: 'user-new',
-      roleId: 'role-project-manager',
+      passwordHash: await passwordService.hashPassword('TempPass1!'),
+      roleId: 'role-team-member',
+      status: 'first_login_pending',
     });
 
-    await service.register({
-      email: 'new@example.com',
-      firstName: 'New',
-      lastName: 'User',
-      password: 'ValidPass1!',
+    await expect(
+      service.login({ email: 'new.user@example.com', password: 'TempPass1!' }),
+    ).resolves.toEqual({
+      accessToken: 'signed-token',
+      refreshToken: 'signed-token',
+      requiresPasswordChange: true,
+    });
+    expect(usersService.recordLogin).toHaveBeenCalledWith('user-new');
+  });
+
+  it('rejects disabled users during authentication', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'disabled@example.com',
+      id: 'user-disabled',
+      passwordHash: await passwordService.hashPassword('TempPass1!'),
+      roleId: 'role-team-member',
+      status: 'disabled',
     });
 
-    expect(usersService.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: 'new@example.com',
-        roleId: 'role-project-manager',
-      }),
-    );
+    await expect(
+      service.login({ email: 'disabled@example.com', password: 'TempPass1!' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
 
@@ -236,6 +223,29 @@ describe('JwtStrategy', () => {
         id: 'user-1',
         passwordChangedAt: new Date('2026-07-26T10:00:00.000Z'),
         status: 'active',
+      }),
+    } as unknown as UsersService);
+
+    await expect(
+      strategy.validate({
+        email: 'user@example.com',
+        iat: Math.floor(new Date('2026-07-26T10:00:01.000Z').getTime() / 1000),
+        roleId: UserRole.TeamMember,
+        sub: 'user-1',
+      }),
+    ).resolves.toEqual({
+      email: 'user@example.com',
+      roleId: UserRole.TeamMember,
+      userId: 'user-1',
+    });
+  });
+
+  it('accepts first-login-pending tokens for forced password change', async () => {
+    const strategy = new JwtStrategy({
+      findTokenValidationUser: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        passwordChangedAt: null,
+        status: 'first_login_pending',
       }),
     } as unknown as UsersService);
 

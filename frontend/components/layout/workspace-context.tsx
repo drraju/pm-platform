@@ -123,7 +123,7 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
   if (pathname.startsWith("/calendar") || pathname.startsWith("/users")) {
     const leaf = pathname.startsWith("/calendar")
       ? "Enterprise Calendars"
-      : "Users";
+      : "User Administration";
     return createContext("Administration", "Enterprise configuration", [
       { label: "Administration" },
       { label: leaf },

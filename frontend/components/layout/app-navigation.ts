@@ -69,8 +69,8 @@ export const appNavigation: AppNavigationItem[] = [
   },
   {
     href: "/users",
-    label: "Users",
-    permissions: ["user.manage", "role.manage"],
+    label: "User Administration",
+    permissions: ["user.manage"],
     section: "Administration",
   },
 ];

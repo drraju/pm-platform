@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addProjectMember,
+  adminResetUserPassword,
   archiveProject,
   captureProjectBaseline,
   changePassword,
-  requestPasswordReset,
-  resetPassword,
   getDocumentCategories,
   createProjectDocument,
   createProjectTask,
@@ -23,6 +22,8 @@ import {
   deleteProjectTaskDependency,
   deleteProjectTask,
   deleteRaidItem,
+  disableUser,
+  enableUser,
   getMyTasks,
   getProjectBaseline,
   getProjectBaselines,
@@ -37,6 +38,7 @@ import {
   removeProjectMember,
   restoreProject,
   updateRolePermissions,
+  updateUser,
   updateProject,
   updateProjectMember,
   updateProjectTask,
@@ -732,72 +734,6 @@ describe("project API client", () => {
     );
   });
 
-  it("requests and completes password reset without an access token", async () => {
-    const fetchMock = mockFetch({
-      message: "If an account exists, a password reset email has been sent.",
-      success: true,
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(requestPasswordReset("user@example.com")).resolves.toEqual({
-      message: "If an account exists, a password reset email has been sent.",
-      success: true,
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/auth/forgot-password",
-      expect.objectContaining({
-        body: JSON.stringify({ email: "user@example.com" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
-    );
-
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: {
-        get: vi.fn(() =>
-          String(
-            JSON.stringify({
-              message: "Password reset successfully. Please sign in.",
-              success: true,
-            }).length,
-          ),
-        ),
-      },
-      json: vi.fn(),
-      text: vi.fn().mockResolvedValue(
-        JSON.stringify({
-          message: "Password reset successfully. Please sign in.",
-          success: true,
-        }),
-      ),
-    });
-
-    await expect(
-      resetPassword({
-        confirmPassword: "NewPass1!",
-        newPassword: "NewPass1!",
-        token: "raw-token",
-      }),
-    ).resolves.toEqual({
-      message: "Password reset successfully. Please sign in.",
-      success: true,
-    });
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://localhost:3001/auth/reset-password",
-      expect.objectContaining({
-        body: JSON.stringify({
-          confirmPassword: "NewPass1!",
-          newPassword: "NewPass1!",
-          token: "raw-token",
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
-    );
-  });
-
   it("loads permissions and updates role permission assignments", async () => {
     const fetchMock = mockFetch([{ id: "permission-1", key: "task.create" }]);
     vi.stubGlobal("fetch", fetchMock);
@@ -817,6 +753,51 @@ describe("project API client", () => {
         }),
         method: "PATCH",
       }),
+    );
+  });
+
+  it("calls user administration lifecycle endpoints", async () => {
+    const fetchMock = mockFetch({ id: "user-1", status: "active" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateUser("user-1", {
+      email: "user@example.com",
+      firstName: "Ava",
+      lastName: "Patel",
+      roleId: "role-1",
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/users/user-1",
+      expect.objectContaining({
+        body: JSON.stringify({
+          email: "user@example.com",
+          firstName: "Ava",
+          lastName: "Patel",
+          roleId: "role-1",
+        }),
+        method: "PATCH",
+      }),
+    );
+
+    await adminResetUserPassword("user-1", "TempPass1!");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/users/user-1/reset-password",
+      expect.objectContaining({
+        body: JSON.stringify({ temporaryPassword: "TempPass1!" }),
+        method: "POST",
+      }),
+    );
+
+    await disableUser("user-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/users/user-1/disable",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    await enableUser("user-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/users/user-1/enable",
+      expect.objectContaining({ method: "POST" }),
     );
   });
 });

@@ -21,11 +21,21 @@ export class User extends TimestampedEntity {
   @Column({ name: 'password_changed_at', type: 'timestamptz', nullable: true })
   passwordChangedAt?: Date | null;
 
+  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  lastLoginAt?: Date | null;
+
   @Column({ name: 'role_id', type: 'uuid' })
   roleId: string;
 
   @Column({ default: 'active' })
   status: string;
+
+  @Column({
+    default: () => "'[]'::jsonb",
+    name: 'account_history',
+    type: 'jsonb',
+  })
+  accountHistory: UserAccountHistoryEntry[];
 
   @ManyToOne(() => Role, (role) => role.users)
   @JoinColumn({ name: 'role_id' })
@@ -37,3 +47,9 @@ export class User extends TimestampedEntity {
   @OneToMany(() => Notification, (notification) => notification.user)
   notifications: Notification[];
 }
+
+export type UserAccountHistoryEntry = {
+  action: string;
+  administratorId: string;
+  timestamp: string;
+};

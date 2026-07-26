@@ -6,4 +6,7 @@ export class SessionDto {
 
   @ApiProperty()
   refreshToken: string;
+
+  @ApiProperty({ required: false })
+  requiresPasswordChange?: boolean;
 }

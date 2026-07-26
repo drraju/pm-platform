@@ -3,12 +3,10 @@
 import React from "react";
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   getAuthMe,
   getDefaultDashboardPath,
   login,
-  register,
   storeAuthMe,
   storeSession,
 } from "@/features/auth";
@@ -23,8 +21,8 @@ export default function LoginPage() {
 
 function PageContent() {
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
   const [error, setError] = useState<string | null>(null);
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -37,20 +35,16 @@ function PageContent() {
     const password = String(formData.get("password") ?? "");
 
     try {
-      const session =
-        mode === "login"
-          ? await login(email, password)
-          : await register({
-              email,
-              password,
-              firstName: String(formData.get("firstName") ?? ""),
-              lastName: String(formData.get("lastName") ?? ""),
-            });
+      const session = await login(email, password);
 
       storeSession(session.accessToken, session.refreshToken);
       const authMe = await getAuthMe();
       storeAuthMe(authMe);
-      router.push(getDefaultDashboardPath(authMe));
+      router.push(
+        session.requiresPasswordChange || authMe.user.status === "first_login_pending"
+          ? "/settings/change-password"
+          : getDefaultDashboardPath(authMe),
+      );
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -79,50 +73,11 @@ function PageContent() {
         </section>
 
         <section className="rounded-md border border-slate-200 bg-white p-6 shadow-soft">
-          <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
-            {(["login", "register"] as const).map((item) => (
-              <button
-                className={`flex-1 rounded px-3 py-2 text-sm font-semibold ${
-                  mode === item
-                    ? "bg-white text-slate-950 shadow-sm"
-                    : "text-slate-600"
-                }`}
-                key={item}
-                onClick={() => setMode(item)}
-                type="button"
-              >
-                {item === "login" ? "Sign in" : "Create account"}
-              </button>
-            ))}
-          </div>
+          <h2 className="text-xl font-semibold tracking-normal text-slate-950">
+            Sign in
+          </h2>
 
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-            {mode === "register" ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">
-                    First name
-                  </span>
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                    name="firstName"
-                    required
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">
-                    Last name
-                  </span>
-                  <input
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                    name="lastName"
-                    required
-                  />
-                </label>
-              </div>
-            ) : null}
-
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Email</span>
               <input
@@ -138,27 +93,28 @@ function PageContent() {
               <span className="text-sm font-medium text-slate-700">Password</span>
               <input
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                minLength={mode === "register" ? 8 : undefined}
                 name="password"
-                placeholder={
-                  mode === "register"
-                    ? "Enter at least 8 characters"
-                    : "Enter your password"
-                }
+                placeholder="Enter your password"
                 required
                 type="password"
               />
             </label>
 
-            {mode === "login" ? (
-              <div className="text-right">
-                <Link
-                  className="text-sm font-semibold text-brand transition hover:text-teal-800"
-                  href="/forgot-password"
-                >
-                  Forgot Password?
-                </Link>
-              </div>
+            <div className="text-right">
+              <button
+                className="text-sm font-semibold text-brand transition hover:text-teal-800"
+                onClick={() => setForgotPasswordMessage(true)}
+                type="button"
+              >
+                Forgot Password?
+              </button>
+            </div>
+
+            {forgotPasswordMessage ? (
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                If you have forgotten your password, please contact your PM
+                Platform Administrator.
+              </p>
             ) : null}
 
             {error ? (
@@ -172,11 +128,7 @@ function PageContent() {
               disabled={isSubmitting}
               type="submit"
             >
-              {isSubmitting
-                ? "Working..."
-                : mode === "login"
-                  ? "Continue"
-                  : "Create account"}
+              {isSubmitting ? "Working..." : "Sign In"}
             </button>
           </form>
         </section>

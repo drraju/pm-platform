@@ -1,10 +1,16 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import {
+  canonicalUserRoles,
+  UserRole,
+} from '../../common/enums/user-role.enum';
 import { AssignableUserResponseDto } from './dto/assignable-user-response.dto';
 import { PermissionResponseDto } from './dto/permission-response.dto';
 import { RoleResponseDto } from './dto/role-response.dto';
@@ -15,6 +21,12 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
+
+export type UserAdministrationActor = {
+  email?: string;
+  roleId: string;
+  userId: string;
+};
 
 export type CreateUserPersistenceInput = {
   email: string;
@@ -27,6 +39,8 @@ export type CreateUserPersistenceInput = {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -38,10 +52,15 @@ export class UsersService {
 
   async create(
     createUserDto: CreateUserPersistenceInput,
+    actor?: UserAdministrationActor,
   ): Promise<UserResponseDto> {
+    if (actor) {
+      await this.ensurePlatformAdmin(actor);
+    }
     if (!createUserDto.passwordHash) {
       throw new BadRequestException('Password is required');
     }
+    await this.ensureCanonicalRole(createUserDto.roleId);
 
     const user = this.usersRepository.create({
       email: createUserDto.email,
@@ -49,14 +68,22 @@ export class UsersService {
       lastName: createUserDto.lastName,
       passwordHash: createUserDto.passwordHash,
       roleId: createUserDto.roleId,
-      status: createUserDto.status ?? 'active',
+      status: createUserDto.status ?? 'first_login_pending',
+      accountHistory: actor
+        ? [this.createHistoryEntry('UserCreated', actor.userId)]
+        : [],
     });
-
-    return this.toUserResponse(await this.usersRepository.save(user));
+    const savedUser = await this.usersRepository.save(user);
+    this.recordUserAdministrationAudit('UserCreated', savedUser.id, actor);
+    return this.toUserResponse(savedUser);
   }
 
-  async findAll(): Promise<UserResponseDto[]> {
+  async findAll(actor?: UserAdministrationActor): Promise<UserResponseDto[]> {
+    if (actor) {
+      await this.ensurePlatformAdmin(actor);
+    }
     const users = await this.usersRepository.find({
+      order: { createdAt: 'DESC', email: 'ASC' },
       relations: { role: { permissions: true } },
     });
     return users.map((user) => this.toUserResponse(user));
@@ -71,7 +98,13 @@ export class UsersService {
     return users.map((user) => this.toAssignableUserResponse(user));
   }
 
-  async findOne(id: string): Promise<UserResponseDto> {
+  async findOne(
+    id: string,
+    actor?: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    if (actor) {
+      await this.ensurePlatformAdmin(actor);
+    }
     const user = await this.usersRepository.findOne({
       where: { id },
       relations: { role: { permissions: true } },
@@ -112,10 +145,15 @@ export class UsersService {
     userId: string,
     passwordHash: string,
     passwordChangedAt = new Date(),
+    status?: string,
   ): Promise<void> {
     const result = await this.usersRepository.update(
       { id: userId },
-      { passwordChangedAt, passwordHash },
+      {
+        passwordChangedAt,
+        passwordHash,
+        ...(status ? { status } : {}),
+      },
     );
 
     if (!result.affected) {
@@ -123,10 +161,21 @@ export class UsersService {
     }
   }
 
-  async findRoles(): Promise<RoleResponseDto[]> {
+  async recordLogin(userId: string): Promise<void> {
+    await this.usersRepository.update(
+      { id: userId },
+      { lastLoginAt: new Date() },
+    );
+  }
+
+  async findRoles(actor?: UserAdministrationActor): Promise<RoleResponseDto[]> {
+    if (actor) {
+      await this.ensurePlatformAdmin(actor);
+    }
     const roles = await this.rolesRepository.find({
       order: { name: 'ASC' },
       relations: { permissions: true },
+      where: { name: In([...canonicalUserRoles]) },
     });
     return roles.map((role) => this.toRoleResponse(role));
   }
@@ -180,15 +229,85 @@ export class UsersService {
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
+    actor?: UserAdministrationActor,
   ): Promise<UserResponseDto> {
+    if (actor) {
+      await this.ensurePlatformAdmin(actor);
+    }
+    if (actor?.userId === id && updateUserDto.roleId) {
+      throw new ForbiddenException('Users cannot modify their own role');
+    }
+    if (actor?.userId === id && updateUserDto.status) {
+      throw new ForbiddenException('Users cannot modify their own status');
+    }
     const user = await this.findUserEntity(id);
+    const roleChanged =
+      Boolean(updateUserDto.roleId) && updateUserDto.roleId !== user.roleId;
+    if (updateUserDto.roleId) {
+      await this.ensureCanonicalRole(updateUserDto.roleId);
+    }
     Object.assign(user, updateUserDto);
-    return this.toUserResponse(await this.usersRepository.save(user));
+    user.accountHistory = [
+      ...(user.accountHistory ?? []),
+      this.createHistoryEntry(
+        roleChanged ? 'RoleChanged' : 'UserUpdated',
+        actor?.userId,
+      ),
+    ];
+    const savedUser = await this.usersRepository.save(user);
+    this.recordUserAdministrationAudit(
+      roleChanged ? 'RoleChanged' : 'UserUpdated',
+      id,
+      actor,
+    );
+    return this.toUserResponse(savedUser);
   }
 
-  async remove(id: string): Promise<void> {
-    const user = await this.findUserEntity(id);
-    await this.usersRepository.remove(user);
+  async enable(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    if (actor.userId === id) {
+      throw new ForbiddenException('Users cannot enable themselves');
+    }
+    return this.updateLifecycleStatus(id, 'active', 'UserEnabled', actor);
+  }
+
+  async disable(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    if (actor.userId === id) {
+      throw new ForbiddenException('Users cannot disable themselves');
+    }
+    return this.updateLifecycleStatus(id, 'disabled', 'UserDisabled', actor);
+  }
+
+  async remove(id: string, actor?: UserAdministrationActor): Promise<void> {
+    if (!actor) {
+      throw new ForbiddenException('User deletion is not supported');
+    }
+    await this.disable(id, actor);
+  }
+
+  async recordAdminPasswordReset(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    if (actor.userId === id) {
+      throw new ForbiddenException(
+        'Users cannot reset their own password here',
+      );
+    }
+    return this.updateLifecycleStatus(
+      id,
+      'first_login_pending',
+      'PasswordReset',
+      actor,
+    );
   }
 
   private async findUserEntity(id: string): Promise<User> {
@@ -232,6 +351,9 @@ export class UsersService {
       lastName: user.lastName,
       roleId: user.roleId,
       status: user.status,
+      accountHistory: user.accountHistory ?? [],
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt ?? null,
       role: user.role ? this.toRoleResponse(user.role) : null,
     };
   }
@@ -269,5 +391,63 @@ export class UsersService {
       key: permission.key,
       description: permission.description ?? null,
     };
+  }
+
+  private async updateLifecycleStatus(
+    id: string,
+    status: string,
+    action: string,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    const user = await this.findUserEntity(id);
+    user.status = status;
+    user.accountHistory = [
+      ...(user.accountHistory ?? []),
+      this.createHistoryEntry(action, actor.userId),
+    ];
+    const savedUser = await this.usersRepository.save(user);
+    this.recordUserAdministrationAudit(action, id, actor);
+    return this.toUserResponse(savedUser);
+  }
+
+  private async ensureCanonicalRole(roleId: string): Promise<Role> {
+    const role = await this.rolesRepository.findOne({ where: { id: roleId } });
+    if (!role || !canonicalUserRoles.includes(role.name as UserRole)) {
+      throw new BadRequestException(
+        'Role is not supported for user administration',
+      );
+    }
+    return role;
+  }
+
+  async ensurePlatformAdmin(actor: UserAdministrationActor): Promise<void> {
+    const role = await this.rolesRepository.findOne({
+      where: { id: actor.roleId, name: UserRole.PlatformAdmin },
+    });
+    if (!role) {
+      throw new ForbiddenException('Platform administrator access is required');
+    }
+  }
+
+  private createHistoryEntry(action: string, administratorId = 'system') {
+    return {
+      action,
+      administratorId,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  private recordUserAdministrationAudit(
+    action: string,
+    userId: string,
+    actor?: UserAdministrationActor,
+  ) {
+    this.logger.log({
+      action,
+      administratorId: actor?.userId ?? 'system',
+      event: 'UserAdministrationAction',
+      timestamp: new Date().toISOString(),
+      userId,
+    });
   }
 }

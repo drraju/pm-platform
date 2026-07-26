@@ -6,9 +6,6 @@ export {
   getStoredPermissionKeys,
   getStoredSessionUser,
   login,
-  register,
-  requestPasswordReset,
-  resetPassword,
   storeAuthMe,
   storeSession,
 } from "@/lib/api/client";

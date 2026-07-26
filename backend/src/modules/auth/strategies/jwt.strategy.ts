@@ -16,7 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: JwtPayload) {
     const user = await this.usersService.findTokenValidationUser(payload.sub);
-    if (!user || user.status !== 'active') {
+    if (!user || !['active', 'first_login_pending'].includes(user.status)) {
       throw new UnauthorizedException('Invalid session');
     }
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PasswordModule } from '../auth/password.module';
+import { PasswordUpdateService } from '../auth/password-update.service';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { RolePermission } from './entities/role-permission.entity';
@@ -14,7 +15,7 @@ import { UsersService } from './users.service';
     PasswordModule,
   ],
   controllers: [UsersController],
-  providers: [UsersService],
+  providers: [UsersService, PasswordUpdateService],
   exports: [UsersService],
 })
 export class UsersModule {}

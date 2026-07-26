@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -21,7 +22,8 @@ import {
   RequirePermissions,
 } from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PasswordService } from '../auth/password.service';
+import { PasswordUpdateService } from '../auth/password-update.service';
+import { AdminResetPasswordDto } from './dto/admin-reset-password.dto';
 import { AssignableUserResponseDto } from './dto/assignable-user-response.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -31,6 +33,15 @@ import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
+import type { Request } from 'express';
+
+type AuthenticatedRequest = Request & {
+  user: {
+    email?: string;
+    roleId: string;
+    userId: string;
+  };
+};
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -39,31 +50,37 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly passwordService: PasswordService,
+    private readonly passwordUpdateService: PasswordUpdateService,
   ) {}
 
   @Post()
   @RequirePermissions(PermissionKey.UserManage)
   @ApiCreatedResponse({ type: UserResponseDto })
-  async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    const passwordHash = createUserDto.password
-      ? await this.passwordService.hashPassword(createUserDto.password)
-      : '';
-    return this.usersService.create({
-      email: createUserDto.email,
-      firstName: createUserDto.firstName,
-      lastName: createUserDto.lastName,
-      passwordHash,
-      roleId: createUserDto.roleId,
-      status: createUserDto.status,
-    });
+  async create(
+    @Req() request: AuthenticatedRequest,
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<UserResponseDto> {
+    const passwordHash = await this.passwordUpdateService.hashTemporaryPassword(
+      createUserDto.password,
+    );
+    return this.usersService.create(
+      {
+        email: createUserDto.email,
+        firstName: createUserDto.firstName,
+        lastName: createUserDto.lastName,
+        passwordHash,
+        roleId: createUserDto.roleId,
+        status: 'first_login_pending',
+      },
+      request.user,
+    );
   }
 
   @Get('roles')
   @RequirePermissions(PermissionKey.RoleManage)
   @ApiOkResponse({ type: RoleResponseDto, isArray: true })
-  findRoles(): Promise<RoleResponseDto[]> {
-    return this.usersService.findRoles();
+  findRoles(@Req() request: AuthenticatedRequest): Promise<RoleResponseDto[]> {
+    return this.usersService.findRoles(request.user);
   }
 
   @Post('roles')
@@ -96,8 +113,8 @@ export class UsersController {
   @Get()
   @RequirePermissions(PermissionKey.UserManage)
   @ApiOkResponse({ type: UserResponseDto, isArray: true })
-  findAll(): Promise<UserResponseDto[]> {
-    return this.usersService.findAll();
+  findAll(@Req() request: AuthenticatedRequest): Promise<UserResponseDto[]> {
+    return this.usersService.findAll(request.user);
   }
 
   @Get('assignable')
@@ -113,24 +130,74 @@ export class UsersController {
   @Get(':id')
   @RequirePermissions(PermissionKey.UserManage)
   @ApiOkResponse({ type: UserResponseDto })
-  findOne(@Param('id') id: string): Promise<UserResponseDto> {
-    return this.usersService.findOne(id);
+  findOne(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<UserResponseDto> {
+    return this.usersService.findOne(id, request.user);
   }
 
   @Patch(':id')
   @RequirePermissions(PermissionKey.UserManage)
   @ApiOkResponse({ type: UserResponseDto })
   update(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
-    return this.usersService.update(id, updateUserDto);
+    return this.usersService.update(id, updateUserDto, request.user);
+  }
+
+  @Post(':id/reset-password')
+  @RequirePermissions(PermissionKey.UserManage)
+  @ApiOkResponse({ type: UserResponseDto })
+  async resetPassword(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() adminResetPasswordDto: AdminResetPasswordDto,
+  ): Promise<UserResponseDto> {
+    await this.usersService.ensurePlatformAdmin(request.user);
+    if (request.user.userId === id) {
+      return this.usersService.recordAdminPasswordReset(id, request.user);
+    }
+    await this.passwordUpdateService.adminResetPassword(
+      id,
+      adminResetPasswordDto.temporaryPassword,
+      {
+        ipAddress: request.ip,
+        userAgent: request.get('user-agent'),
+      },
+    );
+    return this.usersService.recordAdminPasswordReset(id, request.user);
+  }
+
+  @Post(':id/enable')
+  @RequirePermissions(PermissionKey.UserManage)
+  @ApiOkResponse({ type: UserResponseDto })
+  enable(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<UserResponseDto> {
+    return this.usersService.enable(id, request.user);
+  }
+
+  @Post(':id/disable')
+  @RequirePermissions(PermissionKey.UserManage)
+  @ApiOkResponse({ type: UserResponseDto })
+  disable(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<UserResponseDto> {
+    return this.usersService.disable(id, request.user);
   }
 
   @Delete(':id')
   @RequirePermissions(PermissionKey.UserManage)
   @ApiOkResponse()
-  remove(@Param('id') id: string): Promise<void> {
-    return this.usersService.remove(id);
+  remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.usersService.remove(id, request.user);
   }
 }

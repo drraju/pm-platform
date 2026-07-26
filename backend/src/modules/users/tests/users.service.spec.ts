@@ -13,6 +13,7 @@ type MockRepository<T extends object = object> = Partial<
 
 describe('UsersService', () => {
   let service: UsersService;
+  let rolesRepository: MockRepository<Role>;
   let usersRepository: MockRepository<User>;
 
   beforeEach(async () => {
@@ -29,11 +30,18 @@ describe('UsersService', () => {
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
+    rolesRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'role-1',
+        name: UserRole.TeamMember,
+      }),
+    };
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: usersRepository },
-        { provide: getRepositoryToken(Role), useValue: {} },
+        { provide: getRepositoryToken(Role), useValue: rolesRepository },
         { provide: getRepositoryToken(Permission), useValue: {} },
       ],
     }).compile();
@@ -57,7 +65,10 @@ describe('UsersService', () => {
       lastName: 'Patel',
       role: null,
       roleId: 'role-1',
-      status: 'active',
+      accountHistory: [],
+      createdAt: undefined,
+      lastLoginAt: null,
+      status: 'first_login_pending',
     });
     expect(JSON.stringify(result)).not.toContain('passwordHash');
   });
@@ -71,11 +82,19 @@ describe('UsersService', () => {
         lastName: 'Patel',
         passwordHash: 'hashed-password',
         roleId: 'role-1',
+        createdAt: undefined,
+        lastLoginAt: null,
         status: 'active',
+        accountHistory: [],
       },
     ]);
 
     const result = await service.findAll();
+
+    expect(usersRepository.find).toHaveBeenCalledWith({
+      order: { createdAt: 'DESC', email: 'ASC' },
+      relations: { role: { permissions: true } },
+    });
 
     expect(result).toEqual([
       {
@@ -85,6 +104,9 @@ describe('UsersService', () => {
         lastName: 'Patel',
         role: null,
         roleId: 'role-1',
+        accountHistory: [],
+        createdAt: undefined,
+        lastLoginAt: null,
         status: 'active',
       },
     ]);
