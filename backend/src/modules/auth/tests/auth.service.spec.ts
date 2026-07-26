@@ -9,6 +9,7 @@ import { User } from '../../users/entities/user.entity';
 import { UsersService } from '../../users/users.service';
 import { AuthService } from '../auth.service';
 import { PasswordPolicyService } from '../password-policy.service';
+import { PasswordUpdateService } from '../password-update.service';
 import { PasswordService } from '../password.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
 
@@ -49,6 +50,7 @@ describe('AuthService', () => {
         AuthService,
         PasswordPolicyService,
         PasswordService,
+        PasswordUpdateService,
         {
           provide: UsersService,
           useValue: usersService,

@@ -4,13 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import * as bcrypt from 'bcryptjs';
 import { In, Repository } from 'typeorm';
 import { AssignableUserResponseDto } from './dto/assignable-user-response.dto';
 import { PermissionResponseDto } from './dto/permission-response.dto';
 import { RoleResponseDto } from './dto/role-response.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
-import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -18,8 +16,13 @@ import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
 
-type CreateUserInput = CreateUserDto & {
-  passwordHash?: string;
+export type CreateUserPersistenceInput = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  passwordHash: string;
+  roleId: string;
+  status?: string;
 };
 
 @Injectable()
@@ -33,14 +36,10 @@ export class UsersService {
     private readonly permissionsRepository: Repository<Permission>,
   ) {}
 
-  async create(createUserDto: CreateUserInput): Promise<UserResponseDto> {
-    const passwordHash =
-      createUserDto.passwordHash ??
-      (createUserDto.password
-        ? await bcrypt.hash(createUserDto.password, 10)
-        : undefined);
-
-    if (!passwordHash) {
+  async create(
+    createUserDto: CreateUserPersistenceInput,
+  ): Promise<UserResponseDto> {
+    if (!createUserDto.passwordHash) {
       throw new BadRequestException('Password is required');
     }
 
@@ -48,7 +47,7 @@ export class UsersService {
       email: createUserDto.email,
       firstName: createUserDto.firstName,
       lastName: createUserDto.lastName,
-      passwordHash,
+      passwordHash: createUserDto.passwordHash,
       roleId: createUserDto.roleId,
       status: createUserDto.status ?? 'active',
     });

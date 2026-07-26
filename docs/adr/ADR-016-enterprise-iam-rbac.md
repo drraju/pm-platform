@@ -95,13 +95,13 @@ unapproved account creation.
 
 ## Alternatives Considered
 
-| Alternative | Reason Rejected |
-| --- | --- |
-| Keep current role names | Maintains inconsistent authorization vocabulary and conflates security, profile, and project concepts. |
-| Use only role-name checks | Produces brittle authorization, poor UX, and difficult auditability. |
-| Make project responsibilities become platform roles | Forces project-specific duties into global access control and causes over-permissioning. |
-| Allow self-registration with approval later | Still creates unmanaged identity records and increases security review scope. |
-| Put password reset inside Users only | Password reset affects authentication/session policy and belongs to the IAM boundary, even when it updates User records. |
+| Alternative                                         | Reason Rejected                                                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Keep current role names                             | Maintains inconsistent authorization vocabulary and conflates security, profile, and project concepts.                   |
+| Use only role-name checks                           | Produces brittle authorization, poor UX, and difficult auditability.                                                     |
+| Make project responsibilities become platform roles | Forces project-specific duties into global access control and causes over-permissioning.                                 |
+| Allow self-registration with approval later         | Still creates unmanaged identity records and increases security review scope.                                            |
+| Put password reset inside Users only                | Password reset affects authentication/session policy and belongs to the IAM boundary, even when it updates User records. |
 
 ## Consequences
 
@@ -141,3 +141,112 @@ Expected implementation shape:
 - [STAB-IAM-001 ADR Review](../STAB_IAM_001_ADR_REVIEW.md)
 - [Security Architecture](../07-SECURITY-ARCHITECTURE.md)
 - [Development Workflow](../08-DEVELOPMENT-WORKFLOW.md)
+
+## Authentication Architecture
+
+Authentication remains inside the IAM boundary. Controllers expose HTTP
+operations, `AuthService` coordinates authentication use cases, password
+workflow services own password mutation rules, and `UsersService` persists user
+state.
+
+Current dependency flow:
+
+```text
+AuthController
+  -> AuthService
+      -> PasswordUpdateService
+          -> PasswordService
+          -> PasswordPolicyService
+          -> UsersService
+              -> User repository
+```
+
+`UsersController` may create administrator-managed users, but it must hash
+initial passwords through `PasswordService` before calling `UsersService`.
+`UsersService` must never hash, compare, validate, or orchestrate password
+workflows.
+
+## Authentication Flow
+
+Login verifies submitted credentials through `PasswordService`, then
+`AuthService` issues a JWT access token and a signed refresh token. Protected
+requests pass through `JwtAuthGuard` and `JwtStrategy`. The JWT strategy
+loads the minimal user state needed to confirm that the user still exists, is
+active, and has not changed password since the token was issued.
+
+Refresh token handling is currently token issuance only. There is no persistent
+session store, refresh endpoint, token rotation, reuse detection, or revocation
+table yet.
+
+## Password Architecture
+
+`PasswordService` is the only bcrypt boundary. It owns password hashing and
+password hash comparison only.
+
+`PasswordPolicyService` is the only password policy authority. It evaluates
+candidate passwords for required length and complexity and returns structured
+validation results.
+
+`PasswordUpdateService` owns password mutation workflows. The implemented
+workflow is `changeOwnPassword`, which verifies the current password, validates
+the new password through `PasswordPolicyService`, rejects reuse, hashes the
+new password through `PasswordService`, persists the hash through
+`UsersService`, updates `password_changed_at`, and records an audit integration
+event without logging password material.
+
+`UsersService` owns user persistence. Password-related persistence is limited
+to selecting authentication users when explicitly needed, selecting token
+validation state, and updating `password_hash` with `password_changed_at`.
+
+## Password Change Workflow
+
+The current change-password workflow is:
+
+1. `AuthController` receives `POST /auth/change-password`.
+2. `JwtAuthGuard` authenticates the caller.
+3. `AuthService` delegates to `PasswordUpdateService.changeOwnPassword`.
+4. `PasswordUpdateService` validates confirmation and password policy.
+5. `PasswordUpdateService` verifies the current password with a generic
+   authentication failure on mismatch.
+6. `PasswordUpdateService` rejects reuse of the existing password.
+7. `PasswordUpdateService` hashes the accepted password.
+8. `UsersService.updatePassword` persists the hash and sets
+   `password_changed_at`.
+9. The frontend clears local session state and requires sign-in again.
+
+## `password_changed_at` Strategy
+
+`password_changed_at` is nullable for legacy users and set whenever
+`UsersService.updatePassword` persists a new password hash. It is the canonical
+timestamp for invalidating tokens issued before a password change.
+
+## JWT Invalidation Strategy
+
+`JwtStrategy` compares the JWT `iat` claim with `users.password_changed_at`.
+Tokens issued before the recorded password change are rejected as invalid
+sessions. Tokens issued after the recorded password change remain valid if the
+user is active and the token has not expired.
+
+## Current Session Model
+
+The current model is stateless JWT authentication. Access tokens expire
+according to JWT configuration. Refresh tokens are signed and returned to the
+client, and the frontend stores both access and refresh tokens in local
+storage. The frontend clears local tokens after successful password change.
+
+This is not yet an enterprise session-management implementation because there
+is no server-side refresh-token persistence, rotation, logout revocation,
+session inventory, or device/session audit trail.
+
+## Future Session Roadmap
+
+Future authentication stabilization tasks should reuse the current password
+foundation and add:
+
+- forgot password and password reset tokens
+- administrator password reset
+- forced password change and password expiry policy
+- persistent refresh sessions with rotation and revocation
+- logout and all-sessions logout
+- MFA enrollment, challenge, recovery, and session elevation
+- durable security audit events

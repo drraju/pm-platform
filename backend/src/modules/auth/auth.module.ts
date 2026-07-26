@@ -6,8 +6,8 @@ import { UsersModule } from '../users/users.module';
 import { Role } from '../users/entities/role.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { PasswordPolicyService } from './password-policy.service';
-import { PasswordService } from './password.service';
+import { PasswordModule } from './password.module';
+import { PasswordUpdateService } from './password-update.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -18,10 +18,11 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       signOptions: { expiresIn: '1h' },
     }),
     TypeOrmModule.forFeature([Role]),
+    PasswordModule,
     UsersModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PasswordPolicyService, PasswordService],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, PasswordUpdateService],
+  exports: [AuthService, PasswordUpdateService],
 })
 export class AuthModule {}

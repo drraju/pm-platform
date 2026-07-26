@@ -21,6 +21,7 @@ import {
   RequirePermissions,
 } from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PasswordService } from '../auth/password.service';
 import { AssignableUserResponseDto } from './dto/assignable-user-response.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -36,13 +37,26 @@ import { UsersService } from './users.service';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly passwordService: PasswordService,
+  ) {}
 
   @Post()
   @RequirePermissions(PermissionKey.UserManage)
   @ApiCreatedResponse({ type: UserResponseDto })
-  create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    return this.usersService.create(createUserDto);
+  async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
+    const passwordHash = createUserDto.password
+      ? await this.passwordService.hashPassword(createUserDto.password)
+      : '';
+    return this.usersService.create({
+      email: createUserDto.email,
+      firstName: createUserDto.firstName,
+      lastName: createUserDto.lastName,
+      passwordHash,
+      roleId: createUserDto.roleId,
+      status: createUserDto.status,
+    });
   }
 
   @Get('roles')

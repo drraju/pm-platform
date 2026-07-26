@@ -1,8 +1,6 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
-  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -14,26 +12,24 @@ import {
 } from '../../common/enums/user-role.enum';
 import { Role } from '../users/entities/role.entity';
 import { UsersService } from '../users/users.service';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SessionDto } from './dto/session.dto';
+import {
+  PasswordChangeAuditContext,
+  PasswordUpdateService,
+} from './password-update.service';
 import { PasswordService } from './password.service';
-
-export type PasswordChangeAuditContext = {
-  ipAddress?: string;
-  userAgent?: string;
-};
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly passwordService: PasswordService,
+    private readonly passwordUpdateService: PasswordUpdateService,
     @InjectRepository(Role)
     private readonly rolesRepository: Repository<Role>,
   ) {}
@@ -86,46 +82,11 @@ export class AuthService {
     changePasswordDto: ChangePasswordDto,
     auditContext: PasswordChangeAuditContext = {},
   ): Promise<ChangePasswordResponseDto> {
-    if (changePasswordDto.newPassword !== changePasswordDto.confirmPassword) {
-      throw new BadRequestException('Password confirmation does not match');
-    }
-
-    this.passwordService.validateNewPassword(changePasswordDto.newPassword);
-
-    const user = await this.usersService.findAuthenticationUserById(userId);
-    if (!user) {
-      throw new UnauthorizedException('Unable to change password');
-    }
-
-    const currentPasswordMatches = await this.passwordService.verifyPassword(
-      changePasswordDto.currentPassword,
-      user.passwordHash,
+    return this.passwordUpdateService.changeOwnPassword(
+      userId,
+      changePasswordDto,
+      auditContext,
     );
-    if (!currentPasswordMatches) {
-      throw new UnauthorizedException('Unable to change password');
-    }
-
-    const newPasswordMatchesCurrent = await this.passwordService.verifyPassword(
-      changePasswordDto.newPassword,
-      user.passwordHash,
-    );
-    if (newPasswordMatchesCurrent) {
-      throw new BadRequestException(
-        'New password must differ from current password',
-      );
-    }
-
-    const passwordHash = await this.passwordService.hashPassword(
-      changePasswordDto.newPassword,
-    );
-    await this.usersService.updatePassword(userId, passwordHash);
-    this.recordPasswordChangeAudit(userId, auditContext);
-
-    return {
-      success: true,
-      message: 'Password changed successfully. Please sign in again.',
-      requiresLogin: true,
-    };
   }
 
   private issueSession(
@@ -162,18 +123,5 @@ export class AuthService {
       return createdRole;
     });
     return savedRole.id;
-  }
-
-  private recordPasswordChangeAudit(
-    userId: string,
-    auditContext: PasswordChangeAuditContext,
-  ) {
-    this.logger.log({
-      event: 'PasswordChanged',
-      ipAddress: auditContext.ipAddress,
-      timestamp: new Date().toISOString(),
-      userAgent: auditContext.userAgent,
-      userId,
-    });
   }
 }

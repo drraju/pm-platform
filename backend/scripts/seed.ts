@@ -1,5 +1,4 @@
 import 'reflect-metadata';
-import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import {
   DataSource,
@@ -29,6 +28,7 @@ import { Role } from '../src/modules/users/entities/role.entity';
 import { RolePermission } from '../src/modules/users/entities/role-permission.entity';
 import { User } from '../src/modules/users/entities/user.entity';
 import { PermissionKey } from '../src/common/authz/permissions';
+import { PasswordService } from '../src/modules/auth/password.service';
 
 const seedNamespace = 'pm-platform-dev-seed-v2';
 export const defaultPassword = 'Password123!';
@@ -672,8 +672,11 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
   const permissionRepository = manager.getRepository(Permission);
   const rolePermissionRepository = manager.getRepository(RolePermission);
   const userRepository = manager.getRepository(User);
-  const passwordHash = await bcrypt.hash(defaultPassword, 10);
-  const superAdminPasswordHash = await bcrypt.hash(superAdminUser.password, 10);
+  const passwordService = new PasswordService();
+  const passwordHash = await passwordService.hashPassword(defaultPassword);
+  const superAdminPasswordHash = await passwordService.hashPassword(
+    superAdminUser.password,
+  );
 
   const roles: Role[] = [];
   for (const roleName of canonicalUserRoles) {

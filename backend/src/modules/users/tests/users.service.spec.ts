@@ -16,11 +16,17 @@ describe('UsersService', () => {
   let usersRepository: MockRepository<User>;
 
   beforeEach(async () => {
+    const createUserMock = jest.fn((input: Partial<User>) => input);
+    const saveUserMock = jest.fn((input: Partial<User>) =>
+      Promise.resolve({ id: 'user-1', ...input }),
+    );
+
     usersRepository = {
-      create: jest.fn((input) => input),
+      create: createUserMock,
       find: jest.fn(),
       findOne: jest.fn(),
-      save: jest.fn((input) => Promise.resolve({ id: 'user-1', ...input })),
+      save: saveUserMock,
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -117,5 +123,23 @@ describe('UsersService', () => {
       },
     ]);
     expect(JSON.stringify(result)).not.toContain('passwordHash');
+  });
+
+  it('updates password hash and passwordChangedAt together', async () => {
+    const passwordChangedAt = new Date('2026-07-26T10:00:00.000Z');
+
+    await service.updatePassword(
+      'user-1',
+      'new-hashed-password',
+      passwordChangedAt,
+    );
+
+    expect(usersRepository.update).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      {
+        passwordChangedAt,
+        passwordHash: 'new-hashed-password',
+      },
+    );
   });
 });
