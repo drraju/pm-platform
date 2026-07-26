@@ -15,6 +15,11 @@ export type PasswordChangeAuditContext = {
   userAgent?: string;
 };
 
+export type ResetPasswordInput = {
+  confirmPassword: string;
+  newPassword: string;
+};
+
 @Injectable()
 export class PasswordUpdateService {
   private readonly logger = new Logger(PasswordUpdateService.name);
@@ -72,6 +77,42 @@ export class PasswordUpdateService {
     };
   }
 
+  async resetPasswordForUser(
+    userId: string,
+    resetPasswordInput: ResetPasswordInput,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<void> {
+    if (resetPasswordInput.newPassword !== resetPasswordInput.confirmPassword) {
+      throw new BadRequestException('Password confirmation does not match');
+    }
+
+    this.validateNewPassword(resetPasswordInput.newPassword);
+
+    const user = await this.usersService.findAuthenticationUserById(userId);
+    if (!user) {
+      throw new UnauthorizedException('Unable to reset password');
+    }
+
+    const newPasswordMatchesCurrent = await this.passwordService.verifyPassword(
+      resetPasswordInput.newPassword,
+      user.passwordHash,
+    );
+    if (newPasswordMatchesCurrent) {
+      throw new BadRequestException(
+        'New password must differ from current password',
+      );
+    }
+
+    const passwordHash = await this.passwordService.hashPassword(
+      resetPasswordInput.newPassword,
+    );
+    await this.usersService.updatePassword(userId, passwordHash);
+    this.recordPasswordChangeAudit(userId, {
+      ...auditContext,
+      event: 'PasswordResetPasswordChanged',
+    });
+  }
+
   private validateNewPassword(password: string): void {
     const result = this.passwordPolicyService.validate(password);
     if (!result.valid) {
@@ -81,10 +122,10 @@ export class PasswordUpdateService {
 
   private recordPasswordChangeAudit(
     userId: string,
-    auditContext: PasswordChangeAuditContext,
+    auditContext: PasswordChangeAuditContext & { event?: string },
   ) {
     this.logger.log({
-      event: 'PasswordChanged',
+      event: auditContext.event ?? 'PasswordChanged',
       ipAddress: auditContext.ipAddress,
       timestamp: new Date().toISOString(),
       userAgent: auditContext.userAgent,

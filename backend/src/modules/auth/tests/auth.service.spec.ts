@@ -9,6 +9,7 @@ import { User } from '../../users/entities/user.entity';
 import { UsersService } from '../../users/users.service';
 import { AuthService } from '../auth.service';
 import { PasswordPolicyService } from '../password-policy.service';
+import { PasswordResetService } from '../password-reset.service';
 import { PasswordUpdateService } from '../password-update.service';
 import { PasswordService } from '../password.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
@@ -51,6 +52,13 @@ describe('AuthService', () => {
         PasswordPolicyService,
         PasswordService,
         PasswordUpdateService,
+        {
+          provide: PasswordResetService,
+          useValue: {
+            requestPasswordReset: jest.fn(),
+            resetPassword: jest.fn(),
+          },
+        },
         {
           provide: UsersService,
           useValue: usersService,

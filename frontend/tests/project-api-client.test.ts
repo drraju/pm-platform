@@ -4,6 +4,8 @@ import {
   archiveProject,
   captureProjectBaseline,
   changePassword,
+  requestPasswordReset,
+  resetPassword,
   getDocumentCategories,
   createProjectDocument,
   createProjectTask,
@@ -725,6 +727,72 @@ describe("project API client", () => {
           currentPassword: "OldPass1!",
           newPassword: "NewPass1!",
         }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("requests and completes password reset without an access token", async () => {
+    const fetchMock = mockFetch({
+      message: "If an account exists, a password reset email has been sent.",
+      success: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(requestPasswordReset("user@example.com")).resolves.toEqual({
+      message: "If an account exists, a password reset email has been sent.",
+      success: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/forgot-password",
+      expect.objectContaining({
+        body: JSON.stringify({ email: "user@example.com" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: {
+        get: vi.fn(() =>
+          String(
+            JSON.stringify({
+              message: "Password reset successfully. Please sign in.",
+              success: true,
+            }).length,
+          ),
+        ),
+      },
+      json: vi.fn(),
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          message: "Password reset successfully. Please sign in.",
+          success: true,
+        }),
+      ),
+    });
+
+    await expect(
+      resetPassword({
+        confirmPassword: "NewPass1!",
+        newPassword: "NewPass1!",
+        token: "raw-token",
+      }),
+    ).resolves.toEqual({
+      message: "Password reset successfully. Please sign in.",
+      success: true,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/auth/reset-password",
+      expect.objectContaining({
+        body: JSON.stringify({
+          confirmPassword: "NewPass1!",
+          newPassword: "NewPass1!",
+          token: "raw-token",
+        }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
     );

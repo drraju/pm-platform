@@ -673,6 +673,32 @@ export function changePassword(input: {
   });
 }
 
+export function requestPasswordReset(email: string) {
+  return apiRequest<{
+    message: string;
+    success: boolean;
+  }>("/auth/forgot-password", {
+    method: "POST",
+    token: null,
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(input: {
+  confirmPassword: string;
+  newPassword: string;
+  token: string;
+}) {
+  return apiRequest<{
+    message: string;
+    success: boolean;
+  }>("/auth/reset-password", {
+    method: "POST",
+    token: null,
+    body: JSON.stringify(input),
+  });
+}
+
 export function register(input: {
   email: string;
   firstName: string;

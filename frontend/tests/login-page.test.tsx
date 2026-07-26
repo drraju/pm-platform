@@ -123,4 +123,12 @@ describe("Login page", () => {
       expect(routerPush).toHaveBeenCalledWith("/portfolio");
     });
   });
+
+  it("links to forgot password from sign in mode", () => {
+    render(<LoginPage />);
+
+    expect(
+      screen.getByRole("link", { name: /forgot password/i }),
+    ).toHaveAttribute("href", "/forgot-password");
+  });
 });

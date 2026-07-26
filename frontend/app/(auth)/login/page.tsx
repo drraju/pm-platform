@@ -3,6 +3,7 @@
 import React from "react";
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   getAuthMe,
   getDefaultDashboardPath,
@@ -148,6 +149,17 @@ function PageContent() {
                 type="password"
               />
             </label>
+
+            {mode === "login" ? (
+              <div className="text-right">
+                <Link
+                  className="text-sm font-semibold text-brand transition hover:text-teal-800"
+                  href="/forgot-password"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
+            ) : null}
 
             {error ? (
               <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

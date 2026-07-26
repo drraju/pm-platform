@@ -14,13 +14,17 @@ import { Role } from '../users/entities/role.entity';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { PasswordResetResponseDto } from './dto/password-reset-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SessionDto } from './dto/session.dto';
 import {
   PasswordChangeAuditContext,
   PasswordUpdateService,
 } from './password-update.service';
+import { PasswordResetService } from './password-reset.service';
 import { PasswordService } from './password.service';
 
 @Injectable()
@@ -30,6 +34,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly passwordService: PasswordService,
     private readonly passwordUpdateService: PasswordUpdateService,
+    private readonly passwordResetService: PasswordResetService,
     @InjectRepository(Role)
     private readonly rolesRepository: Repository<Role>,
   ) {}
@@ -85,6 +90,26 @@ export class AuthService {
     return this.passwordUpdateService.changeOwnPassword(
       userId,
       changePasswordDto,
+      auditContext,
+    );
+  }
+
+  requestPasswordReset(
+    forgotPasswordDto: ForgotPasswordDto,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<PasswordResetResponseDto> {
+    return this.passwordResetService.requestPasswordReset(
+      forgotPasswordDto,
+      auditContext,
+    );
+  }
+
+  resetPassword(
+    resetPasswordDto: ResetPasswordDto,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<PasswordResetResponseDto> {
+    return this.passwordResetService.resetPassword(
+      resetPasswordDto,
       auditContext,
     );
   }
