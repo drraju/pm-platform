@@ -689,8 +689,18 @@ export function register(input: {
   );
 }
 
-export function getProjects() {
-  return apiRequest<ApiProject[]>("/projects");
+export function getProjects(
+  input: { archived?: boolean; includeArchived?: boolean } = {},
+) {
+  const searchParams = new URLSearchParams();
+  if (input.archived) {
+    searchParams.set("archived", "true");
+  } else if (input.includeArchived) {
+    searchParams.set("includeArchived", "true");
+  }
+
+  const query = searchParams.toString();
+  return apiRequest<ApiProject[]>(`/projects${query ? `?${query}` : ""}`);
 }
 
 export function getMyDashboard() {
@@ -990,6 +1000,24 @@ export function updateProject(
 
 export function deleteProject(projectId: string) {
   return apiRequest<void>(`/projects/${projectId}`, {
+    method: "DELETE",
+  });
+}
+
+export function archiveProject(projectId: string) {
+  return apiRequest<ApiProject>(`/projects/${projectId}/archive`, {
+    method: "POST",
+  });
+}
+
+export function restoreProject(projectId: string) {
+  return apiRequest<ApiProject>(`/projects/${projectId}/restore`, {
+    method: "POST",
+  });
+}
+
+export function purgeProject(projectId: string) {
+  return apiRequest<void>(`/projects/${projectId}/purge`, {
     method: "DELETE",
   });
 }

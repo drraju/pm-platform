@@ -9,7 +9,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import {
   AuthorizationActor,
   AuthorizationPolicyService,
@@ -19,6 +19,7 @@ import { ProjectRole } from '../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
 import { ProjectHealthService } from '../health/project-health.service';
@@ -38,6 +39,7 @@ import { Dependency } from '../raid/entities/dependency.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { User } from '../users/entities/user.entity';
+import { Role } from '../users/entities/role.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
@@ -57,6 +59,9 @@ import { TasksService } from '../tasks/tasks.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
 type AuthenticatedActor = AuthorizationActor;
+type ProjectListMode = 'active' | 'archived' | 'all';
+
+const archivedProjectStatus = 'archived';
 const teamMemberEditableTaskFields = new Set([
   'assigneeId',
   'remarks',
@@ -81,6 +86,8 @@ export class ProjectsService {
     private readonly taskDependenciesRepository: Repository<TaskDependency>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(Role)
+    private readonly rolesRepository: Repository<Role>,
     private readonly projectHealthService: ProjectHealthService,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
@@ -129,12 +136,22 @@ export class ProjectsService {
     );
   }
 
-  async findAll(actor?: ProjectVisibilityActor): Promise<ProjectWithHealth[]> {
+  async findAll(
+    actor?: ProjectVisibilityActor,
+    options: { lifecycle?: ProjectListMode } = {},
+  ): Promise<ProjectWithHealth[]> {
     const projects =
       await this.projectVisibilityService.getVisibleProjects(actor);
-    return projects.map((project) =>
-      this.decorateProject(this.withHealth(project)),
-    );
+    const lifecycle = options.lifecycle ?? 'active';
+    return projects
+      .filter((project) => {
+        if (lifecycle === 'all') {
+          return true;
+        }
+        const isArchived = project.status === archivedProjectStatus;
+        return lifecycle === 'archived' ? isArchived : !isArchived;
+      })
+      .map((project) => this.decorateProject(this.withHealth(project)));
   }
 
   async findOne(
@@ -177,9 +194,37 @@ export class ProjectsService {
   }
 
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
+    await this.archive(id, actor);
+  }
+
+  async archive(id: string, actor?: AuthenticatedActor): Promise<Project> {
     await this.ensureCanDeleteProject(id, actor);
     const project = await this.findProjectEntity(id);
-    await this.projectsRepository.softRemove(project);
+    project.status = archivedProjectStatus;
+    project.deletedAt = null;
+    project.deletedById = null;
+    project.updatedById = actor?.userId;
+    return this.projectsRepository.save(project);
+  }
+
+  async restore(id: string, actor?: AuthenticatedActor): Promise<Project> {
+    await this.ensureCanManageProject(id, actor);
+    const project = await this.findProjectEntityIncludingArchived(id);
+    project.status =
+      project.status === archivedProjectStatus ? 'active' : project.status;
+    project.deletedAt = null;
+    project.deletedById = null;
+    project.updatedById = actor?.userId;
+    return this.projectsRepository.save(project);
+  }
+
+  async purge(id: string, actor?: AuthenticatedActor): Promise<void> {
+    await this.ensurePlatformAdmin(actor);
+    await this.findProjectEntityIncludingArchived(id);
+
+    await this.projectsRepository.manager.transaction(async (manager) => {
+      await this.purgeProjectOwnedData(manager, id);
+    });
   }
 
   async addMember(
@@ -767,6 +812,78 @@ export class ProjectsService {
     }
 
     return project;
+  }
+
+  private async findProjectEntityIncludingArchived(
+    id: string,
+  ): Promise<Project> {
+    const project = await this.projectsRepository.findOne({
+      where: { id },
+      withDeleted: true,
+    });
+    if (!project) {
+      throw new NotFoundException(`Project ${id} not found`);
+    }
+
+    return project;
+  }
+
+  private async ensurePlatformAdmin(actor?: AuthenticatedActor): Promise<void> {
+    if (!actor?.roleId) {
+      throw new ForbiddenException('Platform administrator access is required');
+    }
+
+    const role = await this.rolesRepository.findOne({
+      select: { id: true, name: true },
+      where: { id: actor.roleId },
+    });
+    if (role?.name !== UserRole.PlatformAdmin) {
+      throw new ForbiddenException('Platform administrator access is required');
+    }
+  }
+
+  private async purgeProjectOwnedData(
+    manager: EntityManager,
+    projectId: string,
+  ): Promise<void> {
+    await manager.query("SET LOCAL pm_platform.project_purge = 'on'");
+
+    const query = (sql: string) => manager.query(sql, [projectId]);
+
+    await query(`
+      DELETE FROM task_dependencies
+      WHERE predecessor_task_id IN (SELECT id FROM tasks WHERE project_id = $1)
+         OR successor_task_id IN (SELECT id FROM tasks WHERE project_id = $1)
+    `);
+    await query(`
+      DELETE FROM portfolio_dependencies
+      WHERE predecessor_project_id = $1
+         OR successor_project_id = $1
+    `);
+    await query('DELETE FROM planning_task_schedules WHERE project_id = $1');
+    await query(
+      'DELETE FROM planning_schedule_snapshots WHERE project_id = $1',
+    );
+    await query('DELETE FROM resource_allocations WHERE project_id = $1');
+    await query('DELETE FROM resource_capacities WHERE project_id = $1');
+    await query(
+      'DELETE FROM resource_workload_snapshots WHERE project_id = $1',
+    );
+    await query(
+      'DELETE FROM enterprise_resource_assignments WHERE project_id = $1',
+    );
+    await query('DELETE FROM project_documents WHERE project_id = $1');
+    await query('DELETE FROM raid_comments WHERE project_id = $1');
+    await query('DELETE FROM raid_history_entries WHERE project_id = $1');
+    await query('DELETE FROM risks WHERE project_id = $1');
+    await query('DELETE FROM issues WHERE project_id = $1');
+    await query('DELETE FROM assumptions WHERE project_id = $1');
+    await query('DELETE FROM dependencies WHERE project_id = $1');
+    await query('DELETE FROM project_baseline_tasks WHERE project_id = $1');
+    await query('DELETE FROM project_baselines WHERE project_id = $1');
+    await query('DELETE FROM project_members WHERE project_id = $1');
+    await query('DELETE FROM tasks WHERE project_id = $1');
+    await query('DELETE FROM projects WHERE id = $1');
   }
 
   private async ensureUserExists(userId: string): Promise<void> {

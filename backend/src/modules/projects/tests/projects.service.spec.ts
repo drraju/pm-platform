@@ -20,6 +20,7 @@ import { ProjectBaselineTask } from '../entities/project-baseline-task.entity';
 import { ProjectBaseline } from '../entities/project-baseline.entity';
 import { TaskDependency } from '../../tasks/entities/task-dependency.entity';
 import { Task } from '../../tasks/entities/task.entity';
+import { Role } from '../../users/entities/role.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectMember } from '../entities/project-member.entity';
 import { Project } from '../entities/project.entity';
@@ -44,6 +45,7 @@ describe('ProjectsService', () => {
   let tasksRepository: MockRepository<Task>;
   let taskDependenciesRepository: MockRepository<TaskDependency>;
   let usersRepository: MockRepository<User>;
+  let rolesRepository: MockRepository<Role>;
   let authorizationPolicyService: {
     canDeleteProject: jest.Mock;
     canManageProject: jest.Mock;
@@ -58,6 +60,7 @@ describe('ProjectsService', () => {
     rebuildWorkspaceSnapshot: jest.Mock;
   };
   let transactionalEntityManager: {
+    query: jest.Mock;
     save: jest.Mock;
     update: jest.Mock;
   };
@@ -69,38 +72,47 @@ describe('ProjectsService', () => {
 
   beforeEach(async () => {
     projectsRepository = {
-      create: jest.fn((input) => input),
+      create: jest.fn((input: Partial<Project>) => input),
       find: jest.fn(),
       findOne: jest.fn(),
-      save: jest.fn((input) => Promise.resolve({ id: projectId, ...input })),
+      save: jest.fn((input: Partial<Project>) =>
+        Promise.resolve({ id: projectId, ...input }),
+      ),
       softRemove: jest.fn(() => Promise.resolve()),
     };
     projectMembersRepository = {
-      create: jest.fn((input) => input),
+      create: jest.fn((input: Partial<ProjectMember>) => input),
       find: jest.fn(),
       findOne: jest.fn(),
-      save: jest.fn((input) => Promise.resolve({ id: 'member-id', ...input })),
+      save: jest.fn((input: Partial<ProjectMember>) =>
+        Promise.resolve({ id: 'member-id', ...input }),
+      ),
       softRemove: jest.fn(() => Promise.resolve()),
     };
     projectBaselinesRepository = {
-      create: jest.fn((input) => input),
+      create: jest.fn((input: Partial<ProjectBaseline>) => input),
       findOne: jest.fn(),
-      save: jest.fn((input) =>
+      save: jest.fn((input: Partial<ProjectBaseline>) =>
         Promise.resolve({ id: 'project-baseline-id', ...input }),
       ),
     };
     projectBaselineTasksRepository = {
-      create: jest.fn((input) => input),
-      save: jest.fn((input) => Promise.resolve(input)),
+      create: jest.fn((input: Partial<ProjectBaselineTask>) => input),
+      save: jest.fn((input: Partial<ProjectBaselineTask>) =>
+        Promise.resolve(input),
+      ),
     };
     tasksRepository = {
-      create: jest.fn((input) => input),
+      create: jest.fn((input: Partial<Task>) => input),
       find: jest.fn(),
       findOne: jest.fn(),
-      save: jest.fn((input) => Promise.resolve({ id: taskId, ...input })),
+      save: jest.fn((input: Partial<Task>) =>
+        Promise.resolve({ id: taskId, ...input }),
+      ),
       softRemove: jest.fn(() => Promise.resolve()),
     };
     transactionalEntityManager = {
+      query: jest.fn(() => Promise.resolve()),
       save: jest.fn((entity, input) => {
         if (entity === ProjectBaseline) {
           return Promise.resolve({ id: 'project-baseline-id', ...input });
@@ -118,20 +130,31 @@ describe('ProjectsService', () => {
       }),
       update: jest.fn(() => Promise.resolve()),
     };
+    const transactionMock = jest.fn(
+      (
+        callback: (manager: typeof transactionalEntityManager) => unknown,
+      ): unknown => callback(transactionalEntityManager),
+    );
     projectsRepository.manager = {
-      transaction: jest.fn((callback) => callback(transactionalEntityManager)),
-    } as Repository<Project>['manager'];
+      transaction: transactionMock,
+    } as unknown as Repository<Project>['manager'];
     taskDependenciesRepository = {
-      create: jest.fn((input) => input),
+      create: jest.fn((input: Partial<TaskDependency>) => input),
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
-      save: jest.fn((input) =>
+      save: jest.fn((input: Partial<TaskDependency>) =>
         Promise.resolve({ id: 'task-dependency-id', ...input }),
       ),
       softRemove: jest.fn(() => Promise.resolve()),
     };
     usersRepository = {
       findOne: jest.fn().mockResolvedValue({ id: userId }),
+    };
+    rolesRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'role-id',
+        name: UserRole.PlatformAdmin,
+      }),
     };
     authorizationPolicyService = {
       canDeleteProject: jest.fn().mockResolvedValue(true),
@@ -178,6 +201,10 @@ describe('ProjectsService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: usersRepository,
+        },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: rolesRepository,
         },
         ProjectHealthService,
         {
@@ -323,6 +350,21 @@ describe('ProjectsService', () => {
     );
   });
 
+  it('hides archived projects from the normal project list', async () => {
+    projectVisibilityService.getVisibleProjects.mockResolvedValue([
+      { id: 'active-project', status: 'active' },
+      { id: 'archived-project', status: 'archived' },
+    ]);
+
+    await expect(service.findAll(actor)).resolves.toEqual([
+      expect.objectContaining({ id: 'active-project' }),
+    ]);
+
+    await expect(
+      service.findAll(actor, { lifecycle: 'archived' }),
+    ).resolves.toEqual([expect.objectContaining({ id: 'archived-project' })]);
+  });
+
   it('loads project details with members, tasks, and RAID context', async () => {
     projectsRepository.findOne?.mockResolvedValue({
       id: projectId,
@@ -361,7 +403,9 @@ describe('ProjectsService', () => {
       ],
     });
 
-    await expect(service.findOne(projectId)).resolves.toEqual(
+    const result = await service.findOne(projectId);
+
+    expect(result).toEqual(
       expect.objectContaining({
         health: {
           reasons: [
@@ -375,16 +419,18 @@ describe('ProjectsService', () => {
           phases: 1,
           tasks: 2,
         },
-        tasks: expect.arrayContaining([
-          expect.objectContaining({
-            childTaskCount: 2,
-            id: 'phase-1',
-            phaseEndDate: '2026-07-18',
-            phaseProgress: 50,
-            phaseStartDate: '2026-07-02',
-          }),
-        ]),
       }),
+    );
+    expect(result.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          childTaskCount: 2,
+          id: 'phase-1',
+          phaseEndDate: '2026-07-18',
+          phaseProgress: 50,
+          phaseStartDate: '2026-07-02',
+        }),
+      ]),
     );
     expect(projectsRepository.findOne).toHaveBeenCalledWith({
       where: { id: projectId },
@@ -461,13 +507,80 @@ describe('ProjectsService', () => {
     });
   });
 
-  it('soft deletes an existing project', async () => {
-    const project = { id: projectId, name: 'ERP Modernization' };
+  it('archives an existing project instead of deleting it', async () => {
+    const project = {
+      id: projectId,
+      name: 'ERP Modernization',
+      status: 'active',
+    };
     projectsRepository.findOne?.mockResolvedValue(project);
 
     await service.remove(projectId);
 
-    expect(projectsRepository.softRemove).toHaveBeenCalledWith(project);
+    expect(projectsRepository.save).toHaveBeenCalledWith({
+      deletedAt: null,
+      deletedById: null,
+      id: projectId,
+      name: 'ERP Modernization',
+      status: 'archived',
+      updatedById: undefined,
+    });
+    expect(projectsRepository.softRemove).not.toHaveBeenCalled();
+  });
+
+  it('restores an archived project without deleting relationships', async () => {
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      status: 'archived',
+    });
+
+    await service.restore(projectId, actor);
+
+    expect(projectsRepository.findOne).toHaveBeenCalledWith({
+      where: { id: projectId },
+      withDeleted: true,
+    });
+    expect(projectsRepository.save).toHaveBeenCalledWith({
+      deletedAt: null,
+      deletedById: null,
+      id: projectId,
+      status: 'active',
+      updatedById: actor.userId,
+    });
+  });
+
+  it('permanently purges project-owned data for platform administrators', async () => {
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      status: 'archived',
+    });
+
+    await service.purge(projectId, actor);
+
+    expect(rolesRepository.findOne).toHaveBeenCalledWith({
+      select: { id: true, name: true },
+      where: { id: actor.roleId },
+    });
+    expect(projectsRepository.manager.transaction).toHaveBeenCalled();
+    expect(transactionalEntityManager.query).toHaveBeenCalledWith(
+      "SET LOCAL pm_platform.project_purge = 'on'",
+    );
+    expect(transactionalEntityManager.query).toHaveBeenCalledWith(
+      'DELETE FROM projects WHERE id = $1',
+      [projectId],
+    );
+  });
+
+  it('rejects permanent purge for non-platform administrators', async () => {
+    rolesRepository.findOne?.mockResolvedValue({
+      id: 'role-id',
+      name: UserRole.ProjectManager,
+    });
+
+    await expect(service.purge(projectId, actor)).rejects.toThrow(
+      'Platform administrator access is required',
+    );
+    expect(projectsRepository.manager.transaction).not.toHaveBeenCalled();
   });
 
   it('adds a project member when the project and user exist', async () => {

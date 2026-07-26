@@ -12,6 +12,7 @@ import ProjectsPage from "@/app/(app)/projects/page";
 import { dispatchApplicationCommandAction } from "@/features/commands";
 
 const projectMocks = vi.hoisted(() => ({
+  archiveProject: vi.fn(),
   createProject: vi.fn(),
   deleteProject: vi.fn(),
   getAssignableUsers: vi.fn(async () => [
@@ -87,6 +88,8 @@ const projectMocks = vi.hoisted(() => ({
       status: "active",
     },
   ]),
+  purgeProject: vi.fn(),
+  restoreProject: vi.fn(),
   updateProject: vi.fn(),
 }));
 
@@ -128,6 +131,7 @@ vi.mock("@/features/auth", () => ({
 }));
 
 vi.mock("@/features/projects", () => ({
+  archiveProject: projectMocks.archiveProject,
   captureProjectBaseline: vi.fn(),
   createProject: projectMocks.createProject,
   createProjectTaskDependency: vi.fn(),
@@ -149,17 +153,22 @@ vi.mock("@/features/projects", () => ({
   getProject: projectMocks.getProject,
   getProjectTaskDependencies: vi.fn(async () => []),
   getProjects: projectMocks.getProjects,
+  purgeProject: projectMocks.purgeProject,
+  restoreProject: projectMocks.restoreProject,
   updateProject: projectMocks.updateProject,
   updateProjectTaskDependency: vi.fn(),
 }));
 
 describe("ProjectsPage CRUD", () => {
   beforeEach(() => {
+    projectMocks.archiveProject.mockReset();
     projectMocks.createProject.mockReset();
     projectMocks.deleteProject.mockReset();
     projectMocks.getAssignableUsers.mockClear();
     projectMocks.getProject.mockClear();
     projectMocks.getProjects.mockClear();
+    projectMocks.purgeProject.mockReset();
+    projectMocks.restoreProject.mockReset();
     projectMocks.updateProject.mockReset();
   });
 
@@ -195,23 +204,25 @@ describe("ProjectsPage CRUD", () => {
     });
   });
 
-  it("confirms and deletes a project", async () => {
+  it("confirms and archives a project", async () => {
     render(<ProjectsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /delete/i }));
-    const deleteDialog = screen.getByRole("dialog", {
-      name: /delete project/i,
+    fireEvent.click(await screen.findByRole("button", { name: /archive/i }));
+    const archiveDialog = screen.getByRole("dialog", {
+      name: /archive project/i,
     });
     expect(
-      within(deleteDialog).getByText(/confirm deletion of/i),
+      within(archiveDialog).getByText(/confirm archive of/i),
     ).toBeInTheDocument();
 
     fireEvent.click(
-      within(deleteDialog).getByRole("button", { name: /^delete project$/i }),
+      within(archiveDialog).getByRole("button", {
+        name: /^archive project$/i,
+      }),
     );
 
     await waitFor(() => {
-      expect(projectMocks.deleteProject).toHaveBeenCalledWith("project-1");
+      expect(projectMocks.archiveProject).toHaveBeenCalledWith("project-1");
     });
   });
 

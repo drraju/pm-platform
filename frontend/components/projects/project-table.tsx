@@ -9,22 +9,34 @@ import {
 import type { ApiProject } from "@/features/projects";
 
 type ProjectTableProps = {
+  canArchiveProjects?: boolean;
   canDeleteProjects?: boolean;
   canEditProjects?: boolean;
+  canPurgeProjects?: boolean;
+  canRestoreProjects?: boolean;
   emptyMessage: string;
   isLoading: boolean;
+  onArchiveProject?: (project: ApiProject) => void;
   onDeleteProject?: (project: ApiProject) => void;
   onEditProject?: (project: ApiProject) => void;
+  onPurgeProject?: (project: ApiProject) => void;
+  onRestoreProject?: (project: ApiProject) => void;
   projects: ApiProject[];
 };
 
 export function ProjectTable({
+  canArchiveProjects,
   canDeleteProjects = false,
   canEditProjects = false,
+  canPurgeProjects = false,
+  canRestoreProjects = false,
   emptyMessage,
   isLoading,
+  onArchiveProject,
   onDeleteProject,
   onEditProject,
+  onPurgeProject,
+  onRestoreProject,
   projects,
 }: ProjectTableProps) {
   const router = useRouter();
@@ -134,16 +146,46 @@ export function ProjectTable({
                   Edit
                 </button>
               ) : null}
-              {canDeleteProjects && onDeleteProject ? (
+              {(canArchiveProjects ?? canDeleteProjects) &&
+              (onArchiveProject ?? onDeleteProject) &&
+              project.status !== "archived" ? (
                 <button
                   className="w-fit rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300/40"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onDeleteProject(project);
+                    (onArchiveProject ?? onDeleteProject)?.(project);
                   }}
                   type="button"
                 >
-                  Delete
+                  Archive
+                </button>
+              ) : null}
+              {canRestoreProjects &&
+              onRestoreProject &&
+              project.status === "archived" ? (
+                <button
+                  className="w-fit rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRestoreProject(project);
+                  }}
+                  type="button"
+                >
+                  Restore
+                </button>
+              ) : null}
+              {canPurgeProjects &&
+              onPurgeProject &&
+              project.status === "archived" ? (
+                <button
+                  className="w-fit rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-800 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300/40"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onPurgeProject(project);
+                  }}
+                  type="button"
+                >
+                  Purge
                 </button>
               ) : null}
             </div>

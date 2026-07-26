@@ -47,10 +47,10 @@ describe("ProjectTable", () => {
       <ProjectTable
         emptyMessage="No projects"
         isLoading={false}
-        onDeleteProject={vi.fn()}
+        onArchiveProject={vi.fn()}
         onEditProject={vi.fn()}
         projects={projects}
-        canDeleteProjects
+        canArchiveProjects
         canEditProjects
       />,
     );
@@ -70,7 +70,9 @@ describe("ProjectTable", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /archive/i }),
+    ).toBeInTheDocument();
   });
 
   it("opens a project when Enter is pressed on a row", () => {
@@ -87,17 +89,17 @@ describe("ProjectTable", () => {
     expect(navigationMocks.push).toHaveBeenCalledWith("/projects/project-1");
   });
 
-  it("triggers edit and delete callbacks without opening the project row", () => {
+  it("triggers edit and archive callbacks without opening the project row", () => {
     const onEditProject = vi.fn();
-    const onDeleteProject = vi.fn();
+    const onArchiveProject = vi.fn();
 
     render(
       <ProjectTable
-        canDeleteProjects
+        canArchiveProjects
         canEditProjects
         emptyMessage="No projects"
         isLoading={false}
-        onDeleteProject={onDeleteProject}
+        onArchiveProject={onArchiveProject}
         onEditProject={onEditProject}
         projects={projects}
       />,
@@ -107,8 +109,8 @@ describe("ProjectTable", () => {
     expect(onEditProject).toHaveBeenCalledWith(projects[0]);
     expect(navigationMocks.push).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
-    expect(onDeleteProject).toHaveBeenCalledWith(projects[0]);
+    fireEvent.click(screen.getByRole("button", { name: /archive/i }));
+    expect(onArchiveProject).toHaveBeenCalledWith(projects[0]);
     expect(navigationMocks.push).not.toHaveBeenCalled();
   });
 

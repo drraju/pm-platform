@@ -7,6 +7,7 @@ import { Risk } from '../raid/entities/risk.entity';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { User } from '../users/entities/user.entity';
+import { Role } from '../users/entities/role.entity';
 import { ProjectBaselineTask } from './entities/project-baseline-task.entity';
 import { ProjectBaseline } from './entities/project-baseline.entity';
 import { ProjectMember } from './entities/project-member.entity';
@@ -30,6 +31,7 @@ import { TasksModule } from '../tasks/tasks.module';
       Task,
       TaskDependency,
       User,
+      Role,
       Risk,
       Issue,
     ]),

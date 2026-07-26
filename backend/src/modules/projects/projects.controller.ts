@@ -95,9 +95,22 @@ export class ProjectsController {
 
   @Get()
   @ApiOperation({ summary: 'List projects' })
+  @ApiQuery({ name: 'archived', required: false })
+  @ApiQuery({ name: 'includeArchived', required: false })
   @ApiOkResponse({ type: Project, isArray: true })
-  findAll(@Req() request: AuthenticatedRequest): Promise<Project[]> {
-    return this.projectsService.findAll(request.user);
+  findAll(
+    @Req() request: AuthenticatedRequest,
+    @Query('archived') archived?: string,
+    @Query('includeArchived') includeArchived?: string,
+  ): Promise<Project[]> {
+    return this.projectsService.findAll(request.user, {
+      lifecycle:
+        archived === 'true'
+          ? 'archived'
+          : includeArchived === 'true'
+            ? 'all'
+            : 'active',
+    });
   }
 
   @Post(':id/members')
@@ -551,12 +564,54 @@ export class ProjectsController {
     return this.projectsService.update(id, updateProjectDto, request.user);
   }
 
+  @Post(':id/archive')
+  @RequirePermissions(PermissionKey.ProjectDelete)
+  @ApiOperation({ summary: 'Archive a project' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: Project })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  archive(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Project> {
+    return this.projectsService.archive(id, request.user);
+  }
+
+  @Post(':id/restore')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiOperation({ summary: 'Restore an archived project' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: Project })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  restore(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<Project> {
+    return this.projectsService.restore(id, request.user);
+  }
+
+  @Delete(':id/purge')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Permanently purge a project' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiNoContentResponse({ description: 'Project permanently purged' })
+  @ApiForbiddenResponse({
+    description: 'Platform administrator access is required',
+  })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  purge(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.projectsService.purge(id, request.user);
+  }
+
   @Delete(':id')
   @RequirePermissions(PermissionKey.ProjectDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a project' })
+  @ApiOperation({ summary: 'Archive a project' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiNoContentResponse({ description: 'Project deleted' })
+  @ApiNoContentResponse({ description: 'Project archived' })
   @ApiNotFoundResponse({ description: 'Project not found' })
   remove(
     @Req() request: AuthenticatedRequest,

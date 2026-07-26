@@ -1,5 +1,6 @@
 export {
   addProjectMember,
+  archiveProject,
   createProject,
   captureProjectBaseline,
   createProjectTask,
@@ -19,7 +20,9 @@ export {
   getProjectTaskDependencies,
   getProjectTasks,
   getProjects,
+  purgeProject,
   removeProjectMember,
+  restoreProject,
   updateProject,
   updateProjectMember,
   updateProjectTask,

@@ -1,7 +1,14 @@
 "use client";
 
 import React from "react";
-import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectTable } from "@/components/projects/project-table";
@@ -12,11 +19,13 @@ import {
   ModalFormSection,
 } from "@/components/ui/modal-form";
 import {
+  archiveProject,
   createProject,
-  deleteProject,
   getAssignableUsers,
   getProject,
   getProjects,
+  purgeProject,
+  restoreProject,
   updateProject,
   type ApiProject,
 } from "@/features/projects";
@@ -44,6 +53,11 @@ const projectStatuses = [
   { label: "Complete", value: "complete" },
 ];
 
+const projectFilterStatuses = [
+  ...projectStatuses,
+  { label: "Archived", value: "archived" },
+];
+
 export default function ProjectsPage() {
   return (
     <Suspense fallback={<PageLoading />}>
@@ -61,11 +75,17 @@ function PageContent() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingProject, setIsSavingProject] = useState(false);
-  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [isLifecycleActionSaving, setIsLifecycleActionSaving] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [projectPendingDelete, setProjectPendingDelete] =
+  const [projectPendingArchive, setProjectPendingArchive] =
     useState<ApiProject | null>(null);
-  const [selectedProject, setSelectedProject] = useState<ApiProject | null>(null);
+  const [projectPendingPurge, setProjectPendingPurge] =
+    useState<ApiProject | null>(null);
+  const [projectPendingRestore, setProjectPendingRestore] =
+    useState<ApiProject | null>(null);
+  const [selectedProject, setSelectedProject] = useState<ApiProject | null>(
+    null,
+  );
   const searchTerm = searchParams.get("search") ?? "";
   const statusFilter = searchParams.get("status") ?? "all";
   const requestedHealth = searchParams.get("health")?.toUpperCase();
@@ -78,13 +98,21 @@ function PageContent() {
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
     getStoredPermissionKeys(),
   );
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const requestedSort = searchParams.get("sort");
-  const sortMode: "created_asc" | "created_desc" | "health_asc" | "health_desc" =
-    isProjectSortMode(requestedSort) ? requestedSort : "created_desc";
+  const sortMode:
+    | "created_asc"
+    | "created_desc"
+    | "health_asc"
+    | "health_desc" = isProjectSortMode(requestedSort)
+    ? requestedSort
+    : "created_desc";
   const hasSession = useMemo(() => Boolean(getStoredAccessToken()), []);
   const canCreateProject = hasPermission(permissionKeys, "project.create");
   const canEditProject = hasPermission(permissionKeys, "project.update");
-  const canDeleteProject = hasPermission(permissionKeys, "project.delete");
+  const canArchiveProject = hasPermission(permissionKeys, "project.delete");
+  const canRestoreProject = hasPermission(permissionKeys, "project.update");
+  const canPurgeProject = isPlatformAdmin;
   const projectEntityProvider = useMemo(
     () => createProjectEntityProvider(projects),
     [projects],
@@ -104,22 +132,28 @@ function PageContent() {
       status: nextFilters.status ?? statusFilter,
     });
 
-    if (`${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}` !== nextUrl) {
+    if (
+      `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}` !==
+      nextUrl
+    ) {
       router.replace(nextUrl);
     }
   }
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setError(null);
     setIsLoading(true);
     try {
       const [projectData, userData, authMe] = await Promise.all([
-        getProjects(),
+        getProjects({ archived: statusFilter === "archived" }),
         getAssignableUsers(),
         getAuthMe(),
       ]);
       storeAuthMe(authMe);
       setPermissionKeys(authMe.permissions.map((permission) => permission.key));
+      setIsPlatformAdmin(
+        authMe.roles.some((role) => role.name === "PLATFORM_ADMIN"),
+      );
       const projectsWithWorkspaceContext = await Promise.all(
         projectData.map(async (project) => {
           try {
@@ -163,11 +197,11 @@ function PageContent() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [statusFilter]);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [loadData]);
 
   const filteredProjects = useMemo(() => {
     const normalizedSearchTerm = searchTerm.trim().toLowerCase();
@@ -197,7 +231,9 @@ function PageContent() {
             : leftHealth - rightHealth;
         }
 
-        const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+        const leftTime = left.createdAt
+          ? new Date(left.createdAt).getTime()
+          : 0;
         const rightTime = right.createdAt
           ? new Date(right.createdAt).getTime()
           : 0;
@@ -277,25 +313,69 @@ function PageContent() {
     }
   }
 
-  async function handleDeleteProject() {
-    if (!projectPendingDelete) {
+  async function handleArchiveProject() {
+    if (!projectPendingArchive) {
       return;
     }
 
     setError(null);
-    setIsDeletingProject(true);
+    setIsLifecycleActionSaving(true);
     try {
-      await deleteProject(projectPendingDelete.id);
-      setProjectPendingDelete(null);
+      await archiveProject(projectPendingArchive.id);
+      setProjectPendingArchive(null);
       await loadData();
     } catch (requestError) {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to delete project",
+          : "Unable to archive project",
       );
     } finally {
-      setIsDeletingProject(false);
+      setIsLifecycleActionSaving(false);
+    }
+  }
+
+  async function handleRestoreProject() {
+    if (!projectPendingRestore) {
+      return;
+    }
+
+    setError(null);
+    setIsLifecycleActionSaving(true);
+    try {
+      await restoreProject(projectPendingRestore.id);
+      setProjectPendingRestore(null);
+      await loadData();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to restore project",
+      );
+    } finally {
+      setIsLifecycleActionSaving(false);
+    }
+  }
+
+  async function handlePurgeProject() {
+    if (!projectPendingPurge) {
+      return;
+    }
+
+    setError(null);
+    setIsLifecycleActionSaving(true);
+    try {
+      await purgeProject(projectPendingPurge.id);
+      setProjectPendingPurge(null);
+      await loadData();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to permanently purge project",
+      );
+    } finally {
+      setIsLifecycleActionSaving(false);
     }
   }
 
@@ -338,7 +418,9 @@ function PageContent() {
           </span>
           <input
             className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) => syncProjectFilters({ search: event.target.value })}
+            onChange={(event) =>
+              syncProjectFilters({ search: event.target.value })
+            }
             placeholder="Search projects"
             type="search"
             value={searchTerm}
@@ -350,11 +432,13 @@ function PageContent() {
           </span>
           <select
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) => syncProjectFilters({ status: event.target.value })}
+            onChange={(event) =>
+              syncProjectFilters({ status: event.target.value })
+            }
             value={statusFilter}
           >
             <option value="all">All statuses</option>
-            {projectStatuses.map((status) => (
+            {projectFilterStatuses.map((status) => (
               <option key={status.value} value={status.value}>
                 {status.label}
               </option>
@@ -369,12 +453,11 @@ function PageContent() {
             className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
             onChange={(event) =>
               syncProjectFilters({
-                sort:
-                  event.target.value as
-                    | "created_asc"
-                    | "created_desc"
-                    | "health_asc"
-                    | "health_desc",
+                sort: event.target.value as
+                  | "created_asc"
+                  | "created_desc"
+                  | "health_asc"
+                  | "health_desc",
               })
             }
             value={sortMode}
@@ -407,16 +490,20 @@ function PageContent() {
       </section>
 
       <ProjectTable
-        canDeleteProjects={canDeleteProject}
+        canArchiveProjects={canArchiveProject}
         canEditProjects={canEditProject}
+        canPurgeProjects={canPurgeProject}
+        canRestoreProjects={canRestoreProject}
         emptyMessage={
           projects.length === 0
             ? "No projects have been created yet."
             : "No projects match the current filters."
         }
         isLoading={isLoading}
-        onDeleteProject={(project) => setProjectPendingDelete(project)}
+        onArchiveProject={(project) => setProjectPendingArchive(project)}
         onEditProject={openEditProjectModal}
+        onPurgeProject={(project) => setProjectPendingPurge(project)}
+        onRestoreProject={(project) => setProjectPendingRestore(project)}
         projects={filteredProjects}
       />
 
@@ -461,37 +548,111 @@ function PageContent() {
         </AppModal>
       ) : null}
 
-      {projectPendingDelete ? (
+      {projectPendingArchive ? (
         <AppModal
-          description="This removes the project workspace and its related delivery data from active use."
+          description="This hides the project from normal portfolio lists while preserving delivery history and related records."
           footer={
             <>
               <button
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => setProjectPendingDelete(null)}
+                onClick={() => setProjectPendingArchive(null)}
                 type="button"
               >
                 Cancel
               </button>
               <button
                 className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={isDeletingProject}
-                onClick={handleDeleteProject}
+                disabled={isLifecycleActionSaving}
+                onClick={handleArchiveProject}
                 type="button"
               >
-                {isDeletingProject ? "Deleting..." : "Delete project"}
+                {isLifecycleActionSaving ? "Archiving..." : "Archive project"}
               </button>
             </>
           }
-          labelledById="delete-project-title"
-          onClose={() => setProjectPendingDelete(null)}
-          title="Delete project"
+          labelledById="archive-project-title"
+          onClose={() => setProjectPendingArchive(null)}
+          title="Archive project"
           widthClassName="max-w-md"
         >
           <p className="text-sm text-slate-600">
-            Confirm deletion of{" "}
+            Confirm archive of{" "}
             <span className="font-semibold text-slate-950">
-              {projectPendingDelete.name}
+              {projectPendingArchive.name}
+            </span>
+            .
+          </p>
+        </AppModal>
+      ) : null}
+
+      {projectPendingRestore ? (
+        <AppModal
+          description="This restores the project to normal portfolio visibility without changing its related records."
+          footer={
+            <>
+              <button
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setProjectPendingRestore(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={isLifecycleActionSaving}
+                onClick={handleRestoreProject}
+                type="button"
+              >
+                {isLifecycleActionSaving ? "Restoring..." : "Restore project"}
+              </button>
+            </>
+          }
+          labelledById="restore-project-title"
+          onClose={() => setProjectPendingRestore(null)}
+          title="Restore project"
+          widthClassName="max-w-md"
+        >
+          <p className="text-sm text-slate-600">
+            Confirm restore of{" "}
+            <span className="font-semibold text-slate-950">
+              {projectPendingRestore.name}
+            </span>
+            .
+          </p>
+        </AppModal>
+      ) : null}
+
+      {projectPendingPurge ? (
+        <AppModal
+          description="This permanently removes the project and all project-owned records. This action cannot be undone."
+          footer={
+            <>
+              <button
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setProjectPendingPurge(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={isLifecycleActionSaving}
+                onClick={handlePurgeProject}
+                type="button"
+              >
+                {isLifecycleActionSaving ? "Purging..." : "Permanent purge"}
+              </button>
+            </>
+          }
+          labelledById="purge-project-title"
+          onClose={() => setProjectPendingPurge(null)}
+          title="Permanent purge"
+          widthClassName="max-w-md"
+        >
+          <p className="text-sm text-slate-600">
+            Confirm permanent purge of{" "}
+            <span className="font-semibold text-slate-950">
+              {projectPendingPurge.name}
             </span>
             .
           </p>
@@ -505,11 +666,9 @@ function PageLoading() {
   return <div className="space-y-6" />;
 }
 
-function isProjectSortMode(value: string | null): value is
-  | "created_asc"
-  | "created_desc"
-  | "health_asc"
-  | "health_desc" {
+function isProjectSortMode(
+  value: string | null,
+): value is "created_asc" | "created_desc" | "health_asc" | "health_desc" {
   return (
     value === "created_asc" ||
     value === "created_desc" ||
@@ -518,15 +677,17 @@ function isProjectSortMode(value: string | null): value is
   );
 }
 
-function buildProjectFiltersUrl(pathname: string, filters: {
-  health: "all" | ApiProjectHealthStatus;
-  search: string;
-  sort: "created_asc" | "created_desc" | "health_asc" | "health_desc";
-  status: string;
-}) {
+function buildProjectFiltersUrl(
+  pathname: string,
+  filters: {
+    health: "all" | ApiProjectHealthStatus;
+    search: string;
+    sort: "created_asc" | "created_desc" | "health_asc" | "health_desc";
+    status: string;
+  },
+) {
   const searchParams = new URLSearchParams();
   const trimmedSearch = filters.search.trim();
-
 
   if (trimmedSearch) {
     searchParams.set("search", trimmedSearch);
@@ -564,84 +725,86 @@ function ProjectForm({
         title="Project Detail"
       >
         <ModalFormGrid>
-      <label className="block sm:col-span-2">
-        <span className="text-sm font-medium text-slate-700">Name</span>
-        <input
-          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-          defaultValue={project?.name ?? ""}
-          name="name"
-          required
-        />
-      </label>
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Name</span>
+            <input
+              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+              defaultValue={project?.name ?? ""}
+              name="name"
+              required
+            />
+          </label>
 
-      <label className="block sm:col-span-2">
-        <span className="text-sm font-medium text-slate-700">Description</span>
-        <textarea
-          className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-          defaultValue={project?.description ?? ""}
-          name="description"
-        />
-      </label>
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-slate-700">
+              Description
+            </span>
+            <textarea
+              className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+              defaultValue={project?.description ?? ""}
+              name="description"
+            />
+          </label>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Status</span>
-        <select
-          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-          defaultValue={project?.status ?? "active"}
-          name="status"
-        >
-          {projectStatuses.map((status) => (
-            <option key={status.value} value={status.value}>
-              {status.label}
-            </option>
-          ))}
-        </select>
-      </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Status</span>
+            <select
+              className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+              defaultValue={project?.status ?? "active"}
+              name="status"
+            >
+              {projectStatuses.map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <ProjectUserSelect
-        defaultValue={project?.ownerId ?? ""}
-        label="Owner"
-        name="ownerId"
-        users={users}
-      />
-      <ProjectUserSelect
-        defaultValue={project?.businessOwnerId ?? ""}
-        label="Business Owner"
-        name="businessOwnerId"
-        users={users}
-      />
-      <ProjectUserSelect
-        defaultValue={project?.executiveSponsorId ?? ""}
-        label="Executive Sponsor"
-        name="executiveSponsorId"
-        users={users}
-      />
-      <ProjectUserSelect
-        defaultValue={project?.deliveryLeadId ?? ""}
-        label="Delivery Lead"
-        name="deliveryLeadId"
-        users={users}
-      />
+          <ProjectUserSelect
+            defaultValue={project?.ownerId ?? ""}
+            label="Owner"
+            name="ownerId"
+            users={users}
+          />
+          <ProjectUserSelect
+            defaultValue={project?.businessOwnerId ?? ""}
+            label="Business Owner"
+            name="businessOwnerId"
+            users={users}
+          />
+          <ProjectUserSelect
+            defaultValue={project?.executiveSponsorId ?? ""}
+            label="Executive Sponsor"
+            name="executiveSponsorId"
+            users={users}
+          />
+          <ProjectUserSelect
+            defaultValue={project?.deliveryLeadId ?? ""}
+            label="Delivery Lead"
+            name="deliveryLeadId"
+            users={users}
+          />
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Start</span>
-        <input
-          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-          defaultValue={project?.startDate ?? ""}
-          name="startDate"
-          type="date"
-        />
-      </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Start</span>
+            <input
+              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+              defaultValue={project?.startDate ?? ""}
+              name="startDate"
+              type="date"
+            />
+          </label>
 
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Target</span>
-        <input
-          className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-          defaultValue={project?.targetEndDate ?? ""}
-          name="targetEndDate"
-          type="date"
-        />
-      </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Target</span>
+            <input
+              className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+              defaultValue={project?.targetEndDate ?? ""}
+              name="targetEndDate"
+              type="date"
+            />
+          </label>
         </ModalFormGrid>
       </ModalFormSection>
     </ModalForm>

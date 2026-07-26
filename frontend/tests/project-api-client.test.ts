@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addProjectMember,
+  archiveProject,
   captureProjectBaseline,
   changePassword,
   getDocumentCategories,
@@ -30,7 +31,9 @@ import {
   getProjectRisks,
   getProjectTaskDependencies,
   getProjects,
+  purgeProject,
   removeProjectMember,
+  restoreProject,
   updateRolePermissions,
   updateProject,
   updateProjectMember,
@@ -304,6 +307,34 @@ describe("project API client", () => {
     await expect(deleteProject("project-1")).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects/project-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("archives, restores, and permanently purges projects", async () => {
+    const fetchMock = mockFetch({ id: "project-1", status: "archived" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await archiveProject("project-1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/archive",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    await restoreProject("project-1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/restore",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    fetchMock.mockResolvedValueOnce({
+      headers: new Headers({ "content-length": "0" }),
+      ok: true,
+      status: 204,
+    });
+    await expect(purgeProject("project-1")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/purge",
       expect.objectContaining({ method: "DELETE" }),
     );
   });
