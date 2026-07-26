@@ -64,3 +64,24 @@ Architecture-affecting changes require updates to architecture docs or ADRs. Pro
 - Frontend must prevent invalid inputs where possible.
 - Do not create parallel models for the same concept.
 - Prefer typed domain helpers over ad hoc string manipulation.
+
+## Security Coding Standards
+SR-001 Password Hashing
+
+SR-002 Password Validation
+
+SR-003 Password Workflow
+
+SR-004 JWT Handling
+
+SR-005 Secrets Management
+
+SR-006 Encryption
+
+SR-007 Audit Logging
+
+SR-008 Input Validation
+
+SR-009 Authorization Checks
+
+SR-010 Sensitive Data Logging

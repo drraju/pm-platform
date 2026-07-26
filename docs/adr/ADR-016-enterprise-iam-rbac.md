@@ -250,3 +250,36 @@ foundation and add:
 - logout and all-sessions logout
 - MFA enrollment, challenge, recovery, and session elevation
 - durable security audit events
+
+## Enterprise Roles
+SUPER_ADMIN
+Purpose:
+Platform owner responsible for global configuration and security.
+
+Responsibilities:
+- Platform administration
+- Tenant/company configuration
+- User management
+- Role management
+- System maintenance
+## Enterprise Roles (Current PM Platform)
+
+| Role                  | Purpose                                                                        | Current Permissions                                                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PLATFORM_ADMIN**    | Owns and administers the PM Platform for the organisation.                     | Full access to all projects, portfolios, users, workspaces, integrations, platform settings, and future administration features. Can create, update, archive and delete any project.                             |
+| **PORTFOLIO_MANAGER** | Oversees multiple projects within a portfolio and ensures strategic alignment. | View and manage all assigned projects. Full access to Planning, RAID, Milestones, Calendar, Documents, Dashboards and Reports across assigned projects. Cannot administer the platform or users.                 |
+| **PROJECT_MANAGER**   | Responsible for successful delivery of one or more projects.                   | Create and manage assigned projects. Manage Planning, Tasks, RAID, Milestones, Calendar, Documents and project reports. Manage project team membership.                                                          |
+| **TEAM_MEMBER**       | Contributes to project delivery.                                               | View assigned projects. Update assigned tasks and activities. Add comments and upload project documents where permitted. No project administration or portfolio access.                                          |
+| **EXECUTIVE**         | Senior leadership requiring portfolio visibility and governance.               | Read-only access to dashboards, portfolios, projects, milestones, RAID summaries and reports. No create, update or delete permissions.                                                                           |
+| **CUSTOMER**          | Customer representative collaborating on authorised projects.                  | Read-only access to assigned projects, approved documents, milestones and reports. No internal administration or planning changes.                                                                               |
+| **PARTNER**           | External supplier or implementation partner supporting project delivery.       | Limited access to assigned projects only. Can participate in authorised collaboration activities and update assigned work where permitted. No access to portfolios, organisation settings or unrelated projects. |
+
+### Notes
+
+* **PLATFORM_ADMIN** is the only role that manages the platform itself.
+* **PORTFOLIO_MANAGER** manages **multiple projects**.
+* **PROJECT_MANAGER** manages **individual projects**.
+* **TEAM_MEMBER** performs delivery work.
+* **EXECUTIVE**, **CUSTOMER**, and **PARTNER** are primarily visibility/collaboration roles with restricted permissions.
+
+
