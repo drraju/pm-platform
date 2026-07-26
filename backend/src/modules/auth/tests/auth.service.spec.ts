@@ -6,6 +6,7 @@ import { User } from '../../users/entities/user.entity';
 import { UsersService } from '../../users/users.service';
 import { AuthService } from '../auth.service';
 import { PasswordPolicyService } from '../password-policy.service';
+import { PasswordResetTokenService } from '../password-reset-token.service';
 import { PasswordUpdateService } from '../password-update.service';
 import { PasswordService } from '../password.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
@@ -13,6 +14,11 @@ import { JwtStrategy } from '../strategies/jwt.strategy';
 describe('AuthService', () => {
   let service: AuthService;
   let passwordService: PasswordService;
+  let passwordResetTokenService: {
+    consumeToken: jest.Mock;
+    issueToken: jest.Mock;
+    validateToken: jest.Mock;
+  };
   let usersService: {
     create: jest.Mock;
     findAuthenticationUserById: jest.Mock;
@@ -31,6 +37,11 @@ describe('AuthService', () => {
       recordLogin: jest.fn(),
       updatePassword: jest.fn(),
     };
+    passwordResetTokenService = {
+      consumeToken: jest.fn(),
+      issueToken: jest.fn(),
+      validateToken: jest.fn(),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -47,6 +58,10 @@ describe('AuthService', () => {
           useValue: {
             sign: jest.fn(() => 'signed-token'),
           },
+        },
+        {
+          provide: PasswordResetTokenService,
+          useValue: passwordResetTokenService,
         },
       ],
     }).compile();
@@ -172,6 +187,117 @@ describe('AuthService', () => {
     await expect(
       service.login({ email: 'disabled@example.com', password: 'TempPass1!' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('returns a generic forgot password response for unknown accounts', async () => {
+    usersService.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      service.forgotPassword({ email: 'missing@example.com' }),
+    ).resolves.toEqual({
+      message:
+        'If an account exists for that email, password reset instructions will be sent.',
+      success: true,
+    });
+    expect(passwordResetTokenService.issueToken).not.toHaveBeenCalled();
+  });
+
+  it('issues a reset token for eligible accounts without exposing it', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'active@example.com',
+      id: 'user-active',
+      passwordHash: await passwordService.hashPassword('OldPass1!'),
+      roleId: 'role-team-member',
+      status: 'active',
+    });
+    passwordResetTokenService.issueToken.mockResolvedValue({
+      expiresAt: new Date('2026-07-26T10:30:00.000Z'),
+      token: 'raw-token',
+    });
+
+    await expect(
+      service.forgotPassword(
+        { email: 'active@example.com' },
+        { ipAddress: '127.0.0.1' },
+      ),
+    ).resolves.toEqual({
+      message:
+        'If an account exists for that email, password reset instructions will be sent.',
+      success: true,
+    });
+    expect(passwordResetTokenService.issueToken).toHaveBeenCalledWith(
+      'user-active',
+      '127.0.0.1',
+    );
+  });
+
+  it('does not issue reset tokens for disabled accounts', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'disabled@example.com',
+      id: 'user-disabled',
+      passwordHash: await passwordService.hashPassword('OldPass1!'),
+      roleId: 'role-team-member',
+      status: 'disabled',
+    });
+
+    await expect(
+      service.forgotPassword({ email: 'disabled@example.com' }),
+    ).resolves.toEqual({
+      message:
+        'If an account exists for that email, password reset instructions will be sent.',
+      success: true,
+    });
+    expect(passwordResetTokenService.issueToken).not.toHaveBeenCalled();
+  });
+
+  it('resets a password with a valid single-use token', async () => {
+    usersService.findAuthenticationUserById.mockResolvedValue({
+      id: 'user-1',
+      passwordHash: await passwordService.hashPassword('OldPass1!'),
+    } satisfies Partial<User>);
+    passwordResetTokenService.validateToken.mockResolvedValue({
+      id: 'reset-token-1',
+      userId: 'user-1',
+    });
+
+    await expect(
+      service.resetPassword({
+        confirmPassword: 'NewPass1!',
+        newPassword: 'NewPass1!',
+        token: 'raw-token',
+      }),
+    ).resolves.toEqual({
+      message: 'Password reset successfully. Please sign in.',
+      success: true,
+    });
+    expect(passwordResetTokenService.validateToken).toHaveBeenCalledWith(
+      'raw-token',
+    );
+    expect(passwordResetTokenService.consumeToken).toHaveBeenCalledWith(
+      'reset-token-1',
+    );
+    expect(usersService.updatePassword).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
+      expect.any(Date),
+      'active',
+    );
+  });
+
+  it('rejects invalid reset tokens without updating passwords', async () => {
+    passwordResetTokenService.validateToken.mockRejectedValue(
+      new UnauthorizedException('Invalid or expired password reset token'),
+    );
+
+    await expect(
+      service.resetPassword({
+        confirmPassword: 'NewPass1!',
+        newPassword: 'NewPass1!',
+        token: 'bad-token',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(usersService.updatePassword).not.toHaveBeenCalled();
+    expect(passwordResetTokenService.consumeToken).not.toHaveBeenCalled();
   });
 });
 

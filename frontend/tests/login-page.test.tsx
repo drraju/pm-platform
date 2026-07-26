@@ -121,15 +121,13 @@ describe("Login page", () => {
     });
   });
 
-  it("shows administrator contact guidance for forgotten passwords", () => {
+  it("links to the forgot password workflow", () => {
     render(<LoginPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /forgot password/i }));
+    const forgotPasswordLink = screen.getByRole("link", {
+      name: /forgot password/i,
+    });
 
-    expect(
-      screen.getByText(
-        "If you have forgotten your password, please contact your PM Platform Administrator.",
-      ),
-    ).toBeInTheDocument();
+    expect(forgotPasswordLink).toHaveAttribute("href", "/forgot-password");
   });
 });

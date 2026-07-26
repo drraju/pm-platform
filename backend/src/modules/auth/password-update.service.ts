@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
+import { User } from '../users/entities/user.entity';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
 import { PasswordPolicyService } from './password-policy.service';
@@ -87,6 +88,18 @@ export class PasswordUpdateService {
     resetPasswordInput: ResetPasswordInput,
     auditContext: PasswordChangeAuditContext = {},
   ): Promise<void> {
+    await this.validateResetPasswordForUser(userId, resetPasswordInput);
+    await this.applyValidatedPasswordReset(
+      userId,
+      resetPasswordInput.newPassword,
+      auditContext,
+    );
+  }
+
+  async validateResetPasswordForUser(
+    userId: string,
+    resetPasswordInput: ResetPasswordInput,
+  ): Promise<User> {
     if (resetPasswordInput.newPassword !== resetPasswordInput.confirmPassword) {
       throw new BadRequestException('Password confirmation does not match');
     }
@@ -108,9 +121,15 @@ export class PasswordUpdateService {
       );
     }
 
-    const passwordHash = await this.passwordService.hashPassword(
-      resetPasswordInput.newPassword,
-    );
+    return user;
+  }
+
+  async applyValidatedPasswordReset(
+    userId: string,
+    newPassword: string,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<void> {
+    const passwordHash = await this.passwordService.hashPassword(newPassword);
     await this.usersService.updatePassword(
       userId,
       passwordHash,

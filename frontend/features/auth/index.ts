@@ -1,11 +1,13 @@
 export {
   changePassword,
   clearSession,
+  forgotPassword,
   getAuthMe,
   getStoredAccessToken,
   getStoredPermissionKeys,
   getStoredSessionUser,
   login,
+  resetPassword,
   storeAuthMe,
   storeSession,
 } from "@/lib/api/client";

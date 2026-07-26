@@ -656,14 +656,11 @@ export function login(email: string, password: string) {
     accessToken: string;
     refreshToken: string;
     requiresPasswordChange?: boolean;
-  }>(
-    "/auth/login",
-    {
-      method: "POST",
-      token: null,
-      body: JSON.stringify({ email, password }),
-    },
-  );
+  }>("/auth/login", {
+    method: "POST",
+    token: null,
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 export function getAuthMe() {
@@ -681,6 +678,32 @@ export function changePassword(input: {
     success: boolean;
   }>("/auth/change-password", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function forgotPassword(email: string) {
+  return apiRequest<{
+    message: string;
+    success: boolean;
+  }>("/auth/forgot-password", {
+    method: "POST",
+    token: null,
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(input: {
+  confirmPassword: string;
+  newPassword: string;
+  token: string;
+}) {
+  return apiRequest<{
+    message: string;
+    success: boolean;
+  }>("/auth/reset-password", {
+    method: "POST",
+    token: null,
     body: JSON.stringify(input),
   });
 }

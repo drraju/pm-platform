@@ -5,6 +5,7 @@ import {
   archiveProject,
   captureProjectBaseline,
   changePassword,
+  forgotPassword,
   getDocumentCategories,
   createProjectDocument,
   createProjectTask,
@@ -36,6 +37,7 @@ import {
   getProjects,
   purgeProject,
   removeProjectMember,
+  resetPassword,
   restoreProject,
   updateRolePermissions,
   updateUser,
@@ -731,6 +733,64 @@ describe("project API client", () => {
         }),
         method: "POST",
       }),
+    );
+  });
+
+  it("requests a password reset without requiring a session token", async () => {
+    const fetchMock = mockFetch({
+      message:
+        "If an account exists for that email, password reset instructions will be sent.",
+      success: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(forgotPassword("user@example.com")).resolves.toEqual({
+      message:
+        "If an account exists for that email, password reset instructions will be sent.",
+      success: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/forgot-password",
+      expect.objectContaining({
+        body: JSON.stringify({ email: "user@example.com" }),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty(
+      "Authorization",
+    );
+  });
+
+  it("resets a password with a reset token without requiring a session token", async () => {
+    const fetchMock = mockFetch({
+      message: "Password reset successfully. Please sign in.",
+      success: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      resetPassword({
+        confirmPassword: "NewPass1!",
+        newPassword: "NewPass1!",
+        token: "reset-token",
+      }),
+    ).resolves.toEqual({
+      message: "Password reset successfully. Please sign in.",
+      success: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/reset-password",
+      expect.objectContaining({
+        body: JSON.stringify({
+          confirmPassword: "NewPass1!",
+          newPassword: "NewPass1!",
+          token: "reset-token",
+        }),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty(
+      "Authorization",
     );
   });
 

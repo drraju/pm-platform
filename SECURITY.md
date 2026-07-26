@@ -38,10 +38,17 @@ Contributors should:
 PM Platform uses:
 
 - JWT authentication
+- hashed password storage
+- short-lived, single-use password reset tokens stored only as hashes
 - RBAC and permission policies
 - project-scoped visibility rules
 - PostgreSQL persistence
 - Docker Compose deployment
+
+Password reset requests return a generic success response regardless of whether
+an account exists. Reset tokens expire after a short window, are marked consumed
+after use, and password updates refresh `password_changed_at` so older JWTs are
+rejected by token validation.
 
 Related documentation:
 

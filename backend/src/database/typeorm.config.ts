@@ -8,6 +8,7 @@ import {
   ProjectDocument,
 } from '../modules/documents/entities';
 import { Notification } from '../modules/notifications/entities/notification.entity';
+import { PasswordResetToken } from '../modules/auth/entities/password-reset-token.entity';
 import { PlanningScheduleSnapshot } from '../modules/planning/entities/planning-schedule-snapshot.entity';
 import { PlanningTaskSchedule } from '../modules/planning/entities/planning-task-schedule.entity';
 import { PortfolioDependency } from '../modules/planning/entities/portfolio-dependency.entity';
@@ -74,6 +75,7 @@ export const databaseEntities: EntityConstructor[] = [
   RaidComment,
   RaidHistoryEntry,
   Notification,
+  PasswordResetToken,
 ];
 
 const databaseConnectionOptions = {

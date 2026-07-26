@@ -276,6 +276,19 @@ describe('ProjectsService', () => {
     );
   });
 
+  it('rejects direct archived status during project creation', async () => {
+    await expect(
+      service.create(
+        {
+          name: 'Archived project',
+          status: 'archived',
+        },
+        actor,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(projectsRepository.manager.transaction).not.toHaveBeenCalled();
+  });
+
   it('overrides any incoming ownerId with the authenticated creator', async () => {
     await service.create(
       {
@@ -507,6 +520,13 @@ describe('ProjectsService', () => {
     });
   });
 
+  it('rejects direct archived status during project updates', async () => {
+    await expect(
+      service.update(projectId, { status: 'archived' }, actor),
+    ).rejects.toThrow(BadRequestException);
+    expect(projectsRepository.save).not.toHaveBeenCalled();
+  });
+
   it('archives an existing project instead of deleting it', async () => {
     const project = {
       id: projectId,
@@ -569,6 +589,18 @@ describe('ProjectsService', () => {
       'DELETE FROM projects WHERE id = $1',
       [projectId],
     );
+  });
+
+  it('rejects permanent purge for active projects', async () => {
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      status: 'active',
+    });
+
+    await expect(service.purge(projectId, actor)).rejects.toThrow(
+      'Only archived projects can be permanently purged',
+    );
+    expect(projectsRepository.manager.transaction).not.toHaveBeenCalled();
   });
 
   it('rejects permanent purge for non-platform administrators', async () => {

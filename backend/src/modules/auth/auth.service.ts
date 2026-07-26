@@ -3,8 +3,12 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { PasswordResetResponseDto } from './dto/password-reset-response.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SessionDto } from './dto/session.dto';
+import { PasswordResetTokenService } from './password-reset-token.service';
 import {
   PasswordChangeAuditContext,
   PasswordUpdateService,
@@ -17,6 +21,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly passwordService: PasswordService,
+    private readonly passwordResetTokenService: PasswordResetTokenService,
     private readonly passwordUpdateService: PasswordUpdateService,
   ) {}
 
@@ -57,6 +62,50 @@ export class AuthService {
       changePasswordDto,
       auditContext,
     );
+  }
+
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<PasswordResetResponseDto> {
+    const user = await this.usersService.findByEmail(forgotPasswordDto.email);
+    if (user && ['active', 'first_login_pending'].includes(user.status)) {
+      await this.passwordResetTokenService.issueToken(
+        user.id,
+        auditContext.ipAddress,
+      );
+    }
+
+    return {
+      message:
+        'If an account exists for that email, password reset instructions will be sent.',
+      success: true,
+    };
+  }
+
+  async resetPassword(
+    resetPasswordDto: ResetPasswordDto,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<PasswordResetResponseDto> {
+    const resetToken = await this.passwordResetTokenService.validateToken(
+      resetPasswordDto.token,
+    );
+
+    await this.passwordUpdateService.validateResetPasswordForUser(
+      resetToken.userId,
+      resetPasswordDto,
+    );
+    await this.passwordResetTokenService.consumeToken(resetToken.id);
+    await this.passwordUpdateService.applyValidatedPasswordReset(
+      resetToken.userId,
+      resetPasswordDto.newPassword,
+      auditContext,
+    );
+
+    return {
+      message: 'Password reset successfully. Please sign in.',
+      success: true,
+    };
   }
 
   private issueSession(

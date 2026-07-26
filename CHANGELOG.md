@@ -9,6 +9,10 @@ This project also keeps detailed release documentation in
 
 ### Added
 
+- Added v1.2 project lifecycle stabilization for archive, restore, and
+  archived-only permanent purge.
+- Added v1.2 password reset workflow with generic forgot-password requests,
+  hashed single-use reset tokens, token-based reset, and frontend reset pages.
 - Added Enterprise Dependency Management read APIs for visible dependency detail and project dependency collections.
 - Added derived dependency health, blocked-state, and bounded downstream-impact projections.
 - Added dependency filtering, deterministic sorting, pagination, traversal limits, Swagger contracts, and architecture tests.

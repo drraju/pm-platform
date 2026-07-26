@@ -62,6 +62,12 @@ type AuthenticatedActor = AuthorizationActor;
 type ProjectListMode = 'active' | 'archived' | 'all';
 
 const archivedProjectStatus = 'archived';
+const mutableProjectStatuses = new Set([
+  'active',
+  'at_risk',
+  'blocked',
+  'complete',
+]);
 const teamMemberEditableTaskFields = new Set([
   'assigneeId',
   'remarks',
@@ -111,6 +117,7 @@ export class ProjectsService {
       ...createProjectDto,
       ownerId: actor.userId,
     };
+    this.validateMutableProjectStatus(normalizedInput.status);
     await this.validateGovernanceUsers(normalizedInput);
 
     return this.projectsRepository.manager.transaction(
@@ -187,6 +194,7 @@ export class ProjectsService {
     actor?: AuthenticatedActor,
   ): Promise<Project> {
     await this.ensureCanManageProject(id, actor);
+    this.validateMutableProjectStatus(updateProjectDto.status);
     await this.validateGovernanceUsers(updateProjectDto);
     const project = await this.findProjectEntity(id);
     Object.assign(project, updateProjectDto);
@@ -220,7 +228,12 @@ export class ProjectsService {
 
   async purge(id: string, actor?: AuthenticatedActor): Promise<void> {
     await this.ensurePlatformAdmin(actor);
-    await this.findProjectEntityIncludingArchived(id);
+    const project = await this.findProjectEntityIncludingArchived(id);
+    if (project.status !== archivedProjectStatus) {
+      throw new BadRequestException(
+        'Only archived projects can be permanently purged',
+      );
+    }
 
     await this.projectsRepository.manager.transaction(async (manager) => {
       await this.purgeProjectOwnedData(manager, id);
@@ -916,6 +929,18 @@ export class ProjectsService {
     await Promise.all(
       uniqueUserIds.map((userId) => this.ensureUserExists(userId)),
     );
+  }
+
+  private validateMutableProjectStatus(status?: string): void {
+    if (!status) {
+      return;
+    }
+
+    if (!mutableProjectStatuses.has(status)) {
+      throw new BadRequestException(
+        'Project status must be active, at_risk, blocked, or complete',
+      );
+    }
   }
 
   private async findMember(

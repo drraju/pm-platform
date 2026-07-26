@@ -18,12 +18,13 @@ export class PasswordResetToken extends TimestampedEntity {
   @Column({ name: 'used_at', type: 'timestamptz', nullable: true })
   usedAt?: Date | null;
 
-@Column({
-  type: 'varchar',
-  length: 45,
-  nullable: true,
-})
-createdIp?: string;
+  @Column({
+    length: 64,
+    name: 'created_ip',
+    nullable: true,
+    type: 'varchar',
+  })
+  createdIp?: string | null;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
