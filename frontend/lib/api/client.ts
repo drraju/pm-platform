@@ -134,6 +134,7 @@ export type ApiTask = {
   phaseStartDate?: string | null;
   phaseEndDate?: string | null;
   childTaskCount?: number;
+  latestExecutionUpdate?: ApiTaskExecutionUpdate | null;
   project?: ApiProject | null;
   assignee?: {
     id: string;
@@ -144,6 +145,22 @@ export type ApiTask = {
     role?: ApiRole | string | null;
     status?: string;
   } | null;
+};
+
+export type ApiTaskExecutionUpdate = {
+  id: string;
+  taskId: string;
+  projectId: string;
+  status: ApiTask["status"];
+  priority: string;
+  percentComplete: number;
+  assigneeId?: string | null;
+  nextStep?: string | null;
+  nextActionOwnerId?: string | null;
+  targetCompletionDate?: string | null;
+  updateNotes?: string | null;
+  updatedById?: string | null;
+  updatedOn?: string;
 };
 
 export type ApiTaskType = "task" | "summary" | "milestone";
@@ -1325,6 +1342,29 @@ export function updateProjectTask(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function recordProjectTaskExecutionUpdate(
+  projectId: string,
+  taskId: string,
+  input: {
+    status: ApiTask["status"];
+    priority: string;
+    percentComplete: number;
+    assigneeId?: string | null;
+    nextStep?: string | null;
+    nextActionOwnerId?: string | null;
+    targetCompletionDate?: string | null;
+    updateNotes?: string | null;
+  },
+) {
+  return apiRequest<ApiTask>(
+    `/projects/${projectId}/tasks/${taskId}/execution-updates`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function deleteProjectTask(projectId: string, taskId: string) {

@@ -37,6 +37,7 @@ import {
   getProjects,
   purgeProject,
   removeProjectMember,
+  recordProjectTaskExecutionUpdate,
   resetPassword,
   restoreProject,
   updateRolePermissions,
@@ -569,6 +570,34 @@ describe("project API client", () => {
           remainingHours: 0,
         }),
         method: "PATCH",
+      }),
+    );
+
+    await recordProjectTaskExecutionUpdate("project-1", "task-1", {
+      assigneeId: "user-2",
+      nextActionOwnerId: "user-1",
+      nextStep: "Confirm API owner",
+      percentComplete: 65,
+      priority: "critical",
+      status: "in_progress",
+      targetCompletionDate: "2026-08-07",
+      updateNotes: "Customer asked for acceleration.",
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/projects/project-1/tasks/task-1/execution-updates",
+      expect.objectContaining({
+        body: JSON.stringify({
+          assigneeId: "user-2",
+          nextActionOwnerId: "user-1",
+          nextStep: "Confirm API owner",
+          percentComplete: 65,
+          priority: "critical",
+          status: "in_progress",
+          targetCompletionDate: "2026-08-07",
+          updateNotes: "Customer asked for acceleration.",
+        }),
+        method: "POST",
       }),
     );
 

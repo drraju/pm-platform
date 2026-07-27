@@ -36,6 +36,17 @@ type TaskOperationInput = {
   title?: string;
 };
 
+type TaskExecutionUpdateInput = {
+  assigneeId?: string | null;
+  nextActionOwnerId?: string | null;
+  nextStep?: string | null;
+  percentComplete: number;
+  priority: string;
+  status: ApiTask["status"];
+  targetCompletionDate?: string | null;
+  updateNotes?: string | null;
+};
+
 type ProjectWorkspaceTasksProps = {
   canManageDependencies?: boolean;
   canCreateTasks?: boolean;
@@ -68,6 +79,10 @@ type ProjectWorkspaceTasksProps = {
       successorTaskId: string;
     },
   ) => void;
+  onRecordExecutionUpdate?: (
+    taskId: string,
+    input: TaskExecutionUpdateInput,
+  ) => Promise<void> | void;
   onUpdateTask?: (taskId: string, input: TaskOperationInput) => void;
   statusFilter?: "all" | ApiTask["status"];
   tasks: ApiTask[];
@@ -110,6 +125,17 @@ type TaskFormState = {
   status: ApiTask["status"];
   taskKind: NonNullable<ApiTask["taskKind"]>;
   title: string;
+};
+
+type ExecutionUpdateFormState = {
+  assigneeId: string;
+  nextActionOwnerId: string;
+  nextStep: string;
+  percentComplete: string;
+  priority: string;
+  status: ApiTask["status"];
+  targetCompletionDate: string;
+  updateNotes: string;
 };
 
 type TaskFieldAccess = {
@@ -169,6 +195,7 @@ export function ProjectWorkspaceTasks({
   onDeleteDependency,
   onDeleteTask,
   onUpdateDependency,
+  onRecordExecutionUpdate,
   onUpdateTask,
   statusFilter = "all",
   tasks,
@@ -176,8 +203,12 @@ export function ProjectWorkspaceTasks({
   const [dialogMode, setDialogMode] = React.useState<DialogMode | null>(null);
   const [taskPendingDelete, setTaskPendingDelete] = React.useState<ApiTask | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<ApiTask | null>(null);
+  const [executionTask, setExecutionTask] = React.useState<ApiTask | null>(null);
   const [form, setForm] = React.useState<TaskFormState>(() => createEmptyTaskForm());
+  const [executionForm, setExecutionForm] =
+    React.useState<ExecutionUpdateFormState>(() => createEmptyExecutionUpdateForm());
   const [formError, setFormError] = React.useState<string | null>(null);
+  const [executionFormError, setExecutionFormError] = React.useState<string | null>(null);
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = React.useState("all");
   const [priorityFilter, setPriorityFilter] = React.useState("all");
@@ -264,6 +295,18 @@ export function ProjectWorkspaceTasks({
     setFormError(null);
   }
 
+  function openExecutionUpdate(task: ApiTask) {
+    setExecutionTask(task);
+    setExecutionForm(createExecutionUpdateForm(task));
+    setExecutionFormError(null);
+  }
+
+  function closeExecutionUpdate() {
+    setExecutionTask(null);
+    setExecutionForm(createEmptyExecutionUpdateForm());
+    setExecutionFormError(null);
+  }
+
   function toggleExpanded(taskId: string) {
     setExpandedTaskIds((currentExpandedTaskIds) =>
       currentExpandedTaskIds.includes(taskId)
@@ -324,6 +367,31 @@ export function ProjectWorkspaceTasks({
         requestError instanceof Error
           ? requestError.message
           : "Unable to update task",
+      );
+    }
+  }
+
+  async function handleExecutionUpdateSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!executionTask || !onRecordExecutionUpdate) {
+      return;
+    }
+
+    const validationError = validateExecutionUpdateForm(executionForm);
+    if (validationError) {
+      setExecutionFormError(validationError);
+      return;
+    }
+
+    setExecutionFormError(null);
+    try {
+      await onRecordExecutionUpdate(executionTask.id, toExecutionUpdatePayload(executionForm));
+      closeExecutionUpdate();
+    } catch (requestError) {
+      setExecutionFormError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to record execution update",
       );
     }
   }
@@ -471,6 +539,11 @@ export function ProjectWorkspaceTasks({
               const canUpdateOwnTask = task.assigneeId === currentUserId && Boolean(onUpdateTask);
               const canEditRow =
                 hasFullEditAccess || hasExecutionEditAccess || canUpdateOwnTask;
+              const canRecordExecutionUpdate =
+                !isPlanningMode &&
+                !isSummary &&
+                Boolean(onRecordExecutionUpdate) &&
+                (canEditRow || hasReassignAccess);
               const canEditPlanningFields = hasFullEditAccess;
               const canEditExecutionFields =
                 hasFullEditAccess || hasExecutionEditAccess || canUpdateOwnTask;
@@ -667,8 +740,17 @@ export function ProjectWorkspaceTasks({
                     />
                   </td>
                   <td className="px-3 py-3">
-                    {canEditRow || canDeleteRow || canAddChild || hasReassignAccess ? (
+                    {canEditRow || canDeleteRow || canAddChild || hasReassignAccess || canRecordExecutionUpdate ? (
                       <div className="flex flex-wrap gap-2">
+                        {canRecordExecutionUpdate ? (
+                          <button
+                            className="rounded-md bg-brand px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+                            onClick={() => openExecutionUpdate(task)}
+                            type="button"
+                          >
+                            Update
+                          </button>
+                        ) : null}
                         {canEditRow ? (
                           <button
                             className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -1047,6 +1129,201 @@ export function ProjectWorkspaceTasks({
             </ModalFormSection>
           </ModalForm>
         </AppModal>
+      ) : null}
+
+      {executionTask ? (
+        <div
+          aria-labelledby="task-execution-update-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex justify-end bg-slate-950/30"
+          role="dialog"
+        >
+          <div className="flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-2xl">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2
+                    className="text-lg font-semibold text-slate-950"
+                    id="task-execution-update-title"
+                  >
+                    Task Execution Update
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {executionTask.title}
+                  </p>
+                </div>
+                <button
+                  aria-label="Close execution update"
+                  className="rounded-md border border-slate-200 px-2.5 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  onClick={closeExecutionUpdate}
+                  type="button"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <form
+              className="flex flex-1 flex-col"
+              id="task-execution-update-form"
+              onSubmit={handleExecutionUpdateSubmit}
+            >
+              <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
+                {executionFormError ? (
+                  <ErrorState className="sm:col-span-2">
+                    {executionFormError}
+                  </ErrorState>
+                ) : null}
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Status
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    onChange={(event) =>
+                      setExecutionForm({
+                        ...executionForm,
+                        status: event.target.value as ApiTask["status"],
+                      })
+                    }
+                    value={executionForm.status}
+                  >
+                    {taskStatuses.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Priority
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    onChange={(event) =>
+                      setExecutionForm({
+                        ...executionForm,
+                        priority: event.target.value,
+                      })
+                    }
+                    value={executionForm.priority}
+                  >
+                    {priorities.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <TaskAssigneeSelect
+                  members={members}
+                  onChange={(assigneeId) =>
+                    setExecutionForm({ ...executionForm, assigneeId })
+                  }
+                  value={executionForm.assigneeId}
+                />
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Progress %
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    max={100}
+                    min={0}
+                    onChange={(event) =>
+                      setExecutionForm({
+                        ...executionForm,
+                        percentComplete: event.target.value,
+                      })
+                    }
+                    type="number"
+                    value={executionForm.percentComplete}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
+                  Next Step
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    onChange={(event) =>
+                      setExecutionForm({
+                        ...executionForm,
+                        nextStep: event.target.value,
+                      })
+                    }
+                    value={executionForm.nextStep}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Next Action Owner
+                  <select
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    onChange={(event) =>
+                      setExecutionForm({
+                        ...executionForm,
+                        nextActionOwnerId: event.target.value,
+                      })
+                    }
+                    value={executionForm.nextActionOwnerId}
+                  >
+                    <option value="">Unassigned</option>
+                    {members.map((member) => (
+                      <option key={member.id} value={member.userId}>
+                        {formatMemberName(member)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  Target Completion Date
+                  <input
+                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    onChange={(event) =>
+                      setExecutionForm({
+                        ...executionForm,
+                        targetCompletionDate: event.target.value,
+                      })
+                    }
+                    type="date"
+                    value={executionForm.targetCompletionDate}
+                  />
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
+                  Update Notes
+                  <textarea
+                    className="mt-2 min-h-28 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                    onChange={(event) =>
+                      setExecutionForm({
+                        ...executionForm,
+                        updateNotes: event.target.value,
+                      })
+                    }
+                    value={executionForm.updateNotes}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-auto flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                <button
+                  className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                  onClick={closeExecutionUpdate}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isSaving}
+                  type="submit"
+                >
+                  {isSaving ? "Saving..." : "Save update"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       ) : null}
 
       {taskPendingDelete ? (
@@ -1599,6 +1876,68 @@ function createTaskForm(task: ApiTask): TaskFormState {
     status: task.status,
     taskKind: task.taskKind ?? "standard",
     title: task.title,
+  };
+}
+
+function createEmptyExecutionUpdateForm(): ExecutionUpdateFormState {
+  return {
+    assigneeId: "",
+    nextActionOwnerId: "",
+    nextStep: "",
+    percentComplete: "0",
+    priority: "medium",
+    status: "todo",
+    targetCompletionDate: "",
+    updateNotes: "",
+  };
+}
+
+function createExecutionUpdateForm(task: ApiTask): ExecutionUpdateFormState {
+  const latestUpdate = task.latestExecutionUpdate;
+
+  return {
+    assigneeId: task.assigneeId ?? "",
+    nextActionOwnerId: latestUpdate?.nextActionOwnerId ?? "",
+    nextStep: latestUpdate?.nextStep ?? "",
+    percentComplete: String(getDisplayedPercentComplete(task)),
+    priority: task.priority,
+    status: task.status,
+    targetCompletionDate:
+      latestUpdate?.targetCompletionDate ?? task.dueDate ?? task.plannedEndDate ?? "",
+    updateNotes: "",
+  };
+}
+
+function validateExecutionUpdateForm(form: ExecutionUpdateFormState) {
+  const percentComplete = Number(form.percentComplete);
+
+  if (
+    !Number.isFinite(percentComplete) ||
+    percentComplete < 0 ||
+    percentComplete > 100
+  ) {
+    return "Progress must be between 0 and 100.";
+  }
+
+  if (!priorities.includes(form.priority)) {
+    return "Priority must be low, medium, high, or critical.";
+  }
+
+  return null;
+}
+
+function toExecutionUpdatePayload(
+  form: ExecutionUpdateFormState,
+): TaskExecutionUpdateInput {
+  return {
+    assigneeId: toNullableString(form.assigneeId),
+    nextActionOwnerId: toNullableString(form.nextActionOwnerId),
+    nextStep: toNullableString(form.nextStep),
+    percentComplete: Number(form.percentComplete),
+    priority: form.priority,
+    status: form.status,
+    targetCompletionDate: toNullableString(form.targetCompletionDate),
+    updateNotes: toNullableString(form.updateNotes),
   };
 }
 

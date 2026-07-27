@@ -9,6 +9,7 @@ import { TaskType } from '../../../common/enums/task-type.enum';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
+import { TaskExecutionUpdate } from '../entities/task-execution-update.entity';
 import { Task } from '../entities/task.entity';
 import { TasksService } from '../tasks.service';
 
@@ -23,6 +24,9 @@ const projectId = '2bbca1cb-1be2-4a04-b857-f1f8c7a26800';
 describe('TasksService', () => {
   let service: TasksService;
   let tasksRepository: MockRepository<Task>;
+  let taskExecutionUpdatesRepository: MockRepository<TaskExecutionUpdate> & {
+    createQueryBuilder: jest.Mock;
+  };
   let projectMembersRepository: MockRepository<ProjectMember>;
   let authorizationPolicyService: {
     canManageProject: jest.Mock;
@@ -38,9 +42,26 @@ describe('TasksService', () => {
       create: jest.fn((input) => input),
       find: jest.fn(),
       findOne: jest.fn(),
+      manager: {
+        transaction: jest.fn((callback) =>
+          callback({
+            create: jest.fn((_entity, input) => input),
+            save: jest.fn((_entity, input) =>
+              Promise.resolve({ id: 'execution-update-id', ...input }),
+            ),
+          }),
+        ),
+      } as never,
       remove: jest.fn(() => Promise.resolve()),
       save: jest.fn((input) => Promise.resolve({ id: taskId, ...input })),
       softRemove: jest.fn(() => Promise.resolve()),
+    };
+    taskExecutionUpdatesRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        getMany: jest.fn().mockResolvedValue([]),
+        orderBy: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+      })),
     };
     projectMembersRepository = {
       findOne: jest.fn(),
@@ -61,6 +82,10 @@ describe('TasksService', () => {
         {
           provide: getRepositoryToken(Task),
           useValue: tasksRepository,
+        },
+        {
+          provide: getRepositoryToken(TaskExecutionUpdate),
+          useValue: taskExecutionUpdatesRepository,
         },
         {
           provide: getRepositoryToken(ProjectMember),
@@ -105,6 +130,54 @@ describe('TasksService', () => {
         id: taskId,
         projectId,
         title: 'Prepare steering committee readout',
+      }),
+    );
+  });
+
+  it('records an execution update with priority and timeline details', async () => {
+    const task = {
+      assigneeId: null,
+      id: taskId,
+      percentComplete: 20,
+      priority: 'medium',
+      projectId,
+      status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare release plan',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(true);
+    projectMembersRepository.findOne?.mockResolvedValue({ id: 'member-id' });
+
+    const result = await service.recordExecutionUpdate(
+      taskId,
+      {
+        assigneeId: userId,
+        nextActionOwnerId: userId,
+        nextStep: 'Confirm API owner',
+        percentComplete: 50,
+        priority: 'critical',
+        status: TaskStatus.InProgress,
+        targetCompletionDate: '2026-08-07',
+        updateNotes: 'Customer review moved the API task up.',
+      },
+      { email: 'pm@example.com', roleId: 'role-1', userId },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        assigneeId: userId,
+        dueDate: '2026-08-07',
+        latestExecutionUpdate: expect.objectContaining({
+          nextActionOwnerId: userId,
+          nextStep: 'Confirm API owner',
+          priority: 'critical',
+          updateNotes: 'Customer review moved the API task up.',
+          updatedById: userId,
+        }),
+        percentComplete: 50,
+        priority: 'critical',
+        status: TaskStatus.InProgress,
       }),
     );
   });
@@ -224,7 +297,9 @@ describe('TasksService', () => {
         projectId,
         status: TaskStatus.InProgress,
       }),
-    ).resolves.toEqual([{ id: taskId, assigneeId: userId }]);
+    ).resolves.toEqual([
+      { id: taskId, assigneeId: userId, latestExecutionUpdate: null },
+    ]);
 
     expect(tasksRepository.find).toHaveBeenCalledWith({
       order: {

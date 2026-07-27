@@ -32,6 +32,7 @@ import { ResourceSkill } from '../modules/resources/entities/resource-skill.enti
 import { Resource } from '../modules/resources/entities/resource.entity';
 import { Skill } from '../modules/resources/entities/skill.entity';
 import { TaskDependency } from '../modules/tasks/entities/task-dependency.entity';
+import { TaskExecutionUpdate } from '../modules/tasks/entities/task-execution-update.entity';
 import { Task } from '../modules/tasks/entities/task.entity';
 import { Permission } from '../modules/users/entities/permission.entity';
 import { RolePermission } from '../modules/users/entities/role-permission.entity';
@@ -59,6 +60,7 @@ export const databaseEntities: EntityConstructor[] = [
   ProjectMember,
   Task,
   TaskDependency,
+  TaskExecutionUpdate,
   PlanningTaskSchedule,
   PortfolioDependency,
   ResourceAllocation,

@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ProjectHealthCard } from "@/components/projects/project-health-card";
 import { ProjectSummary } from "@/components/project/project-summary";
@@ -1025,6 +1025,107 @@ describe("Project workspace components", () => {
     ).not.toBeInTheDocument();
     expect(within(dialog).getByText("Calculated Progress")).toBeInTheDocument();
     expect(within(dialog).getByText("50%")).toBeInTheDocument();
+  });
+
+  it("records a lightweight task execution update from the tasks workspace", async () => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+    const members = [
+      {
+        id: "member-1",
+        role: "manager",
+        user: {
+          email: "ava.patel@example.com",
+          firstName: "Ava",
+          id: "user-1",
+          lastName: "Patel",
+          status: "active",
+        },
+        userId: "user-1",
+      },
+      {
+        id: "member-2",
+        role: "contributor",
+        user: {
+          email: "li.chen@example.com",
+          firstName: "Li",
+          id: "user-2",
+          lastName: "Chen",
+          status: "active",
+        },
+        userId: "user-2",
+      },
+    ];
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        canReassignTasks
+        members={members}
+        mode="execution"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            assigneeId: "user-1",
+            dueDate: "2026-08-01",
+            id: "task-1",
+            percentComplete: 20,
+            priority: "medium",
+            projectId: "project-1",
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    const taskRow = screen.getByText("Prepare release plan").closest("tr");
+    expect(taskRow).not.toBeNull();
+    fireEvent.click(
+      within(taskRow as HTMLElement).getByRole("button", { name: "Update" }),
+    );
+
+    const drawer = screen.getByRole("dialog", {
+      name: /task execution update/i,
+    });
+    fireEvent.change(within(drawer).getByLabelText(/status/i), {
+      target: { value: "in_progress" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/priority/i), {
+      target: { value: "critical" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/^assignee$/i), {
+      target: { value: "user-2" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/progress/i), {
+      target: { value: "65" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/next step/i), {
+      target: { value: "Confirm API owner" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/next action owner/i), {
+      target: { value: "user-1" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/target completion date/i), {
+      target: { value: "2026-08-07" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/update notes/i), {
+      target: { value: "Customer asked for acceleration." },
+    });
+    fireEvent.click(within(drawer).getByRole("button", { name: /save update/i }));
+
+    await waitFor(() => {
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith("task-1", {
+        assigneeId: "user-2",
+        nextActionOwnerId: "user-1",
+        nextStep: "Confirm API owner",
+        percentComplete: 65,
+        priority: "critical",
+        status: "in_progress",
+        targetCompletionDate: "2026-08-07",
+        updateNotes: "Customer asked for acceleration.",
+      });
+    });
   });
 
   it("renders project task actions as view-only without permissions", () => {

@@ -27,6 +27,7 @@ import { CreateProjectBaselineDto } from './dto/create-project-baseline.dto';
 import { ProjectBaselineTask } from './entities/project-baseline-task.entity';
 import { ProjectBaseline } from './entities/project-baseline.entity';
 import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto';
+import { CreateTaskExecutionUpdateDto } from '../tasks/dto/task-execution-update.dto';
 import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -183,6 +184,13 @@ export class ProjectsService {
     });
     if (!project) {
       throw new NotFoundException(`Project ${id} not found`);
+    }
+
+    if (this.canonicalTasksService && project.tasks) {
+      project.tasks =
+        await this.canonicalTasksService.attachLatestExecutionUpdates(
+          project.tasks,
+        );
     }
 
     return this.decorateProject(this.withHealth(project));
@@ -354,7 +362,10 @@ export class ProjectsService {
         ...(query.priority ? { priority: query.priority } : {}),
       },
     });
-    return decoratePlanningTasks(tasks);
+    const decoratedTasks = decoratePlanningTasks(tasks);
+    return this.canonicalTasksService
+      ? this.canonicalTasksService.attachLatestExecutionUpdates(decoratedTasks)
+      : decoratedTasks;
   }
 
   async createProjectTask(
@@ -437,6 +448,24 @@ export class ProjectsService {
 
     const savedTask = await this.tasksRepository.save(task);
     return this.decorateTask(savedTask);
+  }
+
+  async recordProjectTaskExecutionUpdate(
+    projectId: string,
+    taskId: string,
+    input: CreateTaskExecutionUpdateDto,
+    actor?: AuthenticatedActor,
+  ): Promise<Task> {
+    await this.ensureProjectExists(projectId);
+    await this.findProjectTask(projectId, taskId);
+    if (!this.canonicalTasksService) {
+      throw new Error('TasksService is not configured');
+    }
+    return this.canonicalTasksService.recordExecutionUpdate(
+      taskId,
+      input,
+      actor,
+    );
   }
 
   async removeProjectTask(

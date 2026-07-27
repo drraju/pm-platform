@@ -48,6 +48,7 @@ import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
 import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto';
+import { CreateTaskExecutionUpdateDto } from '../tasks/dto/task-execution-update.dto';
 import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -288,6 +289,28 @@ export class ProjectsController {
       projectId,
       taskId,
       updateProjectTaskDto,
+      request.user,
+    );
+  }
+
+  @Post(':projectId/tasks/:taskId/execution-updates')
+  @RequirePermissions(PermissionKey.TaskUpdate)
+  @ApiOperation({ summary: 'Record a project task execution update' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'taskId', format: 'uuid' })
+  @ApiCreatedResponse({ type: Task })
+  @ApiNotFoundResponse({ description: 'Project, task, or assignee not found' })
+  @ApiConflictResponse({ description: 'Assignee must be a project member' })
+  recordProjectTaskExecutionUpdate(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Body() input: CreateTaskExecutionUpdateDto,
+  ): Promise<Task> {
+    return this.projectsService.recordProjectTaskExecutionUpdate(
+      projectId,
+      taskId,
+      input,
       request.user,
     );
   }

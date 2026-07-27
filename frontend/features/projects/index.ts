@@ -22,6 +22,7 @@ export {
   getProjects,
   purgeProject,
   removeProjectMember,
+  recordProjectTaskExecutionUpdate,
   restoreProject,
   updateProject,
   updateProjectMember,

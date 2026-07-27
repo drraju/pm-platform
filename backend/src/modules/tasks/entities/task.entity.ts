@@ -5,6 +5,7 @@ import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { Project } from '../../projects/entities/project.entity';
 import { User } from '../../users/entities/user.entity';
+import { TaskExecutionUpdateDto } from '../dto/task-execution-update.dto';
 
 @Entity({ name: 'tasks' })
 export class Task extends AuditableEntity {
@@ -94,6 +95,8 @@ export class Task extends AuditableEntity {
   phaseEndDate?: string | null;
 
   childTaskCount?: number;
+
+  latestExecutionUpdate?: TaskExecutionUpdateDto | null;
 
   @ManyToOne(() => Project, (project) => project.tasks)
   @JoinColumn({ name: 'project_id' })

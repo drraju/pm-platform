@@ -23,7 +23,12 @@ import {
 import { CreateTaskDto } from './dto/create-task.dto';
 import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
 import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
+import {
+  CreateTaskExecutionUpdateDto,
+  TaskExecutionUpdateDto,
+} from './dto/task-execution-update.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { TaskExecutionUpdate } from './entities/task-execution-update.entity';
 import { Task } from './entities/task.entity';
 import { decoratePlanningTasks, getOperationalTasks } from './planning-rollup';
 import {
@@ -39,12 +44,15 @@ const teamMemberEditableTaskFields = new Set([
   'percentComplete',
   'status',
 ]);
+const taskPriorities = new Set(['low', 'medium', 'high', 'critical']);
 
 @Injectable()
 export class TasksService {
   constructor(
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
+    @InjectRepository(TaskExecutionUpdate)
+    private readonly taskExecutionUpdatesRepository: Repository<TaskExecutionUpdate>,
     @InjectRepository(ProjectMember)
     private readonly projectMembersRepository: Repository<ProjectMember>,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
@@ -145,11 +153,14 @@ export class TasksService {
           ? undefined
           : { projectId: In(visibleProjectIds) },
     });
-    return decoratePlanningTasks(tasks);
+    return this.attachLatestExecutionUpdates(decoratePlanningTasks(tasks));
   }
 
-  findMyTasks(userId: string, query: MyTasksQueryDto = {}): Promise<Task[]> {
-    return this.tasksRepository.find({
+  async findMyTasks(
+    userId: string,
+    query: MyTasksQueryDto = {},
+  ): Promise<Task[]> {
+    const tasks = await this.tasksRepository.find({
       order: {
         dueDate: 'ASC',
         createdAt: 'DESC',
@@ -163,6 +174,7 @@ export class TasksService {
         ...(query.priority ? { priority: query.priority } : {}),
       },
     });
+    return this.attachLatestExecutionUpdates(tasks);
   }
 
   async getMyTasksSummary(userId: string): Promise<MyTasksSummaryDto> {
@@ -218,7 +230,7 @@ export class TasksService {
       throw new NotFoundException(`Task ${id} not found`);
     }
 
-    return this.decorateTask(task);
+    return this.decorateTaskWithLatest(task);
   }
 
   async update(
@@ -247,7 +259,106 @@ export class TasksService {
       task.updatedById = actor.userId;
     }
     const savedTask = await this.tasksRepository.save(task);
-    return this.decorateTask(savedTask);
+    return this.decorateTaskWithLatest(savedTask);
+  }
+
+  async recordExecutionUpdate(
+    id: string,
+    input: CreateTaskExecutionUpdateDto,
+    actor?: AuthenticatedActor,
+  ): Promise<Task> {
+    const task = await this.findOne(id, actor);
+    if (task.taskKind === TaskKind.Summary) {
+      throw new BadRequestException(
+        'Summary tasks cannot receive execution updates',
+      );
+    }
+    await this.ensureCanUpdateTask(task, input, actor);
+    this.validateTaskPriority(input.priority);
+    await this.validateAssigneeMembership(task.projectId, input.assigneeId);
+    await this.validateAssigneeMembership(
+      task.projectId,
+      input.nextActionOwnerId,
+    );
+
+    return this.tasksRepository.manager.transaction(
+      async (transactionalEntityManager) => {
+        const normalizedInput = this.withNormalizedProgress({
+          assigneeId: input.assigneeId ?? null,
+          dueDate: input.targetCompletionDate ?? null,
+          percentComplete: input.percentComplete,
+          priority: input.priority,
+          remarks: this.normalizeNullableText(input.updateNotes),
+          status: input.status,
+        });
+        const changes = this.getExecutionChanges(task, {
+          ...input,
+          percentComplete:
+            normalizedInput.percentComplete ?? input.percentComplete,
+          status: normalizedInput.status ?? input.status,
+        });
+
+        Object.assign(task, normalizedInput, {
+          updatedById: actor?.userId,
+        });
+
+        const savedTask = await transactionalEntityManager.save(Task, task);
+        const executionUpdate = transactionalEntityManager.create(
+          TaskExecutionUpdate,
+          {
+            assigneeId: savedTask.assigneeId ?? null,
+            changes,
+            createdById: actor?.userId,
+            nextActionOwnerId: input.nextActionOwnerId ?? null,
+            nextStep: this.normalizeNullableText(input.nextStep),
+            percentComplete: savedTask.percentComplete,
+            priority: savedTask.priority,
+            projectId: savedTask.projectId,
+            status: savedTask.status,
+            targetCompletionDate: input.targetCompletionDate ?? null,
+            taskId: savedTask.id,
+            updateNotes: this.normalizeNullableText(input.updateNotes),
+            updatedById: actor?.userId,
+          },
+        );
+        const savedUpdate = await transactionalEntityManager.save(
+          TaskExecutionUpdate,
+          executionUpdate,
+        );
+
+        return this.decorateTask({
+          ...savedTask,
+          latestExecutionUpdate: this.toExecutionUpdateDto(savedUpdate),
+        });
+      },
+    );
+  }
+
+  async attachLatestExecutionUpdates<T extends Task>(tasks: T[]): Promise<T[]> {
+    if (tasks.length === 0) {
+      return tasks;
+    }
+
+    const updates = await this.taskExecutionUpdatesRepository
+      .createQueryBuilder('executionUpdate')
+      .where('executionUpdate.taskId IN (:...taskIds)', {
+        taskIds: tasks.map((task) => task.id),
+      })
+      .orderBy('executionUpdate.createdAt', 'DESC')
+      .getMany();
+    const latestByTaskId = new Map<string, TaskExecutionUpdate>();
+    for (const update of updates) {
+      if (!latestByTaskId.has(update.taskId)) {
+        latestByTaskId.set(update.taskId, update);
+      }
+    }
+
+    return tasks.map((task) => ({
+      ...task,
+      latestExecutionUpdate: latestByTaskId.has(task.id)
+        ? this.toExecutionUpdateDto(latestByTaskId.get(task.id)!)
+        : null,
+    }));
   }
 
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
@@ -430,6 +541,12 @@ export class TasksService {
     return decoratePlanningTasks([task])[0];
   }
 
+  private async decorateTaskWithLatest(task: Task): Promise<Task> {
+    return (
+      await this.attachLatestExecutionUpdates([this.decorateTask(task)])
+    )[0];
+  }
+
   private withNormalizedProgress<
     T extends Partial<CreateTaskDto | UpdateTaskDto>,
   >(input: T): T {
@@ -444,6 +561,72 @@ export class TasksService {
     }
 
     return normalizedInput;
+  }
+
+  private validateTaskPriority(priority: string) {
+    if (!taskPriorities.has(priority)) {
+      throw new BadRequestException(
+        'Priority must be low, medium, high, or critical',
+      );
+    }
+  }
+
+  private normalizeNullableText(value?: string | null): string | null {
+    const normalizedValue = value?.trim();
+    return normalizedValue ? normalizedValue : null;
+  }
+
+  private getExecutionChanges(
+    task: Task,
+    input: CreateTaskExecutionUpdateDto,
+  ): TaskExecutionUpdate['changes'] {
+    return {
+      assigneeId: this.toChangeValue(task.assigneeId, input.assigneeId ?? null),
+      dueDate: this.toChangeValue(
+        task.dueDate,
+        input.targetCompletionDate ?? null,
+      ),
+      percentComplete: this.toChangeValue(
+        task.percentComplete,
+        input.percentComplete,
+      ),
+      priority: this.toChangeValue(task.priority, input.priority),
+      remarks: this.toChangeValue(
+        task.remarks,
+        this.normalizeNullableText(input.updateNotes),
+      ),
+      status: this.toChangeValue(task.status, input.status),
+    };
+  }
+
+  private toChangeValue(
+    previousValue: string | number | null | undefined,
+    nextValue: string | number | null | undefined,
+  ) {
+    return {
+      previousValue: previousValue ?? null,
+      nextValue: nextValue ?? null,
+    };
+  }
+
+  private toExecutionUpdateDto(
+    update: TaskExecutionUpdate,
+  ): TaskExecutionUpdateDto {
+    return {
+      assigneeId: update.assigneeId ?? null,
+      id: update.id,
+      nextActionOwnerId: update.nextActionOwnerId ?? null,
+      nextStep: update.nextStep ?? null,
+      percentComplete: update.percentComplete,
+      priority: update.priority,
+      projectId: update.projectId,
+      status: update.status,
+      targetCompletionDate: update.targetCompletionDate ?? null,
+      taskId: update.taskId,
+      updateNotes: update.updateNotes ?? null,
+      updatedById: update.updatedById ?? null,
+      updatedOn: update.createdAt,
+    };
   }
 
   private requireMilestoneQueryService(): MilestoneQueryService {

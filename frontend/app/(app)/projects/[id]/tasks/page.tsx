@@ -8,6 +8,7 @@ import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-t
 import {
   getProject,
   getProjectTaskDependencies,
+  recordProjectTaskExecutionUpdate,
   updateProjectTask,
   type ApiProjectDetails,
   type ApiTaskDependency,
@@ -103,6 +104,56 @@ export default function ProjectTasksPage() {
     }
   }
 
+  async function handleRecordExecutionUpdate(
+    taskId: string,
+    input: {
+      assigneeId?: string | null;
+      nextActionOwnerId?: string | null;
+      nextStep?: string | null;
+      percentComplete: number;
+      priority: string;
+      status: ApiTask["status"];
+      targetCompletionDate?: string | null;
+      updateNotes?: string | null;
+    },
+  ) {
+    setError(null);
+    setIsSaving(true);
+    try {
+      const updatedTask = await recordProjectTaskExecutionUpdate(
+        projectId,
+        taskId,
+        input,
+      );
+      setProject((currentProject) => {
+        if (!currentProject) {
+          return currentProject;
+        }
+        const nextTasks = (currentProject.tasks ?? []).map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                ...updatedTask,
+                assignee:
+                  members.find((member) => member.userId === updatedTask.assigneeId)
+                    ?.user ?? updatedTask.assignee,
+              }
+            : task,
+        );
+        return decorateProjectPlan({ ...currentProject, tasks: nextTasks });
+      });
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to record task execution update",
+      );
+      throw requestError;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   if (isLoading || areMembersLoading) {
     return <ProjectLayoutLoadingState />;
   }
@@ -132,6 +183,7 @@ export default function ProjectTasksPage() {
         isSaving={isSaving}
         members={members}
         mode="execution"
+        onRecordExecutionUpdate={handleRecordExecutionUpdate}
         onUpdateTask={handleUpdateTask}
         tasks={project?.tasks ?? []}
       />

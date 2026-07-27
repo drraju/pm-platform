@@ -6,6 +6,7 @@ import { ProjectsModule } from '../projects/projects.module';
 import { PlanningScheduleSnapshot } from '../planning/entities/planning-schedule-snapshot.entity';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
 import { TaskDependency } from './entities/task-dependency.entity';
+import { TaskExecutionUpdate } from './entities/task-execution-update.entity';
 import { Task } from './entities/task.entity';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
@@ -29,6 +30,7 @@ import { DependencyResponseMapper } from './dependency-response.mapper';
     TypeOrmModule.forFeature([
       Task,
       TaskDependency,
+      TaskExecutionUpdate,
       ProjectMember,
       PlanningScheduleSnapshot,
       ProjectBaseline,
