@@ -14,6 +14,7 @@ import {
   type ApiTaskDependency,
 } from "@/features/projects";
 import { decorateProjectPlan } from "@/features/projects/planning";
+import { getTaskExecutionUpdates } from "@/features/tasks";
 import { useProjectMembers } from "@/hooks/use-project-members";
 import type { ApiTask } from "@/lib/api/client";
 
@@ -25,6 +26,9 @@ export default function ProjectTasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [taskViewMode, setTaskViewMode] = useState<"planning" | "execution">(
+    "execution",
+  );
   const {
     error: memberError,
     isLoading: areMembersLoading,
@@ -85,8 +89,9 @@ export default function ProjectTasksPage() {
                 ...task,
                 ...updatedTask,
                 assignee:
-                  members.find((member) => member.userId === updatedTask.assigneeId)
-                    ?.user ?? updatedTask.assignee,
+                  members.find(
+                    (member) => member.userId === updatedTask.assigneeId,
+                  )?.user ?? updatedTask.assignee,
               }
             : task,
         );
@@ -135,8 +140,9 @@ export default function ProjectTasksPage() {
                 ...task,
                 ...updatedTask,
                 assignee:
-                  members.find((member) => member.userId === updatedTask.assigneeId)
-                    ?.user ?? updatedTask.assignee,
+                  members.find(
+                    (member) => member.userId === updatedTask.assigneeId,
+                  )?.user ?? updatedTask.assignee,
               }
             : task,
         );
@@ -176,13 +182,35 @@ export default function ProjectTasksPage() {
           {memberError}
         </section>
       ) : null}
+      <section className="rounded-md border border-slate-200 bg-white p-3 shadow-soft">
+        <fieldset className="flex flex-wrap gap-3">
+          <legend className="sr-only">Task view mode</legend>
+          <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">
+            <input
+              checked={taskViewMode === "planning"}
+              onChange={() => setTaskViewMode("planning")}
+              type="radio"
+            />
+            Planning View
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">
+            <input
+              checked={taskViewMode === "execution"}
+              onChange={() => setTaskViewMode("execution")}
+              type="radio"
+            />
+            Execution Review
+          </label>
+        </fieldset>
+      </section>
       <ProjectWorkspaceTasks
         dependencies={dependencies}
         canEditTasks
         canReassignTasks
         isSaving={isSaving}
         members={members}
-        mode="execution"
+        mode={taskViewMode}
+        onLoadExecutionHistory={getTaskExecutionUpdates}
         onRecordExecutionUpdate={handleRecordExecutionUpdate}
         onUpdateTask={handleUpdateTask}
         tasks={project?.tasks ?? []}

@@ -64,6 +64,10 @@ export class TaskExecutionUpdateDto {
   nextActionOwnerId?: string | null;
   targetCompletionDate?: string | null;
   updateNotes?: string | null;
+  changes?: Record<
+    string,
+    { previousValue: string | number | null; nextValue: string | number | null }
+  > | null;
   updatedById?: string | null;
   updatedOn?: Date;
 }

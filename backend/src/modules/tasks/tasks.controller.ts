@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
 import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
+import { TaskExecutionUpdateDto } from './dto/task-execution-update.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
 import { TasksService } from './tasks.service';
@@ -95,6 +96,16 @@ export class TasksController {
     @Param('id') id: string,
   ): Promise<Task> {
     return this.tasksService.findOne(id, request.user);
+  }
+
+  @Get(':id/execution-updates')
+  @ApiOperation({ summary: 'List recent task execution updates' })
+  @ApiOkResponse({ type: TaskExecutionUpdateDto, isArray: true })
+  findExecutionUpdates(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<TaskExecutionUpdateDto[]> {
+    return this.tasksService.findExecutionUpdates(id, request.user);
   }
 
   @Patch(':id')

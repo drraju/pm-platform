@@ -1,2 +1,8 @@
-export { createTask, getMyTasks, getTasks, updateTask } from "@/lib/api/client";
-export type { ApiTask } from "@/lib/api/client";
+export {
+  createTask,
+  getMyTasks,
+  getTasks,
+  getTaskExecutionUpdates,
+  updateTask,
+} from "@/lib/api/client";
+export type { ApiTask, ApiTaskExecutionUpdate } from "@/lib/api/client";

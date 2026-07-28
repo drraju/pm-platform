@@ -26,6 +26,7 @@ describe('TasksService', () => {
   let tasksRepository: MockRepository<Task>;
   let taskExecutionUpdatesRepository: MockRepository<TaskExecutionUpdate> & {
     createQueryBuilder: jest.Mock;
+    find: jest.Mock;
   };
   let executionUpdateQueryBuilder: {
     addOrderBy: jest.Mock;
@@ -94,6 +95,7 @@ describe('TasksService', () => {
     };
     taskExecutionUpdatesRepository = {
       createQueryBuilder: jest.fn(() => executionUpdateQueryBuilder),
+      find: jest.fn().mockResolvedValue([]),
     };
     projectMembersRepository = {
       findOne: jest.fn(),
@@ -226,6 +228,46 @@ describe('TasksService', () => {
         updateNotes: 'Customer review moved the API task up.',
       }),
     );
+  });
+
+  it('loads recent execution history for one visible task', async () => {
+    tasksRepository.findOne?.mockResolvedValue({
+      id: taskId,
+      projectId,
+      taskKind: TaskKind.Standard,
+    });
+    taskExecutionUpdatesRepository.find.mockResolvedValue([
+      {
+        changes: {
+          priority: { previousValue: 'medium', nextValue: 'high' },
+        },
+        createdAt: new Date('2026-08-02T09:00:00.000Z'),
+        id: 'execution-update-1',
+        nextStep: 'Clear blocker',
+        percentComplete: 60,
+        priority: 'high',
+        projectId,
+        status: TaskStatus.Blocked,
+        taskId,
+        updateNotes: 'Blocker: Waiting for credentials.',
+        updatedById: userId,
+      },
+    ]);
+
+    await expect(service.findExecutionUpdates(taskId)).resolves.toEqual([
+      expect.objectContaining({
+        changes: {
+          priority: { previousValue: 'medium', nextValue: 'high' },
+        },
+        nextStep: 'Clear blocker',
+        updateNotes: 'Blocker: Waiting for credentials.',
+      }),
+    ]);
+    expect(taskExecutionUpdatesRepository.find).toHaveBeenCalledWith({
+      order: { createdAt: 'DESC' },
+      where: { taskId },
+      take: 10,
+    });
   });
 
   it('creates a child task under a summary parent in the same project', async () => {

@@ -373,6 +373,20 @@ export class TasksService {
     }));
   }
 
+  async findExecutionUpdates(
+    id: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<TaskExecutionUpdateDto[]> {
+    const task = await this.findOne(id, actor);
+    const updates = await this.taskExecutionUpdatesRepository.find({
+      order: { createdAt: 'DESC' },
+      where: { taskId: task.id },
+      take: 10,
+    });
+
+    return updates.map((update) => this.toExecutionUpdateDto(update));
+  }
+
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
     const task = await this.findOne(id, actor);
     await this.ensureCanManageProject(task.projectId, actor);
@@ -643,6 +657,7 @@ export class TasksService {
       targetCompletionDate: update.targetCompletionDate ?? null,
       taskId: update.taskId,
       updateNotes: update.updateNotes ?? null,
+      changes: update.changes ?? null,
       updatedById: update.updatedById ?? null,
       updatedOn: update.createdAt,
     };

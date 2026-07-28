@@ -39,6 +39,7 @@ export type {
   ApiProjectMember,
   ApiRaidItem,
   ApiTaskDependency,
+  ApiTaskExecutionUpdate,
   ApiTaskCounts,
   ApiTask,
   ApiAssignableUser,

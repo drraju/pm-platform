@@ -159,6 +159,10 @@ export type ApiTaskExecutionUpdate = {
   nextActionOwnerId?: string | null;
   targetCompletionDate?: string | null;
   updateNotes?: string | null;
+  changes?: Record<
+    string,
+    { previousValue: string | number | null; nextValue: string | number | null }
+  > | null;
   updatedById?: string | null;
   updatedOn?: string;
 };
@@ -1207,6 +1211,12 @@ export function getMyTasks(
   const queryString = params.toString();
   return apiRequest<ApiTask[]>(
     queryString ? `/tasks/my?${queryString}` : "/tasks/my",
+  );
+}
+
+export function getTaskExecutionUpdates(taskId: string) {
+  return apiRequest<ApiTaskExecutionUpdate[]>(
+    `/tasks/${taskId}/execution-updates`,
   );
 }
 

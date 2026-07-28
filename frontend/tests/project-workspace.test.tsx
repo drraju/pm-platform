@@ -670,6 +670,18 @@ describe("Project workspace components", () => {
         },
         userId: "user-2",
       },
+      {
+        id: "member-3",
+        role: "observer",
+        user: {
+          email: "inactive@example.com",
+          firstName: "Inactive",
+          id: "user-3",
+          lastName: "Member",
+          status: "inactive",
+        },
+        userId: "user-3",
+      },
     ];
 
     render(
@@ -1004,8 +1016,17 @@ describe("Project workspace components", () => {
     expect(
       screen.queryByLabelText("Finish Prepare release plan"),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();
-    expect(screen.getByText("Jun 30, 2026")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Owner" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Blocked" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Last Updated" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Jun 01, 2026")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jun 30, 2026")).not.toBeInTheDocument();
   });
 
   it("treats summaries as read-only planning containers in the editor", () => {
@@ -1048,6 +1069,24 @@ describe("Project workspace components", () => {
 
   it("records a lightweight task execution update from the tasks workspace", async () => {
     const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+    const onLoadExecutionHistory = vi.fn().mockResolvedValue([
+      {
+        changes: {
+          priority: { previousValue: "medium", nextValue: "high" },
+          percentComplete: { previousValue: 20, nextValue: 40 },
+        },
+        id: "history-1",
+        nextStep: "Receive Customer Credentials",
+        percentComplete: 40,
+        priority: "high",
+        projectId: "project-1",
+        status: "in_progress",
+        taskId: "task-1",
+        updateNotes: "Previous update notes",
+        updatedById: "user-1",
+        updatedOn: "2026-08-02T09:00:00.000Z",
+      },
+    ]);
     const members = [
       {
         id: "member-1",
@@ -1081,6 +1120,7 @@ describe("Project workspace components", () => {
         canReassignTasks
         members={members}
         mode="execution"
+        onLoadExecutionHistory={onLoadExecutionHistory}
         onRecordExecutionUpdate={onRecordExecutionUpdate}
         tasks={[
           {
@@ -1098,8 +1138,12 @@ describe("Project workspace components", () => {
               projectId: "project-1",
               status: "todo",
               taskId: "task-1",
+              updatedById: "user-1",
+              updatedOn: "2026-08-02T09:00:00.000Z",
+              updateNotes:
+                "Blocker Category: Waiting for Customer\nBlocker: Waiting for credentials.",
             },
-            status: "todo",
+            status: "blocked",
             taskKind: "standard",
             title: "Prepare release plan",
           },
@@ -1112,6 +1156,17 @@ describe("Project workspace components", () => {
     expect(
       within(taskRow as HTMLElement).getByText("Confirm API owner"),
     ).toBeInTheDocument();
+    expect(
+      within(taskRow as HTMLElement).getByText("Waiting for Customer"),
+    ).toBeInTheDocument();
+    expect(
+      within(taskRow as HTMLElement).getByText("2 Aug"),
+    ).toBeInTheDocument();
+    expect(
+      within(taskRow as HTMLElement).getByText("Ava Patel"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Planned Start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Estimated Hours")).not.toBeInTheDocument();
     fireEvent.click(
       within(taskRow as HTMLElement).getByRole("button", { name: "Update" }),
     );
@@ -1119,20 +1174,46 @@ describe("Project workspace components", () => {
     const drawer = screen.getByRole("dialog", {
       name: /task execution update/i,
     });
+    await waitFor(() => {
+      expect(onLoadExecutionHistory).toHaveBeenCalledWith("task-1");
+    });
+    expect(
+      within(drawer).getByText("Recent Execution History"),
+    ).toBeInTheDocument();
+    expect(
+      await within(drawer).findByText("Receive Customer Credentials"),
+    ).toBeInTheDocument();
+    expect(within(drawer).getByText("Current Task State")).toBeInTheDocument();
+    expect(
+      within(drawer).getByText("Today's Execution Update"),
+    ).toBeInTheDocument();
+    expect(within(drawer).getAllByText("Ava Patel").length).toBeGreaterThan(0);
+    const nextActionOwner = within(drawer).getByLabelText(/next action owner/i);
+    expect(within(nextActionOwner).getByText("Li Chen")).toBeInTheDocument();
+    expect(
+      within(nextActionOwner).queryByText("Inactive Member"),
+    ).not.toBeInTheDocument();
     fireEvent.change(within(drawer).getByLabelText(/status/i), {
       target: { value: "in_progress" },
     });
     fireEvent.change(within(drawer).getByLabelText(/priority/i), {
       target: { value: "critical" },
     });
-    fireEvent.change(within(drawer).getByLabelText(/^assignee$/i), {
+    fireEvent.change(within(drawer).getByLabelText(/^task owner$/i), {
       target: { value: "user-2" },
     });
-    fireEvent.change(within(drawer).getByLabelText(/progress/i), {
+    fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
       target: { value: "65" },
     });
     fireEvent.change(within(drawer).getByLabelText(/next step/i), {
       target: { value: "Confirm API owner" },
+    });
+    fireEvent.click(within(drawer).getByLabelText(/blocked/i));
+    fireEvent.change(within(drawer).getByLabelText(/blocker reason/i), {
+      target: { value: "Waiting for credentials." },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/blocker category/i), {
+      target: { value: "Waiting for Customer" },
     });
     fireEvent.change(within(drawer).getByLabelText(/next action owner/i), {
       target: { value: "user-1" },
@@ -1154,10 +1235,177 @@ describe("Project workspace components", () => {
         nextStep: "Confirm API owner",
         percentComplete: 65,
         priority: "critical",
-        status: "in_progress",
+        status: "blocked",
         targetCompletionDate: "2026-08-07",
-        updateNotes: "Customer asked for acceleration.",
+        updateNotes:
+          "Blocker Category: Waiting for Customer\n\nBlocker: Waiting for credentials.\n\nCustomer asked for acceleration.",
       });
+    });
+  });
+
+  it("validates blocked, progress, status, and next step execution updates", async () => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        mode="execution"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            id: "task-1",
+            percentComplete: 0,
+            priority: "medium",
+            projectId: "project-1",
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      within(
+        screen.getByText("Prepare release plan").closest("tr") as HTMLElement,
+      ).getByRole("button", { name: "Update" }),
+    );
+    const drawer = screen.getByRole("dialog", {
+      name: /task execution update/i,
+    });
+
+    fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
+      target: { value: "25" },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save update/i }),
+    );
+    expect(
+      await within(drawer).findByText("Todo tasks must stay at 0% progress."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(drawer).getByLabelText(/status/i), {
+      target: { value: "in_progress" },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save update/i }),
+    );
+    expect(
+      await within(drawer).findByText(
+        "Add a Next Step when status, progress, or priority changes.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(drawer).getByLabelText(/next step/i), {
+      target: { value: "Confirm API owner" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
+      target: { value: "100" },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save update/i }),
+    );
+    expect(
+      await within(drawer).findByText(
+        "In Progress tasks must be between 1% and 99% complete.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(drawer).getByLabelText(/status/i), {
+      target: { value: "done" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
+      target: { value: "80" },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save update/i }),
+    );
+    expect(
+      await within(drawer).findByText("Done tasks must be 100% complete."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByLabelText(/blocked/i));
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save update/i }),
+    );
+    expect(
+      await within(drawer).findByText(
+        "Blocker reason is required for blocked tasks.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(drawer).getByLabelText(/blocker reason/i), {
+      target: { value: "Waiting for credentials." },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save update/i }),
+    );
+    expect(
+      await within(drawer).findByText(
+        "Blocker category is required for blocked tasks.",
+      ),
+    ).toBeInTheDocument();
+    expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+  });
+
+  it("supports sequential execution review between tasks", async () => {
+    const onLoadExecutionHistory = vi.fn().mockResolvedValue([]);
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        members={[]}
+        mode="execution"
+        onLoadExecutionHistory={onLoadExecutionHistory}
+        onRecordExecutionUpdate={vi.fn()}
+        tasks={[
+          {
+            id: "task-1",
+            percentComplete: 10,
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 1,
+            status: "todo",
+            taskKind: "standard",
+            title: "Connectivity",
+          },
+          {
+            id: "task-2",
+            percentComplete: 20,
+            priority: "high",
+            projectId: "project-1",
+            sequenceNumber: 2,
+            status: "in_progress",
+            taskKind: "standard",
+            title: "Authentication",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      within(
+        screen.getByText("Connectivity").closest("tr") as HTMLElement,
+      ).getByRole("button", { name: "Update" }),
+    );
+    const drawer = screen.getByRole("dialog", {
+      name: /task execution update/i,
+    });
+    expect(within(drawer).getByText("Connectivity")).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: /next task/i }));
+
+    await waitFor(() => {
+      expect(within(drawer).getByText("Authentication")).toBeInTheDocument();
+    });
+    expect(onLoadExecutionHistory).toHaveBeenCalledWith("task-2");
+
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /previous task/i }),
+    );
+
+    await waitFor(() => {
+      expect(within(drawer).getByText("Connectivity")).toBeInTheDocument();
     });
   });
 
