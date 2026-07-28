@@ -1,5 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ProjectHealthCard } from "@/components/projects/project-health-card";
 import { ProjectSummary } from "@/components/project/project-summary";
@@ -367,9 +373,10 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("link", { name: "Open Risks: 0" }),
-    ).toHaveAttribute("href", "/projects/project-1/raid");
+    expect(screen.getByRole("link", { name: "Open Risks: 0" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/raid",
+    );
     expect(screen.getByRole("link", { name: "Open Team" })).toHaveAttribute(
       "href",
       "/projects/project-1/team",
@@ -382,8 +389,12 @@ describe("Project workspace components", () => {
       "href",
       "/projects/project-1/raid",
     );
-    expect(screen.queryByRole("link", { name: "Open Tasks" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Open Reports" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open Tasks" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open Reports" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders responsive two-column operational regions", () => {
@@ -400,9 +411,10 @@ describe("Project workspace components", () => {
     );
 
     expect(screen.getByLabelText("Project overview")).toHaveClass("space-y-6");
-    expect(
-      screen.getByLabelText("Project health and timeline"),
-    ).toHaveClass("grid", "xl:grid-cols-2");
+    expect(screen.getByLabelText("Project health and timeline")).toHaveClass(
+      "grid",
+      "xl:grid-cols-2",
+    );
     expect(
       screen.getByLabelText("Upcoming milestones and recent activity"),
     ).toHaveClass("grid", "xl:grid-cols-2");
@@ -477,8 +489,15 @@ describe("Project workspace components", () => {
     expect(screen.getByText("0%")).toBeInTheDocument();
     const planningSummary = screen.getByLabelText("Project planning summary");
 
-    for (const title of ["Summaries", "Tasks", "Milestones", "Planning Items"]) {
-      const metric = within(planningSummary).getByText(title).closest("section");
+    for (const title of [
+      "Summaries",
+      "Tasks",
+      "Milestones",
+      "Planning Items",
+    ]) {
+      const metric = within(planningSummary)
+        .getByText(title)
+        .closest("section");
 
       expect(metric).not.toBeNull();
       expect(within(metric as HTMLElement).getByText("0")).toBeInTheDocument();
@@ -1071,6 +1090,15 @@ describe("Project workspace components", () => {
             percentComplete: 20,
             priority: "medium",
             projectId: "project-1",
+            latestExecutionUpdate: {
+              id: "execution-update-1",
+              nextStep: "Confirm API owner",
+              percentComplete: 20,
+              priority: "medium",
+              projectId: "project-1",
+              status: "todo",
+              taskId: "task-1",
+            },
             status: "todo",
             taskKind: "standard",
             title: "Prepare release plan",
@@ -1081,6 +1109,9 @@ describe("Project workspace components", () => {
 
     const taskRow = screen.getByText("Prepare release plan").closest("tr");
     expect(taskRow).not.toBeNull();
+    expect(
+      within(taskRow as HTMLElement).getByText("Confirm API owner"),
+    ).toBeInTheDocument();
     fireEvent.click(
       within(taskRow as HTMLElement).getByRole("button", { name: "Update" }),
     );
@@ -1112,7 +1143,9 @@ describe("Project workspace components", () => {
     fireEvent.change(within(drawer).getByLabelText(/update notes/i), {
       target: { value: "Customer asked for acceleration." },
     });
-    fireEvent.click(within(drawer).getByRole("button", { name: /save update/i }));
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save update/i }),
+    );
 
     await waitFor(() => {
       expect(onRecordExecutionUpdate).toHaveBeenCalledWith("task-1", {
@@ -1795,7 +1828,9 @@ describe("Project workspace components", () => {
     });
     expect(scrollRegion).toHaveAttribute("tabindex", "0");
     expect(scrollRegion).toHaveClass("overflow-x-auto", "focus-visible:ring-2");
-    expect(within(scrollRegion).getByRole("table")).toHaveClass("min-w-[640px]");
+    expect(within(scrollRegion).getByRole("table")).toHaveClass(
+      "min-w-[640px]",
+    );
     expect(screen.queryByText("No records yet.")).not.toBeInTheDocument();
   });
 });

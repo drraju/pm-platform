@@ -112,7 +112,11 @@ describe('ProjectsService', () => {
       softRemove: jest.fn(() => Promise.resolve()),
     };
     transactionalEntityManager = {
-      query: jest.fn(() => Promise.resolve()),
+      query: jest.fn((sql: string) =>
+        Promise.resolve(
+          sql.toLowerCase().includes('select count') ? [{ count: 0 }] : [],
+        ),
+      ),
       save: jest.fn((entity, input) => {
         if (entity === ProjectBaseline) {
           return Promise.resolve({ id: 'project-baseline-id', ...input });
@@ -586,9 +590,37 @@ describe('ProjectsService', () => {
       "SET LOCAL pm_platform.project_purge = 'on'",
     );
     expect(transactionalEntityManager.query).toHaveBeenCalledWith(
+      'DELETE FROM task_execution_updates WHERE project_id = $1',
+      [projectId],
+    );
+    expect(transactionalEntityManager.query).toHaveBeenCalledWith(
       'DELETE FROM projects WHERE id = $1',
       [projectId],
     );
+    expect(transactionalEntityManager.query).toHaveBeenCalledWith(
+      'SELECT COUNT(*)::int AS count FROM projects WHERE id = $1',
+      [projectId],
+    );
+  });
+
+  it('rolls back permanent purge when integrity verification fails', async () => {
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      status: 'archived',
+    });
+    transactionalEntityManager.query.mockImplementation((sql: string) => {
+      if (sql.toLowerCase().includes('select count')) {
+        return Promise.resolve([{ count: sql.includes('FROM tasks') ? 1 : 0 }]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    await expect(service.purge(projectId, actor)).rejects.toThrow(
+      ConflictException,
+    );
+
+    expect(projectsRepository.manager.transaction).toHaveBeenCalled();
   });
 
   it('rejects permanent purge for active projects', async () => {

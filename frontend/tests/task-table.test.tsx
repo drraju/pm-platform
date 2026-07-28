@@ -43,7 +43,9 @@ describe("TaskTable", () => {
       />,
     );
 
-    expect(screen.getByText("Resolve collector rollout blocker")).toBeInTheDocument();
+    expect(
+      screen.getByText("Resolve collector rollout blocker"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Overdue")).toBeInTheDocument();
     expect(screen.getByText("Confirm release readiness")).toBeInTheDocument();
     expect(screen.getByText("Due this week")).toBeInTheDocument();
@@ -63,6 +65,61 @@ describe("TaskTable", () => {
     expect(
       screen.getByText("No tasks match the current filters."),
     ).toBeInTheDocument();
+  });
+
+  it("renders the latest next step with one-line truncation and tooltip", () => {
+    const longNextStep =
+      "Confirm the revised API owner, prepare the cutover note, and send the final dependency summary to the steering group.";
+
+    render(
+      <TaskTable
+        emptyMessage="No tasks"
+        isLoading={false}
+        tasks={[
+          {
+            dueDate: "2026-06-10",
+            id: "task-next-step",
+            latestExecutionUpdate: {
+              id: "update-2",
+              nextStep: longNextStep,
+              percentComplete: 40,
+              priority: "high",
+              projectId: "project-1",
+              status: "in_progress",
+              taskId: "task-next-step",
+            },
+            priority: "high",
+            project: {
+              id: "project-1",
+              name: "Customer Experience Platform Upgrade",
+              status: "active",
+            },
+            projectId: "project-1",
+            status: "in_progress",
+            title: "Confirm release readiness",
+          },
+          {
+            dueDate: "2026-06-12",
+            id: "task-no-update",
+            priority: "medium",
+            project: {
+              id: "project-1",
+              name: "Customer Experience Platform Upgrade",
+              status: "active",
+            },
+            projectId: "project-1",
+            status: "todo",
+            title: "Prepare follow-up notes",
+          },
+        ]}
+      />,
+    );
+
+    const nextStepCell = screen.getByText(longNextStep);
+    expect(nextStepCell).toHaveClass("truncate");
+    expect(nextStepCell).toHaveAttribute("title", longNextStep);
+    expect(screen.getAllByText("Next Step:")).toHaveLength(2);
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 
   it("submits inline task operation updates", () => {

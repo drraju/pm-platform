@@ -36,12 +36,13 @@ export function TaskTable({
 }: TaskTableProps) {
   return (
     <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-      <div className="hidden grid-cols-[1.2fr_0.9fr_0.8fr_0.7fr_0.8fr_1.4fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+      <div className="hidden grid-cols-[1.15fr_0.85fr_0.7fr_0.65fr_0.75fr_1fr_1.25fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
         <span>Task</span>
         <span>Project</span>
         <span>Status</span>
         <span>Complete</span>
         <span>Due Date</span>
+        <span>Next Step</span>
         <span>Operations</span>
       </div>
 
@@ -109,7 +110,7 @@ function EditableTaskRow({
     assigneeId !== (task.assigneeId ?? "");
 
   return (
-    <article className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.2fr_0.9fr_0.8fr_0.7fr_0.8fr_1.4fr] md:items-start">
+    <article className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.15fr_0.85fr_0.7fr_0.65fr_0.75fr_1fr_1.25fr] md:items-start">
       <div>
         <h2 className="font-semibold text-slate-950">{task.title}</h2>
         <p className="mt-1 text-xs text-slate-500 md:hidden">
@@ -127,9 +128,7 @@ function EditableTaskRow({
         {formatLabel(task.status)}
       </span>
       <span className="text-slate-600">
-        <span className="font-medium text-slate-500 md:hidden">
-          Complete:{" "}
-        </span>
+        <span className="font-medium text-slate-500 md:hidden">Complete: </span>
         {task.percentComplete ?? 0}%
       </span>
       <span className="flex flex-wrap items-center gap-2 text-slate-600">
@@ -142,6 +141,15 @@ function EditableTaskRow({
             {dueState.label}
           </span>
         ) : null}
+      </span>
+      <span
+        className="min-w-0 truncate text-slate-600"
+        title={task.latestExecutionUpdate?.nextStep ?? undefined}
+      >
+        <span className="font-medium text-slate-500 md:hidden">
+          Next Step:{" "}
+        </span>
+        {task.latestExecutionUpdate?.nextStep ?? "—"}
       </span>
       <div className="space-y-2">
         {canEdit ? (

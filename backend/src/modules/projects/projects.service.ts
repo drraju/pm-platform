@@ -5,6 +5,7 @@ import {
   forwardRef,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -78,6 +79,8 @@ const teamMemberEditableTaskFields = new Set([
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
+
   constructor(
     @InjectRepository(Project)
     private readonly projectsRepository: Repository<Project>,
@@ -892,6 +895,7 @@ export class ProjectsService {
 
     const query = (sql: string) => manager.query(sql, [projectId]);
 
+    await query('DELETE FROM task_execution_updates WHERE project_id = $1');
     await query(`
       DELETE FROM task_dependencies
       WHERE predecessor_task_id IN (SELECT id FROM tasks WHERE project_id = $1)
@@ -926,6 +930,189 @@ export class ProjectsService {
     await query('DELETE FROM project_members WHERE project_id = $1');
     await query('DELETE FROM tasks WHERE project_id = $1');
     await query('DELETE FROM projects WHERE id = $1');
+
+    await this.verifyProjectPurgeIntegrity(manager, projectId);
+  }
+
+  private async verifyProjectPurgeIntegrity(
+    manager: EntityManager,
+    projectId: string,
+  ): Promise<void> {
+    const checks = [
+      {
+        label: 'project',
+        sql: 'SELECT COUNT(*)::int AS count FROM projects WHERE id = $1',
+      },
+      {
+        label: 'tasks',
+        sql: 'SELECT COUNT(*)::int AS count FROM tasks WHERE project_id = $1',
+      },
+      {
+        label: 'task_execution_updates',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM task_execution_updates
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'planning_task_schedules',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM planning_task_schedules
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'planning_schedule_snapshots',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM planning_schedule_snapshots
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'resource_allocations',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM resource_allocations
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'resource_capacities',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM resource_capacities
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'resource_workload_snapshots',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM resource_workload_snapshots
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'enterprise_resource_assignments',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM enterprise_resource_assignments
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'project_documents',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM project_documents
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'raid_comments',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM raid_comments
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'raid_history_entries',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM raid_history_entries
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'risks',
+        sql: 'SELECT COUNT(*)::int AS count FROM risks WHERE project_id = $1',
+      },
+      {
+        label: 'issues',
+        sql: 'SELECT COUNT(*)::int AS count FROM issues WHERE project_id = $1',
+      },
+      {
+        label: 'assumptions',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM assumptions
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'dependencies',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM dependencies
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'project_baseline_tasks',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM project_baseline_tasks
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'project_baselines',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM project_baselines
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'project_members',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM project_members
+          WHERE project_id = $1
+        `,
+      },
+      {
+        label: 'task_dependencies_without_tasks',
+        sql: `
+          SELECT COUNT(*)::int AS count
+          FROM task_dependencies dependency
+          LEFT JOIN tasks predecessor
+            ON predecessor.id = dependency.predecessor_task_id
+          LEFT JOIN tasks successor
+            ON successor.id = dependency.successor_task_id
+          WHERE predecessor.id IS NULL
+             OR successor.id IS NULL
+        `,
+        parameters: [],
+      },
+    ];
+
+    const diagnostics: Record<string, number> = {};
+    for (const check of checks) {
+      const rows = await manager.query(
+        check.sql,
+        check.parameters ?? [projectId],
+      );
+      diagnostics[check.label] = Number(rows?.[0]?.count ?? 0);
+    }
+
+    const failures = Object.entries(diagnostics).filter(
+      ([, count]) => count > 0,
+    );
+    if (failures.length === 0) {
+      return;
+    }
+
+    this.logger.error(
+      `Project purge integrity verification failed for ${projectId}: ${JSON.stringify(
+        diagnostics,
+      )}`,
+    );
+    throw new ConflictException('Project purge integrity verification failed');
   }
 
   private async ensureUserExists(userId: string): Promise<void> {

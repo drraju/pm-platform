@@ -27,6 +27,26 @@ describe('TasksService', () => {
   let taskExecutionUpdatesRepository: MockRepository<TaskExecutionUpdate> & {
     createQueryBuilder: jest.Mock;
   };
+  let executionUpdateQueryBuilder: {
+    addOrderBy: jest.Mock;
+    distinctOn: jest.Mock;
+    getMany: jest.Mock;
+    orderBy: jest.Mock;
+    where: jest.Mock;
+  };
+  let taskTransactionManager: {
+    create: jest.Mock;
+    save: jest.Mock;
+  };
+  let taskQueryBuilder: {
+    addOrderBy: jest.Mock;
+    andWhere: jest.Mock;
+    getMany: jest.Mock;
+    innerJoinAndSelect: jest.Mock;
+    leftJoinAndSelect: jest.Mock;
+    orderBy: jest.Mock;
+    where: jest.Mock;
+  };
   let projectMembersRepository: MockRepository<ProjectMember>;
   let authorizationPolicyService: {
     canManageProject: jest.Mock;
@@ -38,30 +58,42 @@ describe('TasksService', () => {
   };
 
   beforeEach(async () => {
+    taskQueryBuilder = {
+      addOrderBy: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+      innerJoinAndSelect: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+    };
     tasksRepository = {
       create: jest.fn((input) => input),
+      createQueryBuilder: jest.fn(() => taskQueryBuilder),
       find: jest.fn(),
       findOne: jest.fn(),
       manager: {
-        transaction: jest.fn((callback) =>
-          callback({
-            create: jest.fn((_entity, input) => input),
-            save: jest.fn((_entity, input) =>
-              Promise.resolve({ id: 'execution-update-id', ...input }),
-            ),
-          }),
-        ),
+        transaction: jest.fn((callback) => callback(taskTransactionManager)),
       } as never,
       remove: jest.fn(() => Promise.resolve()),
       save: jest.fn((input) => Promise.resolve({ id: taskId, ...input })),
       softRemove: jest.fn(() => Promise.resolve()),
     };
+    taskTransactionManager = {
+      create: jest.fn((_entity, input) => input),
+      save: jest.fn((_entity, input) =>
+        Promise.resolve({ id: 'execution-update-id', ...input }),
+      ),
+    };
+    executionUpdateQueryBuilder = {
+      addOrderBy: jest.fn().mockReturnThis(),
+      distinctOn: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+      orderBy: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+    };
     taskExecutionUpdatesRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        getMany: jest.fn().mockResolvedValue([]),
-        orderBy: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-      })),
+      createQueryBuilder: jest.fn(() => executionUpdateQueryBuilder),
     };
     projectMembersRepository = {
       findOne: jest.fn(),
@@ -180,6 +212,20 @@ describe('TasksService', () => {
         status: TaskStatus.InProgress,
       }),
     );
+    expect(taskTransactionManager.create).toHaveBeenCalledWith(
+      TaskExecutionUpdate,
+      expect.objectContaining({
+        changes: expect.objectContaining({
+          priority: {
+            previousValue: 'medium',
+            nextValue: 'critical',
+          },
+        }),
+        nextStep: 'Confirm API owner',
+        priority: 'critical',
+        updateNotes: 'Customer review moved the API task up.',
+      }),
+    );
   });
 
   it('creates a child task under a summary parent in the same project', async () => {
@@ -275,19 +321,36 @@ describe('TasksService', () => {
   });
 
   it('lists all tasks with project and assignee relations', async () => {
-    tasksRepository.find?.mockResolvedValue([{ id: taskId }]);
+    taskQueryBuilder.getMany.mockResolvedValue([{ id: taskId }]);
 
     await expect(service.findAll()).resolves.toEqual([
       expect.objectContaining({ id: taskId }),
     ]);
-    expect(tasksRepository.find).toHaveBeenCalledWith({
-      relations: { project: true, assignee: true },
-      where: undefined,
-    });
+    expect(tasksRepository.createQueryBuilder).toHaveBeenCalledWith('task');
+    expect(taskQueryBuilder.innerJoinAndSelect).toHaveBeenCalledWith(
+      'task.project',
+      'project',
+    );
+    expect(taskQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+      'task.assignee',
+      'assignee',
+    );
+    expect(taskQueryBuilder.where).not.toHaveBeenCalled();
+    expect(executionUpdateQueryBuilder.distinctOn).toHaveBeenCalledWith([
+      'executionUpdate.taskId',
+    ]);
+    expect(executionUpdateQueryBuilder.orderBy).toHaveBeenCalledWith(
+      'executionUpdate.taskId',
+      'ASC',
+    );
+    expect(executionUpdateQueryBuilder.addOrderBy).toHaveBeenCalledWith(
+      'executionUpdate.createdAt',
+      'DESC',
+    );
   });
 
   it('lists authenticated user tasks with filters and required sorting', async () => {
-    tasksRepository.find?.mockResolvedValue([
+    taskQueryBuilder.getMany.mockResolvedValue([
       { id: taskId, assigneeId: userId },
     ]);
 
@@ -301,36 +364,64 @@ describe('TasksService', () => {
       { id: taskId, assigneeId: userId, latestExecutionUpdate: null },
     ]);
 
-    expect(tasksRepository.find).toHaveBeenCalledWith({
-      order: {
-        dueDate: 'ASC',
-        createdAt: 'DESC',
-      },
-      relations: { project: true, assignee: true },
-      where: expect.objectContaining({
-        assigneeId: userId,
-        priority: 'high',
-        projectId,
-        status: TaskStatus.InProgress,
-      }),
-    });
+    expect(taskQueryBuilder.where).toHaveBeenCalledWith(
+      'task.assignee_id = :userId',
+      { userId },
+    );
+    expect(taskQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'task.task_kind IN (:...taskKinds)',
+      { taskKinds: [TaskKind.Standard, TaskKind.Milestone] },
+    );
+    expect(taskQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'task.status = :status',
+      { status: TaskStatus.InProgress },
+    );
+    expect(taskQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'task.project_id = :projectId',
+      { projectId },
+    );
+    expect(taskQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'task.priority = :priority',
+      { priority: 'high' },
+    );
+    expect(taskQueryBuilder.orderBy).toHaveBeenCalledWith(
+      'task.due_date',
+      'ASC',
+    );
+    expect(taskQueryBuilder.addOrderBy).toHaveBeenCalledWith(
+      'task.created_at',
+      'DESC',
+    );
   });
 
   it('omits empty authenticated user task filters', async () => {
-    tasksRepository.find?.mockResolvedValue([]);
+    taskQueryBuilder.getMany.mockResolvedValue([]);
 
     await service.findMyTasks(userId);
 
-    expect(tasksRepository.find).toHaveBeenCalledWith({
-      order: {
-        dueDate: 'ASC',
-        createdAt: 'DESC',
-      },
-      relations: { project: true, assignee: true },
-      where: expect.objectContaining({
-        assigneeId: userId,
-      }),
+    expect(taskQueryBuilder.where).toHaveBeenCalledWith(
+      'task.assignee_id = :userId',
+      { userId },
+    );
+    expect(taskQueryBuilder.andWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it('intersects all-task listing with visible project ids', async () => {
+    projectVisibilityService.getVisibleProjectIds.mockResolvedValue([
+      projectId,
+    ]);
+    taskQueryBuilder.getMany.mockResolvedValue([{ id: taskId, projectId }]);
+
+    await service.findAll({
+      email: 'pm@example.com',
+      roleId: 'role-1',
+      userId,
     });
+
+    expect(taskQueryBuilder.where).toHaveBeenCalledWith(
+      'task.project_id IN (:...projectIds)',
+      { projectIds: [projectId] },
+    );
   });
 
   it('summarizes authenticated user tasks', async () => {

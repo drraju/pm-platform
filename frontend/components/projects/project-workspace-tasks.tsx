@@ -201,14 +201,23 @@ export function ProjectWorkspaceTasks({
   tasks,
 }: ProjectWorkspaceTasksProps) {
   const [dialogMode, setDialogMode] = React.useState<DialogMode | null>(null);
-  const [taskPendingDelete, setTaskPendingDelete] = React.useState<ApiTask | null>(null);
+  const [taskPendingDelete, setTaskPendingDelete] =
+    React.useState<ApiTask | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<ApiTask | null>(null);
-  const [executionTask, setExecutionTask] = React.useState<ApiTask | null>(null);
-  const [form, setForm] = React.useState<TaskFormState>(() => createEmptyTaskForm());
+  const [executionTask, setExecutionTask] = React.useState<ApiTask | null>(
+    null,
+  );
+  const [form, setForm] = React.useState<TaskFormState>(() =>
+    createEmptyTaskForm(),
+  );
   const [executionForm, setExecutionForm] =
-    React.useState<ExecutionUpdateFormState>(() => createEmptyExecutionUpdateForm());
+    React.useState<ExecutionUpdateFormState>(() =>
+      createEmptyExecutionUpdateForm(),
+    );
   const [formError, setFormError] = React.useState<string | null>(null);
-  const [executionFormError, setExecutionFormError] = React.useState<string | null>(null);
+  const [executionFormError, setExecutionFormError] = React.useState<
+    string | null
+  >(null);
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = React.useState("all");
   const [priorityFilter, setPriorityFilter] = React.useState("all");
@@ -217,13 +226,16 @@ export function ProjectWorkspaceTasks({
 
   const isPlanningMode = mode === "planning";
   const canCreateTask =
-    isPlanningMode && (canManageTasks || canCreateTasks) && Boolean(onCreateTask);
+    isPlanningMode &&
+    (canManageTasks || canCreateTasks) &&
+    Boolean(onCreateTask);
   const hasFullEditAccess = isPlanningMode && (canManageTasks || canEditTasks);
   const hasExecutionEditAccess = !isPlanningMode && canEditTasks;
   const hasDeleteAccess = canManageTasks || canDeleteTasks;
   const hasReassignAccess = canManageTasks || canReassignTasks;
-  const [localStatusFilter, setLocalStatusFilter] =
-    React.useState<"all" | ApiTask["status"]>(statusFilter);
+  const [localStatusFilter, setLocalStatusFilter] = React.useState<
+    "all" | ApiTask["status"]
+  >(statusFilter);
 
   React.useEffect(() => {
     setLocalStatusFilter(statusFilter);
@@ -310,7 +322,9 @@ export function ProjectWorkspaceTasks({
   function toggleExpanded(taskId: string) {
     setExpandedTaskIds((currentExpandedTaskIds) =>
       currentExpandedTaskIds.includes(taskId)
-        ? currentExpandedTaskIds.filter((currentTaskId) => currentTaskId !== taskId)
+        ? currentExpandedTaskIds.filter(
+            (currentTaskId) => currentTaskId !== taskId,
+          )
         : [...currentExpandedTaskIds, taskId],
     );
   }
@@ -351,10 +365,7 @@ export function ProjectWorkspaceTasks({
     }
   }
 
-  async function updateInlineTask(
-    task: ApiTask,
-    input: TaskOperationInput,
-  ) {
+  async function updateInlineTask(task: ApiTask, input: TaskOperationInput) {
     if (!onUpdateTask) {
       return;
     }
@@ -371,7 +382,9 @@ export function ProjectWorkspaceTasks({
     }
   }
 
-  async function handleExecutionUpdateSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleExecutionUpdateSubmit(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
     if (!executionTask || !onRecordExecutionUpdate) {
       return;
@@ -385,7 +398,10 @@ export function ProjectWorkspaceTasks({
 
     setExecutionFormError(null);
     try {
-      await onRecordExecutionUpdate(executionTask.id, toExecutionUpdatePayload(executionForm));
+      await onRecordExecutionUpdate(
+        executionTask.id,
+        toExecutionUpdatePayload(executionForm),
+      );
       closeExecutionUpdate();
     } catch (requestError) {
       setExecutionFormError(
@@ -396,7 +412,11 @@ export function ProjectWorkspaceTasks({
     }
   }
 
-  const editableParentOptions = getParentOptions(tasks, hierarchy.wbsByTaskId, selectedTask);
+  const editableParentOptions = getParentOptions(
+    tasks,
+    hierarchy.wbsByTaskId,
+    selectedTask,
+  );
   const taskFieldAccess = getTaskFieldAccess({
     currentUserId,
     dialogMode,
@@ -412,31 +432,31 @@ export function ProjectWorkspaceTasks({
         action={
           <ActionGroup>
             <CountBadge value={hierarchy.rows.length} />
-          {canCreateTask ? (
-            <>
-              <button
-                className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
-                onClick={() => openCreateDialog({ kind: "standard" })}
-                type="button"
-              >
-                Create Task
-              </button>
-              <button
-                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
-                onClick={() => openCreateDialog({ kind: "summary" })}
-                type="button"
-              >
-                Create Summary
-              </button>
-              <button
-                className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 transition hover:bg-sky-100"
-                onClick={() => openCreateDialog({ kind: "milestone" })}
-                type="button"
-              >
-                Create Milestone
-              </button>
-            </>
-          ) : null}
+            {canCreateTask ? (
+              <>
+                <button
+                  className="rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
+                  onClick={() => openCreateDialog({ kind: "standard" })}
+                  type="button"
+                >
+                  Create Task
+                </button>
+                <button
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+                  onClick={() => openCreateDialog({ kind: "summary" })}
+                  type="button"
+                >
+                  Create Summary
+                </button>
+                <button
+                  className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 transition hover:bg-sky-100"
+                  onClick={() => openCreateDialog({ kind: "milestone" })}
+                  type="button"
+                >
+                  Create Milestone
+                </button>
+              </>
+            ) : null}
           </ActionGroup>
         }
         description={
@@ -450,9 +470,7 @@ export function ProjectWorkspaceTasks({
 
       <div className="mt-5 overflow-x-auto">
         {inlineError ? (
-          <ErrorState className="mb-3">
-            {inlineError}
-          </ErrorState>
+          <ErrorState className="mb-3">{inlineError}</ErrorState>
         ) : null}
         <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -476,7 +494,9 @@ export function ProjectWorkspaceTasks({
             <select
               className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
               onChange={(event) =>
-                setLocalStatusFilter(event.target.value as "all" | ApiTask["status"])
+                setLocalStatusFilter(
+                  event.target.value as "all" | ApiTask["status"],
+                )
               }
               value={localStatusFilter}
             >
@@ -504,29 +524,60 @@ export function ProjectWorkspaceTasks({
             </select>
           </label>
         </div>
-        <table className="min-w-[1480px] divide-y divide-slate-200 text-sm">
+        <table className="min-w-[1580px] divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-3" scope="col">WBS</th>
-              <th className="px-3 py-3" scope="col">Task Name</th>
-              <th className="px-3 py-3" scope="col">Assignee</th>
-              <th className="px-3 py-3" scope="col">Status</th>
-              <th className="px-3 py-3" scope="col">Priority</th>
-              <th className="px-3 py-3" scope="col">Progress</th>
-              <th className="px-3 py-3" scope="col">Planned Start</th>
-              <th className="px-3 py-3" scope="col">Planned End</th>
-              <th className="px-3 py-3" scope="col">Actual Start</th>
-              <th className="px-3 py-3" scope="col">Actual End</th>
-              <th className="px-3 py-3" scope="col">Est. Hours</th>
-              <th className="px-3 py-3" scope="col">Remaining</th>
-              <th className="px-3 py-3" scope="col">Comments</th>
-              <th className="px-3 py-3" scope="col">Actions</th>
+              <th className="px-3 py-3" scope="col">
+                WBS
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Task Name
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Assignee
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Status
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Priority
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Next Step
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Progress
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Planned Start
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Planned End
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Actual Start
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Actual End
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Est. Hours
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Remaining
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Comments
+              </th>
+              <th className="px-3 py-3" scope="col">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {hierarchy.rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={14}>
+                <td className="px-3 py-5 text-slate-500" colSpan={15}>
                   {isPlanningMode ? "No plan items yet." : "No tasks yet."}
                 </td>
               </tr>
@@ -536,7 +587,8 @@ export function ProjectWorkspaceTasks({
               const isSummary = task.taskKind === "summary";
               const isMilestone = task.taskKind === "milestone";
               const isExpanded = expandedTaskIds.includes(task.id);
-              const canUpdateOwnTask = task.assigneeId === currentUserId && Boolean(onUpdateTask);
+              const canUpdateOwnTask =
+                task.assigneeId === currentUserId && Boolean(onUpdateTask);
               const canEditRow =
                 hasFullEditAccess || hasExecutionEditAccess || canUpdateOwnTask;
               const canRecordExecutionUpdate =
@@ -605,7 +657,8 @@ export function ProjectWorkspaceTasks({
                           </span>
                           {row.childCount > 0 ? (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                              {row.childCount} child{row.childCount === 1 ? "" : "ren"}
+                              {row.childCount} child
+                              {row.childCount === 1 ? "" : "ren"}
                             </span>
                           ) : null}
                         </div>
@@ -643,7 +696,9 @@ export function ProjectWorkspaceTasks({
                         disabled={!canEditExecutionFields}
                         label={`Status ${task.title}`}
                         onCommit={(status) =>
-                          updateInlineTask(task, { status: status as ApiTask["status"] })
+                          updateInlineTask(task, {
+                            status: status as ApiTask["status"],
+                          })
                         }
                         options={taskStatuses}
                         value={task.status}
@@ -657,7 +712,9 @@ export function ProjectWorkspaceTasks({
                       <InlineSelect
                         disabled={!canEditPlanningFields}
                         label={`Priority ${task.title}`}
-                        onCommit={(priority) => updateInlineTask(task, { priority })}
+                        onCommit={(priority) =>
+                          updateInlineTask(task, { priority })
+                        }
                         options={priorities.map((priority) => ({
                           label: formatLabel(priority),
                           value: priority,
@@ -665,6 +722,14 @@ export function ProjectWorkspaceTasks({
                         value={task.priority}
                       />
                     )}
+                  </td>
+                  <td className="max-w-52 px-3 py-3 text-slate-600">
+                    <span
+                      className="block truncate"
+                      title={task.latestExecutionUpdate?.nextStep ?? undefined}
+                    >
+                      {task.latestExecutionUpdate?.nextStep ?? "—"}
+                    </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-600">
                     {isMilestone ? (
@@ -735,12 +800,18 @@ export function ProjectWorkspaceTasks({
                       disabled={isSummary || !canEditExecutionFields}
                       value={task.remarks ?? ""}
                       onCommit={(remarks) =>
-                        updateInlineTask(task, { remarks: remarks.trim() || null })
+                        updateInlineTask(task, {
+                          remarks: remarks.trim() || null,
+                        })
                       }
                     />
                   </td>
                   <td className="px-3 py-3">
-                    {canEditRow || canDeleteRow || canAddChild || hasReassignAccess || canRecordExecutionUpdate ? (
+                    {canEditRow ||
+                    canDeleteRow ||
+                    canAddChild ||
+                    hasReassignAccess ||
+                    canRecordExecutionUpdate ? (
                       <div className="flex flex-wrap gap-2">
                         {canRecordExecutionUpdate ? (
                           <button
@@ -825,7 +896,9 @@ export function ProjectWorkspaceTasks({
               </button>
               <button
                 className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isSaving || (dialogMode === "create" && !form.title.trim())}
+                disabled={
+                  isSaving || (dialogMode === "create" && !form.title.trim())
+                }
                 form="project-task-form"
                 type="submit"
               >
@@ -849,12 +922,12 @@ export function ProjectWorkspaceTasks({
                       ? "Use canonical planning fields for the current project plan. WBS is derived from hierarchy and ordering."
                       : "Use this view for execution updates only. Schedule structure remains owned by Planning."
               }
-              title={isPlanningMode ? "Planning Detail" : "Task Execution Detail"}
+              title={
+                isPlanningMode ? "Planning Detail" : "Task Execution Detail"
+              }
             >
               {formError ? (
-                <ErrorState className="mb-4">
-                  {formError}
-                </ErrorState>
+                <ErrorState className="mb-4">{formError}</ErrorState>
               ) : null}
 
               <ModalFormGrid className="md:grid-cols-2 xl:grid-cols-3">
@@ -864,11 +937,16 @@ export function ProjectWorkspaceTasks({
                       Type
                       <select
                         className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                        disabled={
+                          dialogMode === "reassign" ||
+                          !taskFieldAccess.structure
+                        }
                         onChange={(event) =>
                           updateForm({
                             ...form,
-                            taskKind: event.target.value as NonNullable<ApiTask["taskKind"]>,
+                            taskKind: event.target.value as NonNullable<
+                              ApiTask["taskKind"]
+                            >,
                           })
                         }
                         value={form.taskKind}
@@ -881,8 +959,9 @@ export function ProjectWorkspaceTasks({
                       </select>
                       <span className="mt-1 block text-xs text-slate-500">
                         {
-                          taskKinds.find((taskKind) => taskKind.value === form.taskKind)
-                            ?.description
+                          taskKinds.find(
+                            (taskKind) => taskKind.value === form.taskKind,
+                          )?.description
                         }
                       </span>
                     </label>
@@ -891,9 +970,15 @@ export function ProjectWorkspaceTasks({
                       Parent Summary
                       <select
                         className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                        disabled={
+                          dialogMode === "reassign" ||
+                          !taskFieldAccess.structure
+                        }
                         onChange={(event) =>
-                          updateForm({ ...form, parentTaskId: event.target.value })
+                          updateForm({
+                            ...form,
+                            parentTaskId: event.target.value,
+                          })
                         }
                         value={form.parentTaskId}
                       >
@@ -910,10 +995,16 @@ export function ProjectWorkspaceTasks({
                       Sequence
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.structure}
+                        disabled={
+                          dialogMode === "reassign" ||
+                          !taskFieldAccess.structure
+                        }
                         min={0}
                         onChange={(event) =>
-                          updateForm({ ...form, sequenceNumber: event.target.value })
+                          updateForm({
+                            ...form,
+                            sequenceNumber: event.target.value,
+                          })
                         }
                         type="number"
                         value={form.sequenceNumber}
@@ -926,7 +1017,9 @@ export function ProjectWorkspaceTasks({
                   Title
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.core}
+                    disabled={
+                      dialogMode === "reassign" || !taskFieldAccess.core
+                    }
                     onChange={(event) =>
                       updateForm({ ...form, title: event.target.value })
                     }
@@ -939,7 +1032,9 @@ export function ProjectWorkspaceTasks({
                   Description
                   <textarea
                     className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.core}
+                    disabled={
+                      dialogMode === "reassign" || !taskFieldAccess.core
+                    }
                     onChange={(event) =>
                       updateForm({ ...form, description: event.target.value })
                     }
@@ -950,9 +1045,13 @@ export function ProjectWorkspaceTasks({
                 {!isPhaseForm(form) ? (
                   <>
                     <TaskAssigneeSelect
-                      disabled={dialogMode !== "create" && !taskFieldAccess.assignee}
+                      disabled={
+                        dialogMode !== "create" && !taskFieldAccess.assignee
+                      }
                       members={members}
-                      onChange={(assigneeId) => updateForm({ ...form, assigneeId })}
+                      onChange={(assigneeId) =>
+                        updateForm({ ...form, assigneeId })
+                      }
                       value={form.assigneeId}
                     />
 
@@ -971,7 +1070,10 @@ export function ProjectWorkspaceTasks({
                         Status
                         <select
                           className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                          disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                          disabled={
+                            dialogMode === "reassign" ||
+                            !taskFieldAccess.progress
+                          }
                           onChange={(event) =>
                             updateForm({
                               ...form,
@@ -993,7 +1095,9 @@ export function ProjectWorkspaceTasks({
                       Priority
                       <select
                         className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.core}
+                        disabled={
+                          dialogMode === "reassign" || !taskFieldAccess.core
+                        }
                         onChange={(event) =>
                           updateForm({ ...form, priority: event.target.value })
                         }
@@ -1015,9 +1119,17 @@ export function ProjectWorkspaceTasks({
                   Planned Start
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    disabled={
+                      dialogMode === "reassign" || !taskFieldAccess.planning
+                    }
                     onChange={(event) =>
-                      updateForm(syncMilestoneDates(form, "plannedStartDate", event.target.value))
+                      updateForm(
+                        syncMilestoneDates(
+                          form,
+                          "plannedStartDate",
+                          event.target.value,
+                        ),
+                      )
                     }
                     type="date"
                     value={form.plannedStartDate}
@@ -1028,9 +1140,17 @@ export function ProjectWorkspaceTasks({
                   Planned End
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.planning}
+                    disabled={
+                      dialogMode === "reassign" || !taskFieldAccess.planning
+                    }
                     onChange={(event) =>
-                      updateForm(syncMilestoneDates(form, "plannedEndDate", event.target.value))
+                      updateForm(
+                        syncMilestoneDates(
+                          form,
+                          "plannedEndDate",
+                          event.target.value,
+                        ),
+                      )
                     }
                     type="date"
                     value={form.plannedEndDate}
@@ -1043,9 +1163,14 @@ export function ProjectWorkspaceTasks({
                       Actual Start
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                        disabled={
+                          dialogMode === "reassign" || !taskFieldAccess.progress
+                        }
                         onChange={(event) =>
-                          updateForm({ ...form, actualStartDate: event.target.value })
+                          updateForm({
+                            ...form,
+                            actualStartDate: event.target.value,
+                          })
                         }
                         type="date"
                         value={form.actualStartDate}
@@ -1057,9 +1182,14 @@ export function ProjectWorkspaceTasks({
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
                         onChange={(event) =>
-                          updateForm({ ...form, actualEndDate: event.target.value })
+                          updateForm({
+                            ...form,
+                            actualEndDate: event.target.value,
+                          })
                         }
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                        disabled={
+                          dialogMode === "reassign" || !taskFieldAccess.progress
+                        }
                         type="date"
                         value={form.actualEndDate}
                       />
@@ -1069,10 +1199,15 @@ export function ProjectWorkspaceTasks({
                       Estimated Hours
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.effort}
+                        disabled={
+                          dialogMode === "reassign" || !taskFieldAccess.effort
+                        }
                         min={0}
                         onChange={(event) =>
-                          updateForm({ ...form, estimatedHours: event.target.value })
+                          updateForm({
+                            ...form,
+                            estimatedHours: event.target.value,
+                          })
                         }
                         step="0.25"
                         type="number"
@@ -1084,10 +1219,15 @@ export function ProjectWorkspaceTasks({
                       Remaining Hours
                       <input
                         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                        disabled={dialogMode === "reassign" || !taskFieldAccess.effort}
+                        disabled={
+                          dialogMode === "reassign" || !taskFieldAccess.effort
+                        }
                         min={0}
                         onChange={(event) =>
-                          updateForm({ ...form, remainingHours: event.target.value })
+                          updateForm({
+                            ...form,
+                            remainingHours: event.target.value,
+                          })
                         }
                         step="0.25"
                         type="number"
@@ -1100,11 +1240,17 @@ export function ProjectWorkspaceTasks({
                         Percent Complete
                         <input
                           className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                          disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                          disabled={
+                            dialogMode === "reassign" ||
+                            !taskFieldAccess.progress
+                          }
                           max={100}
                           min={0}
                           onChange={(event) =>
-                            updateForm({ ...form, percentComplete: event.target.value })
+                            updateForm({
+                              ...form,
+                              percentComplete: event.target.value,
+                            })
                           }
                           type="number"
                           value={form.percentComplete}
@@ -1118,7 +1264,9 @@ export function ProjectWorkspaceTasks({
                   Remarks
                   <textarea
                     className="mt-2 min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
-                    disabled={dialogMode === "reassign" || !taskFieldAccess.progress}
+                    disabled={
+                      dialogMode === "reassign" || !taskFieldAccess.progress
+                    }
                     onChange={(event) =>
                       updateForm({ ...form, remarks: event.target.value })
                     }
@@ -1681,7 +1829,9 @@ function buildTaskHierarchy(tasks: ApiTask[], expandedTaskIds: string[]) {
     tasksByParentId.set(parentTaskId, sortTasks(siblingTasks));
   }
 
-  const summaryTaskIds = tasks.filter((task) => task.taskKind === "summary").map((task) => task.id);
+  const summaryTaskIds = tasks
+    .filter((task) => task.taskKind === "summary")
+    .map((task) => task.id);
 
   function visit(parentTaskId: string | null, prefix: string, depth: number) {
     const siblingTasks = tasksByParentId.get(parentTaskId) ?? [];
@@ -1825,7 +1975,9 @@ function getParentOptions(
   }
 
   return sortTasks(tasks)
-    .filter((task) => task.taskKind === "summary" && !blockedTaskIds.has(task.id))
+    .filter(
+      (task) => task.taskKind === "summary" && !blockedTaskIds.has(task.id),
+    )
     .map((task) => ({
       id: task.id,
       label: `${wbsByTaskId.get(task.id) ?? "?"} ${task.title}`,
@@ -1862,17 +2014,23 @@ function createTaskForm(task: ApiTask): TaskFormState {
     assigneeId: task.assigneeId ?? "",
     description: task.description ?? "",
     estimatedHours:
-      typeof task.estimatedHours === "number" ? String(task.estimatedHours) : "",
+      typeof task.estimatedHours === "number"
+        ? String(task.estimatedHours)
+        : "",
     parentTaskId: task.parentTaskId ?? "",
     percentComplete: String(task.percentComplete ?? 0),
     plannedEndDate: task.plannedEndDate ?? "",
     plannedStartDate: task.plannedStartDate ?? "",
     priority: task.priority,
     remainingHours:
-      typeof task.remainingHours === "number" ? String(task.remainingHours) : "",
+      typeof task.remainingHours === "number"
+        ? String(task.remainingHours)
+        : "",
     remarks: task.remarks ?? "",
     sequenceNumber:
-      typeof task.sequenceNumber === "number" ? String(task.sequenceNumber) : "",
+      typeof task.sequenceNumber === "number"
+        ? String(task.sequenceNumber)
+        : "",
     status: task.status,
     taskKind: task.taskKind ?? "standard",
     title: task.title,
@@ -1903,7 +2061,10 @@ function createExecutionUpdateForm(task: ApiTask): ExecutionUpdateFormState {
     priority: task.priority,
     status: task.status,
     targetCompletionDate:
-      latestUpdate?.targetCompletionDate ?? task.dueDate ?? task.plannedEndDate ?? "",
+      latestUpdate?.targetCompletionDate ??
+      task.dueDate ??
+      task.plannedEndDate ??
+      "",
     updateNotes: "",
   };
 }
@@ -1955,8 +2116,10 @@ function syncMilestoneDates(
 
   return {
     ...currentForm,
-    plannedEndDate: fieldName === "plannedStartDate" ? nextValue : currentForm.plannedEndDate,
-    plannedStartDate: fieldName === "plannedEndDate" ? currentForm.plannedStartDate : nextValue,
+    plannedEndDate:
+      fieldName === "plannedStartDate" ? nextValue : currentForm.plannedEndDate,
+    plannedStartDate:
+      fieldName === "plannedEndDate" ? currentForm.plannedStartDate : nextValue,
     [fieldName]: nextValue,
   };
 }
@@ -1981,7 +2144,9 @@ function toTaskPayload(
 
   return {
     actualEndDate: isPhase ? undefined : toNullableString(form.actualEndDate),
-    actualStartDate: isPhase ? undefined : toNullableString(form.actualStartDate),
+    actualStartDate: isPhase
+      ? undefined
+      : toNullableString(form.actualStartDate),
     assigneeId: isPhase ? undefined : toNullableString(form.assigneeId),
     description: toNullableString(form.description),
     estimatedHours: isPhase ? undefined : toNullableNumber(form.estimatedHours),
@@ -2008,10 +2173,16 @@ function getUpdatePayloadForDialog(
     return { assigneeId: payload.assigneeId };
   }
 
-  if (!taskFieldAccess.core && !taskFieldAccess.planning && !taskFieldAccess.structure) {
+  if (
+    !taskFieldAccess.core &&
+    !taskFieldAccess.planning &&
+    !taskFieldAccess.structure
+  ) {
     return {
       assigneeId: taskFieldAccess.assignee ? payload.assigneeId : undefined,
-      percentComplete: taskFieldAccess.progress ? payload.percentComplete : undefined,
+      percentComplete: taskFieldAccess.progress
+        ? payload.percentComplete
+        : undefined,
       remarks: taskFieldAccess.progress ? payload.remarks : undefined,
       status: taskFieldAccess.progress ? payload.status : undefined,
     };
@@ -2091,8 +2262,8 @@ function getDisplayedStartDate(task?: ApiTask | null) {
   }
 
   return task.taskKind === "summary"
-    ? task.phaseStartDate ?? task.plannedStartDate ?? null
-    : task.plannedStartDate ?? null;
+    ? (task.phaseStartDate ?? task.plannedStartDate ?? null)
+    : (task.plannedStartDate ?? null);
 }
 
 function getDisplayedEndDate(task?: ApiTask | null) {
@@ -2101,8 +2272,8 @@ function getDisplayedEndDate(task?: ApiTask | null) {
   }
 
   return task.taskKind === "summary"
-    ? task.phaseEndDate ?? task.plannedEndDate ?? null
-    : task.plannedEndDate ?? null;
+    ? (task.phaseEndDate ?? task.plannedEndDate ?? null)
+    : (task.plannedEndDate ?? null);
 }
 
 function getDisplayedPercentComplete(task: ApiTask) {
@@ -2131,9 +2302,7 @@ function formatTaskStatus(task: ApiTask) {
   return "not started";
 }
 
-function getMilestoneState(
-  task: Pick<ApiTask, "percentComplete" | "status">,
-) {
+function getMilestoneState(task: Pick<ApiTask, "percentComplete" | "status">) {
   return task.status === "done" || Number(task.percentComplete ?? 0) >= 100
     ? "Reached"
     : "Pending";

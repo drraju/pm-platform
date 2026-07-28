@@ -7,7 +7,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   AuthorizationActor,
   AuthorizationPolicyService,
@@ -146,13 +146,14 @@ export class TasksService {
       return [];
     }
 
-    const tasks = await this.tasksRepository.find({
-      relations: { project: true, assignee: true },
-      where:
-        visibleProjectIds === 'all'
-          ? undefined
-          : { projectId: In(visibleProjectIds) },
-    });
+    const taskQuery = this.createVisibleTasksQuery();
+    if (visibleProjectIds !== 'all') {
+      taskQuery.where('task.project_id IN (:...projectIds)', {
+        projectIds: visibleProjectIds,
+      });
+    }
+
+    const tasks = await taskQuery.getMany();
     return this.attachLatestExecutionUpdates(decoratePlanningTasks(tasks));
   }
 
@@ -160,20 +161,29 @@ export class TasksService {
     userId: string,
     query: MyTasksQueryDto = {},
   ): Promise<Task[]> {
-    const tasks = await this.tasksRepository.find({
-      order: {
-        dueDate: 'ASC',
-        createdAt: 'DESC',
-      },
-      relations: { project: true, assignee: true },
-      where: {
-        assigneeId: userId,
-        taskKind: In([TaskKind.Standard, TaskKind.Milestone]),
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.projectId ? { projectId: query.projectId } : {}),
-        ...(query.priority ? { priority: query.priority } : {}),
-      },
-    });
+    const taskQuery = this.createVisibleTasksQuery()
+      .where('task.assignee_id = :userId', { userId })
+      .andWhere('task.task_kind IN (:...taskKinds)', {
+        taskKinds: [TaskKind.Standard, TaskKind.Milestone],
+      })
+      .orderBy('task.due_date', 'ASC')
+      .addOrderBy('task.created_at', 'DESC');
+
+    if (query.status) {
+      taskQuery.andWhere('task.status = :status', { status: query.status });
+    }
+    if (query.projectId) {
+      taskQuery.andWhere('task.project_id = :projectId', {
+        projectId: query.projectId,
+      });
+    }
+    if (query.priority) {
+      taskQuery.andWhere('task.priority = :priority', {
+        priority: query.priority,
+      });
+    }
+
+    const tasks = await taskQuery.getMany();
     return this.attachLatestExecutionUpdates(tasks);
   }
 
@@ -341,10 +351,12 @@ export class TasksService {
 
     const updates = await this.taskExecutionUpdatesRepository
       .createQueryBuilder('executionUpdate')
+      .distinctOn(['executionUpdate.taskId'])
       .where('executionUpdate.taskId IN (:...taskIds)', {
         taskIds: tasks.map((task) => task.id),
       })
-      .orderBy('executionUpdate.createdAt', 'DESC')
+      .orderBy('executionUpdate.taskId', 'ASC')
+      .addOrderBy('executionUpdate.createdAt', 'DESC')
       .getMany();
     const latestByTaskId = new Map<string, TaskExecutionUpdate>();
     for (const update of updates) {
@@ -375,6 +387,13 @@ export class TasksService {
     const date = value instanceof Date ? new Date(value) : new Date(value);
     date.setHours(0, 0, 0, 0);
     return date;
+  }
+
+  private createVisibleTasksQuery(): SelectQueryBuilder<Task> {
+    return this.tasksRepository
+      .createQueryBuilder('task')
+      .innerJoinAndSelect('task.project', 'project')
+      .leftJoinAndSelect('task.assignee', 'assignee');
   }
 
   private async ensureCanManageProject(
