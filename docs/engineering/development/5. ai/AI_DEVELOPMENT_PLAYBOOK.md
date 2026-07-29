@@ -147,6 +147,23 @@ This playbook focuses on how to execute those Stages well:
 
 For authoritative pass/fail completion rules, use `DEFINITION_OF_DONE.md`.
 
+### AI Architecture Validation
+
+AI Platform work must include automated architecture validation when it touches
+`backend/src/ai`.
+
+Run the focused AI validation set from `backend/`:
+
+```bash
+npx eslint "src/ai/**/*.ts"
+npm test -- --runTestsByPath src/ai/common/architecture/dependency-guardrails.spec.ts src/ai/common/registry/registry-conformance.spec.ts
+```
+
+The dependency guardrail test protects package direction, forbidden imports,
+and package-level circular dependencies. The registry conformance test protects
+shared registry behavior across Capability, Provider, Context, Prompt, Skill,
+and MCP registries.
+
 ## 4. Git Workflow
 
 Git is part of the engineering process, not an afterthought.

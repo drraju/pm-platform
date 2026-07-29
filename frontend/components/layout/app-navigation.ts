@@ -44,6 +44,12 @@ export const appNavigation: AppNavigationItem[] = [
     section: "Workspaces",
   },
   {
+    href: "/ai-playground",
+    label: "AI Playground",
+    permissions: ["user.manage"],
+    section: "Administration",
+  },
+  {
     href: "/tasks",
     label: "My Tasks",
     permissions: ["task.update", "task.comment"],

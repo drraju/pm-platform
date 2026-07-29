@@ -1501,3 +1501,100 @@ export function addRaidComment(itemId: string, input: { body: string }) {
     body: JSON.stringify(input),
   });
 }
+
+export type ApiAiPlaygroundRequest = {
+  actorId?: string;
+  capabilityId?: string;
+  conversationId?: string;
+  correlationId?: string;
+  input: unknown;
+  projectIds?: string[];
+  providerId?: string;
+  requestId?: string;
+  sessionId?: string;
+  tenantId?: string;
+  workspaceId?: string;
+};
+
+export type ApiAiPlaygroundHistoryItem = {
+  capability: string;
+  durationMs?: number;
+  executionId: string;
+  provider?: string;
+  request: string;
+  requestId: string;
+  status: string;
+};
+
+export type ApiAiPlaygroundRegistrySnapshot = Record<
+  | "capabilities"
+  | "conversations"
+  | "prompts"
+  | "providers"
+  | "sessions"
+  | "skills",
+  Array<Record<string, unknown>>
+>;
+
+export type ApiAiPlaygroundTrace = {
+  conversationId: string;
+  diagnostics: Record<string, unknown>;
+  eventBusEvents: Array<Record<string, unknown>>;
+  eventTimeline: Array<{
+    durationMs?: number;
+    eventName: string;
+    executionId: string;
+    timestamp: string;
+  }>;
+  executionId: string;
+  executionStates: Array<Record<string, unknown>>;
+  finalResult: Record<string, unknown>;
+  input: unknown;
+  pipelineStages: Array<Record<string, unknown>>;
+  registrySnapshot: ApiAiPlaygroundRegistrySnapshot;
+  request: ApiAiPlaygroundRequest;
+  requestId: string;
+  selectedCapability: string;
+  selectedContextMetadata: Array<Record<string, unknown>>;
+  selectedConversation: Record<string, unknown> | null;
+  selectedPrompt?: Record<string, unknown>;
+  selectedProvider?: Record<string, unknown>;
+  selectedSkill?: Record<string, unknown>;
+  timing: Record<string, unknown>;
+};
+
+export type ApiAiPlaygroundResponse = {
+  trace: ApiAiPlaygroundTrace;
+};
+
+export function executeAiPlaygroundRequest(input: ApiAiPlaygroundRequest) {
+  return apiRequest<ApiAiPlaygroundResponse>("/ai-playground/execute", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getAiPlaygroundHistory() {
+  return apiRequest<ApiAiPlaygroundHistoryItem[]>("/ai-playground/history");
+}
+
+export function getAiPlaygroundTrace(executionId: string) {
+  return apiRequest<ApiAiPlaygroundTrace>(
+    `/ai-playground/history/${executionId}`,
+  );
+}
+
+export function replayAiPlaygroundExecution(executionId: string) {
+  return apiRequest<ApiAiPlaygroundResponse>(
+    `/ai-playground/history/${executionId}/replay`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function getAiPlaygroundRegistries() {
+  return apiRequest<ApiAiPlaygroundRegistrySnapshot>(
+    "/ai-playground/registries",
+  );
+}
