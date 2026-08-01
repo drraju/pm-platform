@@ -243,10 +243,14 @@ export class UsersService {
     const user = await this.findUserEntity(id);
     const roleChanged =
       Boolean(updateUserDto.roleId) && updateUserDto.roleId !== user.roleId;
+    let updatedRole: Role | undefined;
     if (updateUserDto.roleId) {
-      await this.ensureCanonicalRole(updateUserDto.roleId);
+      updatedRole = await this.ensureCanonicalRole(updateUserDto.roleId);
     }
     Object.assign(user, updateUserDto);
+    if (updatedRole) {
+      user.role = updatedRole;
+    }
     user.accountHistory = [
       ...(user.accountHistory ?? []),
       this.createHistoryEntry(
@@ -260,7 +264,7 @@ export class UsersService {
       id,
       actor,
     );
-    return this.toUserResponse(savedUser);
+    return this.findOne(savedUser.id);
   }
 
   async enable(

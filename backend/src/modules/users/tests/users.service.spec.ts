@@ -147,6 +147,93 @@ describe('UsersService', () => {
     expect(JSON.stringify(result)).not.toContain('passwordHash');
   });
 
+  it.each([
+    {
+      fromName: UserRole.TeamMember,
+      fromRoleId: 'role-team-member',
+      toName: UserRole.ProjectManager,
+      toRoleId: 'role-project-manager',
+    },
+    {
+      fromName: UserRole.ProjectManager,
+      fromRoleId: 'role-project-manager',
+      toName: UserRole.PortfolioManager,
+      toRoleId: 'role-portfolio-manager',
+    },
+    {
+      fromName: UserRole.PlatformAdmin,
+      fromRoleId: 'role-platform-admin',
+      toName: UserRole.ProjectManager,
+      toRoleId: 'role-project-manager',
+    },
+  ])(
+    'persists role changes from $fromName to $toName',
+    async ({ fromName, fromRoleId, toName, toRoleId }) => {
+      const existingUser = {
+        id: 'user-1',
+        email: 'ava@example.com',
+        firstName: 'Ava',
+        lastName: 'Patel',
+        role: { id: fromRoleId, name: fromName },
+        roleId: fromRoleId,
+        status: 'active',
+        accountHistory: [],
+      } as User;
+      const updatedRole = { id: toRoleId, name: toName } as Role;
+      const reloadedUser = {
+        ...existingUser,
+        role: updatedRole,
+        roleId: toRoleId,
+      } as User;
+
+      usersRepository.findOne
+        ?.mockResolvedValueOnce(existingUser)
+        .mockResolvedValueOnce(reloadedUser);
+      rolesRepository.findOne?.mockResolvedValueOnce(updatedRole);
+
+      const result = await service.update('user-1', { roleId: toRoleId });
+
+      expect(usersRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountHistory: expect.arrayContaining([
+            expect.objectContaining({ action: 'RoleChanged' }),
+          ]),
+          id: 'user-1',
+          role: updatedRole,
+          roleId: toRoleId,
+        }),
+      );
+      expect(usersRepository.findOne).toHaveBeenLastCalledWith({
+        where: { id: 'user-1' },
+        relations: { role: { permissions: true } },
+      });
+      expect(result.roleId).toBe(toRoleId);
+      expect(result.role?.name).toBe(toName);
+    },
+  );
+
+  it('rejects unsupported role changes before saving', async () => {
+    usersRepository.findOne?.mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'ava@example.com',
+      firstName: 'Ava',
+      lastName: 'Patel',
+      role: { id: 'role-team-member', name: UserRole.TeamMember },
+      roleId: 'role-team-member',
+      status: 'active',
+      accountHistory: [],
+    });
+    rolesRepository.findOne?.mockResolvedValueOnce({
+      id: 'role-custom',
+      name: 'DELIVERY_LEAD',
+    });
+
+    await expect(
+      service.update('user-1', { roleId: 'role-custom' }),
+    ).rejects.toThrow('Role is not supported for user administration');
+    expect(usersRepository.save).not.toHaveBeenCalled();
+  });
+
   it('updates password hash and passwordChangedAt together', async () => {
     const passwordChangedAt = new Date('2026-07-26T10:00:00.000Z');
 
