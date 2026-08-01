@@ -72,6 +72,12 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
     ]);
   }
 
+  if (pathname.startsWith("/daily-review")) {
+    return createContext("Daily Review", "Project Manager standup console", [
+      { label: "Daily Review" },
+    ]);
+  }
+
   if (pathname.startsWith("/executive")) {
     return createContext("Intelligence", "Cross-project insight", [
       { label: "Intelligence" },

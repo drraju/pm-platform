@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import React from "react";
+import { getStoredPermissionKeys, hasAnyPermission } from "@/features/auth";
 
 export type ProjectWorkspaceTabId =
   | "overview"
   | "planning"
+  | "execution"
   | "tasks"
   | "resources"
   | "calendar"
@@ -25,6 +27,7 @@ function getProjectWorkspaceTabs(projectId: string): ProjectWorkspaceTab[] {
   return [
     { href: basePath, id: "overview", label: "Overview" },
     { href: `${basePath}/planning`, id: "planning", label: "Planning" },
+    { href: `${basePath}/execution`, id: "execution", label: "Execution" },
     { href: `${basePath}/tasks`, id: "tasks", label: "Tasks" },
     { href: `${basePath}/team`, id: "resources", label: "Resources" },
     { href: `${basePath}/reports`, id: "calendar", label: "Calendar" },
@@ -45,13 +48,24 @@ export function ProjectTabs({
   projectId,
   tabs = getProjectWorkspaceTabs(projectId),
 }: ProjectTabsProps) {
+  const permissionKeys = getStoredPermissionKeys();
+  const visibleTabs = tabs.filter((tab) =>
+    tab.id === "execution"
+      ? hasAnyPermission(permissionKeys, [
+          "portfolio.view",
+          "project.update",
+          "user.manage",
+        ])
+      : true,
+  );
+
   return (
     <nav
       aria-label="Project workspace"
       className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0"
     >
       <div className="flex min-w-max gap-1 border-b border-slate-200 md:min-w-0 md:flex-wrap">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const isActive = tab.id === activeTab;
 
           return (

@@ -1225,7 +1225,7 @@ describe("Project workspace components", () => {
       target: { value: "Customer asked for acceleration." },
     });
     fireEvent.click(
-      within(drawer).getByRole("button", { name: /save update/i }),
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
     );
 
     await waitFor(() => {
@@ -1278,7 +1278,7 @@ describe("Project workspace components", () => {
       target: { value: "25" },
     });
     fireEvent.click(
-      within(drawer).getByRole("button", { name: /save update/i }),
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
     );
     expect(
       await within(drawer).findByText("Todo tasks must stay at 0% progress."),
@@ -1288,7 +1288,7 @@ describe("Project workspace components", () => {
       target: { value: "in_progress" },
     });
     fireEvent.click(
-      within(drawer).getByRole("button", { name: /save update/i }),
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
     );
     expect(
       await within(drawer).findByText(
@@ -1303,7 +1303,7 @@ describe("Project workspace components", () => {
       target: { value: "100" },
     });
     fireEvent.click(
-      within(drawer).getByRole("button", { name: /save update/i }),
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
     );
     expect(
       await within(drawer).findByText(
@@ -1318,7 +1318,7 @@ describe("Project workspace components", () => {
       target: { value: "80" },
     });
     fireEvent.click(
-      within(drawer).getByRole("button", { name: /save update/i }),
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
     );
     expect(
       await within(drawer).findByText("Done tasks must be 100% complete."),
@@ -1326,7 +1326,7 @@ describe("Project workspace components", () => {
 
     fireEvent.click(within(drawer).getByLabelText(/blocked/i));
     fireEvent.click(
-      within(drawer).getByRole("button", { name: /save update/i }),
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
     );
     expect(
       await within(drawer).findByText(
@@ -1338,7 +1338,7 @@ describe("Project workspace components", () => {
       target: { value: "Waiting for credentials." },
     });
     fireEvent.click(
-      within(drawer).getByRole("button", { name: /save update/i }),
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
     );
     expect(
       await within(drawer).findByText(

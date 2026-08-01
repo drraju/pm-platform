@@ -87,8 +87,18 @@ type ProjectWorkspaceTasksProps = {
   onLoadExecutionHistory?: (
     taskId: string,
   ) => Promise<ApiTaskExecutionUpdate[]>;
+  onExecutionComplete?: (summary: {
+    blockedTasks: number;
+    escalations: number;
+    tasksReviewed: number;
+    tasksUpdated: number;
+  }) => void;
+  onExecutionTaskReviewed?: (taskId: string) => void;
   onUpdateTask?: (taskId: string, input: TaskOperationInput) => void;
   statusFilter?: "all" | ApiTask["status"];
+  executionTaskOrder?: (left: ApiTask, right: ApiTask) => number;
+  hideExecutionFilters?: boolean;
+  hideHeaderDescription?: boolean;
   tasks: ApiTask[];
 };
 
@@ -212,10 +222,15 @@ export function ProjectWorkspaceTasks({
   onDeleteDependency,
   onDeleteTask,
   onUpdateDependency,
+  onExecutionComplete,
+  onExecutionTaskReviewed,
   onLoadExecutionHistory,
   onRecordExecutionUpdate,
   onUpdateTask,
   statusFilter = "all",
+  executionTaskOrder,
+  hideExecutionFilters = false,
+  hideHeaderDescription = false,
   tasks,
 }: ProjectWorkspaceTasksProps) {
   const [dialogMode, setDialogMode] = React.useState<DialogMode | null>(null);
@@ -307,7 +322,11 @@ export function ProjectWorkspaceTasks({
 
     return matchesStatus && matchesAssignee && matchesPriority;
   });
-  const hierarchy = buildTaskHierarchy(visibleTasks, expandedTaskIds);
+  const hierarchy = buildTaskHierarchy(
+    visibleTasks,
+    expandedTaskIds,
+    executionTaskOrder,
+  );
 
   React.useEffect(() => {
     setExpandedTaskIds((currentExpandedTaskIds) => {
@@ -387,6 +406,7 @@ export function ProjectWorkspaceTasks({
 
     const reviewableTasks = getReviewableTasks(
       hierarchy.rows.map((row) => row.task),
+      executionTaskOrder,
     );
     const currentIndex = reviewableTasks.findIndex(
       (task) => task.id === executionTask.id,
@@ -486,8 +506,10 @@ export function ProjectWorkspaceTasks({
         executionTask.id,
         toExecutionUpdatePayload(executionForm),
       );
+      onExecutionTaskReviewed?.(executionTask.id);
       const reviewableTasks = getReviewableTasks(
         hierarchy.rows.map((row) => row.task),
+        executionTaskOrder,
       );
       const currentIndex = reviewableTasks.findIndex(
         (task) => task.id === executionTask.id,
@@ -496,6 +518,14 @@ export function ProjectWorkspaceTasks({
       if (nextTask) {
         await openExecutionUpdate(nextTask);
       } else {
+        onExecutionComplete?.({
+          blockedTasks: reviewableTasks.filter((task) => task.status === "blocked").length,
+          escalations: reviewableTasks.filter(
+            (task) => task.priority === "critical" && task.status !== "done",
+          ).length,
+          tasksReviewed: reviewableTasks.length,
+          tasksUpdated: reviewableTasks.length,
+        });
         closeExecutionUpdate();
       }
     } catch (requestError) {
@@ -522,6 +552,7 @@ export function ProjectWorkspaceTasks({
   });
   const reviewableTasks = getReviewableTasks(
     hierarchy.rows.map((row) => row.task),
+    executionTaskOrder,
   );
   const executionTaskIndex = executionTask
     ? reviewableTasks.findIndex((task) => task.id === executionTask.id)
@@ -561,7 +592,9 @@ export function ProjectWorkspaceTasks({
           </ActionGroup>
         }
         description={
-          isPlanningMode
+          hideHeaderDescription
+            ? undefined
+            : isPlanningMode
             ? "Hierarchical project planning with summaries, tasks, milestones, and calculated rollups."
             : "Review ownership, status, progress, priority, blockers, and next steps for daily execution."
         }
@@ -573,7 +606,7 @@ export function ProjectWorkspaceTasks({
         {inlineError ? (
           <ErrorState className="mb-3">{inlineError}</ErrorState>
         ) : null}
-        <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
+        {!hideExecutionFilters ? <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Assigned To
             <select
@@ -624,7 +657,7 @@ export function ProjectWorkspaceTasks({
               ))}
             </select>
           </label>
-        </div>
+        </div> : null}
         <table
           className={`divide-y divide-slate-200 text-sm ${
             isPlanningMode ? "min-w-[1580px]" : "min-w-[1320px]"
@@ -1805,7 +1838,12 @@ export function ProjectWorkspaceTasks({
                   disabled={isSaving}
                   type="submit"
                 >
-                  {isSaving ? "Saving..." : "Save update"}
+                  {isSaving
+                    ? "Saving..."
+                    : executionTaskIndex >= 0 &&
+                        executionTaskIndex < reviewableTasks.length - 1
+                      ? "Save & Next"
+                      : "Save & Finish"}
                 </button>
               </div>
             </form>
@@ -2153,7 +2191,11 @@ function ReadOnlyPlanningField({
   );
 }
 
-function buildTaskHierarchy(tasks: ApiTask[], expandedTaskIds: string[]) {
+function buildTaskHierarchy(
+  tasks: ApiTask[],
+  expandedTaskIds: string[],
+  executionTaskOrder?: (left: ApiTask, right: ApiTask) => number,
+) {
   const tasksByParentId = new Map<string | null, ApiTask[]>();
   const wbsByTaskId = new Map<string, string>();
   const rows: PlanRow[] = [];
@@ -2167,7 +2209,12 @@ function buildTaskHierarchy(tasks: ApiTask[], expandedTaskIds: string[]) {
   }
 
   for (const [parentTaskId, siblingTasks] of tasksByParentId.entries()) {
-    tasksByParentId.set(parentTaskId, sortTasks(siblingTasks));
+    tasksByParentId.set(
+      parentTaskId,
+      executionTaskOrder
+        ? [...siblingTasks].sort(executionTaskOrder)
+        : sortTasks(siblingTasks),
+    );
   }
 
   const summaryTaskIds = tasks
@@ -2224,8 +2271,14 @@ function sortTasks(tasks: ApiTask[]) {
   });
 }
 
-function getReviewableTasks(tasks: ApiTask[]) {
-  return tasks.filter((task) => task.taskKind !== "summary");
+function getReviewableTasks(
+  tasks: ApiTask[],
+  executionTaskOrder?: (left: ApiTask, right: ApiTask) => number,
+) {
+  const reviewableTasks = tasks.filter((task) => task.taskKind !== "summary");
+  return executionTaskOrder
+    ? [...reviewableTasks].sort(executionTaskOrder)
+    : reviewableTasks;
 }
 
 function getTaskFieldAccess({

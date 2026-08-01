@@ -8,6 +8,8 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectDocumentsPage from "@/app/(app)/projects/[id]/documents/page";
+import ProjectExecutionPage from "@/app/(app)/projects/[id]/execution/page";
+import DailyReviewPage from "@/app/(app)/daily-review/page";
 import ProjectsPage from "@/app/(app)/projects/page";
 import ProjectPlanningPage from "@/app/(app)/projects/[id]/planning/page";
 import ProjectRaidPage from "@/app/(app)/projects/[id]/raid/page";
@@ -110,8 +112,10 @@ const projectMocks = vi.hoisted(() => ({
     versionNumber: 1,
   })),
   getProjectBaselines: vi.fn(async () => []),
+  getProjectMembers: vi.fn(async () => []),
   getProjectTaskDependencies: vi.fn(async () => []),
   removeProjectMember: vi.fn(),
+  recordProjectTaskExecutionUpdate: vi.fn(),
   updateProject: vi.fn(),
   updateProjectTask: vi.fn(),
   updateProjectTaskDependency: vi.fn(),
@@ -150,6 +154,33 @@ const navigationMocks = vi.hoisted(() => ({
   }),
 }));
 
+const authMocks = vi.hoisted(() => ({
+  getAuthMe: vi.fn(async () => ({
+    permissions: [
+      { id: "permission-task-create", key: "task.create" },
+      { id: "permission-task-update", key: "task.update" },
+      { id: "permission-task-delete", key: "task.delete" },
+      { id: "permission-task-reassign", key: "task.reassign" },
+      { id: "permission-team-manage", key: "project.team.manage" },
+    ],
+    roles: [],
+    user: {
+      email: "project.manager@example.com",
+      firstName: "Project",
+      id: "user-1",
+      lastName: "Manager",
+      roleId: "role-1",
+      status: "active",
+    },
+  })),
+  storeAuthMe: vi.fn((authMe: { permissions: Array<{ key: string }> }) => {
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify(authMe.permissions.map((permission) => permission.key)),
+    );
+  }),
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     children,
@@ -176,30 +207,16 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/features/auth", () => ({
-  getAuthMe: vi.fn(async () => ({
-    permissions: [
-      { id: "permission-task-create", key: "task.create" },
-      { id: "permission-task-update", key: "task.update" },
-      { id: "permission-task-delete", key: "task.delete" },
-      { id: "permission-task-reassign", key: "task.reassign" },
-      { id: "permission-team-manage", key: "project.team.manage" },
-    ],
-    roles: [],
-    user: {
-      email: "project.manager@example.com",
-      firstName: "Project",
-      id: "user-1",
-      lastName: "Manager",
-      roleId: "role-1",
-      status: "active",
-    },
-  })),
+  getAuthMe: authMocks.getAuthMe,
   getStoredAccessToken: () => "test-token",
-  getStoredPermissionKeys: () => [],
+  getStoredPermissionKeys: () =>
+    JSON.parse(window.localStorage.getItem("pm_platform_permissions") ?? "[]"),
   getStoredSessionUser: () => null,
+  hasAnyPermission: (permissionKeys: string[], requiredPermissions: string[]) =>
+    requiredPermissions.some((permission) => permissionKeys.includes(permission)),
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
     permissionKeys.includes(requiredPermission),
-  storeAuthMe: vi.fn(),
+  storeAuthMe: authMocks.storeAuthMe,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -246,14 +263,20 @@ vi.mock("@/features/projects", () => ({
   getAssignableUsers: projectMocks.getAssignableUsers,
   getProjectBaseline: projectMocks.getProjectBaseline,
   getProjectBaselines: projectMocks.getProjectBaselines,
+  getProjectMembers: projectMocks.getProjectMembers,
   getProject: projectMocks.getProject,
   getProjectTaskDependencies: projectMocks.getProjectTaskDependencies,
   getProjects: projectMocks.getProjects,
   removeProjectMember: projectMocks.removeProjectMember,
+  recordProjectTaskExecutionUpdate: projectMocks.recordProjectTaskExecutionUpdate,
   updateProject: projectMocks.updateProject,
   updateProjectTask: projectMocks.updateProjectTask,
   updateProjectTaskDependency: projectMocks.updateProjectTaskDependency,
   updateProjectMember: projectMocks.updateProjectMember,
+}));
+
+vi.mock("@/features/tasks", () => ({
+  getTaskExecutionUpdates: vi.fn(async () => []),
 }));
 
 vi.mock("@/features/users", () => ({
@@ -265,7 +288,10 @@ describe("Projects List navigation", () => {
     navigationMocks.push.mockClear();
     projectMocks.getProject.mockClear();
     projectMocks.getProjects.mockClear();
+    projectMocks.recordProjectTaskExecutionUpdate.mockReset();
     planningMocks.getPlanningWorkspace.mockClear();
+    authMocks.getAuthMe.mockClear();
+    authMocks.storeAuthMe.mockClear();
   });
 
   it("announces project overview loading and error states", async () => {
@@ -351,6 +377,55 @@ describe("Projects List navigation", () => {
     expect(screen.queryByText("Team Summary")).not.toBeInTheDocument();
   });
 
+  it("opens the top-level Daily Review queue for project leadership", async () => {
+    window.history.pushState({}, "", "/daily-review");
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      permissions: [
+        { id: "permission-project-read", key: "project.read" },
+        { id: "permission-task-update", key: "task.update" },
+      ],
+      roles: [{ id: "role-project-manager", name: "PROJECT_MANAGER", permissions: [] }],
+      user: {
+        email: "project.manager@example.com",
+        firstName: "Project",
+        id: "user-1",
+        lastName: "Manager",
+        roleId: "role-project-manager",
+        status: "active",
+      },
+    });
+
+    render(<DailyReviewPage />);
+
+    expect(await screen.findByLabelText("Select project")).toHaveValue(
+      "project-123",
+    );
+    expect(await screen.findByText("Due Today")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search execution queue")).toBeInTheDocument();
+    expect(screen.getByLabelText("Review progress")).toHaveTextContent("0 / 1");
+    expect(
+      screen.getByRole("toolbar", { name: /daily review filters/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Build workspace navigation"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search execution queue"), {
+      target: { value: "does not exist" },
+    });
+    expect(
+      await screen.findByText("No tasks in this review queue"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search execution queue"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Blocked" })[0]);
+    expect(
+      await screen.findByText("No tasks in this review queue"),
+    ).toBeInTheDocument();
+  });
+
   it("renders Project Workspace tabs with the current tab highlighted", async () => {
     window.history.pushState({}, "", "/projects/project-123");
 
@@ -433,6 +508,133 @@ describe("Projects List navigation", () => {
       "aria-current",
       "page",
     );
+  });
+
+  it("loads the dedicated project Execution route for project leadership", async () => {
+    vi.setSystemTime(new Date("2026-08-01T09:00:00.000Z"));
+    window.history.pushState({}, "", "/projects/project-123/execution");
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      permissions: [
+        { id: "permission-project-update", key: "project.update" },
+        { id: "permission-task-update", key: "task.update" },
+        { id: "permission-task-reassign", key: "task.reassign" },
+      ],
+      roles: [{ id: "role-project-manager", name: "PROJECT_MANAGER" }],
+      user: {
+        email: "project.manager@example.com",
+        firstName: "Project",
+        id: "user-1",
+        lastName: "Manager",
+        roleId: "role-project-manager",
+        status: "active",
+      },
+    });
+    projectMocks.getProject.mockResolvedValueOnce({
+      id: "project-123",
+      members: [
+        {
+          id: "member-1",
+          projectId: "project-123",
+          role: "manager",
+          user: {
+            email: "project.manager@example.com",
+            firstName: "Project",
+            id: "user-1",
+            lastName: "Manager",
+            status: "active",
+          },
+          userId: "user-1",
+        },
+      ],
+      name: "Selected Project Workspace",
+      status: "active",
+      tasks: [
+        {
+          assigneeId: "user-1",
+          dueDate: "2026-08-01",
+          id: "task-today",
+          latestExecutionUpdate: {
+            id: "update-1",
+            percentComplete: 45,
+            priority: "high",
+            projectId: "project-123",
+            status: "in_progress",
+            taskId: "task-today",
+            updatedOn: "2026-08-01T08:15:00.000Z",
+          },
+          percentComplete: 45,
+          priority: "high",
+          projectId: "project-123",
+          status: "in_progress",
+          title: "Prepare standup notes",
+        },
+        {
+          assigneeId: "user-2",
+          dueDate: "2026-07-31",
+          id: "task-blocked",
+          percentComplete: 20,
+          priority: "critical",
+          projectId: "project-123",
+          status: "blocked",
+          title: "Resolve vendor blocker",
+        },
+        {
+          id: "summary-1",
+          priority: "medium",
+          projectId: "project-123",
+          status: "todo",
+          taskKind: "summary",
+          title: "Execution summary",
+        },
+      ],
+    });
+
+    render(<ProjectExecutionPage />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Selected Project Workspace",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Execution" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByText("Active Tasks")).toBeInTheDocument();
+    expect(await screen.findByText("Daily Standup")).toBeInTheDocument();
+    expect(screen.getByText("Prepare standup notes")).toBeInTheDocument();
+    expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Blocked" }));
+
+    expect(screen.queryByText("Prepare standup notes")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
+  });
+
+  it("does not expose the Execution workspace to Team Members", async () => {
+    window.history.pushState({}, "", "/projects/project-123/execution");
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      permissions: [{ id: "permission-task-update", key: "task.update" }],
+      roles: [{ id: "role-team-member", name: "TEAM_MEMBER" }],
+      user: {
+        email: "team.member@example.com",
+        firstName: "Team",
+        id: "user-2",
+        lastName: "Member",
+        roleId: "role-team-member",
+        status: "active",
+      },
+    });
+
+    render(<ProjectExecutionPage />);
+
+    expect(
+      await screen.findByText(
+        "Execution workspace is available to project leadership roles with task update access.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Daily Standup")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Execution" })).not.toBeInTheDocument();
   });
 
   it("loads the project RAID route", async () => {
