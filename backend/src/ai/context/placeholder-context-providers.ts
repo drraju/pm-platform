@@ -8,6 +8,10 @@ import {
   AiContextSensitivity,
   AiContextType,
 } from './context-provider.types';
+import {
+  EnterpriseContextFragment,
+  EnterpriseContextProviderRequest,
+} from './enterprise-context.types';
 
 type PlaceholderContextProviderOptions = {
   contextType: AiContextType;
@@ -74,6 +78,23 @@ abstract class PlaceholderContextProvider implements ContextProvider {
         },
       },
     ]);
+  }
+
+  assembleContext(
+    request: EnterpriseContextProviderRequest,
+  ): Promise<EnterpriseContextFragment | null> {
+    const descriptor = this.describeContextProvider();
+    const items = request.sourceData?.[descriptor.contextType];
+
+    return Promise.resolve(
+      items?.length
+        ? {
+            contextType: descriptor.contextType,
+            items,
+            providerId: descriptor.id,
+          }
+        : null,
+    );
   }
 
   private getDefaultResourceId(
@@ -200,6 +221,34 @@ export class WorkspaceContextProvider extends PlaceholderContextProvider {
       priority: 80,
       sensitivity: 'medium',
       supportedResources: ['workspace'],
+    });
+  }
+}
+
+@Injectable()
+export class ExecutionContextProvider extends PlaceholderContextProvider {
+  constructor() {
+    super({
+      contextType: 'execution',
+      id: 'execution-context',
+      name: 'Execution Context',
+      priority: 25,
+      sensitivity: 'medium',
+      supportedResources: ['execution', 'task', 'project'],
+    });
+  }
+}
+
+@Injectable()
+export class UserContextProvider extends PlaceholderContextProvider {
+  constructor() {
+    super({
+      contextType: 'user',
+      id: 'user-context',
+      name: 'User Context',
+      priority: 90,
+      sensitivity: 'high',
+      supportedResources: ['user', 'workspace'],
     });
   }
 }

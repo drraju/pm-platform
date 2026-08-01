@@ -1,5 +1,7 @@
 import type { AiErrorPayload, AiRequest } from '../common';
 import type { AiPipelineDiagnostics } from '../gateway/pipeline';
+import type { AiIntent } from '../skills';
+import type { StructuredAIResponse } from '../responses';
 
 export type AiExecutionEngineState =
   | 'Created'
@@ -71,13 +73,20 @@ export type AiExecutionPolicies = {
 };
 
 export type AiExecutionDiagnostics = {
+  completionStatus?: 'failed' | 'success';
+  contextItemCount?: number;
   contextProviderIds: readonly string[];
+  contextTokenEstimate?: number;
   eventNames: readonly string[];
   pipeline?: AiPipelineDiagnostics;
   policySummary: Readonly<Record<string, unknown>>;
+  promptTokenEstimate?: number;
   promptCandidateIds: readonly string[];
+  providerLatencyMs?: number;
   providerCandidateIds: readonly string[];
+  skillId?: string;
   skillCandidateIds: readonly string[];
+  intentId?: string;
   warnings: readonly string[];
 };
 
@@ -93,6 +102,14 @@ export type AiExecutionMockResponsePayload = {
   providerId: string;
 };
 
+export type AiExecutionStructuredResponse = StructuredAIResponse;
+
+export type AiExecutionAuthorizationInput = {
+  allowSensitiveContext?: boolean;
+  permissions?: readonly string[];
+  roles?: readonly string[];
+};
+
 export type AiExecutionResultStatus =
   | 'success'
   | 'failed'
@@ -104,19 +121,26 @@ export type AiExecutionResult = {
   errors: readonly AiErrorPayload[];
   executionId: string;
   mockResponse?: AiExecutionMockResponsePayload;
+  intent?: AiIntent;
   policies: AiExecutionPolicies;
   requestId: string;
   selectedContextMetadata: readonly Readonly<Record<string, unknown>>[];
   selectedPrompt?: Readonly<Record<string, unknown>>;
   selectedProvider?: Readonly<Record<string, unknown>>;
   selectedSkill?: Readonly<Record<string, unknown>>;
+  structuredResponse?: AiExecutionStructuredResponse;
   stateHistory: readonly AiExecutionTransition[];
   status: AiExecutionResultStatus;
   timing: AiExecutionTiming;
 };
 
 export type AiExecutionRequest = {
+  authorization?: AiExecutionAuthorizationInput;
   executionId?: string;
+  intent?: AiIntent;
   policies?: Partial<AiExecutionPolicies>;
+  preferredProviderId?: string;
   request: AiRequest;
+  responseFormat?: string;
+  skillId?: string;
 };

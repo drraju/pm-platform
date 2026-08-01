@@ -5,3 +5,5 @@ export * from './context-provider.types';
 export * from './permission-filtering.interface';
 export * from './placeholder-context-providers';
 export * from './token-budget.interface';
+export * from './enterprise-context-assembly.service';
+export * from './enterprise-context.types';

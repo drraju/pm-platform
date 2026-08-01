@@ -104,4 +104,74 @@ describe('AiExecutionEngineService', () => {
 
     await moduleRef.close();
   });
+
+  it('executes an explicit skill and returns provider-independent diagnostics', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AiModule],
+    }).compile();
+    const engine = moduleRef.get(AiExecutionEngineService);
+
+    const result = await engine.execute({
+      intent: { id: 'PROJECT_SUMMARY', skillId: 'project-delivery-assistant' },
+      request: {
+        capabilityId: 'chat',
+        correlationId: 'corr-explicit',
+        input: 'Summarize the project.',
+        requestId: 'req-explicit',
+        responseMode: 'sync',
+        scope: { workspaceId: 'workspace-1' },
+      },
+      authorization: {
+        permissions: ['project.read'],
+      },
+      preferredProviderId: 'mock',
+      responseFormat: 'markdown',
+      skillId: 'project-delivery-assistant',
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.intent).toEqual({
+      id: 'PROJECT_SUMMARY',
+      skillId: 'project-delivery-assistant',
+    });
+    expect(result.structuredResponse).toMatchObject({
+      metadata: { providerId: 'mock' },
+      summary: { title: 'AI Response' },
+    });
+    expect(result.diagnostics).toMatchObject({
+      completionStatus: 'success',
+      intentId: 'PROJECT_SUMMARY',
+      skillId: 'project-delivery-assistant',
+    });
+
+    await moduleRef.close();
+  });
+
+  it('returns a standardized authorization error before provider execution', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AiModule],
+    }).compile();
+    const engine = moduleRef.get(AiExecutionEngineService);
+
+    const result = await engine.execute({
+      authorization: { permissions: [] },
+      request: {
+        capabilityId: 'chat',
+        correlationId: 'corr-unauthorized',
+        input: 'Summarize the project.',
+        requestId: 'req-unauthorized',
+        responseMode: 'sync',
+        scope: { workspaceId: 'workspace-1' },
+      },
+      skillId: 'project-delivery-assistant',
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.errors[0]).toMatchObject({
+      code: 'AI_SKILL_UNAUTHORIZED',
+      category: 'authorization',
+    });
+
+    await moduleRef.close();
+  });
 });

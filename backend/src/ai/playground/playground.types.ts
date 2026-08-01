@@ -22,6 +22,7 @@ export type PlaygroundRegistrySnapshot = {
   prompts: readonly Readonly<Record<string, unknown>>[];
   sessions: readonly Readonly<Record<string, unknown>>[];
   skills: readonly Readonly<Record<string, unknown>>[];
+  enterpriseCapabilities?: readonly Readonly<Record<string, unknown>>[];
 };
 
 export type PlaygroundEventTimelineEntry = {

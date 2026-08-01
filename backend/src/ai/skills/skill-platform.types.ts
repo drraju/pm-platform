@@ -1,4 +1,5 @@
 import type { ContextType, PromptCategory, ProviderFeature } from '../common';
+import type { PromptResponseFormat } from '../prompts';
 
 export type AiSkillCategory =
   | 'project-delivery'
@@ -27,6 +28,17 @@ export type AiSkillSecurityClassification =
 export type AiProviderFeature = ProviderFeature;
 
 export type AiSkillDependencyRequiredness = 'required' | 'optional';
+
+export type AiSkillAuthorizationRules = {
+  allowSensitiveContext: boolean;
+  allowedRoles?: readonly string[];
+  requiredPermissions: readonly string[];
+};
+
+export type AiSkillContextRequirements = {
+  optional: readonly ContextType[];
+  required: readonly ContextType[];
+};
 
 export type AiSkillDependencyMetadata = {
   capabilities: readonly {
@@ -57,18 +69,22 @@ export type AiSkillDependencyMetadata = {
 };
 
 export type AiSkillMetadata = {
+  authorizationRules: AiSkillAuthorizationRules;
   category: AiSkillCategory;
+  contextRequirements: AiSkillContextRequirements;
   description: string;
   dependencies: AiSkillDependencyMetadata;
   id: string;
   lifecycleStatus: AiSkillLifecycleStatus;
   name: string;
+  displayName: string;
   owner: string;
   priority: number;
   requiredCapabilities: readonly string[];
   requiredPromptCategories: readonly PromptCategory[];
   requiredProviderFeatures: readonly AiProviderFeature[];
   securityClassification: AiSkillSecurityClassification;
+  supportedResponseFormats: readonly PromptResponseFormat[];
   supportedContextTypes: readonly ContextType[];
   version: string;
 };

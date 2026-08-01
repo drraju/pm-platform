@@ -1,9 +1,11 @@
 export type ContextType =
+  | 'execution'
   | 'project'
   | 'task'
   | 'document'
   | 'raid'
   | 'team'
+  | 'user'
   | 'calendar'
   | 'portfolio'
   | 'workspace';

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ContextType } from '../common';
 import { AiSkillRegistryService } from './ai-skill-registry.service';
 import {
   AiSkillMetadata,
@@ -50,12 +51,25 @@ export class AiSkillResolutionService {
     request: AiSkillResolutionRequest,
   ): boolean {
     return (
-      this.matchesAll(request.contextTypes, skill.supportedContextTypes) &&
+      this.matchesRequiredContext(skill, request.contextTypes) &&
       this.matchesAll(
         request.promptCategories,
         skill.requiredPromptCategories,
       ) &&
       this.matchesAll(request.providerFeatures, skill.requiredProviderFeatures)
+    );
+  }
+
+  private matchesRequiredContext(
+    skill: AiSkillMetadata,
+    availableContextTypes: readonly ContextType[] | undefined,
+  ): boolean {
+    if (!availableContextTypes?.length) {
+      return true;
+    }
+
+    return skill.contextRequirements.required.every((contextType) =>
+      availableContextTypes.includes(contextType),
     );
   }
 

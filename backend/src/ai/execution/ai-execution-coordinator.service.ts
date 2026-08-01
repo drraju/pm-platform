@@ -15,8 +15,15 @@ import {
   AiProviderRegistryService,
   AiProviderRoutingService,
 } from '../providers';
-import { AiPromptResolutionEngineService } from '../prompts';
-import { AiSkillResolutionService } from '../skills';
+import { AiResponseNormalizationService } from '../responses';
+import {
+  AiPromptResolutionEngineService,
+  PromptCompositionService,
+} from '../prompts';
+import {
+  AiSkillRegistryService,
+  AiSkillResolutionService,
+} from '../skills';
 import { AiExecutionStateMachineService } from './ai-execution-state-machine.service';
 import {
   AiExecutionDiagnostics,
@@ -35,9 +42,12 @@ export class AiExecutionCoordinator {
     private readonly pipelineEngine: AiPipelineEngineService,
     private readonly contextRegistry: AiContextRegistryService,
     private readonly promptResolution: AiPromptResolutionEngineService,
+    private readonly promptComposition: PromptCompositionService,
+    private readonly skillRegistry: AiSkillRegistryService,
     private readonly skillResolution: AiSkillResolutionService,
     private readonly providerRouting: AiProviderRoutingService,
     private readonly providerRegistry: AiProviderRegistryService,
+    private readonly responseNormalization: AiResponseNormalizationService,
     private readonly stateMachine: AiExecutionStateMachineService,
   ) {}
 
@@ -68,6 +78,7 @@ export class AiExecutionCoordinator {
       promptCandidateIds: [],
       providerCandidateIds: [],
       skillCandidateIds: [],
+      completionStatus: undefined,
       warnings: [],
     };
 
@@ -129,6 +140,9 @@ export class AiExecutionCoordinator {
       diagnostics.contextProviderIds = contextProviders.map(
         (provider) => provider.id,
       );
+      diagnostics.contextItemCount = this.countEnterpriseContextItems(
+        pipelineResult.context.promptMetadata.enterpriseContext,
+      );
       snapshot = await this.transition(
         snapshot,
         'ContextResolved',
@@ -164,8 +178,57 @@ export class AiExecutionCoordinator {
           ? [promptResult.prompt.category]
           : [],
         providerFeatures: ['chat'],
+        skillId: input.skillId ?? input.intent?.skillId,
       });
       diagnostics.skillCandidateIds = skillResult.diagnostics.candidateSkillIds;
+      diagnostics.skillId = skillResult.skill?.id;
+      diagnostics.intentId = input.intent?.id;
+
+      if (!skillResult.skill) {
+        throw new AiPlatformError({
+          category: 'validation',
+          code: 'AI_SKILL_NOT_FOUND',
+          correlationId: input.request.correlationId,
+          message: 'The requested AI skill could not be resolved.',
+          retryable: false,
+          safeDetail: input.skillId ?? input.intent?.skillId,
+        });
+      }
+
+      const contextValidation = this.skillRegistry.validateContextRequirements(
+        skillResult.skill.id,
+        contextTypes,
+      );
+      if (!contextValidation.valid) {
+        throw new AiPlatformError({
+          category: 'context',
+          code: 'AI_CONTEXT_UNAVAILABLE',
+          correlationId: input.request.correlationId,
+          message: 'Required enterprise context is unavailable for the skill.',
+          retryable: false,
+          safeDetail: contextValidation.errors.join('; '),
+        });
+      }
+
+      if (input.authorization) {
+        const authorizationValidation = this.skillRegistry.validateAuthorization(
+          skillResult.skill.id,
+          input.authorization.permissions ?? [],
+          input.authorization.roles ?? [],
+          input.authorization.allowSensitiveContext ?? false,
+        );
+        if (!authorizationValidation.valid) {
+          throw new AiPlatformError({
+            category: 'authorization',
+            code: 'AI_SKILL_UNAUTHORIZED',
+            correlationId: input.request.correlationId,
+            message: 'The actor is not authorized to execute this AI skill.',
+            retryable: false,
+            safeDetail: authorizationValidation.errors.join('; '),
+          });
+        }
+      }
+
       snapshot = await this.transition(
         snapshot,
         'SkillResolved',
@@ -181,7 +244,9 @@ export class AiExecutionCoordinator {
       diagnostics.providerCandidateIds = routePolicy.priorityOrderedProviderIds;
       const requestedProviderId = this.readRequestedProviderId(input.request);
       const selectedProviderId =
-        requestedProviderId ?? routePolicy.priorityOrderedProviderIds[0];
+        input.preferredProviderId ??
+        requestedProviderId ??
+        routePolicy.priorityOrderedProviderIds[0];
       const provider = selectedProviderId
         ? this.providerRegistry.findProviderAdapterById(selectedProviderId)
         : null;
@@ -229,16 +294,23 @@ export class AiExecutionCoordinator {
         eventNames,
       );
 
-      const providerResult = await provider.execute(
-        this.toProviderExecutionRequest(
+      const composedRequest = this.toProviderExecutionRequest(
           input.request,
           executionId,
           selectedProviderMetadata.id,
           promptResult.prompt?.id,
           skillResult.skill?.id,
           diagnostics.contextProviderIds,
-        ),
-      );
+          pipelineResult.context.promptMetadata.enterpriseContext,
+          input.responseFormat,
+        );
+      diagnostics.promptTokenEstimate = composedRequest.promptTokenEstimate;
+      const providerStartedAt = Date.now();
+      const providerResult = await provider.execute(composedRequest.request);
+      diagnostics.providerLatencyMs = Date.now() - providerStartedAt;
+      this.validateProviderResponse(providerResult, input.request);
+      diagnostics.completionStatus = 'success';
+      const structuredResponse = this.responseNormalization.normalize(providerResult);
 
       snapshot = await this.transition(
         snapshot,
@@ -255,6 +327,7 @@ export class AiExecutionCoordinator {
           modelId: providerResult.modelId,
           providerId: providerResult.providerId,
         },
+        structuredResponse,
         selectedContextMetadata: contextProviders.map((providerMetadata) => ({
           contextType: providerMetadata.contextType,
           id: providerMetadata.id,
@@ -266,6 +339,7 @@ export class AiExecutionCoordinator {
         status: 'success',
       });
     } catch (error) {
+      diagnostics.completionStatus = 'failed';
       const payload = this.toErrorPayload(error, input.request);
       errors.push(payload);
       const terminalState =
@@ -397,17 +471,64 @@ export class AiExecutionCoordinator {
     promptId: string | undefined,
     skillId: string | undefined,
     contextMetadataIds: readonly string[],
-  ): AiProviderExecutionRequest {
+      enterpriseContext: unknown,
+    responseFormat?: string,
+  ): { promptTokenEstimate: number; request: AiProviderExecutionRequest } {
+    const promptComposition = this.promptComposition.compose({
+      capabilityId: request.capabilityId,
+      enterpriseContext: enterpriseContext as Parameters<PromptCompositionService['compose']>[0]['enterpriseContext'],
+      input: request.input,
+      responseFormat: responseFormat as Parameters<PromptCompositionService['compose']>[0]['responseFormat'],
+    });
     return {
+      promptTokenEstimate: promptComposition.diagnostics.tokenEstimate,
+      request: {
       capabilityId: request.capabilityId,
       contextMetadataIds,
       executionId,
-      input: request.input,
+      input: { originalInput: request.input, promptModel: promptComposition.prompt },
       promptId,
       providerId,
       requestId: request.requestId,
       skillId,
+      },
     };
+  }
+
+  private countEnterpriseContextItems(context: unknown): number {
+    if (!context || typeof context !== 'object') {
+      return 0;
+    }
+    return Object.values(context).reduce(
+      (count, value) => count + (Array.isArray(value) ? value.length : value ? 1 : 0),
+      0,
+    );
+  }
+
+  private validateProviderResponse(
+    response: {
+      content: string;
+      modelId: string;
+      providerId: string;
+    },
+    request: AiRequest,
+  ): void {
+    if (
+      !response ||
+      typeof response.content !== 'string' ||
+      response.content.length === 0 ||
+      !response.modelId ||
+      !response.providerId
+    ) {
+      throw new AiPlatformError({
+        category: 'provider',
+        code: 'AI_RESPONSE_VALIDATION_FAILED',
+        correlationId: request.correlationId,
+        message: 'The AI provider returned an invalid response.',
+        retryable: false,
+        safeDetail: 'Required provider response metadata is missing.',
+      });
+    }
   }
 
   private readRequestedProviderId(request: AiRequest): string | undefined {
@@ -486,6 +607,7 @@ export class AiExecutionCoordinator {
       }),
       errors: Object.freeze([...(result.errors ?? [])]),
       executionId: snapshot.executionId,
+      intent: input.intent,
       mockResponse: result.mockResponse,
       policies,
       requestId: input.request.requestId,
@@ -495,6 +617,7 @@ export class AiExecutionCoordinator {
       selectedPrompt: result.selectedPrompt,
       selectedProvider: result.selectedProvider,
       selectedSkill: result.selectedSkill,
+      structuredResponse: result.structuredResponse,
       stateHistory: snapshot.history,
       status: result.status,
       timing: Object.freeze({

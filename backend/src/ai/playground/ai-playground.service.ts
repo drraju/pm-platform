@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InternalAiAssistantService } from '../assistant';
-import { AiCapabilityRegistryService } from '../capabilities';
+import {
+  AiCapabilityRegistryService,
+  EnterpriseCapabilityRegistryService,
+} from '../capabilities';
 import { AIEventBusService } from '../common';
 import {
   ConversationRegistryService,
@@ -26,6 +29,7 @@ export class AiPlaygroundService {
   constructor(
     private readonly assistant: InternalAiAssistantService,
     private readonly capabilities: AiCapabilityRegistryService,
+    private readonly enterpriseCapabilities: EnterpriseCapabilityRegistryService,
     private readonly conversations: ConversationRegistryService,
     private readonly sessions: ConversationSessionRegistryService,
     private readonly prompts: AiPromptRegistryService,
@@ -104,6 +108,7 @@ export class AiPlaygroundService {
   inspectRegistries(): PlaygroundRegistrySnapshot {
     return this.freezeRegistrySnapshot({
       capabilities: this.capabilities.getCapabilities(),
+      enterpriseCapabilities: this.enterpriseCapabilities.getCapabilities(),
       conversations: this.conversations.getConversations(),
       providers: this.providers.getProviders(),
       prompts: this.prompts.getPrompts(),

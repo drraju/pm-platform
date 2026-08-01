@@ -9,7 +9,7 @@ export type AiPipelineStageName =
   | 'authorization_hook'
   | 'execution_context_enrichment'
   | 'capability_resolution'
-  | 'context_assembly_placeholder'
+  | 'context_assembly'
   | 'prompt_resolution_placeholder'
   | 'provider_dispatch_placeholder'
   | 'response_normalization'

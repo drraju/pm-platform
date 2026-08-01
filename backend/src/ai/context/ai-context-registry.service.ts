@@ -14,6 +14,10 @@ import {
   AiContextRequestedResource,
   AiContextSelectionRequest,
 } from './context-provider.types';
+import {
+  EnterpriseContextAssemblyRequest,
+  EnterpriseContextFragment,
+} from './enterprise-context.types';
 
 type AiContextRegistryMetadata = RegistryMetadata & {
   contextProviderId: string;
@@ -115,6 +119,31 @@ export class AiContextRegistryService extends BaseRegistry<AiContextRegistryEntr
     );
 
     return selections.filter((selection) => selection.metadata.length > 0);
+  }
+
+  async assembleContext(
+    request: EnterpriseContextAssemblyRequest,
+  ): Promise<
+    readonly {
+      fragment: EnterpriseContextFragment | null;
+      provider: AiContextProviderDescriptor;
+    }[]
+  > {
+    const candidateProviders = this.resolveCandidateProviders(request);
+    const selections = await Promise.all(
+      candidateProviders.map(async (provider) => ({
+        fragment: provider.assembleContext
+          ? await provider.assembleContext({
+              executionContext: request.executionContext,
+              scope: request.scope,
+              sourceData: request.sourceData,
+            })
+          : null,
+        provider: provider.describeContextProvider(),
+      })),
+    );
+
+    return selections;
   }
 
   private resolveCandidateProviders(

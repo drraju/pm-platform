@@ -5,10 +5,17 @@ import {
   NotFoundException,
   Param,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { AiPlaygroundService } from '../../ai';
+import {
+  AiPlaygroundService,
+  CapabilityExecutionRequest,
+  CapabilityExecutionService,
+  EnterpriseCapabilityRegistryService,
+} from '../../ai';
 import type {
   PlaygroundExecutionHistoryItem,
   PlaygroundExecutionTrace,
@@ -21,12 +28,58 @@ import { PermissionsGuard } from '../../common/authz/permissions.guard';
 import { RequirePermissions } from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+type CapabilityExecutionBody = {
+  contextSourceData?: unknown;
+  input: unknown;
+  projectIds?: readonly string[];
+  requestId?: string;
+  workspaceId?: string;
+};
+
+type AuthenticatedRequest = Request & {
+  user: { userId: string };
+};
+
 @ApiTags('ai-playground')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('ai-playground')
 export class AiPlaygroundController {
-  constructor(private readonly playground: AiPlaygroundService) {}
+  constructor(
+    private readonly playground: AiPlaygroundService,
+    private readonly enterpriseCapabilities: EnterpriseCapabilityRegistryService,
+    private readonly capabilityExecution: CapabilityExecutionService,
+  ) {}
+
+  @Get('capabilities')
+  @RequirePermissions(PermissionKey.UserManage)
+  @ApiOkResponse({ description: 'List available enterprise AI capabilities.' })
+  capabilities() {
+    return this.enterpriseCapabilities.getCapabilities();
+  }
+
+  @Post('capabilities/:capabilityId/execute')
+  @RequirePermissions(PermissionKey.ProjectRead)
+  @ApiOkResponse({ description: 'Execute an enterprise AI capability.' })
+  executeCapability(
+    @Param('capabilityId') capabilityId: string,
+    @Body() body: CapabilityExecutionBody,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const executionRequest: CapabilityExecutionRequest = {
+      actorId: request.user.userId,
+      capabilityId,
+      contextSourceData: body.contextSourceData,
+      correlationId: `${body.requestId ?? Date.now()}:correlation`,
+      input: body.input,
+      permissions: [PermissionKey.ProjectRead],
+      projectIds: body.projectIds,
+      requestId: body.requestId ?? `capability-${Date.now()}`,
+      roles: [],
+      workspaceId: body.workspaceId,
+    };
+    return this.capabilityExecution.execute(executionRequest);
+  }
 
   @Post('execute')
   @RequirePermissions(PermissionKey.UserManage)

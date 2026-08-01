@@ -4,11 +4,16 @@ import {
   AiCapabilityRegistryService,
   AiCapabilityRoutingService,
   builtInAiCapabilities,
+  builtInEnterpriseCapabilityDefinitions,
+  CapabilityExecutionService,
+  EnterpriseCapabilityRegistryService,
 } from './capabilities';
 import {
   AI_AUTHORIZATION_PROVIDER,
   AI_AUDIT_PROVIDER,
   AI_CAPABILITY_DEFINITIONS,
+  AI_ENTERPRISE_CAPABILITY_DEFINITIONS,
+  AI_EXECUTION_ENGINE,
   AI_CONVERSATION_DEFINITIONS,
   AI_CONTEXT_PROVIDERS,
   AI_GATEWAY,
@@ -43,15 +48,18 @@ import {
 } from './execution';
 import {
   AiContextAggregationService,
+  EnterpriseContextAssemblyService,
   AiContextRegistryService,
   CalendarContextProvider,
   ContextProvider,
   DocumentContextProvider,
+  ExecutionContextProvider,
   PortfolioContextProvider,
   ProjectContextProvider,
   RaidContextProvider,
   TaskContextProvider,
   TeamContextProvider,
+  UserContextProvider,
   WorkspaceContextProvider,
 } from './context';
 import { AiGatewayService } from './gateway';
@@ -60,7 +68,7 @@ import {
   AiAuthenticationHookStage,
   AiAuthorizationHookStage,
   AiCapabilityResolutionStage,
-  AiContextAssemblyPlaceholderStage,
+  AiContextAssemblyStage,
   AiExecutionContextEnrichmentStage,
   AiPipelineEngineService,
   AiPipelineStage,
@@ -93,8 +101,10 @@ import {
   OpenAIResponseMapper,
 } from './providers';
 import { AiPlaygroundService } from './playground';
+import { AiResponseNormalizationService } from './responses';
 import {
   AiPromptRegistryService,
+  PromptCompositionService,
   AiPromptResolutionEngineService,
   builtInPromptDefinitions,
 } from './prompts';
@@ -111,7 +121,7 @@ const pipelineStageProviders = [
   AiAuthorizationHookStage,
   AiExecutionContextEnrichmentStage,
   AiCapabilityResolutionStage,
-  AiContextAssemblyPlaceholderStage,
+  AiContextAssemblyStage,
   AiPromptResolutionPlaceholderStage,
   AiProviderDispatchPlaceholderStage,
   AiResponseNormalizationStage,
@@ -122,18 +132,25 @@ const pipelineStageProviders = [
 const contextProviderClasses = [
   ProjectContextProvider,
   TaskContextProvider,
+  ExecutionContextProvider,
   DocumentContextProvider,
   RaidContextProvider,
   TeamContextProvider,
   CalendarContextProvider,
   PortfolioContextProvider,
   WorkspaceContextProvider,
+  UserContextProvider,
 ];
 
 const placeholderProviders = [
   { provide: AI_AUTHORIZATION_PROVIDER, useValue: null },
   { provide: AI_AUDIT_PROVIDER, useValue: null },
   { provide: AI_CAPABILITY_DEFINITIONS, useValue: builtInAiCapabilities },
+  {
+    provide: AI_ENTERPRISE_CAPABILITY_DEFINITIONS,
+    useValue: builtInEnterpriseCapabilityDefinitions,
+  },
+  { provide: AI_EXECUTION_ENGINE, useExisting: AiExecutionEngineService },
   {
     provide: AI_CONVERSATION_DEFINITIONS,
     useValue: builtInConversationDefinitions,
@@ -179,6 +196,8 @@ const placeholderProviders = [
     AiGatewayService,
     AiCapabilityRegistryService,
     AiCapabilityRoutingService,
+    CapabilityExecutionService,
+    EnterpriseCapabilityRegistryService,
     ConversationPlannerService,
     ConversationRegistryService,
     ConversationSessionRegistryService,
@@ -186,6 +205,7 @@ const placeholderProviders = [
     AiExecutionEngineService,
     AiExecutionStateMachineService,
     AiContextAggregationService,
+    EnterpriseContextAssemblyService,
     AiContextRegistryService,
     AiPipelineEngineService,
     AiStageRegistryService,
@@ -198,7 +218,9 @@ const placeholderProviders = [
     OpenAIRequestMapper,
     OpenAIResponseMapper,
     AiPlaygroundService,
+    AiResponseNormalizationService,
     AiPromptRegistryService,
+    PromptCompositionService,
     AiPromptResolutionEngineService,
     AiSkillDependencyGraphService,
     AiSkillRegistryService,
@@ -224,6 +246,8 @@ const placeholderProviders = [
     AiGatewayService,
     AiCapabilityRegistryService,
     AiCapabilityRoutingService,
+    CapabilityExecutionService,
+    EnterpriseCapabilityRegistryService,
     ConversationPlannerService,
     ConversationRegistryService,
     ConversationSessionRegistryService,
@@ -231,6 +255,7 @@ const placeholderProviders = [
     AiExecutionEngineService,
     AiExecutionStateMachineService,
     AiContextAggregationService,
+    EnterpriseContextAssemblyService,
     AiContextRegistryService,
     AiPipelineEngineService,
     AiStageRegistryService,
@@ -243,7 +268,9 @@ const placeholderProviders = [
     OpenAIRequestMapper,
     OpenAIResponseMapper,
     AiPlaygroundService,
+    AiResponseNormalizationService,
     AiPromptRegistryService,
+    PromptCompositionService,
     AiPromptResolutionEngineService,
     AiSkillDependencyGraphService,
     AiSkillRegistryService,

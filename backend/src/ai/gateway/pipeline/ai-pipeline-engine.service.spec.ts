@@ -45,12 +45,14 @@ describe('AiPipelineEngineService', () => {
     expect(result.context.contextReferences).toEqual([
       'project-context:project:project-1',
       'task-context:task:metadata',
+      'execution-context:execution:metadata',
       'document-context:document:metadata',
       'raid-context:raid:metadata',
       'team-context:team:metadata',
       'calendar-context:calendar:metadata',
       'portfolio-context:portfolio:metadata',
       'workspace-context:workspace:workspace-1',
+      'user-context:user:metadata',
     ]);
     expect(result.context.promptMetadata).toMatchObject({
       promptId: 'assistant-chat-foundation',
@@ -62,7 +64,7 @@ describe('AiPipelineEngineService', () => {
       'authorization_hook',
       'execution_context_enrichment',
       'capability_resolution',
-      'context_assembly_placeholder',
+      'context_assembly',
       'prompt_resolution_placeholder',
       'provider_dispatch_placeholder',
       'response_normalization',

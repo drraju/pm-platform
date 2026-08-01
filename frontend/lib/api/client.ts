@@ -7,6 +7,41 @@ export type ApiRole = {
   permissions?: ApiPermission[];
 };
 
+export type ApiEnterpriseCapability = {
+  allowedRoles: string[];
+  category: string;
+  description: string;
+  displayName: string;
+  executionCapabilityId: string;
+  icon: string;
+  id: string;
+  permissions: string[];
+  requiredContext: string[];
+  responseType: string;
+  supportedSkills: string[];
+  version: string;
+  visibility: string;
+};
+
+export type ApiStructuredAIResponse = {
+  actionItems?: Array<Record<string, unknown>>;
+  confidence?: string;
+  diagnostics?: Record<string, unknown>;
+  findings?: Array<Record<string, unknown>>;
+  metadata?: Record<string, unknown>;
+  opportunities?: string[];
+  rawContent?: string;
+  recommendations?: Array<Record<string, unknown>>;
+  risks?: Array<Record<string, unknown>>;
+  summary?: { businessImpact?: string; overview: string; title: string };
+  warnings?: string[];
+};
+
+export type ApiCapabilityExecutionResult = {
+  status: string;
+  structuredResponse?: ApiStructuredAIResponse;
+};
+
 export type ApiPermission = {
   id: string;
   key: string;
@@ -670,6 +705,26 @@ export async function apiRequest<T>(
   }
 
   return JSON.parse(responseText) as T;
+}
+
+export function getAiEnterpriseCapabilities() {
+  return apiRequest<ApiEnterpriseCapability[]>('/ai-playground/capabilities');
+}
+
+export function executeAiEnterpriseCapability(
+  capabilityId: string,
+  input: {
+    contextSourceData?: unknown;
+    input: unknown;
+    projectIds?: readonly string[];
+    requestId?: string;
+    workspaceId?: string;
+  },
+) {
+  return apiRequest<ApiCapabilityExecutionResult>(
+    `/ai-playground/capabilities/${capabilityId}/execute`,
+    { body: JSON.stringify(input), method: 'POST' },
+  );
 }
 
 export function login(email: string, password: string) {
@@ -1532,7 +1587,8 @@ export type ApiAiPlaygroundRegistrySnapshot = Record<
   | "prompts"
   | "providers"
   | "sessions"
-  | "skills",
+  | "skills"
+  | "enterpriseCapabilities",
   Array<Record<string, unknown>>
 >;
 

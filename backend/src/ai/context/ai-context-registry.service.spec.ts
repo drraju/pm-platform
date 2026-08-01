@@ -44,15 +44,17 @@ describe('AiContextRegistryService', () => {
     expect(registry.getProviders().map((provider) => provider.id)).toEqual([
       'project-context',
       'task-context',
+      'execution-context',
       'document-context',
       'raid-context',
       'team-context',
       'calendar-context',
       'portfolio-context',
       'workspace-context',
+      'user-context',
     ]);
     expect(registry.getDiagnostics()).toMatchObject({
-      providerCount: 8,
+      providerCount: 10,
     });
 
     await moduleRef.close();
@@ -88,6 +90,7 @@ describe('AiContextRegistryService', () => {
     expect(selections.map((selection) => selection.provider.id)).toEqual([
       'project-context',
       'task-context',
+      'execution-context',
       'document-context',
       'raid-context',
       'team-context',
@@ -116,7 +119,7 @@ describe('AiContextRegistryService', () => {
       scope: createExecutionContext().scope,
     });
 
-    expect(result.metadata).toHaveLength(8);
+    expect(result.metadata).toHaveLength(10);
     expect(
       result.metadata.every((metadata) => metadata.estimatedTokenSize === 0),
     ).toBe(true);

@@ -2,6 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/foundation";
+import {
+  executeAiEnterpriseCapability,
+  type ApiStructuredAIResponse,
+} from "@/lib/api/client";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 import { WorkspaceContent } from "@/components/foundation/layout/WorkspaceContent";
 import { WorkspaceSection } from "@/components/foundation/layout/WorkspaceSection";
@@ -75,6 +79,9 @@ export default function DailyReviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProjectLoading, setIsProjectLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [aiReview, setAiReview] = useState<ApiStructuredAIResponse | null>(null);
+  const [isAiReviewLoading, setIsAiReviewLoading] = useState(false);
+  const [aiReviewError, setAiReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -212,6 +219,27 @@ export default function DailyReviewPage() {
     }
   }
 
+  async function handleAiDailyReview() {
+    if (!project) return;
+    const requestId = `daily-review-ai-${Date.now()}`;
+    setIsAiReviewLoading(true);
+    setAiReviewError(null);
+    try {
+      const result = await executeAiEnterpriseCapability("daily-review-assistant", {
+        input: `Prepare the daily review for ${project.name}. Analyze execution status, blocked work, deadlines, ownership, RAID indicators, and project health.`,
+        projectIds: [project.id],
+        requestId,
+        workspaceId: "daily-review",
+        contextSourceData: buildDailyReviewContext(project, members, currentUserId),
+      });
+      setAiReview(result.structuredResponse ?? null);
+    } catch (requestError) {
+      setAiReviewError(getErrorMessage(requestError, "Unable to prepare AI Daily Review"));
+    } finally {
+      setIsAiReviewLoading(false);
+    }
+  }
+
   if (isLoading) return <LoadingState label="Loading Daily Review" rows={5} />;
 
   if (!canAccess) {
@@ -245,6 +273,14 @@ export default function DailyReviewPage() {
               <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
             ))}
           </select>
+          <button
+            className="inline-flex h-10 items-center justify-center rounded-md bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!project || isProjectLoading || isAiReviewLoading}
+            onClick={handleAiDailyReview}
+            type="button"
+          >
+            {isAiReviewLoading ? "Preparing AI Review..." : "AI Daily Review"}
+          </button>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm lg:min-w-52">
             <div><dt className="text-xs text-slate-500">Sprint</dt><dd className="font-semibold text-slate-800">Not assigned</dd></div>
             <div><dt className="text-xs text-slate-500">Active tasks</dt><dd className="font-semibold text-slate-800">{projectTaskCount}</dd></div>
@@ -258,6 +294,8 @@ export default function DailyReviewPage() {
 
       {!isProjectLoading && !areMembersLoading && project ? (
         <>
+          {aiReviewError ? <ErrorState message={aiReviewError} /> : null}
+          {aiReview ? <DailyReviewAiPanel response={aiReview} /> : null}
           <WorkspaceSection className="sticky top-0 z-20 space-y-3 border-y border-slate-200 bg-surface/95 py-3 backdrop-blur" surface="plain" padding="none">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <label className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -349,6 +387,55 @@ export default function DailyReviewPage() {
       ) : null}
     </WorkspaceContent>
   );
+}
+
+function DailyReviewAiPanel({ response }: { response: ApiStructuredAIResponse }) {
+  return (
+    <WorkspaceSection className="space-y-4" surface="card">
+      <div className="flex flex-col gap-1 border-b border-slate-200 pb-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand">AI Daily Review</p>
+          <h2 className="mt-1 text-xl font-semibold text-slate-950">{response.summary?.title ?? "Daily execution review"}</h2>
+          <p className="mt-1 text-sm text-slate-600">{response.summary?.overview ?? "No structured summary was returned."}</p>
+        </div>
+        {response.confidence ? <span className="text-xs font-semibold uppercase text-slate-500">Confidence: {response.confidence}</span> : null}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReviewList title="Key Findings" items={response.findings} fields={["title", "description"]} />
+        <ReviewList title="Risks" items={response.risks} fields={["title", "description"]} />
+        <ReviewList title="Recommendations" items={response.recommendations} fields={["title", "description"]} />
+        <ReviewList title="Action Items" items={response.actionItems} fields={["owner", "description"]} />
+      </div>
+      {response.warnings?.length ? <ReviewStrings title="Warnings" items={response.warnings} /> : null}
+      {response.opportunities?.length ? <ReviewStrings title="Opportunities" items={response.opportunities} /> : null}
+    </WorkspaceSection>
+  );
+}
+
+function ReviewList({ title, items, fields }: { title: string; items?: Array<Record<string, unknown>>; fields: string[] }) {
+  if (!items?.length) return null;
+  return <section><h3 className="text-sm font-semibold text-slate-900">{title}</h3><ul className="mt-2 space-y-2">{items.map((item, index) => <li className="rounded-md border border-slate-200 bg-white p-3 text-sm" key={`${title}-${index}`}><strong>{readReviewValue(item, fields[0])}</strong>{readReviewValue(item, fields[1]) ? <p className="mt-1 text-slate-600">{readReviewValue(item, fields[1])}</p> : null}</li>)}</ul></section>;
+}
+
+function ReviewStrings({ title, items }: { title: string; items: string[] }) {
+  return <section><h3 className="text-sm font-semibold text-slate-900">{title}</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600">{items.map((item) => <li key={item}>{item}</li>)}</ul></section>;
+}
+
+function readReviewValue(item: Record<string, unknown>, key: string) {
+  return typeof item[key] === "string" ? item[key] as string : "";
+}
+
+function buildDailyReviewContext(project: ApiProjectDetails, members: ApiProjectDetails["members"], currentUserId: string | null) {
+  const tasks = project.tasks ?? [];
+  return {
+    execution: tasks.flatMap((task) => task.latestExecutionUpdate ? [task.latestExecutionUpdate] : []),
+    project: [{ description: project.description, id: project.id, name: project.name, status: project.status }],
+    raid: [...(project.risks ?? []), ...(project.issues ?? [])],
+    task: tasks.map((task) => ({ assigneeId: task.assigneeId, dueDate: task.dueDate ?? task.plannedEndDate, id: task.id, percentComplete: task.percentComplete, priority: task.priority, projectId: project.id, status: task.status, title: task.title })),
+    team: (members ?? []).map((member) => ({ id: member.id, projectId: project.id, role: member.role, userId: member.userId })),
+    user: currentUserId ? [{ id: currentUserId }] : [],
+    workspace: [{ currentFilters: { projectId: project.id }, currentPage: "daily-review", id: "daily-review", name: "Daily Review" }],
+  };
 }
 
 function CompletionMetric({ label, value }: { label: string; value: number }) {

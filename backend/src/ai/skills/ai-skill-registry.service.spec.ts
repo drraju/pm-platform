@@ -22,12 +22,13 @@ describe('AiSkillRegistryService', () => {
     const registry = moduleRef.get(AiSkillRegistryService);
 
     expect(registry.getSkills().map((skill) => skill.id)).toEqual([
+      'daily-review-analysis',
       'project-delivery-assistant',
       'raid-analysis-assistant',
       'portfolio-status-assistant',
     ]);
     expect(registry.getDiagnostics()).toMatchObject({
-      skillCount: 3,
+      skillCount: 4,
     });
 
     await moduleRef.close();
@@ -39,7 +40,9 @@ describe('AiSkillRegistryService', () => {
     const registry = moduleRef.get(AiSkillRegistryService);
 
     expect(registry.findSkillById('project-delivery-assistant')).not.toBeNull();
-    expect(registry.findSkillsByCapability('chat')).toEqual([]);
+    expect(registry.findSkillsByCapability('chat')).not.toContainEqual(
+      expect.objectContaining({ id: 'project-delivery-assistant' }),
+    );
     expect(registry.getDiagnostics().disabledSkillIds).toContain(
       'project-delivery-assistant',
     );
@@ -78,6 +81,7 @@ describe('AiSkillRegistryService', () => {
     const graph = graphService.buildGraph();
 
     expect(graph.nodes.map((node) => node.skillId)).toEqual([
+      'daily-review-analysis',
       'project-delivery-assistant',
       'raid-analysis-assistant',
       'portfolio-status-assistant',

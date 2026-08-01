@@ -26,6 +26,7 @@ const executionStates = [
 
 const fallbackRegistries: ApiAiPlaygroundRegistrySnapshot = {
   capabilities: [{ id: "chat", name: "Chat" }],
+  enterpriseCapabilities: [],
   conversations: [
     {
       id: "internal-assistant-conversation",

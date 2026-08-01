@@ -2,6 +2,7 @@ export * from './audit.stage';
 export * from './authentication-hook.stage';
 export * from './authorization-hook.stage';
 export * from './capability-resolution.stage';
+export * from './context-assembly.stage';
 export * from './context-assembly-placeholder.stage';
 export * from './execution-context-enrichment.stage';
 export * from './placeholder.stage';

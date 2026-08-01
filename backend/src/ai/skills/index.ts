@@ -1,5 +1,6 @@
 export * from './ai-skill-dependency-graph.service';
 export * from './ai-skill.interface';
+export * from './intent.types';
 export * from './ai-skill-registry.service';
 export * from './ai-skill-resolution.service';
 export * from './built-in-skill-definitions';
