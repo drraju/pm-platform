@@ -32,6 +32,12 @@ The Daily Review route was tightened for standup use without changing the existi
 
 The existing Save & Next, Save & Finish, and completion behavior from the initial Daily Review implementation was preserved as existing execution behavior; this refinement does not add new modal or backend workflow logic.
 
+## Data Consistency Fix
+
+Daily Review summary widgets count executable tasks after excluding summary rows. `ProjectWorkspaceTasks`, however, renders a hierarchy from root tasks and `parentTaskId` relationships. For projects whose executable tasks were children of a summary task, passing only the executable rows orphaned those children and produced an empty grid while the widgets still showed counts.
+
+The queue now preserves the required summary ancestors only for grid rendering. Widget counts and execution filters continue to use executable tasks, while the shared task component receives the minimum hierarchy context needed to render them.
+
 ## Workflow Comparison
 
 The project Execution workspace is project-centric and is best for broader project execution management. Daily Review is operational: a Project Manager opens one top-level route, selects a project, applies a standup filter, reviews tasks in delivery order, and completes the queue without leaving the workspace.

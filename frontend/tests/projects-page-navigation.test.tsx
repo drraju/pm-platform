@@ -426,6 +426,61 @@ describe("Projects List navigation", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps summary ancestors so child tasks render in the first project queue", async () => {
+    window.history.pushState({}, "", "/daily-review");
+    projectMocks.getProjects.mockResolvedValueOnce([
+      {
+        id: "capgemini-project",
+        name: "CapGemini",
+        status: "active",
+      },
+    ]);
+    projectMocks.getProject.mockResolvedValueOnce({
+      id: "capgemini-project",
+      name: "CapGemini",
+      status: "active",
+      members: [],
+      tasks: [
+        {
+          id: "capgemini-summary",
+          projectId: "capgemini-project",
+          priority: "medium",
+          status: "in_progress",
+          taskKind: "summary",
+          title: "CapGemini delivery",
+        },
+        {
+          id: "capgemini-child",
+          parentTaskId: "capgemini-summary",
+          projectId: "capgemini-project",
+          priority: "high",
+          status: "in_progress",
+          title: "Configure client integration",
+        },
+      ],
+    });
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      permissions: [
+        { id: "permission-project-read", key: "project.read" },
+        { id: "permission-task-update", key: "task.update" },
+      ],
+      roles: [{ id: "role-project-manager", name: "PROJECT_MANAGER", permissions: [] }],
+      user: {
+        email: "project.manager@example.com",
+        firstName: "Project",
+        id: "user-1",
+        lastName: "Manager",
+        roleId: "role-project-manager",
+        status: "active",
+      },
+    });
+
+    render(<DailyReviewPage />);
+
+    expect(await screen.findByText("Configure client integration")).toBeInTheDocument();
+    expect(screen.queryByText("No tasks yet.")).not.toBeInTheDocument();
+  });
+
   it("renders Project Workspace tabs with the current tab highlighted", async () => {
     window.history.pushState({}, "", "/projects/project-123");
 

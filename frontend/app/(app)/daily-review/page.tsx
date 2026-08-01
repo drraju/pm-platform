@@ -151,6 +151,10 @@ export default function DailyReviewPage() {
       ),
     [allTasks, currentUserId, filter, taskSearch],
   );
+  const gridTasks = useMemo(
+    () => includeTaskAncestors(project?.tasks ?? [], visibleTasks),
+    [project?.tasks, visibleTasks],
+  );
 
   const canAccess =
     roles.some((role) => leadershipRoles.has(role)) &&
@@ -336,7 +340,7 @@ export default function DailyReviewPage() {
               onLoadExecutionHistory={getTaskExecutionUpdates}
               onRecordExecutionUpdate={handleExecutionUpdate}
               onUpdateTask={handleUpdateTask}
-              tasks={visibleTasks}
+              tasks={gridTasks}
             />
           ) : (
             <EmptyState title="No tasks in this review queue" description="Choose another filter or select a different project." />
@@ -378,6 +382,29 @@ function matchesFilter(task: ApiTask, filter: ReviewFilter, currentUserId: strin
 function matchesTaskSearch(task: ApiTask, search: string) {
   const normalizedSearch = search.trim().toLowerCase();
   return !normalizedSearch || task.title.toLowerCase().includes(normalizedSearch);
+}
+
+function includeTaskAncestors(allTasks: ApiTask[], tasks: ApiTask[]) {
+  const tasksById = new Map(allTasks.map((task) => [task.id, task]));
+  const queue = [...tasks];
+  const includedTaskIds = new Set(tasks.map((task) => task.id));
+
+  while (queue.length > 0) {
+    const task = queue.pop();
+    if (!task?.parentTaskId || includedTaskIds.has(task.parentTaskId)) {
+      continue;
+    }
+
+    const parentTask = tasksById.get(task.parentTaskId);
+    if (!parentTask) {
+      continue;
+    }
+
+    includedTaskIds.add(parentTask.id);
+    queue.push(parentTask);
+  }
+
+  return allTasks.filter((task) => includedTaskIds.has(task.id));
 }
 
 function compareDeliveryPriority(left: ApiTask, right: ApiTask) {
