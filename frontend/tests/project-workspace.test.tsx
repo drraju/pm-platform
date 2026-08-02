@@ -22,6 +22,16 @@ import { ProjectWorkspaceTable } from "@/components/projects/project-workspace-t
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 
+function createDataTransfer() {
+  const data = new Map<string, string>();
+  return {
+    dropEffect: "move",
+    effectAllowed: "move",
+    getData: vi.fn((type: string) => data.get(type) ?? ""),
+    setData: vi.fn((type: string, value: string) => data.set(type, value)),
+  };
+}
+
 describe("Project workspace components", () => {
   it("renders an action-oriented project overview", () => {
     render(
@@ -1346,6 +1356,177 @@ describe("Project workspace components", () => {
       ),
     ).toBeInTheDocument();
     expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+  });
+
+  it("renders the execution Kanban board from existing task data and excludes backlog", () => {
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        executionView="board"
+        mode="execution"
+        onRecordExecutionUpdate={vi.fn()}
+        tasks={[
+          {
+            id: "task-todo",
+            percentComplete: 0,
+            priority: "medium",
+            projectId: "project-1",
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare rollout checklist",
+          },
+          {
+            id: "task-blocked",
+            percentComplete: 40,
+            priority: "critical",
+            projectId: "project-1",
+            status: "blocked",
+            taskKind: "standard",
+            title: "Resolve vendor blocker",
+          },
+          {
+            id: "task-backlog",
+            percentComplete: 0,
+            priority: "low",
+            projectId: "project-1",
+            status: "backlog",
+            taskKind: "standard",
+            title: "Future planning task",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByLabelText("To Do column")).toBeInTheDocument();
+    expect(screen.getByLabelText("In Progress column")).toBeInTheDocument();
+    expect(screen.getByLabelText("Blocked column")).toBeInTheDocument();
+    expect(screen.getByLabelText("Done column")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("To Do column")).getByText(
+        "Prepare rollout checklist",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Blocked column")).getByText(
+        "Resolve vendor blocker",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Future planning task")).not.toBeInTheDocument();
+  });
+
+  it("opens the shared execution update dialog from a Kanban card", async () => {
+    const onLoadExecutionHistory = vi.fn().mockResolvedValue([]);
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        executionView="board"
+        mode="execution"
+        onLoadExecutionHistory={onLoadExecutionHistory}
+        onRecordExecutionUpdate={vi.fn()}
+        tasks={[
+          {
+            id: "task-1",
+            percentComplete: 20,
+            priority: "high",
+            projectId: "project-1",
+            status: "in_progress",
+            taskKind: "standard",
+            title: "Confirm release readiness",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm release readiness/i }));
+
+    expect(
+      await screen.findByRole("dialog", { name: /task execution update/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Confirm release readiness").length).toBeGreaterThan(
+      1,
+    );
+    expect(onLoadExecutionHistory).toHaveBeenCalledWith("task-1");
+  });
+
+  it("records execution history when a Kanban card is dragged between statuses", async () => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+    const dataTransfer = createDataTransfer();
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        executionView="board"
+        mode="execution"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            assigneeId: "user-1",
+            dueDate: "2026-08-07",
+            id: "task-1",
+            latestExecutionUpdate: {
+              id: "update-1",
+              nextStep: "Confirm API owner",
+              percentComplete: 0,
+              priority: "medium",
+              projectId: "project-1",
+              status: "todo",
+              taskId: "task-1",
+            },
+            percentComplete: 0,
+            priority: "medium",
+            projectId: "project-1",
+            status: "todo",
+            taskKind: "standard",
+            title: "Confirm API owner",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.dragStart(screen.getByRole("button", { name: /confirm api owner/i }), {
+      dataTransfer,
+    });
+    fireEvent.drop(screen.getByLabelText("In Progress column"), {
+      dataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith("task-1", {
+        assigneeId: "user-1",
+        nextStep: "Confirm API owner",
+        percentComplete: 1,
+        priority: "medium",
+        status: "in_progress",
+        targetCompletionDate: "2026-08-07",
+        updateNotes: "Kanban status changed to In Progress.",
+      });
+    });
+  });
+
+  it("disables Kanban drag when execution update permission is unavailable", () => {
+    render(
+      <ProjectWorkspaceTasks
+        executionView="board"
+        mode="execution"
+        onRecordExecutionUpdate={vi.fn()}
+        tasks={[
+          {
+            id: "task-1",
+            percentComplete: 20,
+            priority: "high",
+            projectId: "project-1",
+            status: "in_progress",
+            taskKind: "standard",
+            title: "Confirm release readiness",
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /confirm release readiness/i }),
+    ).toHaveAttribute("draggable", "false");
   });
 
   it("supports sequential execution review between tasks", async () => {

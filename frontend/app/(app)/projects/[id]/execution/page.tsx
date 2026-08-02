@@ -4,13 +4,10 @@ import React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
-  EmptyState,
   ErrorState,
   LoadingState,
   StatusBadge,
-  SummaryMetricCard,
   WorkspaceContent,
-  WorkspaceHeader,
   WorkspaceLayout,
   WorkspaceSection,
   type StatusBadgeTone,
@@ -43,7 +40,12 @@ type ExecutionFilter =
   | "due_today"
   | "due_week"
   | "overdue"
-  | "updated_today";
+  | "updated_today"
+  | "awaiting_update"
+  | "waiting_customer"
+  | "completed";
+
+type ExecutionView = "board" | "list";
 
 const leadershipRoles = new Set([
   "PROJECT_MANAGER",
@@ -54,15 +56,22 @@ const leadershipRoles = new Set([
 ]);
 
 const quickFilters: Array<{ id: ExecutionFilter; label: string }> = [
-  { id: "active", label: "All Active" },
-  { id: "mine", label: "My Tasks" },
+  { id: "active", label: "Active" },
+  { id: "mine", label: "Mine" },
   { id: "in_progress", label: "In Progress" },
   { id: "blocked", label: "Blocked" },
   { id: "due_today", label: "Due Today" },
-  { id: "due_week", label: "Due This Week" },
+  { id: "due_week", label: "This Week" },
   { id: "overdue", label: "Overdue" },
   { id: "updated_today", label: "Updated Today" },
 ];
+
+type CompactExecutionHeaderProps = {
+  eyebrow: string;
+  metadata: Array<{ id: string; label: string; value: React.ReactNode }>;
+  navigation: React.ReactNode;
+  title: React.ReactNode;
+};
 
 export default function ProjectExecutionPage() {
   const params = useParams<{ id: string }>();
@@ -72,6 +81,8 @@ export default function ProjectExecutionPage() {
   const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
   const [roleNames, setRoleNames] = useState<string[]>([]);
   const [activeFilter, setActiveFilter] = useState<ExecutionFilter>("active");
+  const [executionView, setExecutionView] = useState<ExecutionView>("list");
+  const [searchTerm, setSearchTerm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -217,8 +228,14 @@ export default function ProjectExecutionPage() {
     [allTasks],
   );
   const visibleTasks = useMemo(
-    () => filterExecutionTasks(standardTasks, activeFilter, currentUserId),
-    [activeFilter, currentUserId, standardTasks],
+    () =>
+      filterExecutionTasks(
+        standardTasks,
+        activeFilter,
+        currentUserId,
+        searchTerm,
+      ),
+    [activeFilter, currentUserId, searchTerm, standardTasks],
   );
   const kpis = useMemo(() => getExecutionKpis(standardTasks), [standardTasks]);
   const standup = useMemo(
@@ -236,7 +253,7 @@ export default function ProjectExecutionPage() {
       activeTab="execution"
       layout={WorkspaceLayout}
       project={workspaceProject}
-      renderHeader={(content) => <WorkspaceHeader {...content} />}
+      renderHeader={(content) => <CompactExecutionHeader {...content} />}
     >
       <WorkspaceContent spacing="compact">
         {isLoading || areMembersLoading ? (
@@ -259,108 +276,123 @@ export default function ProjectExecutionPage() {
 
         {!isLoading && !areMembersLoading && canAccessExecution ? (
           <>
-            <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <WorkspaceSection
+              className="sticky top-0 z-20"
+              padding="compact"
+              surface="card"
+            >
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                <div
+                  aria-label="Execution view"
+                  className="inline-flex w-fit shrink-0 rounded-md border border-slate-200 bg-white p-1"
+                  role="group"
+                >
+                  {(["list", "board"] as ExecutionView[]).map((view) => (
+                    <button
+                      aria-pressed={executionView === view}
+                      className={`rounded px-3 py-1.5 text-sm font-semibold transition ${
+                        executionView === view
+                          ? "bg-brand text-white"
+                          : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                      key={view}
+                      onClick={() => setExecutionView(view)}
+                      type="button"
+                    >
+                      {view === "list" ? "List" : "Board"}
+                    </button>
+                  ))}
+                </div>
+                <label className="min-w-[220px] flex-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="sr-only">Search execution queue</span>
+                  <input
+                    aria-label="Search execution queue"
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search tasks, owners, next steps"
+                    type="search"
+                    value={searchTerm}
+                  />
+                </label>
+                <div
+                  aria-label="Quick filters"
+                  className="flex flex-wrap gap-2"
+                  role="toolbar"
+                >
+                  {quickFilters.map((filter) => (
+                    <FilterButton
+                      active={activeFilter === filter.id}
+                      key={filter.id}
+                      label={filter.label}
+                      onClick={() => setActiveFilter(filter.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </WorkspaceSection>
+
+            <section
+              aria-label="Execution KPI summary"
+              className="flex flex-wrap gap-2"
+            >
               {kpis.map((kpi) => (
-                <SummaryMetricCard
+                <KpiChip
+                  active={activeFilter === kpi.filter}
+                  count={kpi.value}
                   key={kpi.title}
-                  title={kpi.title}
-                  value={kpi.value}
-                  variant={kpi.variant}
+                  label={kpi.title}
+                  onClick={() => setActiveFilter(kpi.filter)}
+                  tone={kpi.tone}
                 />
               ))}
             </section>
 
             <WorkspaceSection
+              padding="compact"
               surface="card"
             >
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-slate-950">
-                  Quick Filters
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <h2 className="shrink-0 text-sm font-semibold text-slate-950">
+                  Today&apos;s Focus
                 </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Focus the execution grid for standup review.
-                </p>
+                <div className="flex flex-wrap gap-2">
+                  <StandupSignal
+                    active={activeFilter === "overdue"}
+                    count={standup.overdue.length}
+                    label="Overdue"
+                    onClick={() => setActiveFilter("overdue")}
+                    tone="critical"
+                  />
+                  <StandupSignal
+                    active={activeFilter === "due_today"}
+                    count={standup.dueToday.length}
+                    label="Due Today"
+                    onClick={() => setActiveFilter("due_today")}
+                    tone="warning"
+                  />
+                  <StandupSignal
+                    active={activeFilter === "awaiting_update"}
+                    count={standup.awaitingUpdate.length}
+                    label="Awaiting Update"
+                    onClick={() => setActiveFilter("awaiting_update")}
+                    tone="warning"
+                  />
+                  <StandupSignal
+                    active={activeFilter === "waiting_customer"}
+                    count={standup.waitingCustomer.length}
+                    label="Waiting Customer"
+                    onClick={() => setActiveFilter("waiting_customer")}
+                    tone="neutral"
+                  />
+                  <StandupSignal
+                    active={activeFilter === "blocked"}
+                    count={standup.blocked.length}
+                    label="Blocked"
+                    onClick={() => setActiveFilter("blocked")}
+                    tone="success"
+                  />
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {quickFilters.map((filter) => (
-                  <button
-                    aria-pressed={activeFilter === filter.id}
-                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
-                      activeFilter === filter.id
-                        ? "border-brand bg-brand text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                    key={filter.id}
-                    onClick={() => setActiveFilter(filter.id)}
-                    type="button"
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
-            </WorkspaceSection>
-
-            <WorkspaceSection
-              surface="card"
-            >
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-slate-950">
-                  Daily Standup
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Daily standup signals from current task status and latest execution updates.
-                </p>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-5">
-                <StandupSignal
-                  count={standup.updatedToday.length}
-                  label="Changed today"
-                  tone="success"
-                />
-                <StandupSignal
-                  count={standup.blocked.length}
-                  label="Blocked"
-                  tone="critical"
-                />
-                <StandupSignal
-                  count={standup.needsAttention.length}
-                  label="Needs attention"
-                  tone="warning"
-                />
-                <StandupSignal
-                  count={standup.overdue.length}
-                  label="Overdue"
-                  tone="critical"
-                />
-                <StandupSignal
-                  count={standup.discussion.length}
-                  label="Discuss"
-                  tone="neutral"
-                />
-              </div>
-              {standup.discussion.length > 0 ? (
-                <ul className="mt-4 divide-y divide-slate-100 text-sm">
-                  {standup.discussion.slice(0, 5).map((task) => (
-                    <li
-                      className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"
-                      key={task.id}
-                    >
-                      <span className="font-semibold text-slate-900">
-                        {task.title}
-                      </span>
-                      <span className="text-slate-600">
-                        {getDiscussionReason(task)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState
-                  compact
-                  description="No blocked, overdue, or high-priority active tasks need discussion."
-                  title="No standup exceptions"
-                />
-              )}
             </WorkspaceSection>
 
             <ProjectWorkspaceTasks
@@ -370,6 +402,7 @@ export default function ProjectExecutionPage() {
               isSaving={isSaving}
               members={members}
               mode="execution"
+              executionView={executionView}
               onLoadExecutionHistory={getTaskExecutionUpdates}
               onRecordExecutionUpdate={handleRecordExecutionUpdate}
               onUpdateTask={handleUpdateTask}
@@ -382,84 +415,214 @@ export default function ProjectExecutionPage() {
   );
 }
 
-function StandupSignal({
-  count,
+function CompactExecutionHeader({
+  eyebrow,
+  metadata,
+  navigation,
+  title,
+}: CompactExecutionHeaderProps) {
+  const metadataById = new Map(metadata.map((item) => [item.id, item]));
+  const health = metadataById.get("status");
+  const projectManager = metadataById.get("project-manager");
+  const start = metadataById.get("start");
+  const finish = metadataById.get("finish");
+  const completion = metadataById.get("completion");
+
+  return (
+    <header className="overflow-hidden rounded-ui border border-ui-border bg-ui-surface shadow-ui-subtle">
+      <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {eyebrow}
+          </p>
+          <h1 className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-950">
+            {title}
+          </h1>
+        </div>
+        <dl className="grid min-w-0 flex-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2 lg:max-w-4xl lg:grid-cols-4 xl:grid-cols-5">
+          <CompactHeaderMetric label="Health" value={health?.value} />
+          <CompactHeaderMetric
+            label="Project Manager"
+            value={projectManager?.value}
+          />
+          <CompactHeaderMetric
+            label="Timeline"
+            value={
+              start?.value || finish?.value ? (
+                <>
+                  {start?.value ?? "Not set"} - {finish?.value ?? "Not set"}
+                </>
+              ) : null
+            }
+          />
+          <CompactHeaderMetric label="Completion" value={completion?.value} />
+        </dl>
+      </div>
+      <div className="px-4">{navigation}</div>
+    </header>
+  );
+}
+
+function CompactHeaderMetric({
   label,
-  tone,
+  value,
 }: {
-  count: number;
   label: string;
-  tone: StatusBadgeTone;
+  value?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-slate-600">{label}</span>
-        <StatusBadge tone={tone}>{count}</StatusBadge>
-      </div>
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+      <dd className="mt-0.5 truncate font-semibold text-slate-900">
+        {value ?? "Not set"}
+      </dd>
     </div>
   );
 }
 
-function getExecutionKpis(tasks: ApiTask[]) {
-  const today = getDateOnly(new Date());
+function FilterButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+        active
+          ? "border-brand bg-brand text-white"
+          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
 
+function KpiChip({
+  active,
+  count,
+  label,
+  onClick,
+  tone,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
+        active
+          ? "border-brand bg-brand text-white"
+          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="text-base">{count}</span>
+      <span>{label}</span>
+      {!active ? (
+        <span
+          aria-hidden="true"
+          className={`h-2 w-2 rounded-full ${getToneDotClassName(tone)}`}
+        />
+      ) : null}
+    </button>
+  );
+}
+
+function StandupSignal({
+  active,
+  count,
+  label,
+  onClick,
+  tone,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${
+        active
+          ? "border-brand bg-brand text-white"
+          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <StatusBadge tone={tone}>{count}</StatusBadge>
+      {label}
+    </button>
+  );
+}
+
+function getExecutionKpis(tasks: ApiTask[]) {
   return [
     {
-      title: "Active Tasks",
+      filter: "active" as const,
+      title: "Active",
       value: tasks.filter((task) => task.status !== "done").length,
-      variant: "primary" as const,
+      tone: "neutral" as const,
     },
     {
+      filter: "in_progress" as const,
       title: "In Progress",
       value: tasks.filter((task) => task.status === "in_progress").length,
-      variant: "neutral" as const,
+      tone: "neutral" as const,
     },
     {
-      title: "Blocked",
-      value: tasks.filter((task) => task.status === "blocked").length,
-      variant: "critical" as const,
-    },
-    {
-      title: "Due This Week",
-      value: tasks.filter((task) => isDueThisWeek(task)).length,
-      variant: "warning" as const,
-    },
-    {
+      filter: "overdue" as const,
       title: "Overdue",
       value: tasks.filter((task) => isOverdue(task)).length,
-      variant: "critical" as const,
+      tone: "critical" as const,
     },
     {
-      title: "Completed Today",
-      value: tasks.filter(
-        (task) =>
-          task.status === "done" &&
-          getDateOnly(task.latestExecutionUpdate?.updatedOn) === today,
-      ).length,
-      variant: "success" as const,
+      filter: "blocked" as const,
+      title: "Blocked",
+      value: tasks.filter((task) => task.status === "blocked").length,
+      tone: "critical" as const,
+    },
+    {
+      filter: "completed" as const,
+      title: "Completed",
+      value: tasks.filter((task) => task.status === "done").length,
+      tone: "success" as const,
     },
   ];
 }
 
 function getStandupSummary(tasks: ApiTask[]) {
-  const blocked = tasks.filter((task) => task.status === "blocked");
-  const overdue = tasks.filter((task) => isOverdue(task));
-  const updatedToday = tasks.filter((task) => wasUpdatedToday(task));
-  const needsAttention = tasks.filter(
-    (task) =>
-      task.status === "blocked" ||
-      isOverdue(task) ||
-      (task.priority === "critical" && task.status !== "done"),
+  const awaitingUpdate = tasks.filter(
+    (task) => task.status !== "done" && !wasUpdatedToday(task),
   );
-  const discussion = uniqueTasks([...blocked, ...overdue, ...needsAttention]);
+  const blocked = tasks.filter((task) => task.status === "blocked");
+  const dueToday = tasks.filter(
+    (task) => getTaskDueDate(task) === getDateOnly(new Date()),
+  );
+  const overdue = tasks.filter((task) => isOverdue(task));
+  const waitingCustomer = tasks.filter(isWaitingCustomerTask);
 
   return {
+    awaitingUpdate,
     blocked,
-    discussion,
-    needsAttention,
+    dueToday,
     overdue,
-    updatedToday,
+    waitingCustomer,
   };
 }
 
@@ -467,8 +630,17 @@ function filterExecutionTasks(
   tasks: ApiTask[],
   filter: ExecutionFilter,
   currentUserId: string | null,
+  searchTerm = "",
 ) {
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
   return tasks.filter((task) => {
+    if (
+      normalizedSearchTerm &&
+      !matchesExecutionSearch(task, normalizedSearchTerm)
+    ) {
+      return false;
+    }
     if (filter === "active") {
       return task.status !== "done";
     }
@@ -487,32 +659,17 @@ function filterExecutionTasks(
     if (filter === "overdue") {
       return isOverdue(task);
     }
-    return wasUpdatedToday(task);
-  });
-}
-
-function uniqueTasks(tasks: ApiTask[]) {
-  const seen = new Set<string>();
-  return tasks.filter((task) => {
-    if (seen.has(task.id)) {
-      return false;
+    if (filter === "updated_today") {
+      return wasUpdatedToday(task);
     }
-    seen.add(task.id);
-    return true;
+    if (filter === "awaiting_update") {
+      return task.status !== "done" && !wasUpdatedToday(task);
+    }
+    if (filter === "waiting_customer") {
+      return isWaitingCustomerTask(task);
+    }
+    return task.status === "done";
   });
-}
-
-function getDiscussionReason(task: ApiTask) {
-  if (task.status === "blocked") {
-    return "Blocked";
-  }
-  if (isOverdue(task)) {
-    return "Overdue";
-  }
-  if (task.priority === "critical") {
-    return "Critical priority";
-  }
-  return "Needs attention";
 }
 
 function isOverdue(task: ApiTask) {
@@ -537,6 +694,42 @@ function isDueThisWeek(task: ApiTask) {
 
 function wasUpdatedToday(task: ApiTask) {
   return getDateOnly(task.latestExecutionUpdate?.updatedOn) === getDateOnly(new Date());
+}
+
+function isWaitingCustomerTask(task: ApiTask) {
+  return Boolean(
+    task.latestExecutionUpdate?.updateNotes
+      ?.toLowerCase()
+      .includes("waiting for customer"),
+  );
+}
+
+function getToneDotClassName(tone: StatusBadgeTone) {
+  if (tone === "critical") {
+    return "bg-red-500";
+  }
+  if (tone === "warning") {
+    return "bg-amber-500";
+  }
+  if (tone === "success") {
+    return "bg-emerald-500";
+  }
+  return "bg-slate-400";
+}
+
+function matchesExecutionSearch(task: ApiTask, searchTerm: string) {
+  return [
+    task.title,
+    task.description,
+    task.assignee?.displayName,
+    task.assignee?.firstName,
+    task.assignee?.lastName,
+    task.assignee?.email,
+    task.latestExecutionUpdate?.nextStep,
+    task.latestExecutionUpdate?.updateNotes,
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(searchTerm));
 }
 
 function getTaskDueDate(task: ApiTask) {

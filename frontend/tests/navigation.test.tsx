@@ -151,7 +151,7 @@ describe("AppShell", () => {
     expect(
       screen.getByRole("link", { name: /pm platform enterprise workspace/i }),
     ).toHaveAttribute("href", "/dashboard");
-    expect(screen.getByRole("link", { name: /intelligence/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /dashboard/i })).toHaveAttribute(
       "href",
       "/executive",
     );
@@ -256,7 +256,7 @@ describe("AppShell", () => {
       screen.getByRole("link", { name: /notifications/i }),
     ).toHaveAttribute("href", "/notifications");
     expect(
-      screen.queryByRole("link", { name: /intelligence/i }),
+      screen.queryByRole("link", { name: /^dashboard$/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /daily review/i }),
@@ -295,6 +295,14 @@ describe("workspace route context", () => {
     expect(getWorkspaceContext("/tasks").breadcrumbs.at(-1)?.label).toBe(
       "My Tasks",
     );
+  });
+
+  it("labels the executive workspace as Dashboard without changing the route", () => {
+    expect(getWorkspaceContext("/executive")).toEqual({
+      breadcrumbs: [{ label: "Dashboard" }, { label: "Executive overview" }],
+      description: "Cross-project insight",
+      title: "Dashboard",
+    });
   });
 
   it("marks Planning instead of Projects active on a planning route", () => {

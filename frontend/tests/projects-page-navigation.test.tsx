@@ -415,7 +415,7 @@ describe("Projects List navigation", () => {
       screen
         .getByRole("heading", {
           level: 1,
-          name: "Selected Project Workspace",
+          name: /Selected Project Workspace/,
         })
         .closest("header"),
     ).toHaveClass("shadow-ui-subtle");
@@ -604,7 +604,7 @@ describe("Projects List navigation", () => {
       screen
         .getByRole("heading", {
           level: 1,
-          name: "Selected Project Workspace",
+          name: /Selected Project Workspace/,
         })
         .closest("header"),
     ).toHaveClass("shadow-ui-subtle");
@@ -707,15 +707,40 @@ describe("Projects List navigation", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Selected Project Workspace",
+        name: /Selected Project Workspace/,
       }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Execution" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(screen.getByText("Active Tasks")).toBeInTheDocument();
-    expect(await screen.findByText("Daily Standup")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /Active/ }).length,
+    ).toBeGreaterThan(0);
+    expect(await screen.findByText("Today's Focus")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("execution-kanban-board"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Board" }));
+
+    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("execution-kanban-board")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Owner" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+
+    expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Prepare standup notes")).toBeInTheDocument();
     expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
 
@@ -747,7 +772,7 @@ describe("Projects List navigation", () => {
         "Execution workspace is available to project leadership roles with task update access.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Daily Standup")).not.toBeInTheDocument();
+    expect(screen.queryByText("Today's Focus")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Execution" })).not.toBeInTheDocument();
   });
 
@@ -768,7 +793,7 @@ describe("Projects List navigation", () => {
       screen
         .getByRole("heading", {
           level: 1,
-          name: "Selected Project Workspace",
+          name: /Selected Project Workspace/,
         })
         .closest("header"),
     ).toHaveClass("shadow-ui-subtle");

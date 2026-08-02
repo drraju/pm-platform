@@ -10,6 +10,7 @@ import {
 import { SectionHeader } from "@/components/ui/section-header";
 import { ErrorState } from "@/components/ui/states";
 import { CountBadge } from "@/components/ui/status-badge";
+import { ProjectExecutionKanban } from "@/components/projects/project-execution-kanban";
 import { ProjectTaskDependencyPanel } from "@/components/projects/project-task-dependency-panel";
 import type {
   ApiProjectMember,
@@ -97,6 +98,7 @@ type ProjectWorkspaceTasksProps = {
   onUpdateTask?: (taskId: string, input: TaskOperationInput) => void;
   statusFilter?: "all" | ApiTask["status"];
   executionTaskOrder?: (left: ApiTask, right: ApiTask) => number;
+  executionView?: "board" | "list";
   hideExecutionFilters?: boolean;
   hideHeaderDescription?: boolean;
   tasks: ApiTask[];
@@ -230,6 +232,7 @@ export function ProjectWorkspaceTasks({
   onUpdateTask,
   statusFilter = "all",
   executionTaskOrder,
+  executionView = "list",
   hideExecutionFilters = false,
   hideHeaderDescription = false,
   tasks,
@@ -570,6 +573,26 @@ export function ProjectWorkspaceTasks({
     ? reviewableTasks.findIndex((task) => task.id === executionTask.id)
     : -1;
   const isExecutionUpdateReadOnly = executionDialogMode === "read-only";
+  const showExecutionBoard = !isPlanningMode && executionView === "board";
+  const canRecordTaskExecution = React.useCallback(
+    (task: ApiTask) => {
+      const canUpdateOwnTask =
+        task.assigneeId === currentUserId && Boolean(onRecordExecutionUpdate);
+      return (
+        !isPlanningMode &&
+        task.taskKind !== "summary" &&
+        Boolean(onRecordExecutionUpdate) &&
+        (hasExecutionEditAccess || canUpdateOwnTask || hasReassignAccess)
+      );
+    },
+    [
+      currentUserId,
+      hasExecutionEditAccess,
+      hasReassignAccess,
+      isPlanningMode,
+      onRecordExecutionUpdate,
+    ],
+  );
 
   return (
     <SectionCard>
@@ -619,63 +642,78 @@ export function ProjectWorkspaceTasks({
         {inlineError ? (
           <ErrorState className="mb-3">{inlineError}</ErrorState>
         ) : null}
-        {!hideExecutionFilters ? <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Assigned To
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
-              onChange={(event) => setAssigneeFilter(event.target.value)}
-              value={assigneeFilter}
-            >
-              <option value="all">All assignees</option>
-              <option value="unassigned">Unassigned</option>
-              {activeMembers.map((member) => (
-                <option key={member.id} value={member.userId}>
-                  {formatMemberName(member)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Status
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
-              onChange={(event) =>
-                setLocalStatusFilter(
-                  event.target.value as "all" | ApiTask["status"],
-                )
-              }
-              value={localStatusFilter}
-            >
-              <option value="all">All statuses</option>
-              {taskStatuses.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Priority
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
-              onChange={(event) => setPriorityFilter(event.target.value)}
-              value={priorityFilter}
-            >
-              <option value="all">All priorities</option>
-              {priorities.map((priority) => (
-                <option className="capitalize" key={priority} value={priority}>
-                  {priority}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div> : null}
-        <table
-          className={`divide-y divide-slate-200 text-sm ${
-            isPlanningMode ? "min-w-[1580px]" : "min-w-[1320px]"
-          }`}
-        >
+        {!hideExecutionFilters ? (
+          <div className="mb-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Assigned To
+              <select
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+                onChange={(event) => setAssigneeFilter(event.target.value)}
+                value={assigneeFilter}
+              >
+                <option value="all">All assignees</option>
+                <option value="unassigned">Unassigned</option>
+                {activeMembers.map((member) => (
+                  <option key={member.id} value={member.userId}>
+                    {formatMemberName(member)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Status
+              <select
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+                onChange={(event) =>
+                  setLocalStatusFilter(
+                    event.target.value as "all" | ApiTask["status"],
+                  )
+                }
+                value={localStatusFilter}
+              >
+                <option value="all">All statuses</option>
+                {taskStatuses.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Priority
+              <select
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-normal normal-case tracking-normal text-slate-700"
+                onChange={(event) => setPriorityFilter(event.target.value)}
+                value={priorityFilter}
+              >
+                <option value="all">All priorities</option>
+                {priorities.map((priority) => (
+                  <option className="capitalize" key={priority} value={priority}>
+                    {priority}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
+        {showExecutionBoard ? (
+          <ProjectExecutionKanban
+            canUpdateTask={canRecordTaskExecution}
+            dependencies={dependencies}
+            isSaving={isSaving}
+            members={members}
+            onOpenExecutionUpdate={(task, dialogMode) =>
+              openExecutionUpdate(task, dialogMode)
+            }
+            onRecordExecutionUpdate={onRecordExecutionUpdate}
+            tasks={visibleTasks}
+          />
+        ) : (
+          <table
+            className={`divide-y divide-slate-200 text-sm ${
+              isPlanningMode ? "min-w-[1580px]" : "min-w-[1320px]"
+            }`}
+          >
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-3" scope="col">
@@ -1098,6 +1136,7 @@ export function ProjectWorkspaceTasks({
             })}
           </tbody>
         </table>
+        )}
       </div>
 
       {dialogMode ? (

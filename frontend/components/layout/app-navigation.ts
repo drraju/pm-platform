@@ -53,7 +53,7 @@ export const appNavigation: AppNavigationItem[] = [
   {
     href: "/executive",
     id: "intelligence",
-    label: "Intelligence",
+    label: "Dashboard",
     permissions: ["executive.view"],
     section: "Workspaces",
   },

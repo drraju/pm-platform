@@ -88,6 +88,30 @@ vi.mock("@/features/auth", () => ({
   ],
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
     permissionKeys.includes(requiredPermission),
+  resolveProjectUiCapabilities: ({
+    currentUserId,
+    permissionKeys = [],
+    task,
+  }: {
+    currentUserId?: string | null;
+    permissionKeys?: string[];
+    task?: { assigneeId?: string | null } | null;
+  }) => {
+    const canUpdateTask =
+      permissionKeys.includes("task.update") &&
+      Boolean(currentUserId) &&
+      task?.assigneeId === currentUserId;
+    return {
+      canAccessDailyReview: false,
+      canEditExecution: canUpdateTask,
+      canEditPlanning: false,
+      canManageDocuments: false,
+      canManageProjectTasks: false,
+      canReassignTask: canUpdateTask,
+      canUpdateTask,
+      canUploadDocuments: permissionKeys.includes("project.read"),
+    };
+  },
   storeAuthMe: vi.fn(),
 }));
 

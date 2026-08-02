@@ -79,8 +79,8 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
   }
 
   if (pathname.startsWith("/executive")) {
-    return createContext("Intelligence", "Cross-project insight", [
-      { label: "Intelligence" },
+    return createContext("Dashboard", "Cross-project insight", [
+      { label: "Dashboard" },
       { label: "Executive overview" },
     ]);
   }
