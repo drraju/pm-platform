@@ -4,17 +4,10 @@ import type {
   ApiTask,
   ApiTaskDependency,
 } from "@/features/projects";
-
-type ExecutionUpdateInput = {
-  assigneeId?: string | null;
-  nextActionOwnerId?: string | null;
-  nextStep?: string | null;
-  percentComplete: number;
-  priority: string;
-  status: ApiTask["status"];
-  targetCompletionDate?: string | null;
-  updateNotes?: string | null;
-};
+import {
+  buildExecutionUpdatePayload,
+  type TaskExecutionUpdatePayload,
+} from "@/components/projects/execution-update-payload";
 
 type ProjectExecutionKanbanProps = {
   canUpdateTask: (task: ApiTask) => boolean;
@@ -24,7 +17,7 @@ type ProjectExecutionKanbanProps = {
   onOpenExecutionUpdate: (task: ApiTask, mode?: "edit" | "read-only") => void;
   onRecordExecutionUpdate?: (
     taskId: string,
-    input: ExecutionUpdateInput,
+    input: TaskExecutionUpdatePayload,
   ) => Promise<void> | void;
   tasks: ApiTask[];
 };
@@ -70,7 +63,13 @@ export function ProjectExecutionKanban({
       return;
     }
 
-    await onRecordExecutionUpdate(task.id, createDragExecutionUpdate(task, status));
+    await onRecordExecutionUpdate(
+      task.id,
+      buildExecutionUpdatePayload(task, {
+        status,
+        updateNotes: `Kanban status changed to ${formatLabel(status)}.`,
+      }),
+    );
   }
 
   return (
@@ -221,39 +220,6 @@ function KanbanCard({
       </dl>
     </button>
   );
-}
-
-function createDragExecutionUpdate(
-  task: ApiTask,
-  status: Exclude<ApiTask["status"], "backlog">,
-): ExecutionUpdateInput {
-  return {
-    assigneeId: task.assigneeId ?? null,
-    nextStep:
-      task.latestExecutionUpdate?.nextStep ??
-      `Review ${formatLabel(status)} execution state`,
-    percentComplete: getProgressForStatus(task.percentComplete ?? 0, status),
-    priority: task.priority,
-    status,
-    targetCompletionDate: task.dueDate ?? null,
-    updateNotes: `Kanban status changed to ${formatLabel(status)}.`,
-  };
-}
-
-function getProgressForStatus(
-  currentProgress: number,
-  status: Exclude<ApiTask["status"], "backlog">,
-) {
-  if (status === "todo") {
-    return 0;
-  }
-  if (status === "done") {
-    return 100;
-  }
-  if (status === "in_progress") {
-    return Math.min(Math.max(currentProgress || 1, 1), 99);
-  }
-  return status === "blocked" && currentProgress === 100 ? 99 : currentProgress;
 }
 
 function hasTaskDependency(taskId: string, dependencies: ApiTaskDependency[]) {

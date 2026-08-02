@@ -10,6 +10,11 @@ import {
 import { SectionHeader } from "@/components/ui/section-header";
 import { ErrorState } from "@/components/ui/states";
 import { CountBadge } from "@/components/ui/status-badge";
+import {
+  buildExecutionUpdatePayload,
+  getDisplayedPercentComplete,
+  type TaskExecutionUpdatePayload,
+} from "@/components/projects/execution-update-payload";
 import { ProjectExecutionKanban } from "@/components/projects/project-execution-kanban";
 import { ProjectTaskDependencyPanel } from "@/components/projects/project-task-dependency-panel";
 import type {
@@ -36,17 +41,6 @@ type TaskOperationInput = {
   status?: ApiTask["status"];
   taskKind?: ApiTask["taskKind"];
   title?: string;
-};
-
-type TaskExecutionUpdateInput = {
-  assigneeId?: string | null;
-  nextActionOwnerId?: string | null;
-  nextStep?: string | null;
-  percentComplete: number;
-  priority: string;
-  status: ApiTask["status"];
-  targetCompletionDate?: string | null;
-  updateNotes?: string | null;
 };
 
 type ProjectWorkspaceTasksProps = {
@@ -83,7 +77,7 @@ type ProjectWorkspaceTasksProps = {
   ) => void;
   onRecordExecutionUpdate?: (
     taskId: string,
-    input: TaskExecutionUpdateInput,
+    input: TaskExecutionUpdatePayload,
   ) => Promise<void> | void;
   onLoadExecutionHistory?: (
     taskId: string,
@@ -519,7 +513,7 @@ export function ProjectWorkspaceTasks({
     try {
       await onRecordExecutionUpdate(
         executionTask.id,
-        toExecutionUpdatePayload(executionForm),
+        toExecutionUpdatePayload(executionTask, executionForm),
       );
       onExecutionTaskReviewed?.(executionTask.id);
       const reviewableTasks = getReviewableTasks(
@@ -2607,32 +2601,22 @@ function validateExecutionUpdateForm(
 }
 
 function toExecutionUpdatePayload(
+  task: ApiTask,
   form: ExecutionUpdateFormState,
-): TaskExecutionUpdateInput {
-  return {
-    assigneeId: toNullableString(form.assigneeId),
-    nextActionOwnerId: toNullableString(form.nextActionOwnerId),
-    nextStep: toNullableString(form.nextStep),
+): TaskExecutionUpdatePayload {
+  return buildExecutionUpdatePayload(task, {
+    assigneeId: form.assigneeId,
+    blockerCategory: form.blockerCategory,
+    blockerReason: form.blockerReason,
+    isBlocked: form.isBlocked,
+    nextActionOwnerId: form.nextActionOwnerId,
+    nextStep: form.nextStep,
     percentComplete: Number(form.percentComplete),
     priority: form.priority,
-    status: form.isBlocked ? "blocked" : form.status,
-    targetCompletionDate: toNullableString(form.targetCompletionDate),
-    updateNotes: toNullableString(
-      form.isBlocked
-        ? [
-            form.blockerCategory
-              ? `Blocker Category: ${form.blockerCategory}`
-              : "",
-            form.blockerReason.trim()
-              ? `Blocker: ${form.blockerReason.trim()}`
-              : "",
-            form.updateNotes.trim(),
-          ]
-            .filter(Boolean)
-            .join("\n\n")
-        : form.updateNotes,
-    ),
-  };
+    status: form.status,
+    targetCompletionDate: form.targetCompletionDate,
+    updateNotes: form.updateNotes,
+  });
 }
 
 function syncMilestoneDates(
@@ -2811,14 +2795,6 @@ function getDisplayedEndDate(task?: ApiTask | null) {
   return task.taskKind === "summary"
     ? (task.phaseEndDate ?? task.plannedEndDate ?? null)
     : (task.plannedEndDate ?? null);
-}
-
-function getDisplayedPercentComplete(task: ApiTask) {
-  if (task.taskKind === "summary") {
-    return task.phaseProgress ?? task.percentComplete ?? 0;
-  }
-
-  return task.percentComplete ?? 0;
 }
 
 function formatTaskStatus(task: ApiTask) {

@@ -1494,12 +1494,71 @@ describe("Project workspace components", () => {
     await waitFor(() => {
       expect(onRecordExecutionUpdate).toHaveBeenCalledWith("task-1", {
         assigneeId: "user-1",
+        nextActionOwnerId: null,
         nextStep: "Confirm API owner",
         percentComplete: 1,
         priority: "medium",
         status: "in_progress",
         targetCompletionDate: "2026-08-07",
         updateNotes: "Kanban status changed to In Progress.",
+      });
+    });
+  });
+
+  it("builds the shared completion payload when a Kanban card is dragged to Done", async () => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+    const dataTransfer = createDataTransfer();
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        executionView="board"
+        mode="execution"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            assigneeId: "user-1",
+            id: "task-1",
+            latestExecutionUpdate: {
+              id: "update-1",
+              nextActionOwnerId: "user-2",
+              nextStep: "Confirm completion evidence",
+              percentComplete: 60,
+              priority: "high",
+              projectId: "project-1",
+              status: "in_progress",
+              targetCompletionDate: "2026-08-08",
+              taskId: "task-1",
+            },
+            percentComplete: 60,
+            plannedEndDate: "2026-08-09",
+            priority: "high",
+            projectId: "project-1",
+            status: "in_progress",
+            taskKind: "standard",
+            title: "Confirm API owner",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.dragStart(screen.getByRole("button", { name: /confirm api owner/i }), {
+      dataTransfer,
+    });
+    fireEvent.drop(screen.getByLabelText("Done column"), {
+      dataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith("task-1", {
+        assigneeId: "user-1",
+        nextActionOwnerId: "user-2",
+        nextStep: "Confirm completion evidence",
+        percentComplete: 100,
+        priority: "high",
+        status: "done",
+        targetCompletionDate: "2026-08-08",
+        updateNotes: "Kanban status changed to Done.",
       });
     });
   });
