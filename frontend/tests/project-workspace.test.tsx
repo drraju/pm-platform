@@ -1160,7 +1160,7 @@ describe("Project workspace components", () => {
       within(taskRow as HTMLElement).getByText("Waiting for Customer"),
     ).toBeInTheDocument();
     expect(
-      within(taskRow as HTMLElement).getByText("2 Aug"),
+      within(taskRow as HTMLElement).getByText(/Today|2 Aug/),
     ).toBeInTheDocument();
     expect(
       within(taskRow as HTMLElement).getByText("Ava Patel"),
@@ -1438,6 +1438,41 @@ describe("Project workspace components", () => {
       screen.queryByRole("button", { name: /delete/i }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("View only")).toBeInTheDocument();
+  });
+
+  it("opens the execution drawer in read-only mode for unauthorized rows", () => {
+    const onRecordExecutionUpdate = vi.fn();
+
+    render(
+      <ProjectWorkspaceTasks
+        currentUserId="user-3"
+        mode="execution"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            assigneeId: "user-1",
+            id: "task-1",
+            percentComplete: 20,
+            priority: "high",
+            projectId: "project-1",
+            status: "in_progress",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+
+    const drawer = screen.getByRole("dialog", {
+      name: /task execution update/i,
+    });
+    expect(within(drawer).getByLabelText(/status/i)).toBeDisabled();
+    expect(within(drawer).getByLabelText(/progress value/i)).toBeDisabled();
+    expect(within(drawer).queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
   it("renders empty states", () => {

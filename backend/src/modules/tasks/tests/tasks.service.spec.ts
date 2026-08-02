@@ -581,6 +581,86 @@ describe('TasksService', () => {
     );
   });
 
+  it('persists reassignment on a raw mutation task and reloads the read model', async () => {
+    const previousAssigneeId = 'e47142f0-1111-4111-8111-111111111111';
+    const nextAssigneeId = '1612c003-6ff0-4852-8dc9-2b0d5c422cd6';
+    const task = {
+      id: taskId,
+      assigneeId: previousAssigneeId,
+      projectId,
+      status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    };
+    const reloadedTask = {
+      ...task,
+      assignee: { id: nextAssigneeId },
+      assigneeId: nextAssigneeId,
+    };
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce(task)
+      .mockResolvedValueOnce(reloadedTask);
+    projectMembersRepository.findOne?.mockResolvedValueOnce({
+      id: 'assignee-member-id',
+    });
+
+    const result = await service.update(taskId, {
+      assigneeId: nextAssigneeId,
+      percentComplete: 0,
+      remarks: '',
+      status: TaskStatus.Todo,
+    });
+
+    expect(tasksRepository.findOne).toHaveBeenNthCalledWith(1, {
+      where: { id: taskId },
+    });
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        assigneeId: nextAssigneeId,
+      }),
+    );
+    expect(tasksRepository.findOne).toHaveBeenNthCalledWith(2, {
+      where: { id: taskId },
+      relations: { project: true, assignee: true },
+    });
+    expect(result.assigneeId).toBe(nextAssigneeId);
+    expect(result.assignee?.id).toBe(nextAssigneeId);
+  });
+
+  it('persists clearing an assignee with null and reloads the read model', async () => {
+    const task = {
+      id: taskId,
+      assigneeId: userId,
+      projectId,
+      status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    };
+    const reloadedTask = {
+      ...task,
+      assignee: null,
+      assigneeId: null,
+    };
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce(task)
+      .mockResolvedValueOnce(reloadedTask);
+
+    const result = await service.update(taskId, {
+      assigneeId: null,
+    });
+
+    expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskId,
+        assigneeId: null,
+      }),
+    );
+    expect(result.assigneeId).toBeNull();
+    expect(result.assignee).toBeNull();
+  });
+
   it('sets percent complete to 100 when status is updated to done', async () => {
     const task = {
       id: taskId,

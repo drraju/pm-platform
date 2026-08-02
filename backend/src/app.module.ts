@@ -23,6 +23,7 @@ import { RisksModule } from './modules/risks/risks.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
+import { ProjectExportModule } from './modules/project-export/project-export.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     RaidModule,
     DashboardModule,
     PortfolioModule,
+    ProjectExportModule,
     DocumentsModule,
     HealthModule,
     NotificationsModule,

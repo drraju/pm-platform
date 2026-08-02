@@ -216,6 +216,65 @@ vi.mock("@/features/auth", () => ({
     requiredPermissions.some((permission) => permissionKeys.includes(permission)),
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
     permissionKeys.includes(requiredPermission),
+  resolveProjectUiCapabilities: ({
+    currentUserId,
+    members = [],
+    permissionKeys = [],
+    project,
+    roleNames = [],
+    task,
+  }: {
+    currentUserId?: string | null;
+    members?: Array<{ role: string; userId: string }>;
+    permissionKeys?: string[];
+    project?: {
+      businessOwnerId?: string | null;
+      deliveryLeadId?: string | null;
+      executiveSponsorId?: string | null;
+      ownerId?: string | null;
+    } | null;
+    roleNames?: string[];
+    task?: { assigneeId?: string | null } | null;
+  }) => {
+    const canReadProject = permissionKeys.includes("project.read");
+    const canUpdateTasks =
+      permissionKeys.includes("task.update") ||
+      permissionKeys.includes("task.comment") ||
+      permissionKeys.includes("task.reassign");
+    const isGovernor =
+      Boolean(currentUserId) &&
+      (project?.ownerId === currentUserId ||
+        project?.businessOwnerId === currentUserId ||
+        project?.deliveryLeadId === currentUserId ||
+        project?.executiveSponsorId === currentUserId ||
+        members.some(
+          (member) =>
+            member.userId === currentUserId &&
+            ["owner", "manager"].includes(member.role),
+        ));
+    const canManageProjectTasks =
+      canUpdateTasks && permissionKeys.includes("project.update") && isGovernor;
+    const canUpdateTask =
+      canManageProjectTasks ||
+      (canUpdateTasks && Boolean(currentUserId) && task?.assigneeId === currentUserId);
+    return {
+      canAccessDailyReview:
+        roleNames.some((roleName) =>
+          ["PLATFORM_ADMIN", "PORTFOLIO_MANAGER", "PROJECT_MANAGER"].includes(
+            roleName,
+          ),
+        ) &&
+        canReadProject &&
+        permissionKeys.includes("task.update"),
+      canEditExecution: canUpdateTask,
+      canEditPlanning: canManageProjectTasks,
+      canManageDocuments: isGovernor,
+      canManageProjectTasks,
+      canReassignTask: canUpdateTask && permissionKeys.includes("task.reassign"),
+      canUpdateTask,
+      canUploadDocuments: canReadProject,
+    };
+  },
   storeAuthMe: authMocks.storeAuthMe,
 }));
 

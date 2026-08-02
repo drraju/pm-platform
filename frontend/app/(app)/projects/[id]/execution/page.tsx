@@ -27,6 +27,7 @@ import {
   getAuthMe,
   hasAnyPermission,
   hasPermission,
+  resolveProjectUiCapabilities,
   storeAuthMe,
 } from "@/features/auth";
 import { getTaskExecutionUpdates } from "@/features/tasks";
@@ -203,6 +204,13 @@ export default function ProjectExecutionPage() {
   const canUpdateExecution = hasPermission(permissionKeys, "task.update");
   const canAccessExecution =
     hasLeadershipRole && hasLeadershipPermission && canUpdateExecution;
+  const executionCapabilities = resolveProjectUiCapabilities({
+    currentUserId,
+    members,
+    permissionKeys,
+    project,
+    roleNames,
+  });
   const allTasks = useMemo(() => project?.tasks ?? [], [project]);
   const standardTasks = useMemo(
     () => allTasks.filter((task) => task.taskKind !== "summary"),
@@ -356,8 +364,8 @@ export default function ProjectExecutionPage() {
             </WorkspaceSection>
 
             <ProjectWorkspaceTasks
-              canEditTasks
-              canReassignTasks
+              canEditTasks={executionCapabilities.canManageProjectTasks}
+              canReassignTasks={executionCapabilities.canManageProjectTasks}
               currentUserId={currentUserId}
               isSaving={isSaving}
               members={members}

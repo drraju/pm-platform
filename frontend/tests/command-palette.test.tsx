@@ -53,6 +53,16 @@ vi.mock("@/features/auth", () => ({
   ) => requiredPermissions.some((permission) =>
     availablePermissions.includes(permission),
   ),
+  resolveProjectUiCapabilities: () => ({
+    canAccessDailyReview: false,
+    canEditExecution: false,
+    canEditPlanning: false,
+    canManageDocuments: false,
+    canManageProjectTasks: false,
+    canReassignTask: false,
+    canUpdateTask: false,
+    canUploadDocuments: false,
+  }),
   storeAuthMe: vi.fn(),
 }));
 

@@ -1,0 +1,3 @@
+export const EXCEL_WORKSHEET_BUILDERS = Symbol(
+  'EXCEL_WORKSHEET_BUILDERS',
+);

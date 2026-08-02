@@ -1,7 +1,9 @@
 import React from "react";
+import { resolveProjectUiCapabilities } from "@/features/auth";
 import type { ApiProjectMember, ApiTask } from "@/lib/api/client";
 
 type TaskTableProps = {
+  currentUserId?: string | null;
   emptyMessage: string;
   isLoading: boolean;
   isSavingTaskId?: string | null;
@@ -9,12 +11,14 @@ type TaskTableProps = {
   onUpdateTask?: (
     taskId: string,
     input: {
-      assigneeId?: string;
+      assigneeId?: string | null;
       percentComplete?: number;
       remarks?: string;
       status?: ApiTask["status"];
     },
   ) => void;
+  permissionKeys?: string[];
+  roleNames?: string[];
   tasks: ApiTask[];
 };
 
@@ -27,11 +31,14 @@ const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
 ];
 
 export function TaskTable({
+  currentUserId = null,
   emptyMessage,
   isLoading,
   isSavingTaskId,
   membersByProjectId = {},
   onUpdateTask,
+  permissionKeys = [],
+  roleNames = [],
   tasks,
 }: TaskTableProps) {
   return (
@@ -62,11 +69,14 @@ export function TaskTable({
           return (
             <EditableTaskRow
               dueState={dueState}
+              currentUserId={currentUserId}
+              isSaving={isSavingTaskId === task.id}
               key={task.id}
               members={projectMembers}
               onUpdateTask={onUpdateTask}
+              permissionKeys={permissionKeys}
+              roleNames={roleNames}
               task={task}
-              isSaving={isSavingTaskId === task.id}
             />
           );
         })}
@@ -76,16 +86,22 @@ export function TaskTable({
 }
 
 function EditableTaskRow({
+  currentUserId,
   dueState,
   isSaving,
   members,
   onUpdateTask,
+  permissionKeys,
+  roleNames,
   task,
 }: {
+  currentUserId?: string | null;
   dueState: ReturnType<typeof getDueState>;
   isSaving: boolean;
   members: ApiProjectMember[];
   onUpdateTask?: TaskTableProps["onUpdateTask"];
+  permissionKeys: string[];
+  roleNames: string[];
   task: ApiTask;
 }) {
   const [status, setStatus] = React.useState(task.status);
@@ -102,7 +118,15 @@ function EditableTaskRow({
     setAssigneeId(task.assigneeId ?? "");
   }, [task]);
 
-  const canEdit = Boolean(onUpdateTask);
+  const capabilities = resolveProjectUiCapabilities({
+    currentUserId,
+    members,
+    permissionKeys,
+    project: task.project,
+    roleNames,
+    task,
+  });
+  const canEdit = Boolean(onUpdateTask) && capabilities.canUpdateTask;
   const isDirty =
     status !== task.status ||
     Number(percentComplete || 0) !== (task.percentComplete ?? 0) ||
@@ -213,7 +237,7 @@ function EditableTaskRow({
               disabled={!isDirty || isSaving}
               onClick={() =>
                 onUpdateTask?.(task.id, {
-                  assigneeId: assigneeId || undefined,
+                  assigneeId: assigneeId || null,
                   percentComplete: Number(percentComplete || 0),
                   remarks,
                   status,

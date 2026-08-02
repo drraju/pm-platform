@@ -707,6 +707,15 @@ export async function apiRequest<T>(
   return JSON.parse(responseText) as T;
 }
 
+export async function downloadProjectExcel(projectId: string) {
+  const response = await fetch(`${apiBaseUrl}/projects/${projectId}/export/excel`, {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${getStoredAccessToken() ?? ""}` },
+  });
+  if (!response.ok) throw new Error(`Unable to export project (${response.status})`);
+  return response.blob();
+}
+
 export function getAiEnterpriseCapabilities() {
   return apiRequest<ApiEnterpriseCapability[]>('/ai-playground/capabilities');
 }
@@ -1303,7 +1312,7 @@ export function updateTask(
     projectId?: string;
     title?: string;
     description?: string;
-    assigneeId?: string;
+    assigneeId?: string | null;
     status?: ApiTask["status"];
     priority?: string;
     remarks?: string;

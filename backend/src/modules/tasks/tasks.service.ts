@@ -248,7 +248,7 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<Task> {
-    const task = await this.findOne(id, actor);
+    const task = await this.findTaskForMutation(id, actor);
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
     const normalizedInput =
       this.schedulingFoundationService.normalizeTaskMutation(
@@ -268,8 +268,8 @@ export class TasksService {
     if (actor?.userId) {
       task.updatedById = actor.userId;
     }
-    const savedTask = await this.tasksRepository.save(task);
-    return this.decorateTaskWithLatest(savedTask);
+    await this.tasksRepository.save(task);
+    return this.findOne(id, actor);
   }
 
   async recordExecutionUpdate(
@@ -408,6 +408,29 @@ export class TasksService {
       .createQueryBuilder('task')
       .innerJoinAndSelect('task.project', 'project')
       .leftJoinAndSelect('task.assignee', 'assignee');
+  }
+
+  private async findTaskForMutation(
+    id: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<Task> {
+    const task = await this.tasksRepository.findOne({
+      where: { id },
+    });
+    if (!task) {
+      throw new NotFoundException(`Task ${id} not found`);
+    }
+
+    if (
+      !(await this.projectVisibilityService.canViewProject(
+        task.projectId,
+        actor,
+      ))
+    ) {
+      throw new NotFoundException(`Task ${id} not found`);
+    }
+
+    return task;
   }
 
   private async ensureCanManageProject(

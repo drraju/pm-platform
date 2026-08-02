@@ -3,6 +3,8 @@
 import React from "react";
 import type { ApiProject } from "@/features/projects";
 import { ProjectTabs, type ProjectWorkspaceTabId } from "./project-tabs";
+import { downloadProjectExcel } from "@/lib/api/client";
+import { useState } from "react";
 
 interface ProjectHeaderContent {
   eyebrow: string;
@@ -27,6 +29,15 @@ export function ProjectHeader({
   project,
   render,
 }: ProjectHeaderProps) {
+  const [isExporting, setIsExporting] = useState(false);
+  async function exportProject() {
+    setIsExporting(true);
+    try {
+      const blob = await downloadProjectExcel(project.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${project.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "project"}.xlsx`; anchor.click(); URL.revokeObjectURL(url);
+    } finally { setIsExporting(false); }
+  }
   const metadata = [
     { label: "Status", value: formatLabel(project.health?.status ?? project.status) },
     { label: "Project Manager", value: formatUser(project.owner) },
@@ -45,7 +56,7 @@ export function ProjectHeader({
       })),
       navigation: <ProjectTabs activeTab={activeTab} projectId={project.id} />,
       subtitle: project.description,
-      title: project.name,
+      title: <>{project.name}<button className="ml-3 rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700" disabled={isExporting} onClick={() => void exportProject()} type="button">{isExporting ? "Exporting..." : "Export Excel"}</button></>,
     });
   }
 

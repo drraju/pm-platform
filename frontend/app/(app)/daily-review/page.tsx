@@ -9,7 +9,7 @@ import {
 import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
 import { WorkspaceContent } from "@/components/foundation/layout/WorkspaceContent";
 import { WorkspaceSection } from "@/components/foundation/layout/WorkspaceSection";
-import { getAuthMe, hasPermission, storeAuthMe } from "@/features/auth";
+import { getAuthMe, resolveProjectUiCapabilities, storeAuthMe } from "@/features/auth";
 import {
   getProject,
   getProjects,
@@ -41,14 +41,6 @@ type CompletionSummary = {
   tasksReviewed: number;
   tasksUpdated: number;
 };
-
-const leadershipRoles = new Set([
-  "PROJECT_MANAGER",
-  "PROGRAM_MANAGER",
-  "PORTFOLIO_MANAGER",
-  "PLATFORM_ADMIN",
-  "SUPER_ADMIN",
-]);
 
 const filterLabels: Array<{ id: ReviewFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -163,10 +155,13 @@ export default function DailyReviewPage() {
     [project?.tasks, visibleTasks],
   );
 
-  const canAccess =
-    roles.some((role) => leadershipRoles.has(role)) &&
-    hasPermission(permissionKeys, "project.read") &&
-    hasPermission(permissionKeys, "task.update");
+  const { canAccessDailyReview } = resolveProjectUiCapabilities({
+    currentUserId,
+    members,
+    permissionKeys,
+    project,
+    roleNames: roles,
+  });
 
   async function handleUpdateTask(taskId: string, input: Parameters<typeof updateProjectTask>[2]) {
     if (!project) return;
@@ -242,7 +237,7 @@ export default function DailyReviewPage() {
 
   if (isLoading) return <LoadingState label="Loading Daily Review" rows={5} />;
 
-  if (!canAccess) {
+  if (!canAccessDailyReview) {
     return <ErrorState title="Daily Review access required" message="Daily Review is available to project leadership with task update access." />;
   }
 

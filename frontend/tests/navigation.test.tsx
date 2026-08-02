@@ -63,6 +63,45 @@ vi.mock("@/features/auth", () => ({
       );
     });
   },
+  resolveProjectUiCapabilities: ({
+    currentUserId,
+    permissionKeys = [],
+    roleNames = [],
+    task,
+  }: {
+    currentUserId?: string | null;
+    permissionKeys?: string[];
+    roleNames?: string[];
+    task?: { assigneeId?: string | null } | null;
+  }) => {
+    const canUpdateTasks =
+      permissionKeys.includes("task.update") ||
+      permissionKeys.includes("task.comment") ||
+      permissionKeys.includes("task.reassign");
+    const canUpdateOwnTask =
+      canUpdateTasks && Boolean(currentUserId) && task?.assigneeId === currentUserId;
+    return {
+      canAccessDailyReview:
+        roleNames.some((roleName) =>
+          [
+            "PLATFORM_ADMIN",
+            "PORTFOLIO_MANAGER",
+            "PROJECT_MANAGER",
+            "PROGRAM_MANAGER",
+            "SUPER_ADMIN",
+          ].includes(roleName),
+        ) &&
+        permissionKeys.includes("project.read") &&
+        permissionKeys.includes("task.update"),
+      canEditExecution: canUpdateOwnTask,
+      canEditPlanning: false,
+      canManageDocuments: false,
+      canManageProjectTasks: false,
+      canReassignTask: canUpdateOwnTask && permissionKeys.includes("task.reassign"),
+      canUpdateTask: canUpdateOwnTask,
+      canUploadDocuments: permissionKeys.includes("project.read"),
+    };
+  },
   storeAuthMe: authMocks.storeAuthMe,
 }));
 
@@ -220,6 +259,9 @@ describe("AppShell", () => {
       screen.queryByRole("link", { name: /intelligence/i }),
     ).not.toBeInTheDocument();
     expect(
+      screen.queryByRole("link", { name: /daily review/i }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.queryByRole("link", { name: /portfolio/i }),
     ).not.toBeInTheDocument();
   });
@@ -258,6 +300,7 @@ describe("workspace route context", () => {
   it("marks Planning instead of Projects active on a planning route", () => {
     expect(
       isNavigationItemActive("/projects/project-1/planning", {
+        id: "planning",
         label: "Planning",
         permissions: ["project.read"],
         section: "Workspaces",
@@ -266,6 +309,7 @@ describe("workspace route context", () => {
     expect(
       isNavigationItemActive("/projects/project-1/planning", {
         href: "/projects",
+        id: "projects",
         label: "Projects",
         permissions: ["project.read"],
         section: "Workspaces",

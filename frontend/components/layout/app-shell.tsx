@@ -108,6 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onToggle={() => setIsSidebarCollapsed((value) => !value)}
           pathname={pathname}
           permissionKeys={permissionKeys}
+          roleNames={sessionProfile?.roles.map((role) => role.name) ?? []}
         />
 
         {isMobileDrawerOpen ? (
@@ -123,6 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClose={() => setIsMobileDrawerOpen(false)}
               pathname={pathname}
               permissionKeys={permissionKeys}
+              roleNames={sessionProfile?.roles.map((role) => role.name) ?? []}
             />
           </div>
         ) : null}

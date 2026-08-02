@@ -127,6 +127,7 @@ describe("TaskTable", () => {
 
     render(
       <TaskTable
+        currentUserId="user-1"
         emptyMessage="No tasks"
         isLoading={false}
         membersByProjectId={{
@@ -146,8 +147,10 @@ describe("TaskTable", () => {
           ],
         }}
         onUpdateTask={onUpdateTask}
+        permissionKeys={["task.update"]}
         tasks={[
           {
+            assigneeId: "user-1",
             dueDate: "2026-06-10",
             id: "task-ops",
             percentComplete: 20,
@@ -185,6 +188,66 @@ describe("TaskTable", () => {
       percentComplete: 55,
       remarks: "Validated pilot scope.",
       status: "in_progress",
+    });
+  });
+
+  it("preserves null when inline reassignment clears the assignee", () => {
+    const onUpdateTask = vi.fn();
+
+    render(
+      <TaskTable
+        currentUserId="user-1"
+        emptyMessage="No tasks"
+        isLoading={false}
+        membersByProjectId={{
+          "project-1": [
+            {
+              id: "member-1",
+              role: "contributor",
+              user: {
+                email: "alex.morgan@example.com",
+                firstName: "Alex",
+                id: "user-1",
+                lastName: "Morgan",
+                status: "active",
+              },
+              userId: "user-1",
+            },
+          ],
+        }}
+        onUpdateTask={onUpdateTask}
+        permissionKeys={["task.update"]}
+        tasks={[
+          {
+            assigneeId: "user-1",
+            dueDate: "2026-06-10",
+            id: "task-clear-assignee",
+            percentComplete: 20,
+            priority: "medium",
+            project: {
+              id: "project-1",
+              name: "Customer Experience Platform Upgrade",
+              status: "active",
+            },
+            projectId: "project-1",
+            remarks: "Initial note",
+            status: "todo",
+            title: "Confirm release readiness",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/reassign/i), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save updates/i }));
+
+    expect(onUpdateTask).toHaveBeenCalledWith("task-clear-assignee", {
+      assigneeId: null,
+      percentComplete: 20,
+      remarks: "Initial note",
+      status: "todo",
     });
   });
 });

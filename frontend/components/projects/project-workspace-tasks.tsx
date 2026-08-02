@@ -108,6 +108,7 @@ type CreatePreset =
   | { kind: "milestone"; parentTaskId?: string | null };
 
 type DialogMode = "create" | "edit" | "reassign";
+type ExecutionDialogMode = "edit" | "read-only";
 
 type PlanRow = {
   childCount: number;
@@ -240,6 +241,8 @@ export function ProjectWorkspaceTasks({
   const [executionTask, setExecutionTask] = React.useState<ApiTask | null>(
     null,
   );
+  const [executionDialogMode, setExecutionDialogMode] =
+    React.useState<ExecutionDialogMode>("edit");
   const [executionHistory, setExecutionHistory] = React.useState<
     ApiTaskExecutionUpdate[]
   >([]);
@@ -267,6 +270,7 @@ export function ProjectWorkspaceTasks({
   const closeExecutionUpdate = React.useCallback(() => {
     const reviewedTaskId = executionTask?.id;
     setExecutionTask(null);
+    setExecutionDialogMode("edit");
     setExecutionForm(createEmptyExecutionUpdateForm());
     setExecutionFormError(null);
     setExecutionHistory([]);
@@ -380,8 +384,12 @@ export function ProjectWorkspaceTasks({
     setFormError(null);
   }
 
-  async function openExecutionUpdate(task: ApiTask) {
+  async function openExecutionUpdate(
+    task: ApiTask,
+    dialogMode: ExecutionDialogMode = "edit",
+  ) {
     setExecutionTask(task);
+    setExecutionDialogMode(dialogMode);
     setExecutionForm(createExecutionUpdateForm(task));
     setExecutionFormError(null);
     setExecutionHistory([]);
@@ -416,7 +424,7 @@ export function ProjectWorkspaceTasks({
         ? reviewableTasks[currentIndex - 1]
         : reviewableTasks[currentIndex + 1];
     if (nextTask) {
-      void openExecutionUpdate(nextTask);
+      void openExecutionUpdate(nextTask, executionDialogMode);
     }
   }
 
@@ -487,7 +495,11 @@ export function ProjectWorkspaceTasks({
     event: React.FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
-    if (!executionTask || !onRecordExecutionUpdate) {
+    if (
+      executionDialogMode === "read-only" ||
+      !executionTask ||
+      !onRecordExecutionUpdate
+    ) {
       return;
     }
 
@@ -516,7 +528,7 @@ export function ProjectWorkspaceTasks({
       );
       const nextTask = reviewableTasks[currentIndex + 1];
       if (nextTask) {
-        await openExecutionUpdate(nextTask);
+        await openExecutionUpdate(nextTask, "edit");
       } else {
         onExecutionComplete?.({
           blockedTasks: reviewableTasks.filter((task) => task.status === "blocked").length,
@@ -557,6 +569,7 @@ export function ProjectWorkspaceTasks({
   const executionTaskIndex = executionTask
     ? reviewableTasks.findIndex((task) => task.id === executionTask.id)
     : -1;
+  const isExecutionUpdateReadOnly = executionDialogMode === "read-only";
 
   return (
     <SectionCard>
@@ -750,6 +763,7 @@ export function ProjectWorkspaceTasks({
                 !isSummary &&
                 Boolean(onRecordExecutionUpdate) &&
                 (canEditRow || hasReassignAccess);
+              const canViewExecutionUpdate = !isPlanningMode && !isSummary;
               const canEditPlanningFields = hasFullEditAccess;
               const canEditExecutionFields =
                 hasFullEditAccess || hasExecutionEditAccess || canUpdateOwnTask;
@@ -1006,7 +1020,8 @@ export function ProjectWorkspaceTasks({
                     canDeleteRow ||
                     canAddChild ||
                     hasReassignAccess ||
-                    canRecordExecutionUpdate ? (
+                    canRecordExecutionUpdate ||
+                    canViewExecutionUpdate ? (
                       <div className="flex flex-wrap gap-2">
                         {canRecordExecutionUpdate ? (
                           <button
@@ -1017,7 +1032,18 @@ export function ProjectWorkspaceTasks({
                             onClick={() => openExecutionUpdate(task)}
                             type="button"
                           >
-                            {isPlanningMode ? "Update" : "Update"}
+                            Update
+                          </button>
+                        ) : canViewExecutionUpdate ? (
+                          <button
+                            ref={(element) => {
+                              reviewButtonRefs.current[task.id] = element;
+                            }}
+                            className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                            onClick={() => openExecutionUpdate(task, "read-only")}
+                            type="button"
+                          >
+                            View
                           </button>
                         ) : null}
                         {canEditRow && isPlanningMode ? (
@@ -1498,25 +1524,29 @@ export function ProjectWorkspaceTasks({
                     {executionTask.title}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={executionTaskIndex <= 0}
-                      onClick={() => moveExecutionReview("previous")}
-                      type="button"
-                    >
-                      Previous Task
-                    </button>
-                    <button
-                      className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={
-                        executionTaskIndex < 0 ||
-                        executionTaskIndex >= reviewableTasks.length - 1
-                      }
-                      onClick={() => moveExecutionReview("next")}
-                      type="button"
-                    >
-                      Next Task
-                    </button>
+                    {!isExecutionUpdateReadOnly ? (
+                      <>
+                        <button
+                          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={executionTaskIndex <= 0}
+                          onClick={() => moveExecutionReview("previous")}
+                          type="button"
+                        >
+                          Previous Task
+                        </button>
+                        <button
+                          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={
+                            executionTaskIndex < 0 ||
+                            executionTaskIndex >= reviewableTasks.length - 1
+                          }
+                          onClick={() => moveExecutionReview("next")}
+                          type="button"
+                        >
+                          Next Task
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <button
@@ -1580,119 +1610,121 @@ export function ProjectWorkspaceTasks({
                   </dl>
                 </section>
 
-                <section>
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Today&apos;s Execution Update
-                  </h3>
-                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                    <label className="block text-sm font-medium text-slate-700">
-                      Status
-                      <select
-                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                        onChange={(event) =>
-                          setExecutionForm({
-                            ...executionForm,
-                            status: event.target.value as ApiTask["status"],
-                            isBlocked: event.target.value === "blocked",
-                          })
-                        }
-                        value={executionForm.status}
-                      >
-                        {taskStatuses.map((status) => (
-                          <option key={status.value} value={status.value}>
-                            {status.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block text-sm font-medium text-slate-700">
-                      Priority
-                      <select
-                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                        onChange={(event) =>
-                          setExecutionForm({
-                            ...executionForm,
-                            priority: event.target.value,
-                          })
-                        }
-                        value={executionForm.priority}
-                      >
-                        {priorities.map((priority) => (
-                          <option key={priority} value={priority}>
-                            {priority}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <TaskAssigneeSelect
-                      label="Task Owner"
-                      members={activeMembers}
-                      onChange={(assigneeId) =>
-                        setExecutionForm({ ...executionForm, assigneeId })
-                      }
-                      value={executionForm.assigneeId}
-                    />
-
-                    <label className="flex items-center gap-2 self-end text-sm font-medium text-slate-700">
-                      <input
-                        checked={executionForm.isBlocked}
-                        onChange={(event) =>
-                          setExecutionForm({
-                            ...executionForm,
-                            isBlocked: event.target.checked,
-                            status: event.target.checked
-                              ? "blocked"
-                              : executionForm.status === "blocked"
-                                ? "in_progress"
-                                : executionForm.status,
-                          })
-                        }
-                        type="checkbox"
-                      />
-                      Blocked
-                    </label>
-
-                    <div className="sm:col-span-2">
-                      <label
-                        className="block text-sm font-medium text-slate-700"
-                        htmlFor="task-execution-progress"
-                      >
-                        Progress
+                <fieldset disabled={isExecutionUpdateReadOnly}>
+                  <section>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Today&apos;s Execution Update
+                    </h3>
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Status
+                        <select
+                          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                          onChange={(event) =>
+                            setExecutionForm({
+                              ...executionForm,
+                              status: event.target.value as ApiTask["status"],
+                              isBlocked: event.target.value === "blocked",
+                            })
+                          }
+                          value={executionForm.status}
+                        >
+                          {taskStatuses.map((status) => (
+                            <option key={status.value} value={status.value}>
+                              {status.label}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                      <div className="mt-2 grid gap-3 sm:grid-cols-[1fr_6rem] sm:items-center">
-                        <input
-                          aria-label="Progress slider"
-                          className="w-full accent-brand"
-                          id="task-execution-progress"
-                          max={100}
-                          min={0}
+
+                      <label className="block text-sm font-medium text-slate-700">
+                        Priority
+                        <select
+                          className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm capitalize outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                           onChange={(event) =>
                             setExecutionForm({
                               ...executionForm,
-                              percentComplete: event.target.value,
+                              priority: event.target.value,
                             })
                           }
-                          type="range"
-                          value={executionForm.percentComplete}
-                        />
+                          value={executionForm.priority}
+                        >
+                          {priorities.map((priority) => (
+                            <option key={priority} value={priority}>
+                              {priority}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <TaskAssigneeSelect
+                        disabled={isExecutionUpdateReadOnly}
+                        label="Task Owner"
+                        members={activeMembers}
+                        onChange={(assigneeId) =>
+                          setExecutionForm({ ...executionForm, assigneeId })
+                        }
+                        value={executionForm.assigneeId}
+                      />
+
+                      <label className="flex items-center gap-2 self-end text-sm font-medium text-slate-700">
                         <input
-                          aria-label="Progress value"
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                          max={100}
-                          min={0}
+                          checked={executionForm.isBlocked}
                           onChange={(event) =>
                             setExecutionForm({
                               ...executionForm,
-                              percentComplete: event.target.value,
+                              isBlocked: event.target.checked,
+                              status: event.target.checked
+                                ? "blocked"
+                                : executionForm.status === "blocked"
+                                  ? "in_progress"
+                                  : executionForm.status,
                             })
                           }
-                          type="number"
-                          value={executionForm.percentComplete}
+                          type="checkbox"
                         />
+                        Blocked
+                      </label>
+
+                      <div className="sm:col-span-2">
+                        <label
+                          className="block text-sm font-medium text-slate-700"
+                          htmlFor="task-execution-progress"
+                        >
+                          Progress
+                        </label>
+                        <div className="mt-2 grid gap-3 sm:grid-cols-[1fr_6rem] sm:items-center">
+                          <input
+                            aria-label="Progress slider"
+                            className="w-full accent-brand"
+                            id="task-execution-progress"
+                            max={100}
+                            min={0}
+                            onChange={(event) =>
+                              setExecutionForm({
+                                ...executionForm,
+                                percentComplete: event.target.value,
+                              })
+                            }
+                            type="range"
+                            value={executionForm.percentComplete}
+                          />
+                          <input
+                            aria-label="Progress value"
+                            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                            max={100}
+                            min={0}
+                            onChange={(event) =>
+                              setExecutionForm({
+                                ...executionForm,
+                                percentComplete: event.target.value,
+                              })
+                            }
+                            type="number"
+                            value={executionForm.percentComplete}
+                          />
+                        </div>
                       </div>
-                    </div>
 
                     {executionForm.isBlocked ? (
                       <>
@@ -1795,8 +1827,9 @@ export function ProjectWorkspaceTasks({
                         value={executionForm.updateNotes}
                       />
                     </label>
-                  </div>
-                </section>
+                    </div>
+                  </section>
+                </fieldset>
 
                 <section>
                   <h3 className="text-sm font-semibold text-slate-900">
@@ -1831,20 +1864,22 @@ export function ProjectWorkspaceTasks({
                   onClick={closeExecutionUpdate}
                   type="button"
                 >
-                  Cancel
+                  {isExecutionUpdateReadOnly ? "Close" : "Cancel"}
                 </button>
-                <button
-                  className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isSaving}
-                  type="submit"
-                >
-                  {isSaving
-                    ? "Saving..."
-                    : executionTaskIndex >= 0 &&
-                        executionTaskIndex < reviewableTasks.length - 1
-                      ? "Save & Next"
-                      : "Save & Finish"}
-                </button>
+                {!isExecutionUpdateReadOnly ? (
+                  <button
+                    className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isSaving}
+                    type="submit"
+                  >
+                    {isSaving
+                      ? "Saving..."
+                      : executionTaskIndex >= 0 &&
+                          executionTaskIndex < reviewableTasks.length - 1
+                        ? "Save & Next"
+                        : "Save & Finish"}
+                  </button>
+                ) : null}
               </div>
             </form>
           </div>

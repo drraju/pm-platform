@@ -13,6 +13,7 @@ import {
   type ApiProjectDetails,
   type ApiTaskDependency,
 } from "@/features/projects";
+import { getAuthMe, resolveProjectUiCapabilities, storeAuthMe } from "@/features/auth";
 import { decorateProjectPlan } from "@/features/projects/planning";
 import { getTaskExecutionUpdates } from "@/features/tasks";
 import { useProjectMembers } from "@/hooks/use-project-members";
@@ -22,7 +23,10 @@ export default function ProjectTasksPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [dependencies, setDependencies] = useState<ApiTaskDependency[]>([]);
+  const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
+  const [roleNames, setRoleNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -40,12 +44,17 @@ export default function ProjectTasksPage() {
       setError(null);
       setIsLoading(true);
       try {
-        const [projectDetails, dependencyData] = await Promise.all([
+        const [projectDetails, dependencyData, authMe] = await Promise.all([
           getProject(projectId),
           getProjectTaskDependencies(projectId).catch(() => []),
+          getAuthMe(),
         ]);
+        storeAuthMe(authMe);
         setProject(projectDetails);
         setDependencies(dependencyData);
+        setCurrentUserId(authMe.user.id);
+        setPermissionKeys(authMe.permissions.map((permission) => permission.key));
+        setRoleNames(authMe.roles.map((role) => role.name));
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -169,6 +178,13 @@ export default function ProjectTasksPage() {
     name: "Project Tasks",
     status: "active",
   };
+  const projectCapabilities = resolveProjectUiCapabilities({
+    currentUserId,
+    members,
+    permissionKeys,
+    project,
+    roleNames,
+  });
 
   return (
     <ProjectLayout activeTab="tasks" project={workspaceProject}>
@@ -205,8 +221,9 @@ export default function ProjectTasksPage() {
       </section>
       <ProjectWorkspaceTasks
         dependencies={dependencies}
-        canEditTasks
-        canReassignTasks
+        canEditTasks={projectCapabilities.canManageProjectTasks}
+        canReassignTasks={projectCapabilities.canManageProjectTasks}
+        currentUserId={currentUserId}
         isSaving={isSaving}
         members={members}
         mode={taskViewMode}

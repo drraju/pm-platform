@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { hasAnyPermission } from "@/features/auth";
+import { hasAnyPermission, resolveProjectUiCapabilities } from "@/features/auth";
 import {
   appNavigation,
   isNavigationItemActive,
@@ -14,6 +14,7 @@ type AppSidebarProps = {
   onToggle?: () => void;
   pathname: string;
   permissionKeys: string[];
+  roleNames?: string[];
 };
 
 export function AppSidebar({
@@ -23,9 +24,16 @@ export function AppSidebar({
   onToggle,
   pathname,
   permissionKeys,
+  roleNames = [],
 }: AppSidebarProps) {
+  const navigationCapabilities = resolveProjectUiCapabilities({
+    permissionKeys,
+    roleNames,
+  });
   const visibleNavigation = appNavigation.filter((item) =>
-    hasAnyPermission(permissionKeys, item.permissions),
+    item.id === "daily-review"
+      ? navigationCapabilities.canAccessDailyReview
+      : hasAnyPermission(permissionKeys, item.permissions),
   );
 
   return (

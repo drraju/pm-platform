@@ -48,9 +48,11 @@ function PageContent() {
   const [membersByProjectId, setMembersByProjectId] = useState<
     Record<string, ApiProjectMember[]>
   >({});
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
     getStoredPermissionKeys(),
   );
+  const [roleNames, setRoleNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,7 +122,9 @@ function PageContent() {
       setTasks(taskData);
       setProjects(projectData);
       setMembersByProjectId(Object.fromEntries(memberEntries));
+      setCurrentUserId(authMe.user.id);
       setPermissionKeys(authMe.permissions.map((permission) => permission.key));
+      setRoleNames(authMe.roles.map((role) => role.name));
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -139,7 +143,7 @@ function PageContent() {
   async function handleUpdateTask(
     taskId: string,
     input: {
-      assigneeId?: string;
+      assigneeId?: string | null;
       percentComplete?: number;
       remarks?: string;
       status?: ApiTask["status"];
@@ -338,6 +342,7 @@ function PageContent() {
       </section>
 
       <TaskTable
+        currentUserId={currentUserId}
         emptyMessage={
           tasks.length === 0
             ? "No tasks are assigned to you yet."
@@ -347,6 +352,8 @@ function PageContent() {
         isSavingTaskId={isSavingTaskId}
         membersByProjectId={membersByProjectId}
         onUpdateTask={canUpdateMyTasks ? handleUpdateTask : undefined}
+        permissionKeys={permissionKeys}
+        roleNames={roleNames}
         tasks={visibleTasks}
       />
     </div>
