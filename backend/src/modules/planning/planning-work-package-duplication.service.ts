@@ -8,6 +8,7 @@ import { In, Repository } from 'typeorm';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
+import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { DuplicateWorkPackageDto } from './dto/duplicate-work-package.dto';
@@ -89,6 +90,10 @@ export class PlanningWorkPackageDuplicationService {
       const idMap = new Map<string, string>();
       const copiedTasks: Task[] = [];
       let flattenedSequence = 0;
+      const lifecycleInput = applyTaskCompletionTransition({
+        percentComplete: 0,
+        status: TaskStatus.Todo,
+      });
       for (const sourceTask of sourcePackage) {
         const isRoot = sourceTask.id === sourceSummaryTaskId;
         const taskKind =
@@ -117,14 +122,8 @@ export class PlanningWorkPackageDuplicationService {
             : null;
         const copy = await tasksRepository.save(
           tasksRepository.create({
-            actualEndDate:
-              input.copyActualDates === true
-                ? (sourceTask.actualEndDate ?? null)
-                : null,
-            actualStartDate:
-              input.copyActualDates === true
-                ? (sourceTask.actualStartDate ?? null)
-                : null,
+            actualEndDate: null,
+            actualStartDate: null,
             assigneeId:
               input.copyResourceAssignments === true
                 ? (sourceTask.assigneeId ?? null)
@@ -152,7 +151,7 @@ export class PlanningWorkPackageDuplicationService {
                 ? (sourceTask.milestoneCategory ?? null)
                 : null,
             parentTaskId,
-            percentComplete: 0,
+            ...lifecycleInput,
             plannedEndDate,
             plannedStartDate,
             priority: sourceTask.priority,
@@ -171,7 +170,6 @@ export class PlanningWorkPackageDuplicationService {
                 ? ++flattenedSequence
                 : sourceTask.sequenceNumber,
             startDate: plannedStartDate,
-            status: TaskStatus.Todo,
             taskKind,
             title: isRoot ? newSummaryName : sourceTask.title,
             updatedById: actor?.userId,

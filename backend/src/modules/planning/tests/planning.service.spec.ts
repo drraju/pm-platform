@@ -257,6 +257,10 @@ describe('PlanningService', () => {
     );
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('aggregates the planning workspace from thin API contracts', async () => {
     const project = { id: projectId, name: 'ERP Modernization' } as Project;
     const task = {
@@ -1122,6 +1126,56 @@ describe('PlanningService', () => {
         plannedFinishDate: '2026-07-06',
         status: TaskStatus.InProgress,
         taskTitle: 'Build delivery plan',
+      }),
+    );
+  });
+
+  it('applies completion defaults when a planning schedule update completes a standard task', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
+    const schedule = {
+      durationDays: 4,
+      id: 'schedule-row-id',
+      parentTaskId: null,
+      percentComplete: 25,
+      plannedEndDate: '2026-07-05',
+      plannedStartDate: '2026-07-01',
+      projectId,
+      sequenceNumber: 1,
+      task: {
+        actualEndDate: null,
+        id: taskId,
+        percentComplete: 25,
+        projectId,
+        status: TaskStatus.InProgress,
+        taskKind: TaskKind.Standard,
+        title: 'Design schedule',
+      } as Task,
+      taskId,
+      taskKind: TaskKind.Standard,
+    } as PlanningTaskSchedule;
+
+    planningTaskSchedulesRepository.findOne?.mockResolvedValue(schedule);
+    scheduleSnapshotsRepository.findOne?.mockResolvedValue({
+      id: 'snapshot-id',
+      projectId,
+      scheduleVersion: 1,
+    });
+    tasksRepository.find?.mockResolvedValue([schedule.task]);
+
+    await service.updatePlanningTaskSchedule(
+      projectId,
+      'schedule-row-id',
+      {
+        status: TaskStatus.Done,
+      },
+      actor,
+    );
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actualEndDate: '2026-08-03',
+        percentComplete: 100,
+        status: TaskStatus.Done,
       }),
     );
   });

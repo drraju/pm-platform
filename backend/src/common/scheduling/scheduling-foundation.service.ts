@@ -9,6 +9,7 @@ import { MilestoneCategory } from '../enums/milestone-category.enum';
 import { TaskKind } from '../enums/task-kind.enum';
 import { TaskStatus } from '../enums/task-status.enum';
 import { TaskType } from '../enums/task-type.enum';
+import { applyTaskCompletionTransition } from './task-completion-transition';
 
 type TaskTypeInput = {
   milestoneCategory?: MilestoneCategory | string | null;
@@ -623,22 +624,21 @@ export class SchedulingFoundationService {
     const wasComplete = existingTask?.status === TaskStatus.Done;
 
     if (nextStatus === TaskStatus.Done) {
-      const completionDate =
-        input.actualEndDate ??
-        input.actualStartDate ??
-        existingTask?.actualEndDate ??
-        existingTask?.actualStartDate ??
-        input.plannedEndDate ??
-        existingTask?.plannedEndDate;
-      if (!completionDate) {
-        throw new BadRequestException(
-          'Milestone completion requires an actual or planned date',
-        );
-      }
-      input.status = TaskStatus.Done;
-      input.percentComplete = 100;
-      input.actualStartDate = completionDate;
-      input.actualEndDate = completionDate;
+      Object.assign(
+        input,
+        applyTaskCompletionTransition(input, existingTask, {
+          completionDateRequiredMessage:
+            'Milestone completion requires an actual or planned date',
+          resolveCompletionDate: (nextInput, currentTask) =>
+            nextInput.actualEndDate ??
+            nextInput.actualStartDate ??
+            currentTask?.actualEndDate ??
+            currentTask?.actualStartDate ??
+            nextInput.plannedEndDate ??
+            currentTask?.plannedEndDate,
+          syncActualStartDateToCompletionDate: true,
+        }),
+      );
       return;
     }
 

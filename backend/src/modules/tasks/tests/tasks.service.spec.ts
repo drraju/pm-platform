@@ -230,6 +230,58 @@ describe('TasksService', () => {
     );
   });
 
+  it('applies completion defaults when an execution update moves a task to done', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
+    const task = {
+      assigneeId: null,
+      actualEndDate: null,
+      id: taskId,
+      percentComplete: 60,
+      priority: 'medium',
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare release plan',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(true);
+
+    const result = await service.recordExecutionUpdate(
+      taskId,
+      {
+        percentComplete: 60,
+        priority: 'medium',
+        status: TaskStatus.Done,
+        updateNotes: 'Kanban status changed to Done.',
+      },
+      { email: 'pm@example.com', roleId: 'role-1', userId },
+    );
+
+    expect(taskTransactionManager.save).toHaveBeenCalledWith(
+      Task,
+      expect.objectContaining({
+        actualEndDate: '2026-08-03',
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+    expect(taskTransactionManager.create).toHaveBeenCalledWith(
+      TaskExecutionUpdate,
+      expect.objectContaining({
+        percentComplete: 100,
+        status: TaskStatus.Done,
+        updateNotes: 'Kanban status changed to Done.',
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        actualEndDate: '2026-08-03',
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
   it('loads recent execution history for one visible task', async () => {
     tasksRepository.findOne?.mockResolvedValue({
       id: taskId,
@@ -662,7 +714,9 @@ describe('TasksService', () => {
   });
 
   it('sets percent complete to 100 when status is updated to done', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
     const task = {
+      actualEndDate: null,
       id: taskId,
       percentComplete: 40,
       projectId,
@@ -679,6 +733,7 @@ describe('TasksService', () => {
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         id: taskId,
+        actualEndDate: '2026-08-03',
         percentComplete: 100,
         status: TaskStatus.Done,
       }),
@@ -686,7 +741,9 @@ describe('TasksService', () => {
   });
 
   it('sets status to done when percent complete is updated to 100', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
     const task = {
+      actualEndDate: null,
       id: taskId,
       percentComplete: 40,
       projectId,
@@ -703,10 +760,59 @@ describe('TasksService', () => {
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         id: taskId,
+        actualEndDate: '2026-08-03',
         percentComplete: 100,
         status: TaskStatus.Done,
       }),
     );
+  });
+
+  it('preserves an existing completion date when a task is completed again', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
+    const task = {
+      actualEndDate: '2026-07-29',
+      id: taskId,
+      percentComplete: 40,
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+
+    await service.update(taskId, {
+      status: TaskStatus.Done,
+    });
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actualEndDate: '2026-07-29',
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
+  it('rejects completion when the inferred completion date is before actual start', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
+    const task = {
+      actualEndDate: null,
+      actualStartDate: '2026-08-05',
+      id: taskId,
+      percentComplete: 40,
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+
+    await expect(
+      service.update(taskId, {
+        status: TaskStatus.Done,
+      }),
+    ).rejects.toThrow('Task cannot be completed before its actual start date');
+    expect(tasksRepository.save).not.toHaveBeenCalled();
   });
 
   it('rejects assigning a task to itself as parent', async () => {

@@ -20,6 +20,7 @@ import { ProjectRole } from '../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectHealthDto } from '../health/dto/project-health.dto';
@@ -390,7 +391,7 @@ export class ProjectsService {
     }
     const normalizedInput =
       this.schedulingFoundationService.normalizeTaskMutation(
-        createProjectTaskDto,
+        applyTaskCompletionTransition(createProjectTaskDto),
       );
     await this.validateTaskPlanningFields(projectId, normalizedInput);
     await this.validateAssigneeMembership(
@@ -399,7 +400,7 @@ export class ProjectsService {
     );
 
     const task = this.tasksRepository.create({
-      ...this.withNormalizedProgress(normalizedInput),
+      ...normalizedInput,
       projectId,
       ...(actor?.userId
         ? { createdById: actor.userId, updatedById: actor.userId }
@@ -436,7 +437,7 @@ export class ProjectsService {
     }
     const normalizedInput =
       this.schedulingFoundationService.normalizeTaskMutation(
-        updateProjectTaskDto,
+        applyTaskCompletionTransition(updateProjectTaskDto, task),
         task,
       );
     await this.validateTaskPlanningFields(projectId, normalizedInput, task);
@@ -444,7 +445,7 @@ export class ProjectsService {
       projectId,
       normalizedInput.assigneeId,
     );
-    Object.assign(task, this.withNormalizedProgress(normalizedInput), {
+    Object.assign(task, normalizedInput, {
       projectId,
       ...(actor?.userId ? { updatedById: actor.userId } : {}),
     });
@@ -1513,19 +1514,4 @@ export class ProjectsService {
     return decoratePlanningTasks([task])[0];
   }
 
-  private withNormalizedProgress<
-    T extends Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
-  >(input: T): T {
-    const normalizedInput = { ...input };
-
-    if (normalizedInput.percentComplete === 100) {
-      normalizedInput.status = TaskStatus.Done;
-    }
-
-    if (normalizedInput.status === TaskStatus.Done) {
-      normalizedInput.percentComplete = 100;
-    }
-
-    return normalizedInput;
-  }
 }

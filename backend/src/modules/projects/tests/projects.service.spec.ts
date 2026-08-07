@@ -1150,7 +1150,9 @@ describe('ProjectsService', () => {
   });
 
   it('sets percent complete to 100 when a project task status is updated to done', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
     const task = {
+      actualEndDate: null,
       id: taskId,
       percentComplete: 40,
       projectId,
@@ -1168,6 +1170,7 @@ describe('ProjectsService', () => {
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         id: taskId,
+        actualEndDate: '2026-08-03',
         percentComplete: 100,
         status: TaskStatus.Done,
       }),
@@ -1175,7 +1178,9 @@ describe('ProjectsService', () => {
   });
 
   it('sets status to done when project task percent complete is updated to 100', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
     const task = {
+      actualEndDate: null,
       id: taskId,
       percentComplete: 40,
       projectId,
@@ -1193,6 +1198,34 @@ describe('ProjectsService', () => {
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         id: taskId,
+        actualEndDate: '2026-08-03',
+        percentComplete: 100,
+        status: TaskStatus.Done,
+      }),
+    );
+  });
+
+  it('preserves an existing project task completion date when completing', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-03T12:00:00Z'));
+    const task = {
+      actualEndDate: '2026-07-29',
+      id: taskId,
+      percentComplete: 40,
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Original task',
+    };
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne?.mockResolvedValue(task);
+
+    await service.updateProjectTask(projectId, taskId, {
+      status: TaskStatus.Done,
+    });
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actualEndDate: '2026-07-29',
         percentComplete: 100,
         status: TaskStatus.Done,
       }),

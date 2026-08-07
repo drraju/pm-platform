@@ -14,6 +14,7 @@ import {
 } from '../../common/authz/authorization-policy.service';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import {
@@ -122,7 +123,9 @@ export class TasksService {
   ): Promise<Task> {
     await this.ensureCanManageProject(createTaskDto.projectId, actor);
     const normalizedInput =
-      this.schedulingFoundationService.normalizeTaskMutation(createTaskDto);
+      this.schedulingFoundationService.normalizeTaskMutation(
+        applyTaskCompletionTransition(createTaskDto),
+      );
     await this.validatePlanningFields(createTaskDto.projectId, normalizedInput);
     await this.validateAssigneeMembership(
       createTaskDto.projectId,
@@ -130,7 +133,7 @@ export class TasksService {
     );
     const task = await this.tasksRepository.save(
       this.tasksRepository.create({
-        ...this.withNormalizedProgress(normalizedInput),
+        ...normalizedInput,
         ...(actor?.userId
           ? { createdById: actor.userId, updatedById: actor.userId }
           : {}),
@@ -252,7 +255,7 @@ export class TasksService {
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
     const normalizedInput =
       this.schedulingFoundationService.normalizeTaskMutation(
-        updateTaskDto,
+        applyTaskCompletionTransition(updateTaskDto, task),
         task,
       );
     await this.validatePlanningFields(
@@ -264,7 +267,7 @@ export class TasksService {
       normalizedInput.projectId ?? task.projectId,
       normalizedInput.assigneeId,
     );
-    Object.assign(task, this.withNormalizedProgress(normalizedInput));
+    Object.assign(task, normalizedInput);
     if (actor?.userId) {
       task.updatedById = actor.userId;
     }
@@ -293,14 +296,17 @@ export class TasksService {
 
     return this.tasksRepository.manager.transaction(
       async (transactionalEntityManager) => {
-        const normalizedInput = this.withNormalizedProgress({
-          assigneeId: input.assigneeId ?? null,
-          dueDate: input.targetCompletionDate ?? null,
-          percentComplete: input.percentComplete,
-          priority: input.priority,
-          remarks: this.normalizeNullableText(input.updateNotes),
-          status: input.status,
-        });
+        const normalizedInput = applyTaskCompletionTransition(
+          {
+            assigneeId: input.assigneeId ?? null,
+            dueDate: input.targetCompletionDate ?? null,
+            percentComplete: input.percentComplete,
+            priority: input.priority,
+            remarks: this.normalizeNullableText(input.updateNotes),
+            status: input.status,
+          },
+          task,
+        );
         const changes = this.getExecutionChanges(task, {
           ...input,
           percentComplete:
@@ -601,22 +607,6 @@ export class TasksService {
     return (
       await this.attachLatestExecutionUpdates([this.decorateTask(task)])
     )[0];
-  }
-
-  private withNormalizedProgress<
-    T extends Partial<CreateTaskDto | UpdateTaskDto>,
-  >(input: T): T {
-    const normalizedInput = { ...input };
-
-    if (normalizedInput.percentComplete === 100) {
-      normalizedInput.status = TaskStatus.Done;
-    }
-
-    if (normalizedInput.status === TaskStatus.Done) {
-      normalizedInput.percentComplete = 100;
-    }
-
-    return normalizedInput;
   }
 
   private validateTaskPriority(priority: string) {

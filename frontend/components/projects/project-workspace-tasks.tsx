@@ -2570,10 +2570,6 @@ function validateExecutionUpdateForm(
     return "Todo tasks must stay at 0% progress.";
   }
 
-  if (nextStatus === "done" && percentComplete !== 100) {
-    return "Done tasks must be 100% complete.";
-  }
-
   if (
     nextStatus === "in_progress" &&
     (percentComplete <= 0 || percentComplete >= 100)

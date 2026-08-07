@@ -1170,7 +1170,7 @@ describe("Project workspace components", () => {
       within(taskRow as HTMLElement).getByText("Waiting for Customer"),
     ).toBeInTheDocument();
     expect(
-      within(taskRow as HTMLElement).getByText(/Today|2 Aug/),
+      within(taskRow as HTMLElement).getByText(/Today|Yesterday|2 Aug/),
     ).toBeInTheDocument();
     expect(
       within(taskRow as HTMLElement).getByText("Ava Patel"),
@@ -1321,19 +1321,6 @@ describe("Project workspace components", () => {
       ),
     ).toBeInTheDocument();
 
-    fireEvent.change(within(drawer).getByLabelText(/status/i), {
-      target: { value: "done" },
-    });
-    fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
-      target: { value: "80" },
-    });
-    fireEvent.click(
-      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
-    );
-    expect(
-      await within(drawer).findByText("Done tasks must be 100% complete."),
-    ).toBeInTheDocument();
-
     fireEvent.click(within(drawer).getByLabelText(/blocked/i));
     fireEvent.click(
       within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
@@ -1356,6 +1343,64 @@ describe("Project workspace components", () => {
       ),
     ).toBeInTheDocument();
     expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+  });
+
+  it("allows Done execution updates to rely on backend completion defaults", async () => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        mode="execution"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            id: "task-1",
+            percentComplete: 40,
+            priority: "medium",
+            projectId: "project-1",
+            status: "in_progress",
+            taskKind: "standard",
+            title: "Prepare release plan",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      within(
+        screen.getByText("Prepare release plan").closest("tr") as HTMLElement,
+      ).getByRole("button", { name: "Update" }),
+    );
+    const drawer = screen.getByRole("dialog", {
+      name: /task execution update/i,
+    });
+
+    fireEvent.change(within(drawer).getByLabelText(/status/i), {
+      target: { value: "done" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
+      target: { value: "80" },
+    });
+    fireEvent.change(within(drawer).getByLabelText(/next step/i), {
+      target: { value: "Confirm completion" },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
+    );
+
+    await waitFor(() => {
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith("task-1", {
+        assigneeId: null,
+        nextActionOwnerId: null,
+        nextStep: "Confirm completion",
+        percentComplete: 80,
+        priority: "medium",
+        status: "done",
+        targetCompletionDate: null,
+        updateNotes: null,
+      });
+    });
   });
 
   it("renders the execution Kanban board from existing task data and excludes backlog", () => {

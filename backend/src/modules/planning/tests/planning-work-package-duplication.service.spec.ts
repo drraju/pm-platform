@@ -194,6 +194,79 @@ describe('PlanningWorkPackageDuplicationService', () => {
       ).map((item) => item.id),
     ).toEqual([sourceSummary.id, connectivity.id, nested.id, uat.id]);
   });
+
+  it('resets copied task lifecycle state even when actual dates are requested', async () => {
+    const completedTask = task({
+      actualEndDate: '2026-08-05',
+      actualStartDate: '2026-08-03',
+      id: 'completed-task',
+      parentTaskId: sourceSummary.id,
+      percentComplete: 100,
+      status: TaskStatus.Done,
+    });
+    const savedCopies: Task[] = [];
+    const taskRepository = {
+      create: jest.fn((value) => value),
+      find: jest.fn().mockResolvedValue([sourceSummary, completedTask]),
+      save: jest.fn(async (value: Task | Task[]) => {
+        if (Array.isArray(value)) {
+          return value;
+        }
+        const saved = {
+          ...value,
+          id: `copy-${savedCopies.length + 1}`,
+        } as Task;
+        savedCopies.push(saved);
+        return saved;
+      }),
+    };
+    const dependencyRepository = {
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(),
+    };
+    const allocationRepository = {
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(),
+    };
+    const manager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === Task) return taskRepository;
+        if (entity === TaskDependency) return dependencyRepository;
+        if (entity === ResourceAllocation) return allocationRepository;
+        throw new Error('Unexpected repository');
+      }),
+    };
+    const service = new PlanningWorkPackageDuplicationService(
+      {
+        manager: {
+          transaction: jest.fn(async (operation) => operation(manager)),
+        },
+      } as never,
+      {
+        rebuildWorkspaceSnapshot: jest.fn().mockResolvedValue({}),
+      } as never,
+      {
+        calculateDurationDays: jest.fn().mockReturnValue(null),
+      } as never,
+    );
+
+    await service.duplicate(
+      'project-1',
+      sourceSummary.id,
+      {
+        copyActualDates: true,
+        newSummaryName: 'Fresh package',
+      },
+      { userId: 'manager-1' },
+    );
+
+    expect(savedCopies[1]).toMatchObject({
+      actualEndDate: null,
+      actualStartDate: null,
+      percentComplete: 0,
+      status: TaskStatus.Todo,
+    });
+  });
 });
 
 function task(input: Partial<Task>): Task {

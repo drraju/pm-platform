@@ -18,6 +18,7 @@ import { TaskStatus } from '../../common/enums/task-status.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { SchedulingContextFactory } from '../../common/scheduling/scheduling-context.factory';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
+import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
 import { Project } from '../projects/entities/project.entity';
 import {
@@ -333,6 +334,12 @@ export class PlanningService {
         input.durationDays !== undefined ||
         input.percentComplete !== undefined)
     ) {
+      const lifecycleInput = applyTaskCompletionTransition({
+        percentComplete: input.percentComplete,
+        status: input.status,
+        actualStartDate: schedule.task.actualStartDate,
+        actualEndDate: schedule.task.actualEndDate,
+      }, schedule.task);
       if (input.ownerId !== undefined) {
         schedule.task.assigneeId = input.ownerId;
       }
@@ -342,8 +349,11 @@ export class PlanningService {
       if (input.sequenceNumber !== undefined) {
         schedule.task.sequenceNumber = input.sequenceNumber;
       }
-      if (input.status !== undefined) {
-        schedule.task.status = input.status;
+      if (
+        lifecycleInput.status !== undefined &&
+        lifecycleInput.status !== null
+      ) {
+        schedule.task.status = lifecycleInput.status;
       }
       if (input.taskTitle !== undefined) {
         const nextTitle = input.taskTitle.trim();
@@ -358,7 +368,15 @@ export class PlanningService {
       schedule.task.plannedEndDate = normalizedSchedule.plannedEndDate;
       schedule.task.plannedStartDate = normalizedSchedule.plannedStartDate;
       schedule.task.percentComplete =
-        input.percentComplete ?? Number(schedule.percentComplete ?? 0);
+        lifecycleInput.percentComplete ??
+        input.percentComplete ??
+        Number(schedule.percentComplete ?? 0);
+      if (lifecycleInput.actualEndDate !== undefined) {
+        schedule.task.actualEndDate = lifecycleInput.actualEndDate;
+      }
+      if (lifecycleInput.actualStartDate !== undefined) {
+        schedule.task.actualStartDate = lifecycleInput.actualStartDate;
+      }
       schedule.task.updatedById = actor?.userId;
       const rebuiltSnapshot =
         await this.scheduleSnapshotsRepository.manager.transaction(
@@ -496,6 +514,10 @@ export class PlanningService {
                 plannedEndDate,
               );
         const title = input.title?.trim() || 'New Task';
+        const lifecycleInput = applyTaskCompletionTransition({
+          percentComplete: 0,
+          status: TaskStatus.Todo,
+        });
 
         const task = await tasksRepository.save(
           tasksRepository.create({
@@ -504,14 +526,13 @@ export class PlanningService {
             durationDays,
             milestoneCategory: normalizedTaskInput.milestoneCategory,
             parentTaskId,
-            percentComplete: 0,
+            ...lifecycleInput,
             plannedEndDate,
             plannedStartDate,
             priority: 'medium',
             projectId,
             sequenceNumber,
             startDate: plannedStartDate,
-            status: TaskStatus.Todo,
             taskKind,
             title,
             updatedById: actor?.userId,
