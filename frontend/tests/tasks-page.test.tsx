@@ -6,12 +6,12 @@ import TasksPage from "@/app/(app)/tasks/page";
 const taskMocks = vi.hoisted(() => ({
   getMyTasks: vi.fn(),
   getTasks: vi.fn(),
-  updateTask: vi.fn(),
 }));
 
 const projectMocks = vi.hoisted(() => ({
   getProjectMembers: vi.fn(),
   getProjects: vi.fn(),
+  recordProjectTaskExecutionUpdate: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -32,13 +32,13 @@ vi.mock("@/features/auth", () => ({
       { id: "permission-task-update-any", key: "task.update" },
       { id: "permission-task-comment", key: "task.comment" },
     ],
-    roles: [{ id: "role-1", name: "EXECUTIVE", permissions: [] }],
+    roles: [{ id: "role-1", name: "TEAM_MEMBER", permissions: [] }],
     user: {
-      email: "executive@example.com",
-      firstName: "Executive",
+      email: "member@example.com",
+      firstName: "Team",
       id: "user-1",
-      lastName: "User",
-      role: { id: "role-1", name: "EXECUTIVE", permissions: [] },
+      lastName: "Member",
+      role: { id: "role-1", name: "TEAM_MEMBER", permissions: [] },
       status: "active",
     },
   })),
@@ -64,13 +64,22 @@ vi.mock("@/features/auth", () => ({
       task?.assigneeId === currentUserId;
     return {
       canAccessDailyReview: false,
+      canAccessDelivery: true,
+      canAccessGovern: false,
+      canAccessPlanning: false,
+      canAccessToday: true,
+      canApproveDocuments: false,
+      canContributeDocuments: true,
+      canEditDocument: false,
       canEditExecution: canUpdateTask,
       canEditPlanning: false,
+      canExecuteAssignedTask: canUpdateTask,
       canManageDocuments: false,
       canManageProjectTasks: false,
+      canManageTeam: false,
       canReassignTask: canUpdateTask,
       canUpdateTask,
-      canUploadDocuments: permissionKeys.includes("project.read"),
+      canUploadDocuments: true,
     };
   },
   storeAuthMe: vi.fn(),
@@ -79,12 +88,12 @@ vi.mock("@/features/auth", () => ({
 vi.mock("@/features/projects", () => ({
   getProjectMembers: projectMocks.getProjectMembers,
   getProjects: projectMocks.getProjects,
+  recordProjectTaskExecutionUpdate: projectMocks.recordProjectTaskExecutionUpdate,
 }));
 
 vi.mock("@/features/tasks", () => ({
   getMyTasks: taskMocks.getMyTasks,
   getTasks: taskMocks.getTasks,
-  updateTask: taskMocks.updateTask,
 }));
 
 describe("Tasks page", () => {
@@ -92,9 +101,9 @@ describe("Tasks page", () => {
     window.history.replaceState({}, "", "/tasks");
     taskMocks.getMyTasks.mockReset();
     taskMocks.getTasks.mockReset();
-    taskMocks.updateTask.mockReset();
     projectMocks.getProjectMembers.mockReset();
     projectMocks.getProjects.mockReset();
+    projectMocks.recordProjectTaskExecutionUpdate.mockReset();
 
     projectMocks.getProjects.mockResolvedValue([
       {
@@ -121,6 +130,7 @@ describe("Tasks page", () => {
 
     const visibleTasks = [
       {
+        assigneeId: "user-1",
         dueDate: overdueDate,
         id: "task-overdue",
         priority: "high",
@@ -129,6 +139,7 @@ describe("Tasks page", () => {
         title: "Resolve collector rollout blocker",
       },
       {
+        assigneeId: "user-1",
         dueDate: dueToday,
         id: "task-due-today",
         priority: "medium",
@@ -137,6 +148,7 @@ describe("Tasks page", () => {
         title: "Prepare steering update",
       },
       {
+        assigneeId: "user-1",
         dueDate: futureDate,
         id: "task-future",
         priority: "medium",
@@ -155,8 +167,10 @@ describe("Tasks page", () => {
       expect(taskMocks.getTasks).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("All visible tasks")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "My Tasks" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Your assigned work across projects."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Resolve collector rollout blocker"),
     ).toBeInTheDocument();
@@ -166,8 +180,74 @@ describe("Tasks page", () => {
     expect(
       screen.queryByText("Plan executive readout"),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByRole("article")).toHaveLength(1);
     expect(window.location.search).toBe("?scope=all&timing=overdue");
+  });
+
+  it("filters by priority and sorts high priority before lower priority", async () => {
+    const today = new Date();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const sooner = new Date(today.getTime() + oneDay).toISOString().slice(0, 10);
+    const later = new Date(today.getTime() + 3 * oneDay)
+      .toISOString()
+      .slice(0, 10);
+
+    const assignedTasks = [
+      {
+        assigneeId: "user-1",
+        dueDate: sooner,
+        id: "task-low",
+        priority: "low",
+        projectId: "project-1",
+        status: "todo",
+        title: "Low priority task",
+      },
+      {
+        assigneeId: "user-1",
+        dueDate: later,
+        id: "task-high",
+        priority: "high",
+        projectId: "project-1",
+        status: "todo",
+        title: "High priority task",
+      },
+      {
+        assigneeId: "user-1",
+        dueDate: sooner,
+        id: "task-medium",
+        priority: "medium",
+        projectId: "project-1",
+        status: "todo",
+        title: "Medium priority task",
+      },
+    ];
+
+    taskMocks.getMyTasks.mockResolvedValue(assignedTasks);
+
+    const { rerender } = render(<TasksPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("High priority task")).toBeInTheDocument();
+    });
+
+    const titles = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => row.querySelector("p")?.textContent);
+    expect(titles).toEqual([
+      "High priority task",
+      "Medium priority task",
+      "Low priority task",
+    ]);
+
+    await act(async () => {
+      window.history.replaceState({}, "", "/tasks?priority=high");
+      rerender(<TasksPage />);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("High priority task")).toBeInTheDocument();
+    expect(screen.queryByText("Medium priority task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Low priority task")).not.toBeInTheDocument();
   });
 
   it("preserves overdue drilldown filters during client-side navigation", async () => {
@@ -185,6 +265,7 @@ describe("Tasks page", () => {
 
     const visibleTasks = [
       {
+        assigneeId: "user-1",
         dueDate: overdueDate,
         id: "task-overdue",
         priority: "high",
@@ -193,6 +274,7 @@ describe("Tasks page", () => {
         title: "Resolve collector rollout blocker",
       },
       {
+        assigneeId: "user-1",
         dueDate: futureDate,
         id: "task-future",
         priority: "medium",
@@ -211,7 +293,6 @@ describe("Tasks page", () => {
       expect(taskMocks.getTasks).toHaveBeenCalled();
     });
 
-    expect(screen.getByDisplayValue("All visible tasks")).toBeInTheDocument();
     expect(
       screen.getByText("Resolve collector rollout blocker"),
     ).toBeInTheDocument();
@@ -235,6 +316,7 @@ describe("Tasks page", () => {
 
     const visibleTasks = [
       {
+        assigneeId: "user-1",
         dueDate: overdueDate,
         id: "task-overdue",
         priority: "high",
@@ -243,6 +325,7 @@ describe("Tasks page", () => {
         title: "Resolve collector rollout blocker",
       },
       {
+        assigneeId: "user-1",
         dueDate: futureDate,
         id: "task-future",
         priority: "medium",

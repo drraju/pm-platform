@@ -7,6 +7,7 @@ import { getWorkspaceContext } from "@/components/layout/workspace-context";
 
 const authMocks = vi.hoisted(() => ({
   getAuthMe: vi.fn(),
+  getStoredRoleNames: vi.fn(() => []),
   storeAuthMe: vi.fn(),
 }));
 
@@ -37,6 +38,11 @@ vi.mock("@/features/auth", () => ({
   clearSession: vi.fn(),
   getAuthMe: authMocks.getAuthMe,
   getStoredPermissionKeys: vi.fn(() => []),
+  getStoredRoleNames: authMocks.getStoredRoleNames,
+  useStoredAuthSession: () => ({
+    permissionKeys: [] as string[],
+    roleNames: [] as string[],
+  }),
   hasAnyPermission: (
     permissionKeys: string[],
     requiredPermissions: string[],
@@ -80,23 +86,36 @@ vi.mock("@/features/auth", () => ({
       permissionKeys.includes("task.reassign");
     const canUpdateOwnTask =
       canUpdateTasks && Boolean(currentUserId) && task?.assigneeId === currentUserId;
+    const canAccessStandup =
+      roleNames.some((roleName) =>
+        [
+          "PLATFORM_ADMIN",
+          "PORTFOLIO_MANAGER",
+          "PROJECT_MANAGER",
+          "PROGRAM_MANAGER",
+          "SUPER_ADMIN",
+        ].includes(roleName),
+      ) &&
+      permissionKeys.includes("project.read") &&
+      permissionKeys.includes("task.update");
+    const canExecuteWork =
+      permissionKeys.includes("project.read") &&
+      permissionKeys.includes("task.update");
     return {
-      canAccessDailyReview:
-        roleNames.some((roleName) =>
-          [
-            "PLATFORM_ADMIN",
-            "PORTFOLIO_MANAGER",
-            "PROJECT_MANAGER",
-            "PROGRAM_MANAGER",
-            "SUPER_ADMIN",
-          ].includes(roleName),
-        ) &&
-        permissionKeys.includes("project.read") &&
-        permissionKeys.includes("task.update"),
+      canAccessDailyReview: canAccessStandup,
+      canAccessDelivery: canExecuteWork,
+      canAccessGovern: false,
+      canAccessPlanning: false,
+      canAccessToday: canExecuteWork,
+      canApproveDocuments: false,
+      canContributeDocuments: permissionKeys.includes("project.read"),
+      canEditDocument: false,
       canEditExecution: canUpdateOwnTask,
       canEditPlanning: false,
+      canExecuteAssignedTask: canUpdateOwnTask,
       canManageDocuments: false,
       canManageProjectTasks: false,
+      canManageTeam: false,
       canReassignTask: canUpdateOwnTask && permissionKeys.includes("task.reassign"),
       canUpdateTask: canUpdateOwnTask,
       canUploadDocuments: permissionKeys.includes("project.read"),
@@ -159,6 +178,10 @@ describe("AppShell", () => {
       "href",
       "/projects",
     );
+    expect(screen.getByRole("link", { name: /^today$/i })).toHaveAttribute(
+      "href",
+      "/today",
+    );
     expect(
       screen.getByRole("link", { name: /daily review/i }),
     ).toHaveAttribute("href", "/daily-review");
@@ -199,8 +222,11 @@ describe("AppShell", () => {
       screen.getByRole("navigation", { name: /breadcrumb/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Current workspace: Home"),
-    ).toBeInTheDocument();
+      screen.getByRole("navigation", { name: /breadcrumb/i }),
+    ).toHaveTextContent("Home");
+    expect(
+      screen.queryByLabelText("Current workspace: Home"),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("PM")).toHaveLength(2);
     expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
     expect(screen.getByText("Workspace content")).toBeInTheDocument();
@@ -258,6 +284,10 @@ describe("AppShell", () => {
     expect(
       screen.queryByRole("link", { name: /^dashboard$/i }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^today$/i })).toHaveAttribute(
+      "href",
+      "/today",
+    );
     expect(
       screen.queryByRole("link", { name: /daily review/i }),
     ).not.toBeInTheDocument();
@@ -281,12 +311,15 @@ describe("workspace route context", () => {
   });
 
   it("preserves the project overview link on deep project routes", () => {
-    expect(getWorkspaceContext("/projects/project-1/raid").breadcrumbs).toEqual(
+    expect(getWorkspaceContext("/projects/project-1/govern").breadcrumbs).toEqual(
       [
         { href: "/projects", label: "Projects" },
         { href: "/projects/project-1", label: "Project" },
-        { label: "Raid" },
+        { label: "Govern" },
       ],
+    );
+    expect(getWorkspaceContext("/projects/project-1/delivery").title).toBe(
+      "Delivery",
     );
   });
 
@@ -295,6 +328,11 @@ describe("workspace route context", () => {
     expect(getWorkspaceContext("/tasks").breadcrumbs.at(-1)?.label).toBe(
       "My Tasks",
     );
+    expect(getWorkspaceContext("/today")).toEqual({
+      breadcrumbs: [{ label: "Today" }],
+      description: "Project execution",
+      title: "Today",
+    });
   });
 
   it("labels the executive workspace as Dashboard without changing the route", () => {

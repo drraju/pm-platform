@@ -2,11 +2,15 @@
 
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { PageHeader } from "@/components/layout/page-header";
-import { TaskTable } from "@/components/tasks/task-table";
+import { buildExecutionUpdatePayload } from "@/components/projects/execution-update-payload";
+import {
+  compareTaskPriority,
+  TaskTable,
+} from "@/components/tasks/task-table";
 import {
   getProjectMembers,
   getProjects,
+  recordProjectTaskExecutionUpdate,
   type ApiProject,
   type ApiProjectMember,
 } from "@/features/projects";
@@ -16,7 +20,7 @@ import {
   hasPermission,
   storeAuthMe,
 } from "@/features/auth";
-import { getMyTasks, getTasks, updateTask, type ApiTask } from "@/features/tasks";
+import { getMyTasks, getTasks, type ApiTask } from "@/features/tasks";
 import {
   createProjectEntityProvider,
   createTaskEntityProvider,
@@ -30,6 +34,15 @@ const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
   { label: "Blocked", value: "blocked" },
   { label: "Done", value: "done" },
 ];
+
+const taskPriorities: Array<{ label: string; value: ApiTask["priority"] }> = [
+  { label: "Critical", value: "critical" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Low", value: "low" },
+];
+
+type SortMode = "priority" | "due-asc" | "due-desc";
 
 export default function TasksPage() {
   return (
@@ -54,16 +67,21 @@ function PageContent() {
   );
   const [roleNames, setRoleNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingTaskId, setIsSavingTaskId] = useState<string | null>(null);
+  const [saveStateByTaskId, setSaveStateByTaskId] = useState<
+    Record<string, "saving" | "saved" | "error">
+  >({});
   const scopeFilter: "mine" | "all" =
     searchParams.get("scope") === "all" ? "all" : "mine";
   const projectFilter = searchParams.get("projectId") ?? "all";
   const requestedStatus = searchParams.get("status");
   const statusFilter: "all" | ApiTask["status"] =
     isTaskStatus(requestedStatus) ? requestedStatus : "all";
-  const dueDateSort: "asc" | "desc" = searchParams.get("sort") === "desc" ? "desc" : "asc";
+  const requestedPriority = searchParams.get("priority");
+  const priorityFilter: "all" | ApiTask["priority"] =
+    isTaskPriority(requestedPriority) ? requestedPriority : "all";
+  const sortFilter = parseSortMode(searchParams.get("sort"));
   const requestedTiming = searchParams.get("timing");
   const timingFilter: "all" | "overdue" | "upcoming" =
     requestedTiming === "overdue" || requestedTiming === "upcoming"
@@ -81,21 +99,26 @@ function PageContent() {
   useEntityProvider(taskEntityProvider);
 
   function syncTaskFilters(nextFilters: {
+    priority?: "all" | ApiTask["priority"];
     projectId?: string;
     scope?: "mine" | "all";
-    sort?: "asc" | "desc";
+    sort?: SortMode;
     status?: "all" | ApiTask["status"];
     timing?: "all" | "overdue" | "upcoming";
   }) {
     const nextUrl = buildTaskFiltersUrl(pathname, {
+      priority: nextFilters.priority ?? priorityFilter,
       projectId: nextFilters.projectId ?? projectFilter,
       scope: nextFilters.scope ?? scopeFilter,
-      sort: nextFilters.sort ?? dueDateSort,
+      sort: nextFilters.sort ?? sortFilter,
       status: nextFilters.status ?? statusFilter,
       timing: nextFilters.timing ?? timingFilter,
     });
 
-    if (`${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}` !== nextUrl) {
+    if (
+      `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}` !==
+      nextUrl
+    ) {
       router.replace(nextUrl);
     }
   }
@@ -114,10 +137,10 @@ function PageContent() {
         new Set(taskData.map((task) => task.projectId)),
       );
       const memberEntries = await Promise.all(
-        uniqueProjectIds.map(async (projectId) => [
-          projectId,
-          await getProjectMembers(projectId),
-        ] as const),
+        uniqueProjectIds.map(
+          async (projectId) =>
+            [projectId, await getProjectMembers(projectId)] as const,
+        ),
       );
       setTasks(taskData);
       setProjects(projectData);
@@ -140,33 +163,43 @@ function PageContent() {
     void loadData();
   }, [loadData]);
 
-  async function handleUpdateTask(
-    taskId: string,
-    input: {
-      assigneeId?: string | null;
-      percentComplete?: number;
-      remarks?: string;
-      status?: ApiTask["status"];
-    },
+  async function handleRecordExecutionUpdate(
+    task: ApiTask,
+    input: ReturnType<typeof buildExecutionUpdatePayload>,
   ) {
     setError(null);
-    setIsSavingTaskId(taskId);
+    setIsSavingTaskId(task.id);
+    setSaveStateByTaskId((current) => ({ ...current, [task.id]: "saving" }));
     try {
-      const updatedTask = await updateTask(taskId, input);
+      const updatedTask = await recordProjectTaskExecutionUpdate(
+        task.projectId,
+        task.id,
+        input,
+      );
       setTasks((currentTasks) =>
-        currentTasks.map((task) =>
-          task.id === taskId
+        currentTasks.map((candidate) =>
+          candidate.id === task.id
             ? {
-                ...task,
+                ...candidate,
                 ...updatedTask,
-                project: updatedTask.project ?? task.project,
+                project: updatedTask.project ?? candidate.project,
               }
-            : task,
+            : candidate,
         ),
       );
-      showToast(setToast, "success", "Task changes saved.");
+      setSaveStateByTaskId((current) => ({ ...current, [task.id]: "saved" }));
+      window.setTimeout(() => {
+        setSaveStateByTaskId((current) => {
+          if (current[task.id] !== "saved") {
+            return current;
+          }
+          const next = { ...current };
+          delete next[task.id];
+          return next;
+        });
+      }, 1200);
     } catch (requestError) {
-      showToast(setToast, "error", "Unable to update task.");
+      setSaveStateByTaskId((current) => ({ ...current, [task.id]: "error" }));
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -181,6 +214,9 @@ function PageContent() {
     return tasks
       .filter((task) =>
         statusFilter === "all" ? true : task.status === statusFilter,
+      )
+      .filter((task) =>
+        priorityFilter === "all" ? true : task.priority === priorityFilter,
       )
       .filter((task) =>
         projectFilter === "all" ? true : task.projectId === projectFilter,
@@ -209,6 +245,13 @@ function PageContent() {
       })
       .slice()
       .sort((left, right) => {
+        if (sortFilter === "priority") {
+          const byPriority = compareTaskPriority(left, right);
+          if (byPriority !== 0) {
+            return byPriority;
+          }
+        }
+
         const leftTime = left.dueDate
           ? new Date(left.dueDate).getTime()
           : Number.MAX_SAFE_INTEGER;
@@ -216,129 +259,112 @@ function PageContent() {
           ? new Date(right.dueDate).getTime()
           : Number.MAX_SAFE_INTEGER;
 
-        return dueDateSort === "asc"
-          ? leftTime - rightTime
-          : rightTime - leftTime;
+        if (sortFilter === "due-desc") {
+          return rightTime - leftTime;
+        }
+
+        return leftTime - rightTime;
       });
-  }, [dueDateSort, projectFilter, statusFilter, tasks, timingFilter]);
+  }, [
+    priorityFilter,
+    projectFilter,
+    sortFilter,
+    statusFilter,
+    tasks,
+    timingFilter,
+  ]);
   const canUpdateMyTasks =
     hasPermission(permissionKeys, "task.update") ||
     hasPermission(permissionKeys, "task.comment") ||
     hasPermission(permissionKeys, "task.reassign");
-  const isAllTasksScope = scopeFilter === "all";
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        description={
-          isAllTasksScope
-            ? "A filtered view of visible project work across projects, due dates, and delivery priority."
-            : "A personal view of assigned work across projects, due dates, and delivery priority."
-        }
-        eyebrow="My work"
-        title={isAllTasksScope ? "Tasks" : "My Tasks"}
-      />
+    <div className="space-y-2">
+      <header>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+          My Tasks
+        </h1>
+        <p className="text-sm text-slate-500">
+          Your assigned work across projects.
+        </p>
+      </header>
 
       {error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <section className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </section>
       ) : null}
-      {toast ? <ToastMessage toast={toast} /> : null}
 
-      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-5">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Task scope
-          </span>
-          <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) =>
-              syncTaskFilters({
-                scope: event.target.value === "all" ? "all" : "mine",
-              })
-            }
-            value={scopeFilter}
-          >
-            <option value="mine">Assigned to me</option>
-            <option value="all">All visible tasks</option>
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Filter by status
-          </span>
-          <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) =>
-              syncTaskFilters({
-                status: event.target.value as "all" | ApiTask["status"],
-              })
-            }
-            value={statusFilter}
-          >
-            <option value="all">All statuses</option>
-            {taskStatuses.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Filter by project
-          </span>
-          <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) => syncTaskFilters({ projectId: event.target.value })}
-            value={projectFilter}
-          >
-            <option value="all">All projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Sort by due date
-          </span>
-          <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) =>
-              syncTaskFilters({ sort: event.target.value as "asc" | "desc" })
-            }
-            value={dueDateSort}
-          >
-            <option value="asc">Soonest first</option>
-            <option value="desc">Latest first</option>
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Filter by timing
-          </span>
-          <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) =>
-              syncTaskFilters({
-                timing: event.target.value as "all" | "overdue" | "upcoming",
-              })
-            }
-            value={timingFilter}
-          >
-            <option value="all">All tasks</option>
-            <option value="upcoming">Upcoming in 7 days</option>
-            <option value="overdue">Overdue</option>
-          </select>
-        </label>
+      <section
+        aria-label="My Tasks filters"
+        className="grid gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 sm:grid-cols-2 lg:grid-cols-5"
+      >
+        <FilterSelect
+          label="Project"
+          onChange={(value) => syncTaskFilters({ projectId: value })}
+          value={projectFilter}
+        >
+          <option value="all">All projects</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </FilterSelect>
+        <FilterSelect
+          label="Status"
+          onChange={(value) =>
+            syncTaskFilters({
+              status: value as "all" | ApiTask["status"],
+            })
+          }
+          value={statusFilter}
+        >
+          <option value="all">All statuses</option>
+          {taskStatuses.map((status) => (
+            <option key={status.value} value={status.value}>
+              {status.label}
+            </option>
+          ))}
+        </FilterSelect>
+        <FilterSelect
+          label="Priority"
+          onChange={(value) =>
+            syncTaskFilters({
+              priority: value as "all" | ApiTask["priority"],
+            })
+          }
+          value={priorityFilter}
+        >
+          <option value="all">All priorities</option>
+          {taskPriorities.map((priority) => (
+            <option key={priority.value} value={priority.value}>
+              {priority.label}
+            </option>
+          ))}
+        </FilterSelect>
+        <FilterSelect
+          label="Due/Timing"
+          onChange={(value) =>
+            syncTaskFilters({
+              timing: value as "all" | "overdue" | "upcoming",
+            })
+          }
+          value={timingFilter}
+        >
+          <option value="all">All timing</option>
+          <option value="upcoming">Upcoming in 7 days</option>
+          <option value="overdue">Overdue</option>
+        </FilterSelect>
+        <FilterSelect
+          label="Sort"
+          onChange={(value) => syncTaskFilters({ sort: value as SortMode })}
+          value={sortFilter}
+        >
+          <option value="priority">Priority, then due</option>
+          <option value="due-asc">Due soonest</option>
+          <option value="due-desc">Due latest</option>
+        </FilterSelect>
       </section>
 
       <TaskTable
@@ -351,17 +377,45 @@ function PageContent() {
         isLoading={isLoading}
         isSavingTaskId={isSavingTaskId}
         membersByProjectId={membersByProjectId}
-        onUpdateTask={canUpdateMyTasks ? handleUpdateTask : undefined}
+        onRecordExecutionUpdate={
+          canUpdateMyTasks ? handleRecordExecutionUpdate : undefined
+        }
         permissionKeys={permissionKeys}
         roleNames={roleNames}
+        saveStateByTaskId={saveStateByTaskId}
         tasks={visibleTasks}
       />
     </div>
   );
 }
 
+function FilterSelect({
+  children,
+  label,
+  onChange,
+  value,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="grid gap-1 text-xs font-semibold text-slate-600">
+      {label}
+      <select
+        className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm font-normal text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
 function PageLoading() {
-  return <div className="space-y-6" />;
+  return <div className="space-y-2" />;
 }
 
 function isTaskStatus(value: string | null): value is ApiTask["status"] {
@@ -374,13 +428,36 @@ function isTaskStatus(value: string | null): value is ApiTask["status"] {
   );
 }
 
-function buildTaskFiltersUrl(pathname: string, filters: {
-  projectId: string;
-  scope: "mine" | "all";
-  sort: "asc" | "desc";
-  status: "all" | ApiTask["status"];
-  timing: "all" | "overdue" | "upcoming";
-}) {
+function isTaskPriority(value: string | null): value is ApiTask["priority"] {
+  return (
+    value === "critical" ||
+    value === "high" ||
+    value === "medium" ||
+    value === "low"
+  );
+}
+
+function parseSortMode(value: string | null): SortMode {
+  if (value === "desc" || value === "due-desc") {
+    return "due-desc";
+  }
+  if (value === "asc" || value === "due-asc") {
+    return "due-asc";
+  }
+  return "priority";
+}
+
+function buildTaskFiltersUrl(
+  pathname: string,
+  filters: {
+    priority: "all" | ApiTask["priority"];
+    projectId: string;
+    scope: "mine" | "all";
+    sort: SortMode;
+    status: "all" | ApiTask["status"];
+    timing: "all" | "overdue" | "upcoming";
+  },
+) {
   const searchParams = new URLSearchParams();
 
   if (filters.scope !== "mine") {
@@ -395,8 +472,14 @@ function buildTaskFiltersUrl(pathname: string, filters: {
     searchParams.set("status", filters.status);
   }
 
-  if (filters.sort !== "asc") {
-    searchParams.set("sort", filters.sort);
+  if (filters.priority !== "all") {
+    searchParams.set("priority", filters.priority);
+  }
+
+  if (filters.sort === "due-asc") {
+    searchParams.set("sort", "asc");
+  } else if (filters.sort === "due-desc") {
+    searchParams.set("sort", "desc");
   }
 
   if (filters.timing !== "all") {
@@ -409,37 +492,4 @@ function buildTaskFiltersUrl(pathname: string, filters: {
 
 function formatDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
-}
-
-type ToastState = {
-  id: number;
-  message: string;
-  tone: "error" | "success";
-};
-
-function showToast(
-  setToast: React.Dispatch<React.SetStateAction<ToastState | null>>,
-  tone: ToastState["tone"],
-  message: string,
-) {
-  const id = Date.now();
-  setToast({ id, message, tone });
-  window.setTimeout(() => {
-    setToast((currentToast) => (currentToast?.id === id ? null : currentToast));
-  }, 3000);
-}
-
-function ToastMessage({ toast }: { toast: ToastState }) {
-  return (
-    <section
-      className={`fixed right-4 top-4 z-50 rounded-md border px-4 py-3 text-sm font-semibold shadow-lg ${
-        toast.tone === "success"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-red-200 bg-red-50 text-red-700"
-      }`}
-      role="status"
-    >
-      {toast.message}
-    </section>
-  );
 }

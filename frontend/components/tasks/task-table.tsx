@@ -1,6 +1,11 @@
 import React from "react";
+import { buildExecutionUpdatePayload } from "@/components/projects/execution-update-payload";
 import { resolveProjectUiCapabilities } from "@/features/auth";
 import type { ApiProjectMember, ApiTask } from "@/lib/api/client";
+
+type ExecutionUpdateInput = ReturnType<typeof buildExecutionUpdatePayload>;
+
+export type TaskPriority = "critical" | "high" | "medium" | "low";
 
 type TaskTableProps = {
   currentUserId?: string | null;
@@ -8,26 +13,28 @@ type TaskTableProps = {
   isLoading: boolean;
   isSavingTaskId?: string | null;
   membersByProjectId?: Record<string, ApiProjectMember[]>;
-  onUpdateTask?: (
-    taskId: string,
-    input: {
-      assigneeId?: string | null;
-      percentComplete?: number;
-      remarks?: string;
-      status?: ApiTask["status"];
-    },
-  ) => void;
+  onRecordExecutionUpdate?: (
+    task: ApiTask,
+    input: ExecutionUpdateInput,
+  ) => Promise<void> | void;
   permissionKeys?: string[];
   roleNames?: string[];
+  saveStateByTaskId?: Record<string, "saving" | "saved" | "error">;
   tasks: ApiTask[];
 };
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
-  { label: "Backlog", value: "backlog" },
   { label: "Todo", value: "todo" },
   { label: "In Progress", value: "in_progress" },
   { label: "Blocked", value: "blocked" },
   { label: "Done", value: "done" },
+];
+
+const taskPriorities: Array<{ label: string; value: TaskPriority }> = [
+  { label: "Critical", value: "critical" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Low", value: "low" },
 ];
 
 export function TaskTable({
@@ -36,50 +43,67 @@ export function TaskTable({
   isLoading,
   isSavingTaskId,
   membersByProjectId = {},
-  onUpdateTask,
+  onRecordExecutionUpdate,
   permissionKeys = [],
   roleNames = [],
+  saveStateByTaskId = {},
   tasks,
 }: TaskTableProps) {
   return (
-    <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-      <div className="hidden grid-cols-[1.15fr_0.85fr_0.7fr_0.65fr_0.75fr_1fr_1.25fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
-        <span>Task</span>
-        <span>Project</span>
-        <span>Status</span>
-        <span>Complete</span>
-        <span>Due Date</span>
-        <span>Next Step</span>
-        <span>Operations</span>
-      </div>
-
-      <div className="divide-y divide-slate-100">
-        {isLoading ? (
-          <p className="px-4 py-6 text-sm text-slate-500">Loading tasks...</p>
-        ) : null}
-
-        {!isLoading && tasks.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-slate-500">{emptyMessage}</p>
-        ) : null}
-
-        {tasks.map((task) => {
-          const dueState = getDueState(task);
-          const projectMembers = membersByProjectId[task.projectId] ?? [];
-
-          return (
-            <EditableTaskRow
-              dueState={dueState}
-              currentUserId={currentUserId}
-              isSaving={isSavingTaskId === task.id}
-              key={task.id}
-              members={projectMembers}
-              onUpdateTask={onUpdateTask}
-              permissionKeys={permissionKeys}
-              roleNames={roleNames}
-              task={task}
-            />
-          );
-        })}
+    <section
+      aria-label="My Tasks queue"
+      className="overflow-hidden rounded-md border border-slate-200 bg-white"
+    >
+      <div className="max-h-[min(70vh,820px)] overflow-auto">
+        <table className="min-w-[1040px] w-full border-collapse text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              {[
+                "Task",
+                "Project",
+                "Priority",
+                "Status",
+                "Progress",
+                "Due",
+                "Today's Update",
+                "Next Step",
+              ].map((heading) => (
+                <th className="px-2.5 py-2 font-semibold" key={heading} scope="col">
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {isLoading ? (
+              <tr>
+                <td className="px-3 py-5 text-slate-500" colSpan={8}>
+                  Loading tasks...
+                </td>
+              </tr>
+            ) : null}
+            {!isLoading && tasks.length === 0 ? (
+              <tr>
+                <td className="px-3 py-5 text-slate-500" colSpan={8}>
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : null}
+            {tasks.map((task) => (
+              <EditableTaskRow
+                currentUserId={currentUserId}
+                isSaving={isSavingTaskId === task.id}
+                key={task.id}
+                members={membersByProjectId[task.projectId] ?? []}
+                onRecordExecutionUpdate={onRecordExecutionUpdate}
+                permissionKeys={permissionKeys}
+                roleNames={roleNames}
+                saveState={saveStateByTaskId[task.id]}
+                task={task}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -87,35 +111,47 @@ export function TaskTable({
 
 function EditableTaskRow({
   currentUserId,
-  dueState,
   isSaving,
   members,
-  onUpdateTask,
+  onRecordExecutionUpdate,
   permissionKeys,
   roleNames,
+  saveState,
   task,
 }: {
   currentUserId?: string | null;
-  dueState: ReturnType<typeof getDueState>;
   isSaving: boolean;
   members: ApiProjectMember[];
-  onUpdateTask?: TaskTableProps["onUpdateTask"];
+  onRecordExecutionUpdate?: TaskTableProps["onRecordExecutionUpdate"];
   permissionKeys: string[];
   roleNames: string[];
+  saveState?: "saving" | "saved" | "error";
   task: ApiTask;
 }) {
   const [status, setStatus] = React.useState(task.status);
+  const [priority, setPriority] = React.useState(task.priority);
   const [percentComplete, setPercentComplete] = React.useState(
     String(task.percentComplete ?? 0),
   );
-  const [remarks, setRemarks] = React.useState(task.remarks ?? "");
-  const [assigneeId, setAssigneeId] = React.useState(task.assigneeId ?? "");
+  const [updateNotes, setUpdateNotes] = React.useState(
+    task.latestExecutionUpdate?.updateNotes ?? "",
+  );
+  const [nextStep, setNextStep] = React.useState(
+    task.latestExecutionUpdate?.nextStep ?? "",
+  );
+  const [nextOwnerId, setNextOwnerId] = React.useState(
+    task.latestExecutionUpdate?.nextActionOwnerId ?? task.assigneeId ?? "",
+  );
 
   React.useEffect(() => {
     setStatus(task.status);
+    setPriority(task.priority);
     setPercentComplete(String(task.percentComplete ?? 0));
-    setRemarks(task.remarks ?? "");
-    setAssigneeId(task.assigneeId ?? "");
+    setUpdateNotes(task.latestExecutionUpdate?.updateNotes ?? "");
+    setNextStep(task.latestExecutionUpdate?.nextStep ?? "");
+    setNextOwnerId(
+      task.latestExecutionUpdate?.nextActionOwnerId ?? task.assigneeId ?? "",
+    );
   }, [task]);
 
   const capabilities = resolveProjectUiCapabilities({
@@ -126,181 +162,208 @@ function EditableTaskRow({
     roleNames,
     task,
   });
-  const canEdit = Boolean(onUpdateTask) && capabilities.canUpdateTask;
+  const canEditExecution =
+    Boolean(onRecordExecutionUpdate) && capabilities.canExecuteAssignedTask;
+  const canEditPriority =
+    Boolean(onRecordExecutionUpdate) && capabilities.canManageProjectTasks;
   const isDirty =
     status !== task.status ||
+    priority !== task.priority ||
     Number(percentComplete || 0) !== (task.percentComplete ?? 0) ||
-    remarks !== (task.remarks ?? "") ||
-    assigneeId !== (task.assigneeId ?? "");
+    updateNotes !== (task.latestExecutionUpdate?.updateNotes ?? "") ||
+    nextStep !== (task.latestExecutionUpdate?.nextStep ?? "") ||
+    nextOwnerId !==
+      (task.latestExecutionUpdate?.nextActionOwnerId ?? task.assigneeId ?? "");
+
+  async function saveRow() {
+    if (!onRecordExecutionUpdate || !canEditExecution) {
+      return;
+    }
+    const payload = buildExecutionUpdatePayload(task, {
+      nextActionOwnerId: nextOwnerId || null,
+      nextStep: nextStep || null,
+      percentComplete: Number(percentComplete || 0),
+      priority: canEditPriority ? priority : task.priority,
+      status,
+      updateNotes: updateNotes || null,
+    });
+    await onRecordExecutionUpdate(task, payload);
+  }
 
   return (
-    <article className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.15fr_0.85fr_0.7fr_0.65fr_0.75fr_1fr_1.25fr] md:items-start">
-      <div>
-        <h2 className="font-semibold text-slate-950">{task.title}</h2>
-        <p className="mt-1 text-xs text-slate-500 md:hidden">
-          {task.project?.name ?? "No project"}
-        </p>
-        {task.remarks ? (
-          <p className="mt-2 text-xs text-slate-500">{task.remarks}</p>
+    <tr className="align-top hover:bg-slate-50/70">
+      <td className="max-w-[220px] px-2.5 py-2">
+        <p className="font-semibold text-slate-950">{task.title}</p>
+        {saveState === "saving" || isSaving ? (
+          <p className="mt-1 text-[11px] font-medium text-slate-500">Saving...</p>
         ) : null}
-      </div>
-      <span className="hidden text-slate-600 md:block">
+        {saveState === "saved" ? (
+          <p className="mt-1 text-[11px] font-medium text-emerald-700">Saved</p>
+        ) : null}
+        {saveState === "error" ? (
+          <p className="mt-1 text-[11px] font-medium text-red-700">Error / Retry</p>
+        ) : null}
+      </td>
+      <td className="px-2.5 py-2 text-slate-600">
         {task.project?.name ?? "No project"}
-      </span>
-      <span className="capitalize text-slate-700">
-        <span className="font-medium text-slate-500 md:hidden">Status: </span>
-        {formatLabel(task.status)}
-      </span>
-      <span className="text-slate-600">
-        <span className="font-medium text-slate-500 md:hidden">Complete: </span>
-        {task.percentComplete ?? 0}%
-      </span>
-      <span className="flex flex-wrap items-center gap-2 text-slate-600">
-        <span className="font-medium text-slate-500 md:hidden">Due: </span>
-        {formatDate(task.dueDate)}
-        {dueState ? (
-          <span
-            className={`rounded-md px-2 py-1 text-xs font-semibold ${dueState.className}`}
-          >
-            {dueState.label}
-          </span>
-        ) : null}
-      </span>
-      <span
-        className="min-w-0 truncate text-slate-600"
-        title={task.latestExecutionUpdate?.nextStep ?? undefined}
-      >
-        <span className="font-medium text-slate-500 md:hidden">
-          Next Step:{" "}
-        </span>
-        {task.latestExecutionUpdate?.nextStep ?? "—"}
-      </span>
-      <div className="space-y-2">
-        {canEdit ? (
-          <>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <label className="text-xs font-medium text-slate-600">
-                Status
-                <select
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                  onChange={(event) =>
-                    setStatus(event.target.value as ApiTask["status"])
-                  }
-                  value={status}
-                >
-                  {taskStatuses.map((taskStatus) => (
-                    <option key={taskStatus.value} value={taskStatus.value}>
-                      {taskStatus.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-medium text-slate-600">
-                Complete %
-                <input
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                  max={100}
-                  min={0}
-                  onChange={(event) => setPercentComplete(event.target.value)}
-                  type="number"
-                  value={percentComplete}
-                />
-              </label>
-            </div>
-            <label className="block text-xs font-medium text-slate-600">
-              Remarks
-              <textarea
-                className="mt-1 min-h-16 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                onChange={(event) => setRemarks(event.target.value)}
-                value={remarks}
-              />
-            </label>
-            <label className="block text-xs font-medium text-slate-600">
-              Reassign
-              <select
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                onChange={(event) => setAssigneeId(event.target.value)}
-                value={assigneeId}
-              >
-                <option value="">Unassigned</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.userId}>
-                    {member.user
-                      ? `${member.user.firstName} ${member.user.lastName}`
-                      : member.userId}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              className="rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!isDirty || isSaving}
-              onClick={() =>
-                onUpdateTask?.(task.id, {
-                  assigneeId: assigneeId || null,
-                  percentComplete: Number(percentComplete || 0),
-                  remarks,
-                  status,
-                })
+      </td>
+      <td className="px-2.5 py-2">
+        {canEditPriority ? (
+          <select
+            aria-label={`Priority for ${task.title}`}
+            className="w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs font-semibold uppercase"
+            disabled={isSaving}
+            onBlur={() => {
+              if (isDirty) {
+                void saveRow();
               }
-              type="button"
-            >
-              {isSaving ? "Saving..." : "Save updates"}
-            </button>
-          </>
+            }}
+            onChange={(event) =>
+              setPriority(event.target.value as ApiTask["priority"])
+            }
+            value={priority}
+          >
+            {taskPriorities.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
         ) : (
-          <span className="text-slate-500">Inline updates unavailable</span>
+          <span className={`text-xs font-semibold uppercase ${priorityClass(task.priority)}`}>
+            {task.priority}
+          </span>
         )}
-      </div>
-    </article>
+      </td>
+      <td className="px-2.5 py-2">
+        {canEditExecution ? (
+          <select
+            aria-label={`Status for ${task.title}`}
+            className="w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs"
+            disabled={isSaving}
+            onBlur={() => {
+              if (isDirty) {
+                void saveRow();
+              }
+            }}
+            onChange={(event) =>
+              setStatus(event.target.value as ApiTask["status"])
+            }
+            value={status}
+          >
+            {taskStatuses.map((taskStatus) => (
+              <option key={taskStatus.value} value={taskStatus.value}>
+                {taskStatus.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="capitalize text-slate-700">
+            {formatLabel(task.status)}
+          </span>
+        )}
+      </td>
+      <td className="px-2.5 py-2">
+        {canEditExecution ? (
+          <input
+            aria-label={`Progress for ${task.title}`}
+            className="w-20 rounded border border-slate-300 px-1.5 py-1 text-xs"
+            disabled={isSaving}
+            max={100}
+            min={0}
+            onBlur={() => {
+              if (isDirty) {
+                void saveRow();
+              }
+            }}
+            onChange={(event) => setPercentComplete(event.target.value)}
+            type="number"
+            value={percentComplete}
+          />
+        ) : (
+          <span className="text-slate-600">{task.percentComplete ?? 0}%</span>
+        )}
+      </td>
+      <td className="px-2.5 py-2 text-slate-600">{formatDate(task.dueDate)}</td>
+      <td className="px-2.5 py-2">
+        {canEditExecution ? (
+          <textarea
+            aria-label={`Today's update for ${task.title}`}
+            className="min-h-14 w-full rounded border border-slate-300 px-1.5 py-1 text-xs"
+            disabled={isSaving}
+            onBlur={() => {
+              if (isDirty) {
+                void saveRow();
+              }
+            }}
+            onChange={(event) => setUpdateNotes(event.target.value)}
+            value={updateNotes}
+          />
+        ) : (
+          <span className="text-slate-600">
+            {task.latestExecutionUpdate?.updateNotes ?? "—"}
+          </span>
+        )}
+      </td>
+      <td className="px-2.5 py-2">
+        {canEditExecution ? (
+          <input
+            aria-label={`Next step for ${task.title}`}
+            className="w-full rounded border border-slate-300 px-1.5 py-1 text-xs"
+            disabled={isSaving}
+            onBlur={() => {
+              if (isDirty) {
+                void saveRow();
+              }
+            }}
+            onChange={(event) => setNextStep(event.target.value)}
+            value={nextStep}
+          />
+        ) : (
+          <span className="text-slate-600">
+            {task.latestExecutionUpdate?.nextStep ?? "—"}
+          </span>
+        )}
+      </td>
+    </tr>
   );
 }
 
-function getDueState(task: ApiTask) {
-  if (!task.dueDate || task.status === "done") {
-    return null;
+function priorityClass(priority: string) {
+  if (priority === "critical" || priority === "high") {
+    return "text-red-700";
   }
-
-  const today = toDateOnly(new Date());
-  const dueDate = toDateOnly(new Date(task.dueDate));
-  const nextWeek = new Date(today);
-  nextWeek.setDate(today.getDate() + 7);
-
-  if (dueDate < today) {
-    return {
-      className: "bg-red-50 text-red-700",
-      label: "Overdue",
-    };
+  if (priority === "medium") {
+    return "text-amber-700";
   }
-
-  if (dueDate <= nextWeek) {
-    return {
-      className: "bg-amber-50 text-amber-700",
-      label: "Due this week",
-    };
-  }
-
-  return null;
-}
-
-function toDateOnly(value: Date) {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
+  return "text-slate-600";
 }
 
 function formatDate(value?: string | null) {
   if (!value) {
-    return "No due date";
+    return "—";
   }
-
   return new Intl.DateTimeFormat("en", {
     day: "2-digit",
     month: "short",
-    year: "numeric",
   }).format(new Date(value));
 }
 
 function formatLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+export function compareTaskPriority(
+  left: Pick<ApiTask, "priority">,
+  right: Pick<ApiTask, "priority">,
+) {
+  return priorityRank(left.priority) - priorityRank(right.priority);
+}
+
+function priorityRank(priority?: string | null) {
+  if (priority === "critical") return 0;
+  if (priority === "high") return 1;
+  if (priority === "medium") return 2;
+  if (priority === "low") return 3;
+  return 4;
 }

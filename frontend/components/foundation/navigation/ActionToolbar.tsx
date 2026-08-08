@@ -3,6 +3,7 @@ import { classNames } from "@/components/ui/classnames";
 
 export interface ActionToolbarProps
   extends React.HTMLAttributes<HTMLDivElement> {
+  density?: "compact" | "default";
   filters?: React.ReactNode;
   label: string;
   overflowMenu?: React.ReactNode;
@@ -14,6 +15,7 @@ export interface ActionToolbarProps
 
 export function ActionToolbar({
   className,
+  density = "default",
   filters,
   label,
   overflowMenu,
@@ -27,7 +29,8 @@ export function ActionToolbar({
     <div
       aria-label={label}
       className={classNames(
-        "flex min-w-0 flex-col gap-3 rounded-ui border border-slate-200 bg-white p-3 lg:flex-row lg:items-center lg:justify-between",
+        "flex min-w-0 flex-col rounded-ui border border-slate-200 bg-white lg:flex-row lg:items-center lg:justify-between",
+        density === "compact" ? "gap-2 p-2" : "gap-3 p-3",
         sticky && "sticky top-0 z-10",
         className,
       )}
@@ -37,7 +40,11 @@ export function ActionToolbar({
       {search || filters ? (
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
           {search ? <div className="min-w-0 flex-1">{search}</div> : null}
-          {filters ? <div className="flex flex-wrap items-center gap-2">{filters}</div> : null}
+          {filters ? (
+            <div className={classNames("flex flex-wrap items-center", density === "compact" ? "gap-1.5" : "gap-2")}>
+              {filters}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {secondaryActions || primaryAction || overflowMenu ? (

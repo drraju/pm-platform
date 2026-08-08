@@ -3,12 +3,10 @@ import React from "react";
 import {
   EmptyState,
   KPIGrid,
-  StatusBadge,
   SummaryCard,
   SummaryMetricCard,
   WorkspaceContent,
   WorkspaceSection,
-  type StatusBadgeTone,
 } from "@/components/foundation";
 import type {
   ApiProjectDetails,
@@ -67,64 +65,28 @@ export function ProjectWorkspaceOverview({
   });
 
   return (
-    <WorkspaceContent aria-label="Project overview">
+    <WorkspaceContent aria-label="Project overview" spacing="compact">
       <WorkspaceSection
-        aria-label="Project health and timeline"
-        className="grid gap-6 xl:grid-cols-2"
+        aria-label="Project timeline"
+        className="grid gap-4"
         padding="none"
       >
-        <div className="xl:col-span-2">
-          <SummaryCard
-            description="The minimum information needed to understand current Project condition."
-            title="Project Health"
-          >
-            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              {project.health ? (
-                <HealthOverviewItem
-                  reasons={project.health.reasons}
-                  status={project.health.status}
-                />
-              ) : (
-                <OverviewItem
-                  label="Overall Health"
-                  value={formatLabel(project.status)}
-                />
-              )}
-              <OverviewItem
-                label="Schedule"
-                value={formatSchedule(project.targetEndDate)}
-              />
-              <OverviewItem
-                label="Progress"
-                value={formatLabel(project.status)}
-              />
-              <OverviewItem
-                label="Project Manager"
-                value={formatUser(project.owner)}
-              />
-              <OverviewItem label="Completion" value={`${progress}%`} />
-            </dl>
-          </SummaryCard>
-        </div>
-
-        <div className="xl:col-span-2">
-          <TimelineSnapshot
-            items={timelineItems}
-            planningHref={`${basePath}/planning`}
-          />
-        </div>
+        <TimelineSnapshot
+          items={timelineItems}
+          planningHref={`${basePath}/planning`}
+        />
       </WorkspaceSection>
 
       <WorkspaceSection
         aria-label="Operational attention"
-        className="grid gap-6 xl:grid-cols-2"
+        className="grid gap-4 xl:grid-cols-2"
         padding="none"
       >
         <SummaryCard
           action={
             <Link
               className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
-              href={`${basePath}/raid`}
+              href={`${basePath}/govern`}
             >
               Open RAID
             </Link>
@@ -135,14 +97,14 @@ export function ProjectWorkspaceOverview({
           <KPIGrid as="div" columns={2} gap="compact">
             <SummaryMetricCard
               ariaLabel={`Open Risks: ${openRisks.length}`}
-              href={`${basePath}/raid`}
+              href={`${basePath}/govern`}
               title="Open Risks"
               value={openRisks.length}
               variant="critical"
             />
             <SummaryMetricCard
               ariaLabel={`Open Issues: ${openIssues.length}`}
-              href={`${basePath}/raid`}
+              href={`${basePath}/govern`}
               title="Open Issues"
               value={openIssues.length}
               variant="warning"
@@ -155,7 +117,7 @@ export function ProjectWorkspaceOverview({
                 <li className="py-3" key={item.id}>
                   <Link
                     className="flex items-start justify-between gap-3 rounded-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
-                    href={`${basePath}/raid`}
+                    href={`${basePath}/govern`}
                   >
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-slate-950">
@@ -191,27 +153,35 @@ export function ProjectWorkspaceOverview({
               Open Team
             </Link>
           }
-          description="A concise view of the people attached to current Project work."
+          description="People attached to current work."
           title="Resource Summary"
         >
-          <KPIGrid as="div" columns={3} gap="compact">
-            <SummaryMetricCard title="Project Members" value={members.length} />
-            <SummaryMetricCard title="Active Work" value={activeWork.length} />
-            <SummaryMetricCard
-              title="Assigned Active Work"
-              value={`${assignedActiveWork}/${activeWork.length}`}
-            />
-          </KPIGrid>
-          <p className="mt-4 text-xs leading-5 text-slate-500">
-            Capacity and availability detail remain in the Resource Workspace
-            when authoritative data is available.
-          </p>
+          <dl className="grid grid-cols-3 gap-3 text-sm">
+            <div>
+              <dt className="text-xs font-medium text-slate-500">Members</dt>
+              <dd className="mt-0.5 font-semibold text-slate-950">
+                {members.length}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-slate-500">Active work</dt>
+              <dd className="mt-0.5 font-semibold text-slate-950">
+                {activeWork.length}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-slate-500">Assigned</dt>
+              <dd className="mt-0.5 font-semibold text-slate-950">
+                {assignedActiveWork}/{activeWork.length}
+              </dd>
+            </div>
+          </dl>
         </SummaryCard>
       </WorkspaceSection>
 
       <WorkspaceSection
         aria-label="Upcoming milestones and recent activity"
-        className="grid gap-6 xl:grid-cols-2"
+        className="grid gap-4 xl:grid-cols-2"
         padding="none"
       >
         <SummaryCard
@@ -308,64 +278,6 @@ export function ProjectWorkspaceOverview({
 
     </WorkspaceContent>
   );
-}
-
-function HealthOverviewItem({
-  reasons,
-  status,
-}: {
-  reasons: string[];
-  status: "AMBER" | "GREEN" | "RED";
-}) {
-  return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Overall Health
-      </dt>
-      <dd className="mt-2">
-        <StatusBadge
-          description={reasons.join(". ")}
-          dot
-          tone={getHealthTone(status)}
-        >
-          {formatHealthStatus(status)}
-        </StatusBadge>
-      </dd>
-    </div>
-  );
-}
-
-function OverviewItem({
-  label,
-  value,
-}: {
-  label: string;
-  value?: string | null;
-}) {
-  return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {label}
-      </dt>
-      <dd className="mt-2 text-sm font-semibold capitalize text-slate-950">
-        {value || "Unassigned"}
-      </dd>
-    </div>
-  );
-}
-
-function getHealthTone(status: "AMBER" | "GREEN" | "RED"): StatusBadgeTone {
-  const tones: Record<typeof status, StatusBadgeTone> = {
-    AMBER: "warning",
-    GREEN: "success",
-    RED: "critical",
-  };
-
-  return tones[status];
-}
-
-function formatHealthStatus(status: "AMBER" | "GREEN" | "RED") {
-  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 function buildTimelineItems({
@@ -613,24 +525,6 @@ function formatMemberName(member: ApiProjectMember) {
   }
 
   return member.userId;
-}
-
-function formatUser(
-  user?: {
-    email?: string;
-    firstName: string;
-    lastName: string;
-  } | null,
-) {
-  return user
-    ? `${user.firstName} ${user.lastName}`.trim() || user.email || null
-    : null;
-}
-
-function formatSchedule(targetEndDate?: string | null) {
-  return targetEndDate
-    ? `Finish ${formatDate(targetEndDate)}`
-    : "Not scheduled";
 }
 
 function formatDate(value?: string | null) {

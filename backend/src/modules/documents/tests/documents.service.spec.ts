@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DocumentsService } from '../documents.service';
 import {
   DocumentApprovalStatus,
@@ -9,6 +9,41 @@ import {
   DocumentType,
   ProjectDocument,
 } from '../entities';
+
+function authorizationPolicy(overrides: {
+  canManageProject?: boolean;
+  canViewProject?: boolean;
+} = {}) {
+  return {
+    canManageProject: jest
+      .fn()
+      .mockResolvedValue(overrides.canManageProject ?? true),
+    canViewProject: jest
+      .fn()
+      .mockResolvedValue(overrides.canViewProject ?? true),
+  };
+}
+
+function createService(
+  documentRepository = repository<ProjectDocument>(),
+  projectRepository = repository<{ id: string }>(),
+  documentTypeRepository = repository<DocumentType>(),
+  categoryRepository = repository<DocumentCategory>(),
+  userRepository = repository<{ id: string }>(),
+  auth = authorizationPolicy(),
+) {
+  return {
+    auth,
+    service: new DocumentsService(
+      documentRepository as never,
+      projectRepository as never,
+      documentTypeRepository as never,
+      categoryRepository as never,
+      userRepository as never,
+      auth as never,
+    ),
+  };
+}
 
 type RepositoryMock<T> = {
   create: jest.Mock<T, [Partial<T>]>;
@@ -108,12 +143,12 @@ describe('DocumentsService', () => {
     categoryRepository.findOne.mockResolvedValue(category);
     const userRepository = repository<{ id: string }>();
     userRepository.findOne.mockResolvedValue({ id: 'owner-1' });
-    const service = new DocumentsService(
-      documentRepository as never,
-      projectRepository as never,
-      documentTypeRepository as never,
-      categoryRepository as never,
-      userRepository as never,
+    const { service } = createService(
+      documentRepository,
+      projectRepository,
+      documentTypeRepository,
+      categoryRepository,
+      userRepository,
     );
 
     const created = await service.create(
@@ -149,13 +184,7 @@ describe('DocumentsService', () => {
   });
 
   it('lists configured storage provider labels without authenticating', () => {
-    const service = new DocumentsService(
-      repository<ProjectDocument>() as never,
-      repository<{ id: string }>() as never,
-      repository<DocumentType>() as never,
-      repository<DocumentCategory>() as never,
-      repository<{ id: string }>() as never,
-    );
+    const { service } = createService();
 
     expect(service.storageProviders()).toEqual(
       expect.arrayContaining([
@@ -174,12 +203,9 @@ describe('DocumentsService', () => {
   it('rejects document links for unknown projects', async () => {
     const projectRepository = repository<{ id: string }>();
     projectRepository.findOne.mockResolvedValue(null);
-    const service = new DocumentsService(
-      repository<ProjectDocument>() as never,
-      projectRepository as never,
-      repository<DocumentType>() as never,
-      repository<DocumentCategory>() as never,
-      repository<{ id: string }>() as never,
+    const { service } = createService(
+      repository<ProjectDocument>(),
+      projectRepository,
     );
 
     await expect(
@@ -191,5 +217,119 @@ describe('DocumentsService', () => {
         title: 'Plan',
       }),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('allows contributors to update their own document metadata but not approve', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    const ownedDocument = {
+      ...storedDocument,
+      createdById: 'contributor-1',
+      ownerId: 'contributor-1',
+    } as ProjectDocument;
+    documentRepository.createQueryBuilder.mockReturnValue(
+      queryBuilder(ownedDocument),
+    );
+    const { service } = createService(
+      documentRepository,
+      repository<{ id: string }>(),
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      authorizationPolicy({ canManageProject: false, canViewProject: true }),
+    );
+
+    await expect(
+      service.update(
+        'document-1',
+        { title: 'QA Evidence Pack' },
+        {
+          email: 'contributor@example.com',
+          roleId: 'role-tm',
+          userId: 'contributor-1',
+        },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        title: 'QA Evidence Pack',
+      }),
+    );
+
+    documentRepository.createQueryBuilder.mockReturnValue(
+      queryBuilder(ownedDocument),
+    );
+    await expect(
+      service.update(
+        'document-1',
+        { approvalStatus: DocumentApprovalStatus.APPROVED },
+        {
+          email: 'contributor@example.com',
+          roleId: 'role-tm',
+          userId: 'contributor-1',
+        },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('updates mutable document governance metadata', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    const updatedDocument = {
+      ...storedDocument,
+      approvalStatus: DocumentApprovalStatus.UNDER_REVIEW,
+      category: { ...category, id: 'category-2', name: 'Business' },
+      categoryId: 'category-2',
+      documentType: { ...documentType, id: 'type-2', name: 'HLD' },
+      documentTypeId: 'type-2',
+      title: 'Business HLD',
+    } as ProjectDocument;
+    documentRepository.createQueryBuilder
+      .mockReturnValueOnce(queryBuilder(storedDocument))
+      .mockReturnValueOnce(queryBuilder(updatedDocument));
+    const documentTypeRepository = repository<DocumentType>();
+    documentTypeRepository.find.mockResolvedValue([documentType]);
+    documentTypeRepository.findOne.mockResolvedValue({
+      id: 'type-2',
+      isActive: true,
+      name: 'HLD',
+    } as DocumentType);
+    const categoryRepository = repository<DocumentCategory>();
+    categoryRepository.find.mockResolvedValue([category]);
+    categoryRepository.findOne.mockResolvedValue({
+      id: 'category-2',
+      isActive: true,
+      name: 'Business',
+    } as DocumentCategory);
+    const userRepository = repository<{ id: string }>();
+    userRepository.findOne.mockResolvedValue({ id: 'owner-1' });
+    const { service } = createService(
+      documentRepository,
+      repository<{ id: string }>(),
+      documentTypeRepository,
+      categoryRepository,
+      userRepository,
+    );
+
+    const updated = await service.update(
+      'document-1',
+      {
+        approvalStatus: DocumentApprovalStatus.UNDER_REVIEW,
+        category: 'Business',
+        documentType: 'HLD',
+        title: 'Business HLD',
+      },
+      { email: 'pm@example.com', roleId: 'role-1', userId: 'pm-1' },
+    );
+
+    expect(documentRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalStatus: DocumentApprovalStatus.UNDER_REVIEW,
+        categoryId: 'category-2',
+        documentTypeId: 'type-2',
+        title: 'Business HLD',
+        updatedById: 'pm-1',
+      }),
+    );
+    expect(updated.title).toBe('Business HLD');
+    expect(updated.category).toBe('Business');
+    expect(updated.documentType).toBe('HLD');
   });
 });

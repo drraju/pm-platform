@@ -18,6 +18,8 @@ interface SummaryMetricCardCommonProps {
   ariaLabel?: string;
   className?: string;
   delta?: React.ReactNode;
+  /** Compact density reduces padding and value size for operational dashboards. */
+  density?: "compact" | "default";
   detail?: React.ReactNode;
   icon?: React.ReactNode;
   title: React.ReactNode;
@@ -78,6 +80,7 @@ export function SummaryMetricCard({
   ariaLabel,
   className,
   delta,
+  density = "default",
   disabled,
   detail,
   href,
@@ -89,8 +92,10 @@ export function SummaryMetricCard({
   variant = "neutral",
 }: SummaryMetricCardProps) {
   const isInteractive = Boolean(href || onClick);
+  const isCompact = density === "compact";
   const rootClassName = classNames(
-    "group relative min-w-0 overflow-hidden rounded-ui border border-slate-200/80 bg-ui-surface p-4 text-left shadow-ui-subtle transition duration-ui",
+    "group relative min-w-0 overflow-hidden rounded-ui border border-slate-200/80 bg-ui-surface text-left shadow-ui-subtle transition duration-ui",
+    isCompact ? "p-2.5" : "p-4",
     isInteractive &&
       "cursor-pointer hover:-translate-y-px hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand/30",
     className,
@@ -105,12 +110,20 @@ export function SummaryMetricCard({
         )}
       />
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 text-sm font-medium text-slate-600">{title}</div>
+        <div
+          className={classNames(
+            "min-w-0 font-medium text-slate-600",
+            isCompact ? "text-xs" : "text-sm",
+          )}
+        >
+          {title}
+        </div>
         {icon ? <div className="shrink-0 text-slate-500">{icon}</div> : null}
       </div>
       <div
         className={classNames(
-          "mt-2 text-3xl font-semibold tracking-tight",
+          "font-semibold tracking-tight",
+          isCompact ? "mt-1 text-xl" : "mt-2 text-3xl",
           variantStyles[variant].value,
         )}
       >

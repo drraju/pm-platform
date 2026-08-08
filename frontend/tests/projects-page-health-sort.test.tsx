@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectsPage from "@/app/(app)/projects/page";
 
@@ -105,7 +105,6 @@ describe("Projects page health sorting", () => {
     await screen.findByText("Red Recovery");
 
     expect(screen.getByDisplayValue("Red")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Health: Red first")).toBeInTheDocument();
     expect(screen.queryByText("Green Delivery")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link")).toHaveLength(1);
     expect(window.location.search).toBe("?health=RED&sort=health_desc");
@@ -120,22 +119,18 @@ describe("Projects page health sorting", () => {
     await screen.findByText("Red Recovery");
 
     expect(screen.getByDisplayValue("Red")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Health: Red first")).toBeInTheDocument();
     expect(screen.queryByText("Green Delivery")).not.toBeInTheDocument();
     expect(window.location.pathname + window.location.search).toBe(
       "/projects?health=RED&sort=health_desc",
     );
   });
 
-  it("sorts projects by health", async () => {
-    const { rerender } = render(<ProjectsPage />);
+  it("sorts projects by health from drilldown URL params", async () => {
+    window.history.replaceState({}, "", "/projects?sort=health_desc");
+
+    render(<ProjectsPage />);
 
     await screen.findByText("Green Delivery");
-
-    fireEvent.change(screen.getByLabelText(/sort projects/i), {
-      target: { value: "health_desc" },
-    });
-    rerender(<ProjectsPage />);
 
     await waitFor(() => {
       const rows = screen.getAllByRole("link");

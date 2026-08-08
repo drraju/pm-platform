@@ -629,11 +629,28 @@ export function storeSession(accessToken: string, refreshToken: string) {
   window.localStorage.setItem("pm_platform_refresh_token", refreshToken);
 }
 
+const authSessionChangeListeners = new Set<() => void>();
+
+export function subscribeAuthSessionChange(listener: () => void) {
+  authSessionChangeListeners.add(listener);
+  return () => {
+    authSessionChangeListeners.delete(listener);
+  };
+}
+
+function notifyAuthSessionChange() {
+  for (const listener of authSessionChangeListeners) {
+    listener();
+  }
+}
+
 export function clearSession() {
   window.localStorage.removeItem("pm_platform_access_token");
   window.localStorage.removeItem("pm_platform_refresh_token");
   window.localStorage.removeItem("pm_platform_permissions");
+  window.localStorage.removeItem("pm_platform_role_names");
   window.localStorage.removeItem("pm_platform_session_user");
+  notifyAuthSessionChange();
 }
 
 export function getStoredPermissionKeys() {
@@ -651,15 +668,33 @@ export function getStoredPermissionKeys() {
   }
 }
 
+export function getStoredRoleNames() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const storedRoles = window.localStorage.getItem("pm_platform_role_names");
+    return storedRoles ? (JSON.parse(storedRoles) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function storeAuthMe(authMe: ApiAuthMe) {
   window.localStorage.setItem(
     "pm_platform_permissions",
     JSON.stringify(authMe.permissions.map((permission) => permission.key)),
   );
   window.localStorage.setItem(
+    "pm_platform_role_names",
+    JSON.stringify(authMe.roles.map((role) => role.name)),
+  );
+  window.localStorage.setItem(
     "pm_platform_session_user",
     JSON.stringify(authMe.user),
   );
+  notifyAuthSessionChange();
 }
 
 export async function apiRequest<T>(
@@ -920,6 +955,29 @@ export function createProjectDocument(input: {
 }) {
   return apiRequest<ApiProjectDocument>("/documents", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProjectDocument(
+  documentId: string,
+  input: {
+    approvalStatus?: ApiDocumentApprovalStatus;
+    category?: string | null;
+    description?: string | null;
+    documentType?: string;
+    externalUrl?: string;
+    lastReviewedAt?: string | null;
+    nextReviewAt?: string | null;
+    ownerId?: string | null;
+    projectId?: string;
+    storageProvider?: ApiDocumentStorageProvider;
+    title?: string;
+    version?: string | null;
+  },
+) {
+  return apiRequest<ApiProjectDocument>(`/documents/${documentId}`, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }

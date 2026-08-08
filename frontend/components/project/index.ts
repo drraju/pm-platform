@@ -1,4 +1,5 @@
 export {
+  CompactProjectWorkspaceLayout,
   ProjectLayout,
   ProjectLayoutLoadingState,
 } from "./project-layout";

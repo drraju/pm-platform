@@ -4,22 +4,16 @@ import Link from "next/link";
 import React, { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";
+import { HomeWorkSummary } from "@/components/dashboard/home-work-summary";
 import {
   ErrorState,
-  KPIGrid,
   LoadingState,
   StatusBadge,
-  SummaryMetricCard,
   WorkspaceContent,
-  WorkspaceHeader,
   WorkspaceLayout,
   WorkspaceSection,
-  type StatusBadgeTone,
 } from "@/components/foundation";
-import {
-  ProjectHealthBadge,
-  ProjectHealthReasons,
-} from "@/components/projects/project-health-badge";
+import { ProjectHealthBadge } from "@/components/projects/project-health-badge";
 import {
   getAuthMe,
   getDefaultDashboardPath,
@@ -79,13 +73,11 @@ function PageContent() {
 
   return (
     <WorkspaceLayout spacing="compact">
-      <WorkspaceHeader
-        eyebrow="Home workspace"
-        subtitle="Your assigned projects, delivery commitments, and items that need attention."
-        title="Your work"
-      />
+      <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+        Home
+      </h1>
 
-      <WorkspaceContent spacing="compact">
+      <WorkspaceContent className="space-y-2" spacing="none">
         {isLoading ? <DashboardLoadingState /> : null}
 
         {!isLoading && error ? (
@@ -94,67 +86,43 @@ function PageContent() {
 
         {!isLoading && !error && dashboard ? (
           <>
-            <KPIGrid
-              aria-label="Work summary"
-              className="xl:grid-cols-5"
-              columns={4}
-              gap="compact"
-            >
-              <SummaryMetricCard
-                ariaLabel={`Assigned tasks: ${dashboard.taskSummary.total}`}
-                href="/tasks"
-                title="Assigned"
-                value={dashboard.taskSummary.total}
-              />
-              <SummaryMetricCard
-                ariaLabel={`In progress tasks: ${dashboard.taskSummary.inProgress}`}
-                href="/tasks?status=in_progress"
-                title="In progress"
-                value={dashboard.taskSummary.inProgress}
-                variant="warning"
-              />
-              <SummaryMetricCard
-                ariaLabel={`Blocked tasks: ${dashboard.taskSummary.blocked}`}
-                href="/tasks?status=blocked"
-                title="Blocked"
-                value={dashboard.taskSummary.blocked}
-                variant="critical"
-              />
-              <SummaryMetricCard
-                ariaLabel={`Overdue tasks: ${dashboard.taskSummary.overdue}`}
-                href="/tasks?timing=overdue"
-                title="Overdue"
-                value={dashboard.taskSummary.overdue}
-                variant="critical"
-              />
-              <WorkspaceSection
-                aria-label="Overall health"
-                padding="compact"
-                surface="card"
-              >
-                <p className="text-sm font-medium text-slate-600">
-                  Overall health
-                </p>
-                <div className="mt-2.5">
-                  <DashboardHealthBadge
-                    reasons={dashboard.health.reasons}
-                    status={dashboard.health.status}
-                  />
-                  <ProjectHealthReasons reasons={dashboard.health.reasons} />
-                </div>
-              </WorkspaceSection>
-            </KPIGrid>
-
-            <DashboardSection
-              emptyMessage="No projects are assigned to you yet. New assignments will appear here."
-              items={dashboard.assignedProjects}
-              renderItem={(project) => <ProjectItem project={project} />}
-              title="Assigned projects"
+            <HomeWorkSummary
+              metrics={[
+                {
+                  href: "/tasks",
+                  id: "assigned",
+                  label: "Assigned",
+                  value: dashboard.taskSummary.total,
+                },
+                {
+                  href: "/tasks?status=in_progress",
+                  id: "in-progress",
+                  label: "In Progress",
+                  value: dashboard.taskSummary.inProgress,
+                  variant: "warning",
+                },
+                {
+                  href: "/tasks?status=blocked",
+                  id: "blocked",
+                  label: "Blocked",
+                  value: dashboard.taskSummary.blocked,
+                  variant: "critical",
+                },
+                {
+                  href: "/tasks?timing=overdue",
+                  id: "overdue",
+                  label: "Overdue",
+                  value: dashboard.taskSummary.overdue,
+                  variant: "critical",
+                },
+              ]}
             />
+
+            <AssignedProjectsTable projects={dashboard.assignedProjects} />
 
             <WorkspaceSection
               aria-label="Items needing attention"
-              className="grid gap-4 xl:grid-cols-3"
+              className="grid gap-3 xl:grid-cols-3"
               padding="none"
             >
               <DashboardSection
@@ -183,6 +151,47 @@ function PageContent() {
   );
 }
 
+function AssignedProjectsTable({
+  projects,
+}: {
+  projects: ApiDashboardProject[];
+}) {
+  return (
+    <section
+      aria-label="Assigned projects"
+      className="overflow-hidden rounded-md border border-slate-200 bg-white"
+    >
+      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+        <h2 className="text-sm font-semibold text-slate-950">
+          Assigned Projects
+        </h2>
+        <StatusBadge
+          aria-label={`${projects.length} assigned projects`}
+          size="sm"
+        >
+          {projects.length}
+        </StatusBadge>
+      </div>
+      <div className="hidden grid-cols-[minmax(0,1fr)_7rem_5.5rem] border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid">
+        <span>Project</span>
+        <span>Health</span>
+        <span>Action</span>
+      </div>
+      {projects.length === 0 ? (
+        <p className="px-3 py-4 text-sm text-slate-500">
+          No projects are assigned to you yet. New assignments will appear here.
+        </p>
+      ) : (
+        <div className="divide-y divide-slate-100">
+          {projects.map((project) => (
+            <ProjectItem key={project.id} project={project} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PageLoading() {
   return <DashboardLoadingState />;
 }
@@ -190,83 +199,31 @@ function PageLoading() {
 function DashboardLoadingState() {
   return (
     <LoadingState
-      className="rounded-ui border border-ui-border bg-ui-surface p-5 shadow-ui-subtle"
-      label="Loading Home workspace"
-      rows={6}
+      className="rounded-ui border border-ui-border bg-ui-surface p-4 shadow-ui-subtle"
+      label="Loading Home"
+      rows={4}
     />
   );
-}
-
-type DashboardHealthStatus = NonNullable<
-  ApiDashboardProject["health"]
->["status"];
-
-const dashboardHealthTones: Record<
-  DashboardHealthStatus,
-  StatusBadgeTone
-> = {
-  AMBER: "warning",
-  GREEN: "success",
-  RED: "critical",
-};
-
-function DashboardHealthBadge({
-  reasons,
-  status,
-}: {
-  reasons?: string[];
-  status: DashboardHealthStatus;
-}) {
-  const description =
-    reasons && reasons.length > 0
-      ? reasons.join(". ")
-      : "No health issues identified";
-
-  return (
-    <StatusBadge
-      description={description}
-      dot
-      title={description}
-      tone={dashboardHealthTones[status]}
-    >
-      {formatHealthStatus(status)}
-    </StatusBadge>
-  );
-}
-
-function formatHealthStatus(status: DashboardHealthStatus) {
-  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 function ProjectItem({ project }: { project: ApiDashboardProject }) {
   const healthStatus = project.health?.status ?? "GREEN";
 
   return (
-    <article className="grid gap-3 text-sm md:grid-cols-[minmax(0,1.1fr)_minmax(7.5rem,0.55fr)_auto_minmax(0,1fr)_auto] md:items-center md:gap-4">
-      <div className="min-w-0">
-        <h3 className="truncate font-semibold text-slate-950">
-          {project.name}
-        </h3>
-        <p className="mt-0.5 text-slate-500 md:hidden">
-          {formatLabel(project.role)}
-        </p>
-      </div>
-      <p className="hidden capitalize text-slate-600 md:block">
-        {formatLabel(project.role)}
-      </p>
+    <article className="grid grid-cols-1 items-center gap-2 px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_7rem_5.5rem]">
+      <h3 className="min-w-0 truncate font-semibold text-slate-950">
+        {project.name}
+      </h3>
       <ProjectHealthBadge
         reasons={project.health?.reasons}
         status={healthStatus}
       />
-      <p className="min-w-0 leading-5 text-slate-600">
-        {getProjectInsight(project)}
-      </p>
       <Link
         aria-label={`Open project ${project.name}`}
-        className="inline-flex min-h-9 w-fit items-center rounded-md px-2.5 py-1.5 font-semibold text-brand transition hover:bg-brand/10"
+        className="inline-flex w-fit items-center rounded border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
         href={`/projects/${project.id}`}
       >
-        Open project
+        Open
       </Link>
     </article>
   );
@@ -278,14 +235,14 @@ function TaskItem({ task }: { task: ApiDashboardTask }) {
       className="block rounded-md text-sm transition hover:bg-slate-50"
       href="/tasks?timing=upcoming"
     >
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h3 className="font-semibold text-slate-950">{task.title}</h3>
-          <p className="mt-1 text-slate-600">
+          <p className="text-xs text-slate-600">
             {task.projectName || "No project"}
           </p>
         </div>
-        <span className="shrink-0 capitalize text-slate-500">
+        <span className="shrink-0 text-xs capitalize text-slate-500">
           {formatDate(task.dueDate)}
         </span>
       </div>
@@ -299,14 +256,14 @@ function RiskItem({ risk }: { risk: ApiDashboardRisk }) {
       className="block rounded-md text-sm transition hover:bg-slate-50"
       href={`/risks?severity=${risk.severity}`}
     >
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h3 className="font-semibold text-slate-950">{risk.title}</h3>
-          <p className="mt-1 text-slate-600">
+          <p className="text-xs text-slate-600">
             {risk.projectName || "No project"}
           </p>
         </div>
-        <span className="shrink-0 capitalize text-slate-500">
+        <span className="shrink-0 text-xs capitalize text-slate-500">
           {formatLabel(risk.severity)}
         </span>
       </div>
@@ -320,14 +277,14 @@ function IssueItem({ issue }: { issue: ApiDashboardIssue }) {
       className="block rounded-md text-sm transition hover:bg-slate-50"
       href={`/issues?priority=${issue.priority}`}
     >
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h3 className="font-semibold text-slate-950">{issue.title}</h3>
-          <p className="mt-1 text-slate-600">
+          <p className="text-xs text-slate-600">
             {issue.projectName || "No project"}
           </p>
         </div>
-        <span className="shrink-0 capitalize text-slate-500">
+        <span className="shrink-0 text-xs capitalize text-slate-500">
           {formatLabel(issue.priority)}
         </span>
       </div>
@@ -349,18 +306,4 @@ function formatDate(value: string | null) {
 
 function formatLabel(value: string) {
   return value.replaceAll("_", " ").toLowerCase();
-}
-
-function getProjectInsight(project: ApiDashboardProject) {
-  const primaryReason = project.health?.reasons?.find((reason) =>
-    Boolean(reason.trim()),
-  );
-
-  if (primaryReason) {
-    return primaryReason;
-  }
-
-  return (project.health?.status ?? "GREEN") === "GREEN"
-    ? "No immediate delivery concerns."
-    : "Review the latest project health update.";
 }

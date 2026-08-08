@@ -59,6 +59,7 @@ describe("UI Foundation v2", () => {
             <button type="button">Create item</button>
           </WorkspaceHeaderActions>
         }
+        density="compact"
         eyebrow="Workspace"
         metadata={[
           { id: "owner", label: "Owner", value: "Ava Patel" },
@@ -80,7 +81,7 @@ describe("UI Foundation v2", () => {
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Platform Upgrade" }),
-    ).toBeInTheDocument();
+    ).toHaveClass("text-xl");
     expect(screen.getByRole("group", { name: "Workspace actions" })).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Completion" })).toHaveValue(42);
     expect(screen.getByText("Ava Patel")).toBeInTheDocument();

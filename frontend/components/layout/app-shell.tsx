@@ -11,6 +11,7 @@ import {
   type ApiAuthMe,
   getAuthMe,
   getStoredPermissionKeys,
+  getStoredRoleNames,
   storeAuthMe,
 } from "@/features/auth";
 import {
@@ -31,6 +32,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sessionProfile, setSessionProfile] = useState<ApiAuthMe | null>(null);
   const [permissionKeys, setPermissionKeys] = useState<string[]>(() =>
     getStoredPermissionKeys(),
+  );
+  const [roleNames, setRoleNames] = useState<string[]>(() =>
+    getStoredRoleNames(),
   );
   const commandRegistry = useMemo(
     () => createApplicationCommandRegistry({ pathname, permissionKeys }),
@@ -61,9 +65,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         setPermissionKeys(
           authMe.permissions.map((permission) => permission.key),
         );
+        setRoleNames(authMe.roles.map((role) => role.name));
       } catch {
         if (isMounted) {
           setPermissionKeys(getStoredPermissionKeys());
+          setRoleNames(getStoredRoleNames());
         }
       }
     }
@@ -108,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onToggle={() => setIsSidebarCollapsed((value) => !value)}
           pathname={pathname}
           permissionKeys={permissionKeys}
-          roleNames={sessionProfile?.roles.map((role) => role.name) ?? []}
+          roleNames={roleNames}
         />
 
         {isMobileDrawerOpen ? (
@@ -124,7 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClose={() => setIsMobileDrawerOpen(false)}
               pathname={pathname}
               permissionKeys={permissionKeys}
-              roleNames={sessionProfile?.roles.map((role) => role.name) ?? []}
+              roleNames={roleNames}
             />
           </div>
         ) : null}
@@ -143,7 +149,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <WorkspaceContextBar pathname={pathname} />
 
-          <main className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+          <main className="mx-auto w-full max-w-[1800px] px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
             {children}
           </main>
         </div>

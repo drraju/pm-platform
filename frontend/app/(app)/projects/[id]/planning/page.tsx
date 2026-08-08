@@ -11,7 +11,10 @@ import {
   WorkspaceLayout,
 } from "@/components/foundation";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
-import { ProjectLayout } from "@/components/project";
+import {
+  CompactProjectWorkspaceLayout,
+  ProjectLayout,
+} from "@/components/project";
 import {
   createPlanningDependency,
   createPlanningTask,
@@ -277,7 +280,7 @@ function PageContent() {
   return (
     <ProjectLayout
       activeTab="planning"
-      layout={WorkspaceLayout}
+      layout={CompactProjectWorkspaceLayout}
       project={
         workspace?.project ?? {
           id: projectId,
@@ -285,7 +288,9 @@ function PageContent() {
           status: "active",
         }
       }
-      renderHeader={(content) => <WorkspaceHeader {...content} />}
+      renderHeader={(content) => (
+        <WorkspaceHeader density="compact" {...content} />
+      )}
     >
       <WorkspaceContent spacing="compact">
         {error ? <ErrorState message={error} /> : null}

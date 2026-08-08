@@ -5,85 +5,96 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectDocumentsPage from "@/app/(app)/projects/[id]/documents/page";
+import ProjectDeliveryPage from "@/app/(app)/projects/[id]/delivery/page";
 import ProjectExecutionPage from "@/app/(app)/projects/[id]/execution/page";
 import DailyReviewPage from "@/app/(app)/daily-review/page";
 import ProjectsPage from "@/app/(app)/projects/page";
 import ProjectPlanningPage from "@/app/(app)/projects/[id]/planning/page";
+import ProjectGovernPage from "@/app/(app)/projects/[id]/govern/page";
 import ProjectRaidPage from "@/app/(app)/projects/[id]/raid/page";
 import ProjectTasksPage from "@/app/(app)/projects/[id]/tasks/page";
 import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
 
-const projectMocks = vi.hoisted(() => ({
+const projectMocks = vi.hoisted(() => {
+  function createDefaultProjectDetails(projectId: string) {
+    return {
+      assumptions: [
+        {
+          id: "assumption-1",
+          projectId,
+          status: "active",
+          title: "Vendor API remains available",
+          type: "assumption",
+          validationStatus: "validated",
+        },
+      ],
+      createdAt: "2026-06-01T10:00:00.000Z",
+      dependencies: [
+        {
+          dependsOn: "Security review",
+          dueDate: "2026-06-30",
+          id: "dependency-1",
+          projectId,
+          status: "pending",
+          title: "IAM approval",
+          type: "dependency",
+        },
+      ],
+      description: "Workspace loaded from selected project id.",
+      id: projectId,
+      issues: [
+        {
+          id: "issue-1",
+          projectId,
+          severity: "critical",
+          status: "open",
+          title: "Integration outage",
+          type: "issue",
+        },
+      ],
+      members: [],
+      name: "Selected Project Workspace",
+      risks: [
+        {
+          id: "risk-1",
+          impact: "high",
+          probability: "medium",
+          projectId,
+          status: "open",
+          title: "Supplier onboarding delay",
+          type: "risk",
+        },
+      ],
+      status: "active",
+      tasks: [
+        {
+          id: "task-1",
+          percentComplete: 42,
+          priority: "high",
+          projectId,
+          status: "in_progress",
+          title: "Build workspace navigation",
+        },
+      ],
+    };
+  }
+
+  return {
   addProjectMember: vi.fn(),
   captureProjectBaseline: vi.fn(),
+  createDefaultProjectDetails,
   createProjectTask: vi.fn(),
   createProjectTaskDependency: vi.fn(),
   deleteProject: vi.fn(),
   deleteProjectTaskDependency: vi.fn(),
   deleteProjectTask: vi.fn(),
-  getProject: vi.fn(async (projectId: string) => ({
-    assumptions: [
-      {
-        id: "assumption-1",
-        projectId,
-        status: "active",
-        title: "Vendor API remains available",
-        type: "assumption",
-        validationStatus: "validated",
-      },
-    ],
-    createdAt: "2026-06-01T10:00:00.000Z",
-    dependencies: [
-      {
-        dependsOn: "Security review",
-        dueDate: "2026-06-30",
-        id: "dependency-1",
-        projectId,
-        status: "pending",
-        title: "IAM approval",
-        type: "dependency",
-      },
-    ],
-    description: "Workspace loaded from selected project id.",
-    id: projectId,
-    issues: [
-      {
-        id: "issue-1",
-        projectId,
-        severity: "critical",
-        status: "open",
-        title: "Integration outage",
-        type: "issue",
-      },
-    ],
-    members: [],
-    name: "Selected Project Workspace",
-    risks: [
-      {
-        id: "risk-1",
-        impact: "high",
-        probability: "medium",
-        projectId,
-        status: "open",
-        title: "Supplier onboarding delay",
-        type: "risk",
-      },
-    ],
-    status: "active",
-    tasks: [
-      {
-        id: "task-1",
-        percentComplete: 42,
-        priority: "high",
-        projectId,
-        status: "in_progress",
-        title: "Build workspace navigation",
-      },
-    ],
-  })),
+  getProject: vi.fn(async (projectId: string) =>
+    createDefaultProjectDetails(projectId),
+  ),
   getProjects: vi.fn(async () => [
     {
       createdAt: "2026-06-01T10:00:00.000Z",
@@ -120,7 +131,8 @@ const projectMocks = vi.hoisted(() => ({
   updateProjectTask: vi.fn(),
   updateProjectTaskDependency: vi.fn(),
   updateProjectMember: vi.fn(),
-}));
+};
+});
 
 const planningMocks = vi.hoisted(() => ({
   createPlanningDependency: vi.fn(),
@@ -157,13 +169,17 @@ const navigationMocks = vi.hoisted(() => ({
 const authMocks = vi.hoisted(() => ({
   getAuthMe: vi.fn(async () => ({
     permissions: [
+      { id: "permission-project-read", key: "project.read" },
+      { id: "permission-project-update", key: "project.update" },
       { id: "permission-task-create", key: "task.create" },
       { id: "permission-task-update", key: "task.update" },
       { id: "permission-task-delete", key: "task.delete" },
       { id: "permission-task-reassign", key: "task.reassign" },
       { id: "permission-team-manage", key: "project.team.manage" },
+      { id: "permission-raid-read", key: "raid.read" },
+      { id: "permission-raid-update", key: "raid.update" },
     ],
-    roles: [],
+    roles: [{ id: "role-1", name: "PROJECT_MANAGER" }],
     user: {
       email: "project.manager@example.com",
       firstName: "Project",
@@ -173,12 +189,21 @@ const authMocks = vi.hoisted(() => ({
       status: "active",
     },
   })),
-  storeAuthMe: vi.fn((authMe: { permissions: Array<{ key: string }> }) => {
-    window.localStorage.setItem(
-      "pm_platform_permissions",
-      JSON.stringify(authMe.permissions.map((permission) => permission.key)),
-    );
-  }),
+  storeAuthMe: vi.fn(
+    (authMe: {
+      permissions: Array<{ key: string }>;
+      roles?: Array<{ name: string }>;
+    }) => {
+      window.localStorage.setItem(
+        "pm_platform_permissions",
+        JSON.stringify(authMe.permissions.map((permission) => permission.key)),
+      );
+      window.localStorage.setItem(
+        "pm_platform_role_names",
+        JSON.stringify((authMe.roles ?? []).map((role) => role.name)),
+      );
+    },
+  ),
 }));
 
 vi.mock("next/link", () => ({
@@ -211,7 +236,17 @@ vi.mock("@/features/auth", () => ({
   getStoredAccessToken: () => "test-token",
   getStoredPermissionKeys: () =>
     JSON.parse(window.localStorage.getItem("pm_platform_permissions") ?? "[]"),
+  getStoredRoleNames: () =>
+    JSON.parse(window.localStorage.getItem("pm_platform_role_names") ?? "[]"),
   getStoredSessionUser: () => null,
+  useStoredAuthSession: () => ({
+    permissionKeys: JSON.parse(
+      window.localStorage.getItem("pm_platform_permissions") ?? "[]",
+    ),
+    roleNames: JSON.parse(
+      window.localStorage.getItem("pm_platform_role_names") ?? "[]",
+    ),
+  }),
   hasAnyPermission: (permissionKeys: string[], requiredPermissions: string[]) =>
     requiredPermissions.some((permission) => permissionKeys.includes(permission)),
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
@@ -257,19 +292,41 @@ vi.mock("@/features/auth", () => ({
     const canUpdateTask =
       canManageProjectTasks ||
       (canUpdateTasks && Boolean(currentUserId) && task?.assigneeId === currentUserId);
+    const canExecuteWork =
+      canReadProject && permissionKeys.includes("task.update");
+    const canAccessStandup =
+      roleNames.some((roleName) =>
+        [
+          "PLATFORM_ADMIN",
+          "PORTFOLIO_MANAGER",
+          "PROGRAM_MANAGER",
+          "PROJECT_MANAGER",
+          "SUPER_ADMIN",
+        ].includes(roleName),
+      ) && canExecuteWork;
+    const canManageProject =
+      permissionKeys.includes("project.update") && isGovernor;
     return {
-      canAccessDailyReview:
-        roleNames.some((roleName) =>
-          ["PLATFORM_ADMIN", "PORTFOLIO_MANAGER", "PROJECT_MANAGER"].includes(
-            roleName,
-          ),
-        ) &&
-        canReadProject &&
-        permissionKeys.includes("task.update"),
+      canAccessDailyReview: canAccessStandup,
+      canAccessDelivery: canExecuteWork,
+      canAccessGovern:
+        permissionKeys.includes("project.update") &&
+        (permissionKeys.includes("raid.read") ||
+          permissionKeys.includes("raid.update") ||
+          permissionKeys.includes("raid.create")),
+      canAccessPlanning:
+        permissionKeys.includes("project.update") && canUpdateTasks,
+      canAccessToday: canExecuteWork,
+      canApproveDocuments: canManageProject,
+      canContributeDocuments: canReadProject,
+      canEditDocument: canManageProject,
       canEditExecution: canUpdateTask,
       canEditPlanning: canManageProjectTasks,
-      canManageDocuments: isGovernor,
+      canExecuteAssignedTask: canUpdateTask,
+      canManageDocuments: canManageProject,
       canManageProjectTasks,
+      canManageTeam:
+        permissionKeys.includes("project.team.manage") && canManageProject,
       canReassignTask: canUpdateTask && permissionKeys.includes("task.reassign"),
       canUpdateTask,
       canUploadDocuments: canReadProject,
@@ -344,8 +401,12 @@ vi.mock("@/features/users", () => ({
 
 describe("Projects List navigation", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     navigationMocks.push.mockClear();
-    projectMocks.getProject.mockClear();
+    projectMocks.getProject.mockReset();
+    projectMocks.getProject.mockImplementation(async (projectId: string) =>
+      projectMocks.createDefaultProjectDetails(projectId),
+    );
     projectMocks.getProjects.mockClear();
     projectMocks.recordProjectTaskExecutionUpdate.mockReset();
     planningMocks.getPlanningWorkspace.mockClear();
@@ -409,8 +470,8 @@ describe("Projects List navigation", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Project Health" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Project Health" }),
+    ).not.toBeInTheDocument();
     expect(
       screen
         .getByRole("heading", {
@@ -428,10 +489,10 @@ describe("Projects List navigation", () => {
     ).toBeGreaterThan(0);
     expect(
       screen.getByRole("link", { name: "Open Risks: 1" }),
-    ).toHaveAttribute("href", "/projects/project-123/raid");
+    ).toHaveAttribute("href", "/projects/project-123/govern");
     expect(
       screen.getByRole("link", { name: "Open Issues: 1" }),
-    ).toHaveAttribute("href", "/projects/project-123/raid");
+    ).toHaveAttribute("href", "/projects/project-123/govern");
     expect(screen.queryByText("RAID Summary")).not.toBeInTheDocument();
     expect(screen.queryByText("Team Summary")).not.toBeInTheDocument();
   });
@@ -459,7 +520,7 @@ describe("Projects List navigation", () => {
     expect(await screen.findByLabelText("Select project")).toHaveValue(
       "project-123",
     );
-    expect(await screen.findByText("Due Today")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Today/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Search execution queue")).toBeInTheDocument();
     expect(screen.getByLabelText("Review progress")).toHaveTextContent("0 / 1");
     expect(
@@ -479,7 +540,7 @@ describe("Projects List navigation", () => {
     fireEvent.change(screen.getByLabelText("Search execution queue"), {
       target: { value: "" },
     });
-    fireEvent.click(screen.getAllByRole("button", { name: "Blocked" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /Blocked/i })[0]);
     expect(
       await screen.findByText("No tasks in this review queue"),
     ).toBeInTheDocument();
@@ -542,6 +603,20 @@ describe("Projects List navigation", () => {
 
   it("renders Project Workspace tabs with the current tab highlighted", async () => {
     window.history.pushState({}, "", "/projects/project-123");
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify([
+        "project.read",
+        "project.update",
+        "task.update",
+        "raid.read",
+        "raid.update",
+      ]),
+    );
+    window.localStorage.setItem(
+      "pm_platform_role_names",
+      JSON.stringify(["PROJECT_MANAGER"]),
+    );
 
     render(<ProjectWorkspacePage />);
 
@@ -559,32 +634,51 @@ describe("Projects List navigation", () => {
       "href",
       "/projects/project-123/planning",
     );
-    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "Delivery" })).toHaveAttribute(
       "href",
-      "/projects/project-123/tasks",
+      "/projects/project-123/delivery",
     );
-    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Govern" })).toHaveAttribute(
       "href",
-      "/projects/project-123/raid",
+      "/projects/project-123/govern",
     );
-    expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
+    expect(screen.queryByRole("link", { name: "Today" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Tasks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "RAID" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Team" })).toHaveAttribute(
       "href",
       "/projects/project-123/team",
     );
-    expect(screen.getByRole("link", { name: "Calendar" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Documents" })).toHaveAttribute(
       "href",
-      "/projects/project-123/reports",
+      "/projects/project-123/documents",
     );
-    expect(screen.getByRole("link", { name: "AI (future)" })).toHaveAttribute(
-      "href",
-      "/projects/project-123/reports",
-    );
+    expect(screen.queryByRole("link", { name: "Calendar" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "AI (future)" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Resources" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Recent Activity")).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });
 
   it("loads the Planning route inside the Project Workspace", async () => {
     window.history.pushState({}, "", "/projects/project-123/planning");
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify([
+        "project.read",
+        "project.update",
+        "task.update",
+        "raid.read",
+      ]),
+    );
+    window.localStorage.setItem(
+      "pm_platform_role_names",
+      JSON.stringify(["PROJECT_MANAGER"]),
+    );
 
     render(<ProjectPlanningPage />);
 
@@ -610,28 +704,50 @@ describe("Projects List navigation", () => {
     ).toHaveClass("shadow-ui-subtle");
   });
 
-  it("loads the project Tasks route", async () => {
+  it("redirects legacy Tasks route into Delivery", async () => {
     window.history.pushState({}, "", "/projects/project-123/tasks");
 
     render(<ProjectTasksPage />);
 
-    expect(
-      await screen.findByText("Build workspace navigation"),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/project-123/delivery");
+    });
   });
 
-  it("loads the dedicated project Execution route for project leadership", async () => {
-    vi.setSystemTime(new Date("2026-08-01T09:00:00.000Z"));
+  it("redirects legacy Execution route into Delivery", async () => {
     window.history.pushState({}, "", "/projects/project-123/execution");
+
+    render(<ProjectExecutionPage />);
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/project-123/delivery");
+    });
+  });
+
+  it("loads the Delivery workspace for project leadership", async () => {
+    vi.setSystemTime(new Date("2026-08-01T09:00:00.000Z"));
+    window.history.pushState({}, "", "/projects/project-123/delivery");
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify([
+        "project.read",
+        "project.update",
+        "task.update",
+        "task.reassign",
+        "raid.read",
+      ]),
+    );
+    window.localStorage.setItem(
+      "pm_platform_role_names",
+      JSON.stringify(["PROJECT_MANAGER"]),
+    );
     authMocks.getAuthMe.mockResolvedValueOnce({
       permissions: [
+        { id: "permission-project-read", key: "project.read" },
         { id: "permission-project-update", key: "project.update" },
         { id: "permission-task-update", key: "task.update" },
         { id: "permission-task-reassign", key: "task.reassign" },
+        { id: "permission-raid-read", key: "raid.read" },
       ],
       roles: [{ id: "role-project-manager", name: "PROJECT_MANAGER" }],
       user: {
@@ -703,22 +819,28 @@ describe("Projects List navigation", () => {
       ],
     });
 
-    render(<ProjectExecutionPage />);
+    render(<ProjectDeliveryPage />);
 
     expect(
       await screen.findByRole("heading", {
         name: /Selected Project Workspace/,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Execution" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Delivery" })).toHaveAttribute(
       "aria-current",
       "page",
     );
     expect(
-      screen.getAllByRole("button", { name: /Active/ }).length,
-    ).toBeGreaterThan(0);
-    expect(await screen.findByText("Today's Focus")).toBeInTheDocument();
+      await screen.findByRole("group", { name: "Delivery toolbar" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("toolbar", { name: "Delivery filters" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "List" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /^All /i })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -729,31 +851,254 @@ describe("Projects List navigation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Board" }));
 
-    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByTestId("execution-kanban-board")).toBeInTheDocument();
+    expect(await screen.findByTestId("execution-kanban-board")).toBeInTheDocument();
     expect(
       screen.queryByRole("columnheader", { name: "Owner" }),
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "List" }));
 
-    expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Prepare standup notes")).toBeInTheDocument();
     expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Blocked" }));
+    fireEvent.click(screen.getByRole("button", { name: /Blocked/i }));
 
     expect(screen.queryByText("Prepare standup notes")).not.toBeInTheDocument();
     expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
   });
 
-  it("does not expose the Execution workspace to Team Members", async () => {
-    window.history.pushState({}, "", "/projects/project-123/execution");
+  it("keeps completed tasks visible in the default Delivery Board Done column", async () => {
+    window.history.pushState({}, "", "/projects/project-123/delivery?view=board");
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify([
+        "project.read",
+        "project.update",
+        "task.update",
+        "task.reassign",
+        "raid.read",
+      ]),
+    );
+    window.localStorage.setItem(
+      "pm_platform_role_names",
+      JSON.stringify(["PROJECT_MANAGER"]),
+    );
     authMocks.getAuthMe.mockResolvedValueOnce({
-      permissions: [{ id: "permission-task-update", key: "task.update" }],
+      permissions: [
+        { id: "permission-project-read", key: "project.read" },
+        { id: "permission-project-update", key: "project.update" },
+        { id: "permission-task-update", key: "task.update" },
+        { id: "permission-task-reassign", key: "task.reassign" },
+        { id: "permission-raid-read", key: "raid.read" },
+      ],
+      roles: [{ id: "role-project-manager", name: "PROJECT_MANAGER" }],
+      user: {
+        email: "project.manager@example.com",
+        firstName: "Project",
+        id: "user-1",
+        lastName: "Manager",
+        roleId: "role-project-manager",
+        status: "active",
+      },
+    });
+    projectMocks.getProject.mockResolvedValueOnce({
+      id: "project-123",
+      members: [
+        {
+          id: "member-1",
+          projectId: "project-123",
+          role: "manager",
+          user: {
+            email: "project.manager@example.com",
+            firstName: "Project",
+            id: "user-1",
+            lastName: "Manager",
+            status: "active",
+          },
+          userId: "user-1",
+        },
+      ],
+      name: "Selected Project Workspace",
+      status: "active",
+      tasks: [
+        {
+          assigneeId: "user-1",
+          id: "task-active",
+          percentComplete: 40,
+          priority: "high",
+          projectId: "project-123",
+          status: "todo",
+          title: "Still open delivery task",
+        },
+        {
+          assigneeId: "user-1",
+          id: "task-done",
+          percentComplete: 100,
+          priority: "medium",
+          projectId: "project-123",
+          status: "done",
+          title: "Completed delivery task",
+        },
+      ],
+    });
+
+    render(<ProjectDeliveryPage />);
+
+    expect(await screen.findByTestId("execution-kanban-board")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^All /i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const doneColumn = screen.getByRole("region", { name: "Done column" });
+    expect(within(doneColumn).getByText("Completed delivery task")).toBeInTheDocument();
+    expect(within(doneColumn).getByText("1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Active /i }));
+    expect(
+      within(screen.getByRole("region", { name: "Done column" })).queryByText(
+        "Completed delivery task",
+      ),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Completed /i }));
+    expect(
+      within(screen.getByRole("region", { name: "Done column" })).getByText(
+        "Completed delivery task",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps summary ancestors so Delivery List can render nested active tasks", async () => {
+    window.history.pushState({}, "", "/projects/project-123/delivery");
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify([
+        "project.read",
+        "project.update",
+        "task.update",
+        "task.reassign",
+        "raid.read",
+      ]),
+    );
+    window.localStorage.setItem(
+      "pm_platform_role_names",
+      JSON.stringify(["PROJECT_MANAGER"]),
+    );
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      permissions: [
+        { id: "permission-project-read", key: "project.read" },
+        { id: "permission-project-update", key: "project.update" },
+        { id: "permission-task-update", key: "task.update" },
+        { id: "permission-task-reassign", key: "task.reassign" },
+        { id: "permission-raid-read", key: "raid.read" },
+      ],
+      roles: [{ id: "role-project-manager", name: "PROJECT_MANAGER" }],
+      user: {
+        email: "project.manager@example.com",
+        firstName: "Project",
+        id: "user-1",
+        lastName: "Manager",
+        roleId: "role-project-manager",
+        status: "active",
+      },
+    });
+    projectMocks.getProject.mockResolvedValue({
+      id: "project-123",
+      members: [
+        {
+          id: "member-1",
+          projectId: "project-123",
+          role: "manager",
+          user: {
+            email: "project.manager@example.com",
+            firstName: "Project",
+            id: "user-1",
+            lastName: "Manager",
+            status: "active",
+          },
+          userId: "user-1",
+        },
+      ],
+      name: "Selected Project Workspace",
+      status: "active",
+      tasks: [
+        {
+          id: "summary-package",
+          priority: "medium",
+          projectId: "project-123",
+          status: "in_progress",
+          taskKind: "summary",
+          title: "Delivery package",
+        },
+        {
+          assigneeId: "user-1",
+          id: "nested-active",
+          parentTaskId: "summary-package",
+          percentComplete: 10,
+          priority: "high",
+          projectId: "project-123",
+          status: "in_progress",
+          title: "Nested active delivery task",
+        },
+        {
+          assigneeId: "user-2",
+          id: "nested-done",
+          parentTaskId: "summary-package",
+          percentComplete: 100,
+          priority: "medium",
+          projectId: "project-123",
+          status: "done",
+          title: "Nested completed delivery task",
+        },
+      ],
+    });
+
+    render(<ProjectDeliveryPage />);
+
+    expect(
+      await screen.findByRole("group", { name: "Delivery toolbar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^All /i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Active 1/i })).toBeInTheDocument();
+    expect(screen.getByText("Delivery package")).toBeInTheDocument();
+    const expandPackage =
+      screen.queryByRole("button", { name: "Expand Delivery package" }) ??
+      screen.queryByRole("button", { name: "Collapse Delivery package" });
+    if (expandPackage?.getAttribute("aria-label")?.startsWith("Expand")) {
+      fireEvent.click(expandPackage);
+    }
+    expect(
+      await screen.findByText("Nested active delivery task"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Nested completed delivery task")).toBeInTheDocument();
+    expect(screen.queryByText("No tasks yet.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Active 1/i }));
+    expect(screen.getByText("Nested active delivery task")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Nested completed delivery task"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("exposes Delivery to Team Members while hiding Planning and Govern", async () => {
+    window.history.pushState({}, "", "/projects/project-123/delivery");
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify(["project.read", "task.update"]),
+    );
+    window.localStorage.setItem(
+      "pm_platform_role_names",
+      JSON.stringify(["TEAM_MEMBER"]),
+    );
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      permissions: [
+        { id: "permission-project-read", key: "project.read" },
+        { id: "permission-task-update", key: "task.update" },
+      ],
       roles: [{ id: "role-team-member", name: "TEAM_MEMBER" }],
       user: {
         email: "team.member@example.com",
@@ -764,39 +1109,86 @@ describe("Projects List navigation", () => {
         status: "active",
       },
     });
+    projectMocks.getProject.mockResolvedValueOnce({
+      id: "project-123",
+      members: [
+        {
+          id: "member-2",
+          projectId: "project-123",
+          role: "contributor",
+          user: {
+            email: "team.member@example.com",
+            firstName: "Team",
+            id: "user-2",
+            lastName: "Member",
+            status: "active",
+          },
+          userId: "user-2",
+        },
+      ],
+      name: "Selected Project Workspace",
+      status: "active",
+      tasks: [
+        {
+          assigneeId: "user-2",
+          id: "task-mine",
+          percentComplete: 10,
+          priority: "medium",
+          projectId: "project-123",
+          status: "todo",
+          title: "Assigned contributor task",
+        },
+      ],
+    });
 
-    render(<ProjectExecutionPage />);
+    render(<ProjectDeliveryPage />);
 
     expect(
-      await screen.findByText(
-        "Execution workspace is available to project leadership roles with task update access.",
-      ),
+      await screen.findByRole("group", { name: "Delivery toolbar" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Today's Focus")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Execution" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Delivery" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.queryByRole("link", { name: "Planning" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
+    expect(screen.getByText("Assigned contributor task")).toBeInTheDocument();
   });
 
-  it("loads the project RAID route", async () => {
-    window.history.pushState({}, "", "/projects/project-123/raid");
+  it("loads the Govern workspace and redirects legacy RAID", async () => {
+    window.history.pushState({}, "", "/projects/project-123/govern");
+    window.localStorage.setItem(
+      "pm_platform_permissions",
+      JSON.stringify([
+        "project.read",
+        "project.update",
+        "task.update",
+        "raid.read",
+        "raid.update",
+      ]),
+    );
+    window.localStorage.setItem(
+      "pm_platform_role_names",
+      JSON.stringify(["PROJECT_MANAGER"]),
+    );
 
-    render(<ProjectRaidPage />);
+    render(<ProjectGovernPage />);
 
     expect(
       await screen.findByText("Supplier onboarding delay"),
     ).toBeInTheDocument();
     expect(screen.getByText("Integration outage")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Govern" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(
-      screen
-        .getByRole("heading", {
-          level: 1,
-          name: /Selected Project Workspace/,
-        })
-        .closest("header"),
-    ).toHaveClass("shadow-ui-subtle");
+
+    cleanup();
+    window.history.pushState({}, "", "/projects/project-123/raid");
+    render(<ProjectRaidPage />);
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/project-123/govern");
+    });
   });
 
   it("loads the project Documents route", async () => {

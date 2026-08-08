@@ -6,6 +6,11 @@ import { useParams } from "next/navigation";
 import { ProjectLayout, ProjectLayoutLoadingState } from "@/components/project";
 import { ProjectWorkspaceTeam } from "@/components/projects/project-workspace-team";
 import {
+  getAuthMe,
+  resolveProjectUiCapabilities,
+  storeAuthMe,
+} from "@/features/auth";
+import {
   getAssignableUsers,
   getProject,
   type ApiAssignableUser,
@@ -16,7 +21,10 @@ import { useProjectMembers } from "@/hooks/use-project-members";
 export default function ProjectTeamPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
+  const [roleNames, setRoleNames] = useState<string[]>([]);
   const [users, setUsers] = useState<ApiAssignableUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,12 +43,17 @@ export default function ProjectTeamPage() {
       setError(null);
       setIsLoading(true);
       try {
-        const [projectDetails, assignableUsers] = await Promise.all([
+        const [projectDetails, assignableUsers, authMe] = await Promise.all([
           getProject(projectId),
           getAssignableUsers(),
+          getAuthMe(),
         ]);
+        storeAuthMe(authMe);
         setProject(projectDetails);
         setUsers(assignableUsers);
+        setCurrentUserId(authMe.user.id);
+        setPermissionKeys(authMe.permissions.map((permission) => permission.key));
+        setRoleNames(authMe.roles.map((role) => role.name));
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -64,6 +77,13 @@ export default function ProjectTeamPage() {
     name: "Project Team",
     status: "active",
   };
+  const capabilities = resolveProjectUiCapabilities({
+    currentUserId,
+    members,
+    permissionKeys,
+    project,
+    roleNames,
+  });
 
   return (
     <ProjectLayout activeTab="resources" project={workspaceProject}>
@@ -81,9 +101,9 @@ export default function ProjectTeamPage() {
         availableUsers={users}
         isSaving={isSaving}
         members={members}
-        onAddMember={addMember}
-        onRemoveMember={removeMember}
-        onUpdateMember={updateMember}
+        onAddMember={capabilities.canManageTeam ? addMember : undefined}
+        onRemoveMember={capabilities.canManageTeam ? removeMember : undefined}
+        onUpdateMember={capabilities.canManageTeam ? updateMember : undefined}
       />
     </ProjectLayout>
   );

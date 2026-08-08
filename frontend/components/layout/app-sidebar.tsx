@@ -30,11 +30,15 @@ export function AppSidebar({
     permissionKeys,
     roleNames,
   });
-  const visibleNavigation = appNavigation.filter((item) =>
-    item.id === "daily-review"
-      ? navigationCapabilities.canAccessDailyReview
-      : hasAnyPermission(permissionKeys, item.permissions),
-  );
+  const visibleNavigation = appNavigation.filter((item) => {
+    if (item.id === "today") {
+      return navigationCapabilities.canAccessToday;
+    }
+    if (item.id === "daily-review") {
+      return navigationCapabilities.canAccessDailyReview;
+    }
+    return hasAnyPermission(permissionKeys, item.permissions);
+  });
 
   return (
     <aside

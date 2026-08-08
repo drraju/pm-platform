@@ -1,7 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { EmptyState, ErrorState, LoadingState } from "@/components/foundation";
+import {
+  ActionToolbar,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "@/components/foundation";
 import {
   executeAiEnterpriseCapability,
   type ApiStructuredAIResponse,
@@ -23,6 +28,11 @@ import {
 import { decorateProjectPlan } from "@/features/projects/planning";
 import { getTaskExecutionUpdates } from "@/features/tasks";
 import { useProjectMembers } from "@/hooks/use-project-members";
+import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
+import {
+  readPersistedWorkspaceState,
+  writePersistedWorkspaceState,
+} from "@/lib/workspace/persisted-workspace-state";
 
 type ReviewFilter =
   | "all"
@@ -42,16 +52,32 @@ type CompletionSummary = {
   tasksUpdated: number;
 };
 
+type DailyReviewPrefs = {
+  filter: ReviewFilter;
+  projectSearch: string;
+  selectedProjectId: string;
+  taskSearch: string;
+};
+
+const DAILY_REVIEW_PREFS_KEY = "daily-review";
+
 const filterLabels: Array<{ id: ReviewFilter; label: string }> = [
   { id: "all", label: "All" },
   { id: "overdue", label: "Overdue" },
   { id: "today", label: "Today" },
   { id: "week", label: "Week" },
+  { id: "updated", label: "Updated" },
   { id: "blocked", label: "Blocked" },
   { id: "mine", label: "Mine" },
   { id: "waiting", label: "Waiting For Me" },
   { id: "escalations", label: "Escalations" },
 ];
+
+const reviewFilterIds = new Set(filterLabels.map((item) => item.id));
+
+function isReviewFilter(value: string): value is ReviewFilter {
+  return reviewFilterIds.has(value as ReviewFilter);
+}
 
 export default function DailyReviewPage() {
   const [projects, setProjects] = useState<ApiProject[]>([]);
@@ -63,6 +89,7 @@ export default function DailyReviewPage() {
   const [roles, setRoles] = useState<string[]>([]);
   const [filter, setFilter] = useState<ReviewFilter>("all");
   const [taskSearch, setTaskSearch] = useState("");
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
   const [reviewedTaskIds, setReviewedTaskIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -76,17 +103,62 @@ export default function DailyReviewPage() {
   const [aiReviewError, setAiReviewError] = useState<string | null>(null);
 
   useEffect(() => {
+    const prefs = readPersistedWorkspaceState<DailyReviewPrefs>(
+      DAILY_REVIEW_PREFS_KEY,
+      {
+        filter: "all",
+        projectSearch: "",
+        selectedProjectId: "",
+        taskSearch: "",
+      },
+    );
+    if (isReviewFilter(prefs.filter)) {
+      setFilter(prefs.filter);
+    }
+    setProjectSearch(prefs.projectSearch);
+    setTaskSearch(prefs.taskSearch);
+    setPrefsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!prefsHydrated) {
+      return;
+    }
+    writePersistedWorkspaceState(DAILY_REVIEW_PREFS_KEY, {
+      filter,
+      projectSearch,
+      selectedProjectId,
+      taskSearch,
+    });
+  }, [filter, prefsHydrated, projectSearch, selectedProjectId, taskSearch]);
+
+  useEffect(() => {
     let mounted = true;
     Promise.all([getProjects(), getAuthMe()])
       .then(([projectData, authMe]) => {
         if (!mounted) return;
         storeAuthMe(authMe);
-        setProjects(projectData.filter((candidate) => candidate.status !== "archived"));
+        const activeProjects = projectData.filter(
+          (candidate) => candidate.status !== "archived",
+        );
+        setProjects(activeProjects);
         setPermissionKeys(authMe.permissions.map((permission) => permission.key));
         setRoles(authMe.roles.map((role) => role.name));
         setCurrentUserId(authMe.user.id);
-        const firstProject = projectData.find((candidate) => candidate.status !== "archived");
-        if (firstProject) setSelectedProjectId(firstProject.id);
+        const prefs = readPersistedWorkspaceState<DailyReviewPrefs>(
+          DAILY_REVIEW_PREFS_KEY,
+          {
+            filter: "all",
+            projectSearch: "",
+            selectedProjectId: "",
+            taskSearch: "",
+          },
+        );
+        const persistedProject = activeProjects.find(
+          (candidate) => candidate.id === prefs.selectedProjectId,
+        );
+        const firstProject = activeProjects[0];
+        setSelectedProjectId(persistedProject?.id ?? firstProject?.id ?? "");
       })
       .catch((requestError) => {
         if (mounted) setError(getErrorMessage(requestError, "Unable to load Daily Review"));
@@ -108,8 +180,6 @@ export default function DailyReviewPage() {
     let mounted = true;
     setIsProjectLoading(true);
     setCompletion(null);
-    setFilter("all");
-    setTaskSearch("");
     setReviewedTaskIds(new Set());
     Promise.all([getProject(selectedProjectId), getProjectMembers(selectedProjectId).catch(() => [])])
       .then(([projectData, members]) => {
@@ -129,12 +199,6 @@ export default function DailyReviewPage() {
 
   const { error: memberError, isLoading: areMembersLoading, members } =
     useProjectMembers(selectedProjectId, project?.members ?? []);
-
-  const filteredProjects = useMemo(() => {
-    const normalizedSearch = projectSearch.trim().toLowerCase();
-    if (!normalizedSearch) return projects;
-    return projects.filter((candidate) => candidate.name.toLowerCase().includes(normalizedSearch));
-  }, [projectSearch, projects]);
 
   const allTasks = useMemo(
     () => (project?.tasks ?? []).filter((task) => task.taskKind !== "summary"),
@@ -245,41 +309,41 @@ export default function DailyReviewPage() {
 
   return (
     <WorkspaceContent spacing="compact">
-      <WorkspaceSection className="space-y-3" surface="plain" padding="none">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-          <label className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
+      <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+        Daily Review
+      </h1>
+
+      <WorkspaceSection className="space-y-2" surface="plain" padding="none">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="min-w-0 flex-1 text-[11px] font-semibold text-slate-600 sm:max-w-md">
             Project
-            <input
-              aria-label="Search projects"
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-              onChange={(event) => setProjectSearch(event.target.value)}
-              placeholder="Search projects"
-              type="search"
-              value={projectSearch}
-            />
+            <select
+              aria-label="Select project"
+              className="mt-0.5 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+              onChange={(event) => setSelectedProjectId(event.target.value)}
+              value={selectedProjectId}
+            >
+              {projects.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </option>
+              ))}
+            </select>
           </label>
-          <select
-            aria-label="Select project"
-            className="min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 lg:w-[min(44vw,32rem)]"
-            onChange={(event) => setSelectedProjectId(event.target.value)}
-            value={selectedProjectId}
-          >
-            {filteredProjects.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
-            ))}
-          </select>
           <button
-            className="inline-flex h-10 items-center justify-center rounded-md bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center justify-center rounded-md bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!project || isProjectLoading || isAiReviewLoading}
             onClick={handleAiDailyReview}
             type="button"
           >
             {isAiReviewLoading ? "Preparing AI Review..." : "AI Daily Review"}
           </button>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm lg:min-w-52">
-            <div><dt className="text-xs text-slate-500">Sprint</dt><dd className="font-semibold text-slate-800">Not assigned</dd></div>
-            <div><dt className="text-xs text-slate-500">Active tasks</dt><dd className="font-semibold text-slate-800">{projectTaskCount}</dd></div>
-          </dl>
+          <p className="text-xs text-slate-600">
+            Active tasks{" "}
+            <span className="font-semibold text-slate-900">
+              {projectTaskCount}
+            </span>
+          </p>
         </div>
       </WorkspaceSection>
 
@@ -291,53 +355,68 @@ export default function DailyReviewPage() {
         <>
           {aiReviewError ? <ErrorState message={aiReviewError} /> : null}
           {aiReview ? <DailyReviewAiPanel response={aiReview} /> : null}
-          <WorkspaceSection className="sticky top-0 z-20 space-y-3 border-y border-slate-200 bg-surface/95 py-3 backdrop-blur" surface="plain" padding="none">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <label className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Search execution queue
+          <WorkspaceSection
+            className="sticky top-0 z-20"
+            padding="none"
+            surface="plain"
+          >
+            <ActionToolbar
+              className="gap-2 p-2"
+              filters={
+                <div
+                  aria-label="Daily Review filters"
+                  className="flex flex-wrap gap-1"
+                  role="toolbar"
+                >
+                  {filterLabels.map((item) => {
+                    const count =
+                      item.id === "all"
+                        ? allTasks.filter((task) => task.status !== "done").length
+                        : allTasks.filter((task) =>
+                            matchesFilter(task, item.id, currentUserId),
+                          ).length;
+                    return (
+                      <button
+                        aria-pressed={filter === item.id}
+                        className={`rounded border px-2 py-1 text-[11px] font-semibold transition ${
+                          filter === item.id
+                            ? "border-brand bg-brand text-white"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-brand/40"
+                        }`}
+                        key={item.id}
+                        onClick={() => setFilter(item.id)}
+                        type="button"
+                      >
+                        {item.label} {count}
+                      </button>
+                    );
+                  })}
+                </div>
+              }
+              label="Daily Review toolbar"
+              search={
                 <input
                   aria-label="Search execution queue"
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                   onChange={(event) => setTaskSearch(event.target.value)}
-                  placeholder="Search task names"
+                  placeholder="Search tasks"
                   type="search"
                   value={taskSearch}
                 />
-              </label>
-              <div className="flex shrink-0 items-center gap-2 text-sm text-slate-600" aria-label="Review progress">
-                <span className="font-semibold text-slate-900">Reviewed</span>
-                <span className="rounded-md bg-slate-100 px-2 py-1 font-semibold text-slate-800">
-                  {reviewedTaskIds.size} / {allTasks.length}
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-              {widgetDefinitions(allTasks, currentUserId).map((widget) => (
-                <button
-                  aria-pressed={filter === widget.filter}
-                  className={`min-h-16 rounded-md border px-3 py-2 text-left transition ${filter === widget.filter ? "border-brand bg-brand text-white" : "border-slate-200 bg-white text-slate-700 hover:border-brand/40"}`}
-                  key={widget.filter}
-                  onClick={() => setFilter(widget.filter)}
-                  type="button"
+              }
+              secondaryActions={
+                <div
+                  aria-label="Review progress"
+                  className="flex shrink-0 items-center gap-1.5 text-xs text-slate-600"
                 >
-                  <span className="block text-xs font-medium opacity-80">{widget.label}</span>
-                  <span className="mt-1 block text-xl font-semibold">{widget.count}</span>
-                </button>
-              ))}
-            </div>
-            <div aria-label="Daily Review filters" className="flex flex-wrap gap-2" role="toolbar">
-              {filterLabels.map((item) => (
-                <button
-                  aria-pressed={filter === item.id}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${filter === item.id ? "border-brand bg-brand text-white" : "border-slate-200 bg-white text-slate-700 hover:border-brand/40"}`}
-                  key={item.id}
-                  onClick={() => setFilter(item.id)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+                  <span className="font-semibold text-slate-900">Reviewed</span>
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-800">
+                    {reviewedTaskIds.size} / {allTasks.length}
+                  </span>
+                </div>
+              }
+              sticky
+            />
           </WorkspaceSection>
 
           {completion ? (
@@ -437,18 +516,6 @@ function CompletionMetric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-md border border-slate-200 bg-white p-3"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 text-2xl font-semibold text-slate-950">{value}</dd></div>;
 }
 
-function widgetDefinitions(tasks: ApiTask[], currentUserId: string | null) {
-  return [
-    { filter: "overdue" as const, label: "Overdue", count: tasks.filter(isOverdue).length },
-    { filter: "today" as const, label: "Due Today", count: tasks.filter((task) => getDueDate(task) === dateOnly(new Date())).length },
-    { filter: "week" as const, label: "Due This Week", count: tasks.filter(isDueThisWeek).length },
-    { filter: "blocked" as const, label: "Blocked", count: tasks.filter((task) => task.status === "blocked").length },
-    { filter: "updated" as const, label: "Updated Today", count: tasks.filter(wasUpdatedToday).length },
-    { filter: "waiting" as const, label: "Waiting For Me", count: tasks.filter((task) => task.latestExecutionUpdate?.nextActionOwnerId === currentUserId).length },
-    { filter: "escalations" as const, label: "Escalations", count: tasks.filter((task) => task.priority === "critical" && task.status !== "done").length },
-  ];
-}
-
 function matchesFilter(task: ApiTask, filter: ReviewFilter, currentUserId: string | null) {
   if (filter === "all") return task.status !== "done";
   if (filter === "overdue") return isOverdue(task);
@@ -464,29 +531,6 @@ function matchesFilter(task: ApiTask, filter: ReviewFilter, currentUserId: strin
 function matchesTaskSearch(task: ApiTask, search: string) {
   const normalizedSearch = search.trim().toLowerCase();
   return !normalizedSearch || task.title.toLowerCase().includes(normalizedSearch);
-}
-
-function includeTaskAncestors(allTasks: ApiTask[], tasks: ApiTask[]) {
-  const tasksById = new Map(allTasks.map((task) => [task.id, task]));
-  const queue = [...tasks];
-  const includedTaskIds = new Set(tasks.map((task) => task.id));
-
-  while (queue.length > 0) {
-    const task = queue.pop();
-    if (!task?.parentTaskId || includedTaskIds.has(task.parentTaskId)) {
-      continue;
-    }
-
-    const parentTask = tasksById.get(task.parentTaskId);
-    if (!parentTask) {
-      continue;
-    }
-
-    includedTaskIds.add(parentTask.id);
-    queue.push(parentTask);
-  }
-
-  return allTasks.filter((task) => includedTaskIds.has(task.id));
 }
 
 function compareDeliveryPriority(left: ApiTask, right: ApiTask) {

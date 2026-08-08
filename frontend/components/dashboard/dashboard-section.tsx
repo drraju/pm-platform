@@ -28,6 +28,7 @@ export function DashboardSection<T>({
           {items.length}
         </StatusBadge>
       }
+      density="compact"
       title={title}
     >
       <div className="divide-y divide-slate-100">
@@ -41,7 +42,7 @@ export function DashboardSection<T>({
           />
         ) : (
           items.map((item, index) => (
-            <div className="py-3.5 first:pt-0 last:pb-0" key={index}>
+            <div className="py-2 first:pt-0 last:pb-0" key={index}>
               {renderItem(item)}
             </div>
           ))
