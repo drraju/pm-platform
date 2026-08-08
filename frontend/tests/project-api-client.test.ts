@@ -8,6 +8,7 @@ import {
   forgotPassword,
   getDocumentCategories,
   createProjectDocument,
+  updateProjectDocument,
   createProjectTask,
   createProject,
   createProjectTaskDependency,
@@ -245,6 +246,31 @@ describe("project API client", () => {
           version: "1.0",
         }),
         method: "POST",
+      }),
+    );
+  });
+
+  it("updates project document metadata through PATCH", async () => {
+    const fetchMock = mockFetch({ id: "document-1", title: "Business HLD" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateProjectDocument("document-1", {
+      approvalStatus: "APPROVED",
+      category: "Business",
+      documentType: "HLD",
+      title: "Business HLD",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/documents/document-1",
+      expect.objectContaining({
+        body: JSON.stringify({
+          approvalStatus: "APPROVED",
+          category: "Business",
+          documentType: "HLD",
+          title: "Business HLD",
+        }),
+        method: "PATCH",
       }),
     );
   });

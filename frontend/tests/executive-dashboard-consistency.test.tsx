@@ -103,10 +103,19 @@ vi.mock("@/features/auth", () => ({
       task?.assigneeId === currentUserId;
     return {
       canAccessDailyReview: false,
+      canAccessDelivery: permissionKeys.includes("task.update"),
+      canAccessGovern: false,
+      canAccessPlanning: false,
+      canAccessToday: permissionKeys.includes("task.update"),
+      canApproveDocuments: false,
+      canContributeDocuments: permissionKeys.includes("project.read"),
+      canEditDocument: false,
       canEditExecution: canUpdateTask,
       canEditPlanning: false,
+      canExecuteAssignedTask: canUpdateTask,
       canManageDocuments: false,
       canManageProjectTasks: false,
+      canManageTeam: false,
       canReassignTask: canUpdateTask,
       canUpdateTask,
       canUploadDocuments: permissionKeys.includes("project.read"),
@@ -524,8 +533,7 @@ describe("Executive dashboard drilldown consistency", () => {
       expect(taskMocks.getTasks).toHaveBeenCalled();
     });
 
-    const visibleTaskCards = screen.getAllByRole("article");
-    expect(visibleTaskCards).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "My Tasks" })).toBeInTheDocument();
     expect(
       screen.getByText("Resolve vendor cutover blocker"),
     ).toBeInTheDocument();
@@ -534,5 +542,6 @@ describe("Executive dashboard drilldown consistency", () => {
       screen.queryByText("Prepare steering readout"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Confirm rollout notes")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("My Tasks queue")).toBeInTheDocument();
   });
 });

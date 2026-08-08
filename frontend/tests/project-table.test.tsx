@@ -42,7 +42,7 @@ const projects = [
 ];
 
 describe("ProjectTable", () => {
-  it("renders project rows with team count and created date", () => {
+  it("renders compact Name / Health / Action rows", () => {
     render(
       <ProjectTable
         emptyMessage="No projects"
@@ -55,20 +55,23 @@ describe("ProjectTable", () => {
       />,
     );
 
+    expect(screen.getByText("Name")).toBeInTheDocument();
+    expect(screen.getByText("Health")).toBeInTheDocument();
+    expect(screen.getByText("Action")).toBeInTheDocument();
+    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
+    expect(screen.queryByText("Team")).not.toBeInTheDocument();
+    expect(screen.queryByText("Created")).not.toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAccessibleName(
       "Open Customer Experience Platform Upgrade",
     );
     expect(screen.getByRole("button", { name: /open/i })).toBeInTheDocument();
-    expect(screen.getByText("at risk")).toBeInTheDocument();
     expect(screen.getByText("Amber")).toBeInTheDocument();
-    expect(screen.queryByText("🟡")).not.toBeInTheDocument();
     expect(screen.getByText("Amber").closest("span")).toHaveAttribute(
       "title",
       "1 high risk open",
     );
-    expect(screen.getByText("Ava Patel")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
-    expect(screen.getByText("Jun 01, 2026")).toBeInTheDocument();
+    expect(screen.queryByText("Ava Patel")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jun 01, 2026")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /archive/i }),

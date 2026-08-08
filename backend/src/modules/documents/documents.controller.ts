@@ -68,7 +68,7 @@ export class DocumentsController {
   }
 
   @Post('documents')
-  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @RequirePermissions(PermissionKey.ProjectRead)
   @ApiOkResponse()
   create(
     @Body() input: CreateProjectDocumentDto,
@@ -97,7 +97,7 @@ export class DocumentsController {
   }
 
   @Patch('documents/:documentId')
-  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @RequirePermissions(PermissionKey.ProjectRead)
   @ApiOkResponse()
   update(
     @Param('documentId') documentId: string,

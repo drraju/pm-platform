@@ -9,7 +9,10 @@ import {
   WorkspaceHeader,
   WorkspaceLayout,
 } from "@/components/foundation";
-import { ProjectLayout } from "@/components/project";
+import {
+  CompactProjectWorkspaceLayout,
+  ProjectLayout,
+} from "@/components/project";
 import { ProjectWorkspaceOverview } from "@/components/projects/project-workspace-overview";
 import { getProject, type ApiProjectDetails } from "@/features/projects";
 
@@ -42,8 +45,8 @@ export default function ProjectWorkspacePage() {
 
   if (isLoading) {
     return (
-      <WorkspaceLayout>
-        <LoadingState label="Loading project workspace" rows={5} />
+      <WorkspaceLayout spacing="compact">
+        <LoadingState label="Loading project workspace" rows={4} />
       </WorkspaceLayout>
     );
   }
@@ -57,9 +60,11 @@ export default function ProjectWorkspacePage() {
   return (
     <ProjectLayout
       activeTab="overview"
-      layout={WorkspaceLayout}
+      layout={CompactProjectWorkspaceLayout}
       project={workspaceProject}
-      renderHeader={(content) => <WorkspaceHeader {...content} />}
+      renderHeader={(content) => (
+        <WorkspaceHeader density="compact" {...content} />
+      )}
     >
       {error ? <ErrorState message={error} /> : null}
       {project ? <ProjectWorkspaceOverview project={project} /> : null}

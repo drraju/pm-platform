@@ -87,21 +87,41 @@ describe("Home workspace", () => {
     dashboardMocks.getMyDashboard.mockResolvedValue(dashboard);
   });
 
-  it("presents action-oriented metrics and a scannable assigned project row", async () => {
+  it("renders a compact horizontal work summary without Overall Health", async () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Payments Modernisation")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { name: "Your work" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Work summary")).toHaveTextContent("Assigned9");
-    expect(screen.queryByText("Total Tasks")).not.toBeInTheDocument();
-    expect(screen.getAllByText("project manager")).toHaveLength(2);
-    expect(screen.getAllByText("Amber")).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(screen.queryByText("Your work")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Home workspace/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Overall Health/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Overall health")).not.toBeInTheDocument();
+
+    const summary = screen.getByLabelText("Work summary");
+    expect(summary).toHaveTextContent("Assigned");
+    expect(summary).toHaveTextContent("9");
+    expect(summary).toHaveTextContent("In Progress");
+    expect(summary).toHaveTextContent("3");
+    expect(summary).toHaveTextContent("Blocked");
+    expect(summary).toHaveTextContent("1");
+    expect(summary).toHaveTextContent("Overdue");
+    expect(screen.getByRole("link", { name: "Assigned tasks: 9" })).toHaveAttribute(
+      "href",
+      "/tasks",
+    );
     expect(
-      screen.getByText("Milestone forecast moved by 5 days"),
+      screen.getByRole("link", { name: "Overdue tasks: 1" }),
+    ).toHaveAttribute("href", "/tasks?timing=overdue");
+
+    expect(
+      screen.getByRole("heading", { name: "Assigned Projects" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Project")).toBeInTheDocument();
+    expect(screen.getByText("Health")).toBeInTheDocument();
+    expect(screen.getByText("Action")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Open project Payments Modernisation" }),
     ).toHaveAttribute("href", "/projects/project-1");

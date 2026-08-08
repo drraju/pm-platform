@@ -10,7 +10,6 @@ import {
   useState,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { PageHeader } from "@/components/layout/page-header";
 import { ProjectTable } from "@/components/projects/project-table";
 import { AppModal } from "@/components/ui/app-modal";
 import {
@@ -380,100 +379,57 @@ function PageContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        actions={
-          canCreateProject ? (
-            <button
-              className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
-              disabled={!hasSession}
-              onClick={openCreateProjectModal}
-              type="button"
-            >
-              Create project
-            </button>
-          ) : null
-        }
-        description="Track delivery ownership, project stage, health, milestones, and integration readiness across the active portfolio."
-        eyebrow="Multi-project support"
-        title="Projects"
-      />
+    <div className="space-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+          Projects
+        </h1>
+        {canCreateProject ? (
+          <button
+            className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={!hasSession}
+            onClick={openCreateProjectModal}
+            type="button"
+          >
+            Create Project
+          </button>
+        ) : null}
+      </header>
 
       {!hasSession ? (
-        <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <section className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Sign in first so the workspace can read and create projects.
         </section>
       ) : null}
 
       {error ? (
-        <section className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <section className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </section>
       ) : null}
 
-      <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[1fr_220px_220px_240px]">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Search by project name
-          </span>
+      <section
+        aria-label="Project filters"
+        className="grid gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        <label className="grid gap-0.5 text-[11px] font-semibold text-slate-600">
+          Search
           <input
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            aria-label="Search projects"
+            className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
             onChange={(event) =>
               syncProjectFilters({ search: event.target.value })
             }
-            placeholder="Search projects"
+            placeholder="Search projects..."
             type="search"
             value={searchTerm}
           />
         </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Filter by status
-          </span>
+        <label className="grid gap-0.5 text-[11px] font-semibold text-slate-600">
+          Health
           <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) =>
-              syncProjectFilters({ status: event.target.value })
-            }
-            value={statusFilter}
-          >
-            <option value="all">All statuses</option>
-            {projectFilterStatuses.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Sort projects
-          </span>
-          <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) =>
-              syncProjectFilters({
-                sort: event.target.value as
-                  | "created_asc"
-                  | "created_desc"
-                  | "health_asc"
-                  | "health_desc",
-              })
-            }
-            value={sortMode}
-          >
-            <option value="created_desc">Newest first</option>
-            <option value="created_asc">Oldest first</option>
-            <option value="health_desc">Health: Red first</option>
-            <option value="health_asc">Health: Green first</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Filter by health
-          </span>
-          <select
-            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            aria-label="Filter by health"
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
             onChange={(event) =>
               syncProjectFilters({
                 health: event.target.value as "all" | ApiProjectHealthStatus,
@@ -485,6 +441,24 @@ function PageContent() {
             <option value="RED">Red</option>
             <option value="AMBER">Amber</option>
             <option value="GREEN">Green</option>
+          </select>
+        </label>
+        <label className="grid gap-0.5 text-[11px] font-semibold text-slate-600">
+          Status
+          <select
+            aria-label="Filter by status"
+            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+            onChange={(event) =>
+              syncProjectFilters({ status: event.target.value })
+            }
+            value={statusFilter}
+          >
+            <option value="all">All statuses</option>
+            {projectFilterStatuses.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
           </select>
         </label>
       </section>
@@ -663,7 +637,7 @@ function PageContent() {
 }
 
 function PageLoading() {
-  return <div className="space-y-6" />;
+  return <div className="space-y-3" />;
 }
 
 function isProjectSortMode(

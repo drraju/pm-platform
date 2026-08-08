@@ -30,6 +30,13 @@ export const appNavigation: AppNavigationItem[] = [
     section: "Workspaces",
   },
   {
+    href: "/today",
+    id: "today",
+    label: "Today",
+    permissions: ["project.read", "task.update"],
+    section: "Workspaces",
+  },
+  {
     href: "/daily-review",
     id: "daily-review",
     label: "Daily Review",

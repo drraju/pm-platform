@@ -47,6 +47,7 @@ vi.mock("@/features/auth", () => ({
   clearSession: vi.fn(),
   getAuthMe: vi.fn(() => new Promise(() => undefined)),
   getStoredPermissionKeys: () => permissionKeys,
+  getStoredRoleNames: () => [],
   hasAnyPermission: (
     availablePermissions: string[],
     requiredPermissions: string[],
@@ -55,15 +56,28 @@ vi.mock("@/features/auth", () => ({
   ),
   resolveProjectUiCapabilities: () => ({
     canAccessDailyReview: false,
+    canAccessDelivery: false,
+    canAccessGovern: false,
+    canAccessPlanning: false,
+    canAccessToday: false,
+    canApproveDocuments: false,
+    canContributeDocuments: false,
+    canEditDocument: false,
     canEditExecution: false,
     canEditPlanning: false,
+    canExecuteAssignedTask: false,
     canManageDocuments: false,
     canManageProjectTasks: false,
+    canManageTeam: false,
     canReassignTask: false,
     canUpdateTask: false,
     canUploadDocuments: false,
   }),
   storeAuthMe: vi.fn(),
+  useStoredAuthSession: () => ({
+    permissionKeys,
+    roleNames: [] as string[],
+  }),
 }));
 
 describe("CommandPalette", () => {

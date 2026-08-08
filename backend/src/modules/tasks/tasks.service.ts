@@ -12,6 +12,7 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from '../../common/authz/authorization-policy.service';
+import { PermissionKey } from '../../common/authz/permissions';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
@@ -44,6 +45,17 @@ const teamMemberEditableTaskFields = new Set([
   'remarks',
   'percentComplete',
   'status',
+]);
+/** Assigned contributors may post stand-up execution fields only. */
+const assigneeExecutionUpdateFields = new Set([
+  'assigneeId',
+  'nextActionOwnerId',
+  'nextStep',
+  'percentComplete',
+  'priority',
+  'status',
+  'targetCompletionDate',
+  'updateNotes',
 ]);
 const taskPriorities = new Set(['low', 'medium', 'high', 'critical']);
 
@@ -286,7 +298,7 @@ export class TasksService {
         'Summary tasks cannot receive execution updates',
       );
     }
-    await this.ensureCanUpdateTask(task, input, actor);
+    await this.ensureCanRecordExecutionUpdate(task, input, actor);
     this.validateTaskPriority(input.priority);
     await this.validateAssigneeMembership(task.projectId, input.assigneeId);
     await this.validateAssigneeMembership(
@@ -477,6 +489,54 @@ export class TasksService {
     if (disallowedFields.length > 0) {
       throw new ForbiddenException(
         'Team members can only update status, remarks, percent complete, or assignee',
+      );
+    }
+  }
+
+  private async ensureCanRecordExecutionUpdate(
+    task: Task,
+    input: CreateTaskExecutionUpdateDto,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
+    if (!actor) {
+      return;
+    }
+
+    if (await this.canManageTask(task.projectId, actor)) {
+      return;
+    }
+
+    if (task.assigneeId !== actor.userId) {
+      throw new ForbiddenException(
+        'Only assigned team members can update this task',
+      );
+    }
+
+    const disallowedFields = Object.keys(input).filter(
+      (field) => !assigneeExecutionUpdateFields.has(field),
+    );
+    if (disallowedFields.length > 0) {
+      throw new ForbiddenException(
+        'Assigned team members can only record execution fields on their tasks',
+      );
+    }
+
+    if (
+      input.assigneeId !== undefined &&
+      input.assigneeId !== task.assigneeId &&
+      !(await this.authorizationPolicyService.hasPermission(
+        actor,
+        PermissionKey.TaskReassign,
+      ))
+    ) {
+      throw new ForbiddenException(
+        'Task reassignment requires task.reassign permission',
+      );
+    }
+
+    if (input.priority !== undefined && input.priority !== task.priority) {
+      throw new ForbiddenException(
+        'Only project managers can change task priority',
       );
     }
   }

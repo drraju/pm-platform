@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DeepPartial, Repository, SelectQueryBuilder } from 'typeorm';
-import { AuthorizationActor } from '../../common/authz/authorization-policy.service';
+import {
+  AuthorizationActor,
+  AuthorizationPolicyService,
+} from '../../common/authz/authorization-policy.service';
 import { Project } from '../projects/entities/project.entity';
 import { User } from '../users/entities/user.entity';
 import {
@@ -117,6 +124,11 @@ type UserSummary = {
   id: string;
 };
 
+const contributorApprovalStatuses = new Set<DocumentApprovalStatus>([
+  DocumentApprovalStatus.DRAFT,
+  DocumentApprovalStatus.UNDER_REVIEW,
+]);
+
 @Injectable()
 export class DocumentsService {
   constructor(
@@ -130,6 +142,7 @@ export class DocumentsService {
     private readonly documentCategoryRepository: Repository<DocumentCategory>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
   ) {}
 
   storageProviders(): StorageProviderReference[] {
@@ -162,7 +175,16 @@ export class DocumentsService {
     actor?: AuthorizationActor,
   ): Promise<ProjectDocumentResponse> {
     await this.ensureProjectExists(input.projectId);
-    await this.ensureUserExists(input.ownerId);
+    await this.ensureCanContributeDocument(input.projectId, actor);
+    const canManage = await this.authorizationPolicyService.canManageProject(
+      input.projectId,
+      actor,
+    );
+    const ownerId = input.ownerId ?? actor?.userId ?? null;
+    await this.ensureUserExists(ownerId);
+    const approvalStatus = canManage
+      ? (input.approvalStatus ?? DocumentApprovalStatus.DRAFT)
+      : this.resolveContributorApprovalStatus(input.approvalStatus);
     const [documentType, category] = await Promise.all([
       this.resolveDocumentType(input.documentType),
       this.resolveCategory(input.category),
@@ -170,7 +192,7 @@ export class DocumentsService {
 
     const document = await this.documentRepository.save(
       this.documentRepository.create({
-        approvalStatus: input.approvalStatus ?? DocumentApprovalStatus.DRAFT,
+        approvalStatus,
         categoryId: category?.id ?? null,
         createdById: actor?.userId,
         description: input.description ?? null,
@@ -179,7 +201,7 @@ export class DocumentsService {
         lastReviewedAt: parseNullableDate(input.lastReviewedAt),
         linkStatus: DocumentLinkStatus.UNKNOWN,
         nextReviewAt: parseNullableDate(input.nextReviewAt),
-        ownerId: input.ownerId ?? null,
+        ownerId,
         projectId: input.projectId,
         storageProvider: input.storageProvider,
         title: input.title,
@@ -246,7 +268,27 @@ export class DocumentsService {
     actor?: AuthorizationActor,
   ): Promise<ProjectDocumentResponse> {
     const document = await this.findEntity(documentId);
+    const canManage = await this.authorizationPolicyService.canManageProject(
+      document.projectId,
+      actor,
+    );
+    const isContributorOwner = this.isDocumentContributor(document, actor);
+    if (!canManage && !isContributorOwner) {
+      throw new ForbiddenException(
+        'Only document owners or project managers can update this document',
+      );
+    }
+    if (!canManage) {
+      await this.ensureCanContributeDocument(document.projectId, actor);
+      this.assertContributorUpdateAllowed(document, input);
+    }
+
     if (input.projectId && input.projectId !== document.projectId) {
+      if (!canManage) {
+        throw new ForbiddenException(
+          'Contributors cannot move documents between projects',
+        );
+      }
       await this.ensureProjectExists(input.projectId);
     }
     await this.ensureUserExists(input.ownerId);
@@ -260,7 +302,11 @@ export class DocumentsService {
       document.categoryId = category?.id ?? null;
     }
 
-    document.approvalStatus = input.approvalStatus ?? document.approvalStatus;
+    if (input.approvalStatus !== undefined) {
+      document.approvalStatus = canManage
+        ? input.approvalStatus
+        : this.resolveContributorApprovalStatus(input.approvalStatus);
+    }
     document.description =
       input.description === undefined
         ? document.description
@@ -274,9 +320,11 @@ export class DocumentsService {
       input.nextReviewAt === undefined
         ? document.nextReviewAt
         : parseNullableDate(input.nextReviewAt);
-    document.ownerId =
-      input.ownerId === undefined ? document.ownerId : input.ownerId;
-    document.projectId = input.projectId ?? document.projectId;
+    if (canManage) {
+      document.ownerId =
+        input.ownerId === undefined ? document.ownerId : input.ownerId;
+      document.projectId = input.projectId ?? document.projectId;
+    }
     document.storageProvider =
       input.storageProvider ?? document.storageProvider;
     document.title = input.title ?? document.title;
@@ -290,9 +338,82 @@ export class DocumentsService {
 
   async remove(documentId: string, actor?: AuthorizationActor): Promise<void> {
     const document = await this.findEntity(documentId);
+    if (
+      !(await this.authorizationPolicyService.canManageProject(
+        document.projectId,
+        actor,
+      ))
+    ) {
+      throw new ForbiddenException(
+        'Only project managers can delete document links',
+      );
+    }
     document.deletedById = actor?.userId ?? document.deletedById;
     await this.documentRepository.save(document);
     await this.documentRepository.softRemove(document);
+  }
+
+  private async ensureCanContributeDocument(
+    projectId: string,
+    actor?: AuthorizationActor,
+  ): Promise<void> {
+    if (
+      !(await this.authorizationPolicyService.canViewProject(projectId, actor))
+    ) {
+      throw new ForbiddenException(
+        'Project document contribution requires project access',
+      );
+    }
+  }
+
+  private isDocumentContributor(
+    document: ProjectDocument,
+    actor?: AuthorizationActor,
+  ): boolean {
+    if (!actor?.userId) {
+      return false;
+    }
+    return (
+      document.ownerId === actor.userId ||
+      document.createdById === actor.userId
+    );
+  }
+
+  private resolveContributorApprovalStatus(
+    approvalStatus?: DocumentApprovalStatus,
+  ): DocumentApprovalStatus {
+    if (!approvalStatus) {
+      return DocumentApprovalStatus.DRAFT;
+    }
+    if (!contributorApprovalStatuses.has(approvalStatus)) {
+      throw new ForbiddenException(
+        'Contributors cannot approve or archive project documents',
+      );
+    }
+    return approvalStatus;
+  }
+
+  private assertContributorUpdateAllowed(
+    document: ProjectDocument,
+    input: UpdateProjectDocumentDto,
+  ): void {
+    if (
+      input.ownerId !== undefined &&
+      input.ownerId !== document.ownerId &&
+      input.ownerId !== document.createdById
+    ) {
+      throw new ForbiddenException(
+        'Contributors cannot transfer document ownership',
+      );
+    }
+    if (
+      input.approvalStatus !== undefined &&
+      !contributorApprovalStatuses.has(input.approvalStatus)
+    ) {
+      throw new ForbiddenException(
+        'Contributors cannot approve or archive project documents',
+      );
+    }
   }
 
   private async findOne(documentId: string): Promise<ProjectDocumentResponse> {

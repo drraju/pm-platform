@@ -44,6 +44,9 @@ export type DocumentFilters = {
 };
 
 type ProjectWorkspaceDocumentsProps = {
+  canApproveDocuments?: boolean;
+  canEditDocument?: (document: ApiProjectDocument) => boolean;
+  canUploadDocuments?: boolean;
   categories: ApiDocumentReference[];
   documents: ApiProjectDocument[];
   documentTypes: ApiDocumentReference[];
@@ -51,6 +54,10 @@ type ProjectWorkspaceDocumentsProps = {
   isSaving?: boolean;
   onCreateDocument: (input: DocumentFormState) => Promise<void> | void;
   onFiltersChange: (filters: DocumentFilters) => void;
+  onUpdateDocument?: (
+    documentId: string,
+    input: DocumentFormState,
+  ) => Promise<void> | void;
   owners: ApiAssignableUser[];
   project: ApiProject;
   storageProviders: ApiStorageProviderReference[];
@@ -122,6 +129,9 @@ function initialFormState(
 }
 
 export function ProjectWorkspaceDocuments({
+  canApproveDocuments = false,
+  canEditDocument = () => false,
+  canUploadDocuments = false,
   categories,
   documents,
   documentTypes,
@@ -129,6 +139,7 @@ export function ProjectWorkspaceDocuments({
   isSaving = false,
   onCreateDocument,
   onFiltersChange,
+  onUpdateDocument,
   owners,
   project,
   storageProviders,
@@ -137,10 +148,14 @@ export function ProjectWorkspaceDocuments({
   const [formState, setFormState] = useState<DocumentFormState>(() =>
     initialFormState(storageProviders, documentTypes, categories),
   );
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(
+    null,
+  );
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
+  const isEditModalOpen = Boolean(editingDocumentId);
 
   const kpis = useMemo(
     () => [
@@ -161,6 +176,15 @@ export function ProjectWorkspaceDocuments({
     }
 
     setUrlError(null);
+    if (editingDocumentId) {
+      if (!onUpdateDocument) {
+        return;
+      }
+      await onUpdateDocument(editingDocumentId, formState);
+      closeEditModal();
+      return;
+    }
+
     await onCreateDocument(formState);
     setFormState(initialFormState(storageProviders, documentTypes, categories));
     setIsAddModalOpen(false);
@@ -180,9 +204,29 @@ export function ProjectWorkspaceDocuments({
     onFiltersChange({ ...filters, [field]: value });
   }
 
+  function openAddModal() {
+    setEditingDocumentId(null);
+    setUrlError(null);
+    setFormState(initialFormState(storageProviders, documentTypes, categories));
+    setIsAddModalOpen(true);
+  }
+
+  function openEditModal(document: ApiProjectDocument) {
+    setIsAddModalOpen(false);
+    setUrlError(null);
+    setEditingDocumentId(document.id);
+    setFormState(documentToFormState(document));
+  }
+
   function closeAddModal() {
     setUrlError(null);
     setIsAddModalOpen(false);
+  }
+
+  function closeEditModal() {
+    setUrlError(null);
+    setEditingDocumentId(null);
+    setFormState(initialFormState(storageProviders, documentTypes, categories));
   }
 
   return (
@@ -219,13 +263,15 @@ export function ProjectWorkspaceDocuments({
               {project.name} document links and review metadata.
             </p>
           </div>
-          <button
-            className="w-fit rounded-sm bg-brand px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-brand/30"
-            onClick={() => setIsAddModalOpen(true)}
-            type="button"
-          >
-            Add Document
-          </button>
+          {canUploadDocuments ? (
+            <button
+              className="w-fit rounded-sm bg-brand px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+              onClick={openAddModal}
+              type="button"
+            >
+              Add Document
+            </button>
+          ) : null}
         </div>
 
         <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(220px,1fr)_180px_220px_200px_auto] lg:items-end">
@@ -380,7 +426,11 @@ export function ProjectWorkspaceDocuments({
               />
             </div>
           ) : (
-            <DocumentGrid documents={documents} />
+            <DocumentGrid
+              canEditDocument={canEditDocument}
+              documents={documents}
+              onEditDocument={openEditModal}
+            />
           )}
         </div>
       </section>
@@ -409,14 +459,18 @@ export function ProjectWorkspaceDocuments({
         ) : null}
       </section>
 
-      {isAddModalOpen ? (
+      {isAddModalOpen || isEditModalOpen ? (
         <AppModal
-          description="Add metadata for a provider-independent external document link."
+          description={
+            isEditModalOpen
+              ? "Update governance metadata for this external document link."
+              : "Add metadata for a provider-independent external document link."
+          }
           footer={
             <>
               <button
                 className="rounded-sm border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                onClick={closeAddModal}
+                onClick={isEditModalOpen ? closeEditModal : closeAddModal}
                 type="button"
               >
                 Cancel
@@ -427,22 +481,23 @@ export function ProjectWorkspaceDocuments({
                 form="document-link-form"
                 type="submit"
               >
-                Add Document Link
+                {isEditModalOpen ? "Save Metadata" : "Add Document Link"}
               </button>
             </>
           }
           labelledById="document-link-dialog-title"
-          onClose={closeAddModal}
-          title="Add Document"
+          onClose={isEditModalOpen ? closeEditModal : closeAddModal}
+          title={isEditModalOpen ? "Edit Document Metadata" : "Add Document"}
           widthClassName="max-w-4xl"
         >
           <DocumentForm
+            canApproveDocuments={canApproveDocuments}
             categories={categories}
+            documentTypes={documentTypes}
             formState={formState}
             handleSubmit={handleSubmit}
             owners={owners}
             storageProviders={storageProviders}
-            documentTypes={documentTypes}
             updateField={updateField}
             urlError={urlError}
           />
@@ -452,7 +507,31 @@ export function ProjectWorkspaceDocuments({
   );
 }
 
+function documentToFormState(document: ApiProjectDocument): DocumentFormState {
+  return {
+    approvalStatus: document.approvalStatus,
+    category: document.category ?? "Other",
+    description: document.description ?? "",
+    documentType: document.documentType,
+    externalUrl: document.externalUrl,
+    lastReviewedAt: toDateInputValue(document.lastReviewedAt),
+    nextReviewAt: toDateInputValue(document.nextReviewAt),
+    ownerId: document.ownerId ?? "",
+    storageProvider: document.storageProvider,
+    title: document.title,
+    version: document.version ?? "",
+  };
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+  return value.slice(0, 10);
+}
+
 function DocumentForm({
+  canApproveDocuments = false,
   categories,
   documentTypes,
   formState,
@@ -462,6 +541,7 @@ function DocumentForm({
   updateField,
   urlError,
 }: {
+  canApproveDocuments?: boolean;
   categories: ApiDocumentReference[];
   documentTypes: ApiDocumentReference[];
   formState: DocumentFormState;
@@ -474,6 +554,11 @@ function DocumentForm({
   ) => void;
   urlError: string | null;
 }) {
+  const availableApprovalStatuses = canApproveDocuments
+    ? approvalStatuses
+    : approvalStatuses.filter(
+        (status) => status === "DRAFT" || status === "UNDER_REVIEW",
+      );
   return (
     <form className="grid gap-4" id="document-link-form" onSubmit={handleSubmit}>
       <div className="grid gap-4 md:grid-cols-2">
@@ -570,7 +655,7 @@ function DocumentForm({
           }
           value={formState.approvalStatus}
         >
-          {approvalStatuses.map((status) => (
+          {availableApprovalStatuses.map((status) => (
             <option key={status} value={status}>
               {formatLabel(status)}
             </option>
@@ -609,7 +694,16 @@ function DocumentForm({
   );
 }
 
-function DocumentGrid({ documents }: { documents: ApiProjectDocument[] }) {
+function DocumentGrid({
+  canEditDocument,
+  documents,
+  onEditDocument,
+}: {
+  canEditDocument: (document: ApiProjectDocument) => boolean;
+  documents: ApiProjectDocument[];
+  onEditDocument: (document: ApiProjectDocument) => void;
+}) {
+  const showActions = documents.some((document) => canEditDocument(document));
   return (
     <div className="max-h-[min(64vh,720px)] min-h-[520px] overflow-auto">
       <table className="min-w-[1180px] divide-y divide-slate-200 text-left text-sm">
@@ -626,6 +720,7 @@ function DocumentGrid({ documents }: { documents: ApiProjectDocument[] }) {
               "Approval",
               "Review",
               "Audit",
+              ...(showActions ? ["Actions"] : []),
             ].map((heading) => (
               <th
                 className="px-3 py-2 font-semibold text-slate-600"
@@ -689,6 +784,19 @@ function DocumentGrid({ documents }: { documents: ApiProjectDocument[] }) {
                 <p>Created: {document.createdBy?.displayName ?? "System"}</p>
                 <p>Updated: {document.updatedBy?.displayName ?? "System"}</p>
               </td>
+              {showActions ? (
+                <td className="px-3 py-3">
+                  {canEditDocument(document) ? (
+                    <button
+                      className="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
+                      onClick={() => onEditDocument(document)}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                  ) : null}
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

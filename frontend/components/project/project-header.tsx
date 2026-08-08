@@ -1,15 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import { StatusBadge } from "@/components/foundation";
+import { ProjectHealthBadge } from "@/components/projects/project-health-badge";
 import type { ApiProject } from "@/features/projects";
-import { ProjectTabs, type ProjectWorkspaceTabId } from "./project-tabs";
 import { downloadProjectExcel } from "@/lib/api/client";
-import { useState } from "react";
+import { ProjectTabs, type ProjectWorkspaceTabId } from "./project-tabs";
 
 interface ProjectHeaderContent {
-  eyebrow: string;
+  actions?: React.ReactNode;
+  eyebrow?: string;
   metadata: Array<{ id: string; label: string; value: React.ReactNode }>;
   navigation: React.ReactNode;
+  status?: React.ReactNode;
   subtitle?: React.ReactNode;
   title: React.ReactNode;
 }
@@ -30,69 +33,89 @@ export function ProjectHeader({
   render,
 }: ProjectHeaderProps) {
   const [isExporting, setIsExporting] = useState(false);
+
   async function exportProject() {
     setIsExporting(true);
     try {
       const blob = await downloadProjectExcel(project.id);
       const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${project.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "project"}.xlsx`; anchor.click(); URL.revokeObjectURL(url);
-    } finally { setIsExporting(false); }
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${project.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "project"}.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsExporting(false);
+    }
   }
+
   const metadata = [
-    { label: "Status", value: formatLabel(project.health?.status ?? project.status) },
     { label: "Project Manager", value: formatUser(project.owner) },
-    { label: "Start", value: formatDate(project.startDate) },
     { label: "Finish", value: formatDate(project.targetEndDate) },
-    { label: "Completion", value: formatCompletion(project) },
   ].filter((item) => item.value);
 
+  const status = project.health ? (
+    <ProjectHealthBadge
+      reasons={project.health.reasons}
+      status={project.health.status}
+    />
+  ) : (
+    <StatusBadge tone="neutral">{formatLabel(project.status) ?? "Active"}</StatusBadge>
+  );
+
+  const actions = (
+    <button
+      className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+      disabled={isExporting}
+      onClick={() => void exportProject()}
+      type="button"
+    >
+      {isExporting ? "Exporting..." : "Export Excel"}
+    </button>
+  );
+
+  const content: ProjectHeaderContent = {
+    actions,
+    metadata: metadata.map((item) => ({
+      id: item.label.toLowerCase().replaceAll(" ", "-"),
+      label: item.label,
+      value: item.value,
+    })),
+    navigation: <ProjectTabs activeTab={activeTab} projectId={project.id} />,
+    status,
+    title: project.name,
+  };
+
   if (render) {
-    return render({
-      eyebrow: "Project Workspace",
-      metadata: metadata.map((item) => ({
-        id: item.label.toLowerCase().replaceAll(" ", "-"),
-        label: item.label,
-        value: item.value,
-      })),
-      navigation: <ProjectTabs activeTab={activeTab} projectId={project.id} />,
-      subtitle: project.description,
-      title: <>{project.name}<button className="ml-3 rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700" disabled={isExporting} onClick={() => void exportProject()} type="button">{isExporting ? "Exporting..." : "Export Excel"}</button></>,
-    });
+    return render(content);
   }
 
   return (
-    <header className="rounded-md border border-slate-200 bg-white shadow-soft">
-      <div className="space-y-4 px-4 py-5 sm:px-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Project Workspace
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">
-            {project.name}
-          </h1>
-          {project.description ? (
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              {project.description}
-            </p>
+    <header className="overflow-hidden rounded-ui border border-ui-border bg-ui-surface shadow-ui-subtle">
+      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight text-slate-950">
+              {project.name}
+            </h1>
+            {status}
+          </div>
+          {metadata.length > 0 ? (
+            <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+              {metadata.map((item) => (
+                <div className="flex min-w-0 items-baseline gap-1" key={item.label}>
+                  <dt className="font-medium text-slate-500">{item.label}</dt>
+                  <dd className="truncate font-semibold text-slate-800">
+                    {item.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           ) : null}
         </div>
-
-        {metadata.length > 0 ? (
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {metadata.map((item) => (
-              <div key={item.label}>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {item.label}
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-slate-900">
-                  {item.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
+        <div className="shrink-0">{actions}</div>
       </div>
-      <div className="px-4 sm:px-5">
+      <div className="px-4">
         <ProjectTabs activeTab={activeTab} projectId={project.id} />
       </div>
     </header>
@@ -121,19 +144,4 @@ function formatDate(value?: string | null) {
 
 function formatLabel(value?: string | null) {
   return value ? value.replaceAll("_", " ") : null;
-}
-
-function formatCompletion(project: ApiProject) {
-  const tasks = project.tasks ?? [];
-
-  if (tasks.length === 0) {
-    return "0%";
-  }
-
-  const totalCompletion = tasks.reduce(
-    (sum, task) => sum + (task.percentComplete ?? (task.status === "done" ? 100 : 0)),
-    0,
-  );
-
-  return `${Math.round(totalCompletion / tasks.length)}%`;
 }

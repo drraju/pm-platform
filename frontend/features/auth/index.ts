@@ -5,12 +5,15 @@ export {
   getAuthMe,
   getStoredAccessToken,
   getStoredPermissionKeys,
+  getStoredRoleNames,
   getStoredSessionUser,
   login,
   resetPassword,
   storeAuthMe,
   storeSession,
+  subscribeAuthSessionChange,
 } from "@/lib/api/client";
+export { useStoredAuthSession } from "./stored-auth-session";
 export type { ApiAuthMe } from "@/lib/api/client";
 export {
   resolveProjectUiCapabilities,

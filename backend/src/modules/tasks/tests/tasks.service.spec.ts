@@ -103,6 +103,7 @@ describe('TasksService', () => {
     authorizationPolicyService = {
       canManageProject: jest.fn().mockResolvedValue(true),
       canManageTask: jest.fn().mockResolvedValue(false),
+      hasPermission: jest.fn().mockResolvedValue(true),
     };
     projectVisibilityService = {
       canViewProject: jest.fn().mockResolvedValue(true),
@@ -166,6 +167,76 @@ describe('TasksService', () => {
         title: 'Prepare steering committee readout',
       }),
     );
+  });
+
+  it('allows assigned team members to record execution updates on their tasks', async () => {
+    const task = {
+      assigneeId: userId,
+      id: taskId,
+      percentComplete: 20,
+      priority: 'medium',
+      projectId,
+      status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare release plan',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
+    projectMembersRepository.findOne?.mockResolvedValue({ id: 'member-id' });
+
+    const result = await service.recordExecutionUpdate(
+      taskId,
+      {
+        nextActionOwnerId: userId,
+        nextStep: 'Confirm API owner',
+        percentComplete: 50,
+        priority: 'medium',
+        status: TaskStatus.InProgress,
+        updateNotes: 'Stand-up progress for assigned work.',
+      },
+      { email: 'member@example.com', roleId: 'role-tm', userId },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        latestExecutionUpdate: expect.objectContaining({
+          nextStep: 'Confirm API owner',
+          updateNotes: 'Stand-up progress for assigned work.',
+        }),
+        percentComplete: 50,
+        status: TaskStatus.InProgress,
+      }),
+    );
+  });
+
+  it('prevents assigned team members from changing task priority', async () => {
+    const task = {
+      assigneeId: userId,
+      id: taskId,
+      percentComplete: 20,
+      priority: 'medium',
+      projectId,
+      status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare release plan',
+    };
+    tasksRepository.findOne?.mockResolvedValue(task);
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
+
+    await expect(
+      service.recordExecutionUpdate(
+        taskId,
+        {
+          nextActionOwnerId: userId,
+          nextStep: 'Confirm API owner',
+          percentComplete: 50,
+          priority: 'high',
+          status: TaskStatus.InProgress,
+          updateNotes: 'Stand-up progress for assigned work.',
+        },
+        { email: 'member@example.com', roleId: 'role-tm', userId },
+      ),
+    ).rejects.toThrow('Only project managers can change task priority');
   });
 
   it('records an execution update with priority and timeline details', async () => {

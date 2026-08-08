@@ -162,15 +162,7 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByText("Project Health")).toBeInTheDocument();
-    expect(screen.getByText("Overall Health")).toBeInTheDocument();
-    expect(screen.getByText("Amber")).toHaveAccessibleDescription(
-      "Supplier onboarding requires attention",
-    );
-    expect(screen.getByText("Schedule")).toBeInTheDocument();
-    expect(screen.getByText("Progress")).toBeInTheDocument();
-    expect(screen.getByText("Project Manager")).toBeInTheDocument();
-    expect(screen.getByText("Completion")).toBeInTheDocument();
+    expect(screen.queryByText("Project Health")).not.toBeInTheDocument();
     expect(screen.getByText("Timeline Snapshot")).toBeInTheDocument();
     expect(
       within(
@@ -385,7 +377,7 @@ describe("Project workspace components", () => {
 
     expect(screen.getByRole("link", { name: "Open Risks: 0" })).toHaveAttribute(
       "href",
-      "/projects/project-1/raid",
+      "/projects/project-1/govern",
     );
     expect(screen.getByRole("link", { name: "Open Team" })).toHaveAttribute(
       "href",
@@ -397,7 +389,7 @@ describe("Project workspace components", () => {
     );
     expect(screen.getByRole("link", { name: "Open RAID" })).toHaveAttribute(
       "href",
-      "/projects/project-1/raid",
+      "/projects/project-1/govern",
     );
     expect(
       screen.queryByRole("link", { name: "Open Tasks" }),
@@ -420,11 +412,8 @@ describe("Project workspace components", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Project overview")).toHaveClass("space-y-6");
-    expect(screen.getByLabelText("Project health and timeline")).toHaveClass(
-      "grid",
-      "xl:grid-cols-2",
-    );
+    expect(screen.getByLabelText("Project overview")).toHaveClass("space-y-4");
+    expect(screen.getByLabelText("Project timeline")).toHaveClass("grid");
     expect(
       screen.getByLabelText("Upcoming milestones and recent activity"),
     ).toHaveClass("grid", "xl:grid-cols-2");
