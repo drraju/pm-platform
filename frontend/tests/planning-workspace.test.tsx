@@ -1414,6 +1414,12 @@ describe("PlanningWorkspace", () => {
     expect(
       screen.getByRole("row", { name: /1\.2 Testing/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /collapse development/i }),
+    ).toHaveTextContent("▾");
+    expect(
+      screen.getByRole("button", { name: /collapse phase 1/i }),
+    ).toHaveTextContent("▾");
 
     fireEvent.click(
       screen.getByRole("button", { name: /collapse development/i }),
@@ -1424,6 +1430,9 @@ describe("PlanningWorkspace", () => {
     expect(
       screen.getByRole("row", { name: /1\.2 Testing/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand development/i }),
+    ).toHaveTextContent("▸");
 
     fireEvent.click(screen.getByRole("button", { name: /collapse phase 1/i }));
     expect(
@@ -1433,6 +1442,9 @@ describe("PlanningWorkspace", () => {
       screen.queryByRole("row", { name: /1\.2 Testing/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("row", { name: /2 Phase 2/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand phase 1/i }),
+    ).toHaveTextContent("▸");
 
     fireEvent.click(screen.getByRole("button", { name: /expand phase 1/i }));
     expect(

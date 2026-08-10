@@ -2,6 +2,7 @@ import React from "react";
 import { ActionGroup } from "@/components/ui/action-group";
 import { AppModal } from "@/components/ui/app-modal";
 import { SectionCard } from "@/components/ui/card";
+import { DisclosureButton } from "@/components/ui/disclosure-button";
 import {
   ModalForm,
   ModalFormGrid,
@@ -819,18 +820,13 @@ export function ProjectWorkspaceTasks({
                     >
                       <div className="mt-0.5 flex items-center gap-1">
                         {row.hasChildren ? (
-                          <button
-                            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${task.title}`}
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                          <DisclosureButton
+                            expanded={isExpanded}
+                            label={task.title}
                             onClick={() => toggleExpanded(task.id)}
-                            type="button"
-                          >
-                            {isExpanded ? "−" : "+"}
-                          </button>
+                          />
                         ) : (
-                          <span className="inline-flex h-6 w-6 items-center justify-center text-slate-300">
-                            ·
-                          </span>
+                          <span aria-hidden="true" className="inline-flex h-6 w-6 shrink-0" />
                         )}
                       </div>
                       <div className="min-w-0">

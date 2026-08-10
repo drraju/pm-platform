@@ -484,9 +484,8 @@ describe("Projects List navigation", () => {
       screen.getByRole("heading", { name: "Timeline Snapshot" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Executive Overview")).not.toBeInTheDocument();
-    expect(
-      screen.getAllByText("Supplier onboarding delay").length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByText("Attention")).toBeInTheDocument();
+    expect(screen.getByText("Delivery Summary")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Open Risks: 1" }),
     ).toHaveAttribute("href", "/projects/project-123/govern");
@@ -660,7 +659,7 @@ describe("Projects List navigation", () => {
     expect(
       screen.queryByRole("link", { name: "Resources" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
+    expect(screen.getByText("Attention")).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });
 
@@ -834,13 +833,13 @@ describe("Projects List navigation", () => {
       await screen.findByRole("group", { name: "Delivery toolbar" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("toolbar", { name: "Delivery filters" }),
+      screen.getByRole("group", { name: "Delivery views" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "List" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: /^All /i })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -862,7 +861,11 @@ describe("Projects List navigation", () => {
     expect(screen.getByText("Prepare standup notes")).toBeInTheDocument();
     expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /Blocked/i }));
+    const deliveryToolbar = screen.getByRole("group", {
+      name: "Delivery toolbar",
+    });
+    const statusFilter = within(deliveryToolbar).getByLabelText("Status");
+    fireEvent.change(statusFilter, { target: { value: "blocked" } });
 
     expect(screen.queryByText("Prepare standup notes")).not.toBeInTheDocument();
     expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
@@ -946,7 +949,7 @@ describe("Projects List navigation", () => {
     render(<ProjectDeliveryPage />);
 
     expect(await screen.findByTestId("execution-kanban-board")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^All /i })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -954,14 +957,18 @@ describe("Projects List navigation", () => {
     expect(within(doneColumn).getByText("Completed delivery task")).toBeInTheDocument();
     expect(within(doneColumn).getByText("1")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Active /i }));
+    const deliveryToolbar = screen.getByRole("group", {
+      name: "Delivery toolbar",
+    });
+    const statusFilter = within(deliveryToolbar).getByLabelText("Status");
+    fireEvent.change(statusFilter, { target: { value: "active" } });
     expect(
       within(screen.getByRole("region", { name: "Done column" })).queryByText(
         "Completed delivery task",
       ),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Completed /i }));
+    fireEvent.change(statusFilter, { target: { value: "completed" } });
     expect(
       within(screen.getByRole("region", { name: "Done column" })).getByText(
         "Completed delivery task",
@@ -1059,11 +1066,15 @@ describe("Projects List navigation", () => {
     expect(
       await screen.findByRole("group", { name: "Delivery toolbar" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^All /i })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: /Active 1/i })).toBeInTheDocument();
+    const deliveryToolbar = screen.getByRole("group", {
+      name: "Delivery toolbar",
+    });
+    const statusFilter = within(deliveryToolbar).getByLabelText("Status");
+    expect(statusFilter).toHaveValue("all");
     expect(screen.getByText("Delivery package")).toBeInTheDocument();
     const expandPackage =
       screen.queryByRole("button", { name: "Expand Delivery package" }) ??
@@ -1077,7 +1088,15 @@ describe("Projects List navigation", () => {
     expect(screen.getByText("Nested completed delivery task")).toBeInTheDocument();
     expect(screen.queryByText("No tasks yet.")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Active 1/i }));
+    fireEvent.change(statusFilter, { target: { value: "active" } });
+    expect(
+      screen.getByLabelText("Active delivery filters"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Active delivery filters")).getByText(
+        "Active",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Nested active delivery task")).toBeInTheDocument();
     expect(
       screen.queryByText("Nested completed delivery task"),

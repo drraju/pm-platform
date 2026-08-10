@@ -1,17 +1,16 @@
 import Link from "next/link";
 import React from "react";
 import {
-  EmptyState,
   KPIGrid,
   SummaryCard,
   SummaryMetricCard,
   WorkspaceContent,
   WorkspaceSection,
 } from "@/components/foundation";
+import { getDeliveryAttentionSummary } from "@/components/delivery/delivery-filters";
+import { getDeliveryHref } from "@/components/delivery/delivery-views";
 import type {
   ApiProjectDetails,
-  ApiProjectMember,
-  ApiRaidItem,
   ApiTask,
 } from "@/features/projects";
 import {
@@ -23,40 +22,31 @@ type ProjectWorkspaceOverviewProps = {
   project: ApiProjectDetails;
 };
 
-type ActivityItem = {
-  date?: string | null;
-  label: string;
-  title: string;
-};
-
 export function ProjectWorkspaceOverview({
   project,
 }: ProjectWorkspaceOverviewProps) {
   const tasks = project.tasks ?? [];
   const milestones = tasks.filter((task) => task.taskKind === "milestone");
+  const deliveryTasks = tasks.filter((task) => task.taskKind !== "summary");
   const risks = project.risks ?? [];
   const issues = project.issues ?? [];
-  const members = project.members ?? [];
   const basePath = `/projects/${project.id}`;
   const progress = calculateProgress(tasks);
-  const activeWork = tasks.filter(
-    (task) => task.status !== "done" && task.taskKind !== "summary",
+  const attentionSummary = getDeliveryAttentionSummary(deliveryTasks, null);
+  const activeDeliveryTasks = deliveryTasks.filter(
+    (task) => task.status !== "done",
   );
-  const assignedActiveWork = activeWork.filter((task) => task.assignee).length;
-  const upcomingMilestones = getUpcomingMilestones(milestones);
-  const recentActivity = getRecentActivity({
-    issues,
-    members,
-    milestones,
-    risks,
-    tasks,
-  });
+  const inProgressDeliveryTasks = deliveryTasks.filter(
+    (task) => task.status === "in_progress",
+  );
+  const completedDeliveryTasks = deliveryTasks.filter(
+    (task) => task.status === "done",
+  );
+  const assignedActiveWork = activeDeliveryTasks.filter((task) => task.assignee)
+    .length;
   const openRisks = risks.filter((risk) => !isClosedRaidStatus(risk.status));
   const openIssues = issues.filter(
     (issue) => !isClosedRaidStatus(issue.status),
-  );
-  const openRaidItems = [...openRisks, ...openIssues].sort(
-    (left, right) => getRaidTime(right) - getRaidTime(left),
   );
   const timelineItems = buildTimelineItems({
     milestones,
@@ -78,11 +68,12 @@ export function ProjectWorkspaceOverview({
       </WorkspaceSection>
 
       <WorkspaceSection
-        aria-label="Operational attention"
+        aria-label="Operational attention and delivery summary"
         className="grid gap-4 xl:grid-cols-2"
         padding="none"
       >
         <SummaryCard
+          density="compact"
           action={
             <Link
               className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
@@ -91,12 +82,13 @@ export function ProjectWorkspaceOverview({
               Open RAID
             </Link>
           }
-          description="Open exposure that may require a response or decision."
-          title="Open Risks & Issues"
+          description="Open risks, issues, and delivery pressure that need action."
+          title="Attention"
         >
-          <KPIGrid as="div" columns={2} gap="compact">
+          <KPIGrid as="div" columns={4} gap="compact">
             <SummaryMetricCard
               ariaLabel={`Open Risks: ${openRisks.length}`}
+              density="compact"
               href={`${basePath}/govern`}
               title="Open Risks"
               value={openRisks.length}
@@ -104,175 +96,78 @@ export function ProjectWorkspaceOverview({
             />
             <SummaryMetricCard
               ariaLabel={`Open Issues: ${openIssues.length}`}
+              density="compact"
               href={`${basePath}/govern`}
               title="Open Issues"
               value={openIssues.length}
               variant="warning"
             />
+            <SummaryMetricCard
+              ariaLabel={`Blocked: ${attentionSummary.blocked}`}
+              density="compact"
+              href={`${basePath}/delivery`}
+              title="Blocked"
+              value={attentionSummary.blocked}
+              variant="critical"
+            />
+            <SummaryMetricCard
+              ariaLabel={`Overdue: ${attentionSummary.overdue}`}
+              density="compact"
+              href={`${basePath}/delivery`}
+              title="Overdue"
+              value={attentionSummary.overdue}
+              variant="warning"
+            />
           </KPIGrid>
-
-          {openRaidItems.length > 0 ? (
-            <ol className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
-              {openRaidItems.slice(0, 3).map((item) => (
-                <li className="py-3" key={item.id}>
-                  <Link
-                    className="flex items-start justify-between gap-3 rounded-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
-                    href={`${basePath}/govern`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-950">
-                        {item.title}
-                      </span>
-                      <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
-                        {formatLabel(item.type)} · {formatLabel(item.status)}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-xs font-semibold text-brand">
-                      Review
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <EmptyState
-              className="mt-4"
-              compact
-              description="No open risks or issues."
-              title="No operational attention needed"
-            />
-          )}
         </SummaryCard>
 
         <SummaryCard
+          density="compact"
           action={
             <Link
               className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
-              href={`${basePath}/team`}
+              href={getDeliveryHref(project.id)}
             >
-              Open Team
+              Open Delivery
             </Link>
           }
-          description="People attached to current work."
-          title="Resource Summary"
+          description="Execution activity across the delivery queue."
+          title="Delivery Summary"
         >
-          <dl className="grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <dt className="text-xs font-medium text-slate-500">Members</dt>
-              <dd className="mt-0.5 font-semibold text-slate-950">
-                {members.length}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-slate-500">Active work</dt>
-              <dd className="mt-0.5 font-semibold text-slate-950">
-                {activeWork.length}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-slate-500">Assigned</dt>
-              <dd className="mt-0.5 font-semibold text-slate-950">
-                {assignedActiveWork}/{activeWork.length}
-              </dd>
-            </div>
-          </dl>
-        </SummaryCard>
-      </WorkspaceSection>
-
-      <WorkspaceSection
-        aria-label="Upcoming milestones and recent activity"
-        className="grid gap-4 xl:grid-cols-2"
-        padding="none"
-      >
-        <SummaryCard
-          action={
-            <Link
-              className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
-              href={`${basePath}/planning`}
-            >
-              Open Planning
-            </Link>
-          }
-          description="The next five incomplete checkpoints requiring coordination."
-          title="Upcoming Milestones"
-        >
-          {upcomingMilestones.length > 0 ? (
-            <ol className="divide-y divide-slate-100">
-              {upcomingMilestones.slice(0, 5).map((milestone) => (
-                <li
-                  className="grid gap-2 py-3 first:pt-0 sm:grid-cols-[minmax(0,1.4fr)_auto] sm:items-start"
-                  key={milestone.id}
-                >
-                  <div className="min-w-0">
-                    <p className="font-semibold text-slate-950">
-                      {milestone.title}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatTaskOwner(milestone)}
-                    </p>
-                  </div>
-                  <div className="sm:text-right">
-                    <p className="text-sm font-semibold text-slate-700">
-                      {formatTaskDate(milestone)}
-                    </p>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      {getMilestoneStatus(milestone)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <EmptyState
-              compact
-              description="No upcoming milestones."
-              title="No milestones scheduled"
+          <KPIGrid as="div" columns={4} gap="compact">
+            <SummaryMetricCard
+              ariaLabel={`Work items: ${attentionSummary.total}`}
+              density="compact"
+              title="Work items"
+              value={attentionSummary.total}
+              variant="neutral"
             />
-          )}
-        </SummaryCard>
-
-        <SummaryCard
-          action={
-            <Link
-              className="rounded-sm text-sm font-semibold text-brand hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/30"
-              href={`${basePath}/reports`}
-            >
-              View All Activity
-            </Link>
-          }
-          description="The latest meaningful Project events."
-          title="Recent Activity"
-        >
-          {recentActivity.length > 0 ? (
-            <ol className="divide-y divide-slate-100">
-              {recentActivity.slice(0, 5).map((activity) => (
-                <li
-                  className="py-3 first:pt-0"
-                  key={`${activity.label}-${activity.title}`}
-                >
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">
-                        {activity.label}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {activity.title}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-xs font-medium text-slate-500">
-                      {formatDate(activity.date)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <EmptyState
-              compact
-              description="No recent activity."
-              title="No activity recorded"
+            <SummaryMetricCard
+              ariaLabel={`Active: ${attentionSummary.active}`}
+              density="compact"
+              title="Active"
+              value={attentionSummary.active}
+              variant="primary"
             />
-          )}
+            <SummaryMetricCard
+              ariaLabel={`In progress: ${inProgressDeliveryTasks.length}`}
+              density="compact"
+              title="In progress"
+              value={inProgressDeliveryTasks.length}
+              variant="warning"
+            />
+            <SummaryMetricCard
+              ariaLabel={`Completed: ${completedDeliveryTasks.length}`}
+              density="compact"
+              title="Completed"
+              value={completedDeliveryTasks.length}
+              variant="success"
+            />
+          </KPIGrid>
+          <p className="mt-3 text-xs font-medium text-slate-500">
+            Assigned {assignedActiveWork} of {activeDeliveryTasks.length} active
+            items.
+          </p>
         </SummaryCard>
       </WorkspaceSection>
 
@@ -290,7 +185,7 @@ function buildTimelineItems({
   targetEndDate?: string | null;
 }): TimelineSnapshotItem[] {
   const nextMilestone = getNextMilestone(milestones);
-  const upcomingRelease = getMilestoneByCategory(milestones, "release");
+  const releaseMilestone = getMilestoneByCategory(milestones, "release");
   const goLive = getMilestoneByCategory(milestones, "go_live");
 
   return [
@@ -301,11 +196,11 @@ function buildTimelineItems({
       status: "Current",
     },
     buildMilestoneCheckpoint("Next Milestone", nextMilestone),
-    buildMilestoneCheckpoint("Upcoming Release", upcomingRelease),
+    buildMilestoneCheckpoint("Release", releaseMilestone),
     buildMilestoneCheckpoint("Go Live", goLive),
     {
       date: formatDate(targetEndDate),
-      label: "Project Finish",
+      label: "Finish",
       status: getFinishStatus(targetEndDate, progress),
     },
   ];
@@ -378,15 +273,12 @@ function isClosedRaidStatus(status: string) {
   );
 }
 
-function getUpcomingMilestones(milestones: ApiTask[]) {
-  return milestones
-    .filter((milestone) => milestone.status !== "done")
-    .sort(compareTasksByDate)
-    .slice(0, 5);
-}
-
 function getNextMilestone(milestones: ApiTask[]) {
-  return getUpcomingMilestones(milestones)[0] ?? null;
+  return (
+    milestones
+      .filter((milestone) => milestone.status !== "done")
+      .sort(compareTasksByDate)[0] ?? null
+  );
 }
 
 function getMilestoneByCategory(
@@ -417,114 +309,6 @@ function getTaskDate(task: ApiTask) {
 
 function formatTaskDate(task: ApiTask) {
   return formatDate(getTaskDate(task));
-}
-
-function formatTaskOwner(task: ApiTask) {
-  return task.assignee
-    ? `${task.assignee.firstName} ${task.assignee.lastName}`.trim() ||
-        task.assignee.email
-    : "Unassigned";
-}
-
-function getRecentActivity({
-  issues,
-  members,
-  milestones,
-  risks,
-  tasks,
-}: {
-  issues: ApiRaidItem[];
-  members: ApiProjectMember[];
-  milestones: ApiTask[];
-  risks: ApiRaidItem[];
-  tasks: ApiTask[];
-}) {
-  const taskActivity = tasks.flatMap((task) => {
-    const auditTask = task as ApiTask & {
-      createdAt?: string | null;
-      updatedAt?: string | null;
-    };
-    const items: ActivityItem[] = [];
-    if (auditTask.createdAt) {
-      items.push({
-        date: auditTask.createdAt,
-        label: "Task Created",
-        title: task.title,
-      });
-    }
-    if (task.status === "done") {
-      items.push({
-        date: task.actualEndDate ?? auditTask.updatedAt ?? auditTask.createdAt,
-        label: "Task Completed",
-        title: task.title,
-      });
-    }
-    return items;
-  });
-  const riskActivity = risks.map((risk) => ({
-    date: getRaidAuditDate(risk),
-    label: "Risk Added",
-    title: risk.title,
-  }));
-  const issueActivity = issues
-    .filter((issue) => isClosedRaidStatus(issue.status))
-    .map((issue) => ({
-      date: getRaidAuditDate(issue),
-      label: "Issue Closed",
-      title: issue.title,
-    }));
-  const milestoneActivity = milestones
-    .filter((milestone) => milestone.status === "done")
-    .map((milestone) => ({
-      date: milestone.actualEndDate ?? getTaskDate(milestone),
-      label: "Milestone Reached",
-      title: milestone.title,
-    }));
-  const memberActivity = members
-    .filter((member) => member.createdAt)
-    .map((member) => ({
-      date: member.createdAt,
-      label: "Team Member Added",
-      title: formatMemberName(member),
-    }));
-
-  return [
-    ...taskActivity,
-    ...riskActivity,
-    ...issueActivity,
-    ...milestoneActivity,
-    ...memberActivity,
-  ]
-    .sort((left, right) => getActivityTime(right) - getActivityTime(left))
-    .slice(0, 10);
-}
-
-function getRaidAuditDate(item: ApiRaidItem) {
-  const auditItem = item as ApiRaidItem & {
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
-  return auditItem.updatedAt ?? auditItem.createdAt ?? item.dueDate;
-}
-
-function getActivityTime(activity: ActivityItem) {
-  return new Date(activity.date ?? "1900-01-01").getTime();
-}
-
-function getRaidTime(item: ApiRaidItem) {
-  return new Date(getRaidAuditDate(item) ?? "1900-01-01").getTime();
-}
-
-function formatMemberName(member: ApiProjectMember) {
-  if (member.user) {
-    return (
-      member.user.displayName ||
-      `${member.user.firstName} ${member.user.lastName}`.trim() ||
-      member.user.email
-    );
-  }
-
-  return member.userId;
 }
 
 function formatDate(value?: string | null) {

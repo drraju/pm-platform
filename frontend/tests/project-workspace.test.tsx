@@ -170,125 +170,65 @@ describe("Project workspace components", () => {
       ).getAllByRole("listitem"),
     ).toHaveLength(5);
     expect(screen.queryByText("AI Insights")).not.toBeInTheDocument();
-    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
-    expect(screen.getByText("Upcoming Milestones")).toBeInTheDocument();
-    expect(screen.getByText("Open Risks & Issues")).toBeInTheDocument();
-    expect(screen.getByText("Resource Summary")).toBeInTheDocument();
+    expect(screen.getByText("Attention")).toBeInTheDocument();
+    expect(screen.getByText("Delivery Summary")).toBeInTheDocument();
+    expect(screen.queryByText("Recent Activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upcoming Milestones")).not.toBeInTheDocument();
+    expect(screen.queryByText("Open Risks & Issues")).not.toBeInTheDocument();
+    expect(screen.queryByText("Resource Summary")).not.toBeInTheDocument();
     expect(screen.queryByText("Quick Actions")).not.toBeInTheDocument();
-    expect(screen.getByText("Beta Release")).toBeInTheDocument();
-    expect(screen.getAllByText("Supplier delay")).toHaveLength(2);
+    expect(screen.getByText("Release")).toBeInTheDocument();
+    expect(screen.getByText("Go Live")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Planning" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/planning",
+    );
+    expect(screen.getByRole("link", { name: "Open RAID" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/govern",
+    );
+    expect(screen.getByRole("link", { name: "Open Delivery" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/delivery",
+    );
+    expect(screen.getByRole("link", { name: "Open Risks: 1" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/govern",
+    );
+    expect(screen.getByRole("link", { name: "Blocked: 0" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/delivery",
+    );
     expect(screen.queryByText("Executive Overview")).not.toBeInTheDocument();
     expect(screen.queryByText("Business Owner")).not.toBeInTheDocument();
     expect(screen.queryByText("RAID Summary")).not.toBeInTheDocument();
     expect(screen.queryByText("Team Summary")).not.toBeInTheDocument();
   });
 
-  it("shows up to five milestones and the latest meaningful activity", () => {
+  it("renders the timeline as a horizontal compact strip", () => {
     render(
       <ProjectWorkspaceOverview
         project={{
-          assumptions: [
-            {
-              id: "assumption-1",
-              projectId: "project-1",
-              status: "open",
-              title: "Vendor approval assumption",
-              type: "assumption",
-            },
-          ],
-          dependencies: [
-            {
-              id: "dependency-1",
-              projectId: "project-1",
-              status: "open",
-              title: "Security dependency",
-              type: "dependency",
-            },
-          ],
           id: "project-1",
-          issues: [
-            {
-              id: "issue-1",
-              projectId: "project-1",
-              status: "open",
-              title: "Integration issue",
-              type: "issue",
-            },
-          ],
           members: [],
           name: "Customer Experience Platform Upgrade",
-          risks: [
-            {
-              id: "risk-1",
-              projectId: "project-1",
-              status: "open",
-              title: "Supplier delay",
-              type: "risk",
-            },
-          ],
           status: "active",
-          tasks: [
-            {
-              actualEndDate: "2026-05-13",
-              id: "done-1",
-              priority: "medium",
-              projectId: "project-1",
-              status: "done",
-              title: "Activity One",
-            },
-            {
-              actualEndDate: "2026-05-12",
-              id: "done-2",
-              priority: "medium",
-              projectId: "project-1",
-              status: "done",
-              title: "Activity Two",
-            },
-            {
-              actualEndDate: "2026-05-11",
-              id: "done-3",
-              priority: "medium",
-              projectId: "project-1",
-              status: "done",
-              title: "Activity Three",
-            },
-            ...Array.from({ length: 6 }).map((_, index) => ({
-              id: `milestone-${index + 1}`,
-              plannedEndDate: `2026-06-${String(index + 1).padStart(2, "0")}`,
-              priority: "high",
-              projectId: "project-1",
-              status: "todo" as const,
-              taskKind: "milestone" as const,
-              title: `Milestone ${index + 1}`,
-            })),
-          ],
+          tasks: [],
         }}
       />,
     );
 
-    const activityPanel = screen
-      .getByText("Recent Activity")
-      .closest("section");
-    const milestonePanel = screen
-      .getByText("Upcoming Milestones")
-      .closest("section");
-    expect(activityPanel).not.toHaveClass("h-[210px]");
-    expect(milestonePanel).not.toHaveClass("h-[210px]");
-    expect(screen.getByText("View All Activity")).toHaveAttribute(
-      "href",
-      "/projects/project-1/reports",
-    );
-    expect(screen.getByText("Activity One")).toBeInTheDocument();
-    expect(screen.getByText("Activity Two")).toBeInTheDocument();
-    expect(screen.getByText("Activity Three")).toBeInTheDocument();
-    expect(screen.getByText("Milestone 5")).toBeInTheDocument();
-    expect(screen.queryByText("Milestone 6")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Supplier delay")).toHaveLength(2);
-    expect(screen.getByText("Integration issue")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Vendor approval assumption"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Security dependency")).not.toBeInTheDocument();
+    const timeline = screen.getByRole("list", {
+      name: "Project timeline checkpoints",
+    });
+    expect(timeline).toHaveClass("flex", "min-w-max");
+    expect(timeline.parentElement).toHaveClass("overflow-x-auto");
+    expect(within(timeline).getAllByRole("listitem")).toHaveLength(5);
+    expect(screen.getByText("Today")).toBeInTheDocument();
+    expect(screen.getByText("Attention")).toBeInTheDocument();
+    expect(screen.getByText("Delivery Summary")).toBeInTheDocument();
+    expect(screen.queryByText("Recent Activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upcoming Milestones")).not.toBeInTheDocument();
   });
 
   it("removes duplicate project summary and planning widgets from overview", () => {
@@ -357,6 +297,10 @@ describe("Project workspace components", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Plan Items")).not.toBeInTheDocument();
     expect(screen.queryByText("Phases")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent Activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upcoming Milestones")).not.toBeInTheDocument();
+    expect(screen.queryByText("Open Risks & Issues")).not.toBeInTheDocument();
+    expect(screen.queryByText("Resource Summary")).not.toBeInTheDocument();
   });
 
   it("links operational summaries to owning modules without duplicate actions", () => {
@@ -379,23 +323,35 @@ describe("Project workspace components", () => {
       "href",
       "/projects/project-1/govern",
     );
-    expect(screen.getByRole("link", { name: "Open Team" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open Issues: 0" })).toHaveAttribute(
       "href",
-      "/projects/project-1/team",
+      "/projects/project-1/govern",
     );
-    expect(screen.getByRole("link", { name: "Open Planning" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Blocked: 0" })).toHaveAttribute(
       "href",
-      "/projects/project-1/planning",
+      "/projects/project-1/delivery",
+    );
+    expect(screen.getByRole("link", { name: "Overdue: 0" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/delivery",
     );
     expect(screen.getByRole("link", { name: "Open RAID" })).toHaveAttribute(
       "href",
       "/projects/project-1/govern",
     );
+    expect(screen.getByRole("link", { name: "Open Delivery" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/delivery",
+    );
+    expect(screen.getByRole("link", { name: "Open in Planning" })).toHaveAttribute(
+      "href",
+      "/projects/project-1/planning",
+    );
     expect(
-      screen.queryByRole("link", { name: "Open Tasks" }),
+      screen.queryByRole("link", { name: "Open Team" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Open Reports" }),
+      screen.queryByRole("link", { name: "View All Activity" }),
     ).not.toBeInTheDocument();
   });
 
@@ -415,15 +371,17 @@ describe("Project workspace components", () => {
     expect(screen.getByLabelText("Project overview")).toHaveClass("space-y-4");
     expect(screen.getByLabelText("Project timeline")).toHaveClass("grid");
     expect(
-      screen.getByLabelText("Upcoming milestones and recent activity"),
+      screen.getByLabelText("Operational attention and delivery summary"),
     ).toHaveClass("grid", "xl:grid-cols-2");
-    expect(screen.getByLabelText("Operational attention")).toHaveClass(
-      "grid",
-      "xl:grid-cols-2",
+    expect(screen.getByRole("list", { name: "Project timeline checkpoints" })).toHaveClass(
+      "flex",
+      "min-w-max",
     );
     expect(
-      screen.getByRole("list", { name: "Project timeline checkpoints" }),
-    ).toHaveClass("grid", "xl:grid-cols-5");
+      screen
+        .getByRole("list", { name: "Project timeline checkpoints" })
+        .parentElement,
+    ).toHaveClass("overflow-x-auto");
   });
 
   it("renders summary metrics", () => {
@@ -1813,14 +1771,29 @@ describe("Project workspace components", () => {
     expect(screen.getByText("1.2")).toBeInTheDocument();
     expect(screen.getByText("[SUMMARY]")).toBeInTheDocument();
     expect(screen.getByText("[MILESTONE]")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /collapse planning/i }),
+    ).toHaveTextContent("▾");
+    expect(
+      screen.queryByRole("button", { name: /expand prepare release plan/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /expand approval checkpoint/i }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
     expect(screen.queryByText("Prepare release plan")).not.toBeInTheDocument();
     expect(screen.queryByText("◆ Approval checkpoint")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /expand planning/i }),
+    ).toHaveTextContent("▸");
 
     fireEvent.click(screen.getByRole("button", { name: /expand planning/i }));
     expect(screen.getByText("Prepare release plan")).toBeInTheDocument();
     expect(screen.getByText("◆ Approval checkpoint")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /collapse planning/i }),
+    ).toHaveTextContent("▾");
   });
 
   it("creates child tasks from summary rows and supports summary and milestone shortcuts", () => {

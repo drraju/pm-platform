@@ -16,6 +16,7 @@ import {
   WorkspaceContent,
   WorkspaceSection,
 } from "@/components/foundation";
+import { DisclosureButton } from "@/components/ui/disclosure-button";
 import {
   buildExecutionUpdatePayload,
   getDisplayedPercentComplete,
@@ -714,19 +715,13 @@ const TodayTaskRow = memo(function TodayTaskRow({
         style={{ paddingLeft: showTeamColumns ? `${row.depth * 14}px` : 0 }}
       >
         {showTeamColumns && row.hasChildren ? (
-          <button
-            aria-expanded={expanded}
-            aria-label={
-              expanded ? `Collapse ${task.title}` : `Expand ${task.title}`
-            }
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
+          <DisclosureButton
+            expanded={expanded}
+            label={task.title}
             onClick={() => onToggleExpand(task.id)}
-            type="button"
-          >
-            {expanded ? "▼" : "▶"}
-          </button>
+          />
         ) : showTeamColumns ? (
-          <span className="inline-block w-6 shrink-0" />
+          <span aria-hidden="true" className="inline-block w-6 shrink-0" />
         ) : null}
         <span
           className={`truncate font-medium ${

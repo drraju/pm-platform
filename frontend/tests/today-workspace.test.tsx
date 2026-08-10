@@ -127,10 +127,19 @@ describe("TodayWorkspace", () => {
     expect(
       screen.queryByText("Interview stakeholders"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Expand Discovery" }),
+    ).toHaveTextContent("▸");
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Discovery" }));
 
     expect(screen.getByText("Interview stakeholders")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Collapse Discovery" }),
+    ).toHaveTextContent("▾");
+    expect(
+      screen.queryByRole("button", { name: "Expand Interview stakeholders" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps summary rows read-only while child rows expose editable controls", () => {

@@ -24,6 +24,7 @@ import {
   StatusBadge,
   WorkspaceSection,
 } from "@/components/foundation";
+import { DisclosureButton } from "@/components/ui/disclosure-button";
 import { ToolbarGroup } from "@/components/ui/toolbar";
 import {
   useDismissibleMenu,
@@ -1593,21 +1594,14 @@ export function PlanningWorkspace({
           style={{ paddingLeft: 12 + depth * 16 }}
         >
           {hasChildren ? (
-            <button
-              aria-label={`${collapsedIds.has(schedule.taskId) ? "Expand" : "Collapse"} ${title}`}
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-slate-500"
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleCollapse(schedule.taskId);
-              }}
-              type="button"
-            >
-              {collapsedIds.has(schedule.taskId) ? "►" : "▼"}
-            </button>
+            <DisclosureButton
+              expanded={!collapsedIds.has(schedule.taskId)}
+              label={title}
+              onClick={() => toggleCollapse(schedule.taskId)}
+            />
           ) : (
-            <span className="w-3 shrink-0" />
+            <span aria-hidden="true" className="w-6 shrink-0" />
           )}
-          <TypeBadge schedule={schedule} />
           <span
             className={`flex min-w-0 flex-1 text-slate-950 ${
               isSummary ? "font-bold" : "font-medium"
@@ -1648,6 +1642,7 @@ export function PlanningWorkspace({
               title
             )}
           </span>
+          <TypeBadge schedule={schedule} />
           {isSummary ? <ScheduleStateIcon kind="calculated" /> : null}
           {!isSummary && isCritical ? (
             <ScheduleStateIcon kind="critical" />
