@@ -29,6 +29,8 @@ import type {
   ApiTask,
   ApiTaskExecutionUpdate,
 } from "@/features/projects";
+import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
+import { includePersonalWorkContext } from "@/lib/tasks/personal-work-context";
 import {
   findAdjacentColumn,
   findAdjacentEditableTaskId,
@@ -166,21 +168,23 @@ export function TodayWorkspace({
     if (taskScope !== "mine" || !currentUserId) {
       return tasks;
     }
-    return tasks.filter(
+    const directTasks = tasks.filter(
       (task) =>
         task.taskKind !== "summary" && task.assigneeId === currentUserId,
+    );
+    return includeTaskAncestors(
+      tasks,
+      includePersonalWorkContext(tasks, directTasks, currentUserId),
     );
   }, [currentUserId, taskScope, tasks]);
 
   const visibleRows = useMemo(() => {
     if (taskScope === "mine") {
-      const flatRows: TodayRow[] = scopedTasks.map((task) => ({
-        depth: 0,
-        hasChildren: false,
-        task,
-        wbs: "",
-      }));
-      return filterRowsForSearch(flatRows, scopedTasks, searchTerm);
+      const hierarchy = buildTodayHierarchy(
+        scopedTasks,
+        getSummaryTaskIds(scopedTasks),
+      );
+      return filterRowsForSearch(hierarchy.rows, scopedTasks, searchTerm);
     }
     const hierarchy = buildTodayHierarchy(scopedTasks, expandedTaskIds);
     return filterRowsForSearch(hierarchy.rows, scopedTasks, searchTerm);
@@ -632,6 +636,7 @@ export function TodayWorkspace({
                 active={activeTaskId === row.task.id}
                 canEdit={canEditTask(row.task)}
                 canEditPriority={canEdit}
+                currentUserId={currentUserId}
                 expanded={expandedTaskIds.includes(row.task.id)}
                 gridTemplate={gridTemplate}
                 key={row.task.id}
@@ -664,6 +669,7 @@ const TodayTaskRow = memo(function TodayTaskRow({
   active,
   canEdit,
   canEditPriority,
+  currentUserId,
   expanded,
   gridTemplate,
   members,
@@ -676,6 +682,7 @@ const TodayTaskRow = memo(function TodayTaskRow({
   active: boolean;
   canEdit: boolean;
   canEditPriority: boolean;
+  currentUserId: string | null;
   expanded: boolean;
   gridTemplate: string;
   members: ApiProjectMember[];
@@ -707,12 +714,16 @@ const TodayTaskRow = memo(function TodayTaskRow({
   const progress = getDisplayedPercentComplete(task);
   const isPackageHeader = isSummary || row.hasChildren;
   const showTeamColumns = taskScope === "team";
+  const showContextAssignee =
+    taskScope === "mine" &&
+    Boolean(task.assigneeId) &&
+    task.assigneeId !== currentUserId;
 
   const taskTitleCell = (
     <div role="cell">
       <div
         className="flex min-w-0 items-center gap-1"
-        style={{ paddingLeft: showTeamColumns ? `${row.depth * 14}px` : 0 }}
+        style={{ paddingLeft: `${row.depth * 14}px` }}
       >
         {showTeamColumns && row.hasChildren ? (
           <DisclosureButton
@@ -735,6 +746,11 @@ const TodayTaskRow = memo(function TodayTaskRow({
         >
           {task.title}
         </span>
+        {showContextAssignee ? (
+          <span className="shrink-0 text-[11px] font-medium text-slate-500">
+            {formatMemberByUserId(task.assigneeId, members)}
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -1028,6 +1044,7 @@ function areTodayTaskRowsEqual(
     active: boolean;
     canEdit: boolean;
     canEditPriority: boolean;
+    currentUserId: string | null;
     expanded: boolean;
     gridTemplate: string;
     members: ApiProjectMember[];
@@ -1038,6 +1055,7 @@ function areTodayTaskRowsEqual(
     active: boolean;
     canEdit: boolean;
     canEditPriority: boolean;
+    currentUserId: string | null;
     expanded: boolean;
     gridTemplate: string;
     members: ApiProjectMember[];
@@ -1049,6 +1067,7 @@ function areTodayTaskRowsEqual(
     previous.active === next.active &&
     previous.canEdit === next.canEdit &&
     previous.canEditPriority === next.canEditPriority &&
+    previous.currentUserId === next.currentUserId &&
     previous.expanded === next.expanded &&
     previous.gridTemplate === next.gridTemplate &&
     previous.members === next.members &&

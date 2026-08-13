@@ -9,6 +9,8 @@ import {
   getDeliveryFilterCounts,
 } from "@/components/delivery/delivery-filters";
 import type { ApiTask } from "@/lib/api/client";
+import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
+import { includePersonalWorkContext } from "@/lib/tasks/personal-work-context";
 
 function task(
   partial: Partial<ApiTask> & Pick<ApiTask, "id" | "title" | "status">,
@@ -125,5 +127,52 @@ describe("delivery filters", () => {
         status: "active",
       }),
     ).toEqual(["Active", "Mine", "High", "Overdue"]);
+  });
+
+  it("keeps Delivery Mine hierarchy-aware without changing direct-work counts", () => {
+    const parent = task({
+      assigneeId: "user-1",
+      id: "task-a",
+      status: "in_progress",
+      title: "Task A",
+    });
+    const child = task({
+      assigneeId: "user-2",
+      id: "task-a-1",
+      parentTaskId: parent.id,
+      status: "todo",
+      title: "Sub-task A1",
+    });
+    const sibling = task({
+      assigneeId: "user-3",
+      id: "task-a-2",
+      parentTaskId: parent.id,
+      status: "blocked",
+      title: "Sub-task A2",
+    });
+    const unrelated = task({
+      assigneeId: "user-4",
+      id: "task-b",
+      status: "todo",
+      title: "Unrelated task",
+    });
+    const allTasks = [parent, child, sibling, unrelated];
+    const matchedTasks = filterDeliveryTasksByState(
+      allTasks,
+      { ...createDefaultDeliveryFilterState(), owner: "mine" },
+      "user-1",
+    );
+    const visibleTasks = includeTaskAncestors(
+      allTasks,
+      includePersonalWorkContext(allTasks, matchedTasks, "user-1"),
+    );
+
+    expect(matchedTasks.map((item) => item.id)).toEqual(["task-a"]);
+    expect(visibleTasks.map((item) => item.id)).toEqual([
+      "task-a",
+      "task-a-1",
+      "task-a-2",
+    ]);
+    expect(getDeliveryFilterCounts(allTasks, "user-1").mine).toBe(1);
   });
 });

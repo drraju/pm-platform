@@ -199,7 +199,8 @@ export class TasksService {
     }
 
     const tasks = await taskQuery.getMany();
-    return this.attachLatestExecutionUpdates(tasks);
+    const tasksWithContext = await this.includePersonalTaskContext(tasks);
+    return this.attachLatestExecutionUpdates(tasksWithContext);
   }
 
   async getMyTasksSummary(userId: string): Promise<MyTasksSummaryDto> {
@@ -426,6 +427,78 @@ export class TasksService {
       .createQueryBuilder('task')
       .innerJoinAndSelect('task.project', 'project')
       .leftJoinAndSelect('task.assignee', 'assignee');
+  }
+
+  private async includePersonalTaskContext(tasks: Task[]): Promise<Task[]> {
+    if (tasks.length === 0) {
+      return tasks;
+    }
+
+    const directTaskIds = tasks.map((task) => task.id);
+    const parentTaskIds = [
+      ...new Set(
+        tasks
+          .map((task) => task.parentTaskId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const directProjectIds = [
+      ...new Set(tasks.map((task) => task.projectId).filter(Boolean)),
+    ];
+    const childTaskWhere =
+      directProjectIds.length > 0
+        ? {
+            parentTaskId: In(directTaskIds),
+            projectId: In(directProjectIds),
+          }
+        : { parentTaskId: In(directTaskIds) };
+
+    const [childTasks, parentTasks] = await Promise.all([
+      this.tasksRepository.find({
+        order: { dueDate: 'ASC', createdAt: 'DESC' },
+        relations: { assignee: true, project: true },
+        where: childTaskWhere,
+      }),
+      parentTaskIds.length > 0
+        ? this.tasksRepository.find({
+            relations: { assignee: true, project: true },
+            where: { id: In(parentTaskIds) },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const childrenByParentId = new Map<string, Task[]>();
+    for (const task of childTasks) {
+      if (!task.parentTaskId) {
+        continue;
+      }
+      const siblings = childrenByParentId.get(task.parentTaskId) ?? [];
+      siblings.push(task);
+      childrenByParentId.set(task.parentTaskId, siblings);
+    }
+
+    const parentById = new Map(parentTasks.map((task) => [task.id, task]));
+    const orderedTasks: Task[] = [];
+    const includedTaskIds = new Set<string>();
+    const include = (task?: Task | null) => {
+      if (!task || includedTaskIds.has(task.id)) {
+        return;
+      }
+      includedTaskIds.add(task.id);
+      orderedTasks.push(task);
+    };
+
+    for (const task of tasks) {
+      if (task.parentTaskId) {
+        include(parentById.get(task.parentTaskId));
+      }
+      include(task);
+      for (const childTask of childrenByParentId.get(task.id) ?? []) {
+        include(childTask);
+      }
+    }
+
+    return orderedTasks;
   }
 
   private async findTaskForMutation(

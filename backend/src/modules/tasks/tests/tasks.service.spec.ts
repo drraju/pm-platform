@@ -71,7 +71,7 @@ describe('TasksService', () => {
     tasksRepository = {
       create: jest.fn((input) => input),
       createQueryBuilder: jest.fn(() => taskQueryBuilder),
-      find: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       manager: {
         transaction: jest.fn((callback) => callback(taskTransactionManager)),
@@ -589,6 +589,94 @@ describe('TasksService', () => {
     );
   });
 
+  it('includes direct child context for an authenticated parent task owner', async () => {
+    const parentTask = {
+      id: 'parent-task-id',
+      assigneeId: userId,
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Task A',
+    };
+    const childTask = {
+      id: 'child-task-id',
+      assigneeId: 'delegated-user-id',
+      parentTaskId: parentTask.id,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Sub-task A1',
+    };
+    taskQueryBuilder.getMany.mockResolvedValue([parentTask]);
+    tasksRepository.find?.mockResolvedValueOnce([childTask]);
+
+    await expect(service.findMyTasks(userId)).resolves.toEqual([
+      expect.objectContaining({ id: parentTask.id }),
+      expect.objectContaining({ id: childTask.id }),
+    ]);
+
+    expect(tasksRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relations: { assignee: true, project: true },
+        where: expect.objectContaining({
+          parentTaskId: expect.any(Object),
+          projectId: expect.any(Object),
+        }),
+      }),
+    );
+  });
+
+  it('includes parent context for an authenticated child task assignee', async () => {
+    const parentTask = {
+      id: 'parent-task-id',
+      assigneeId: 'parent-owner-id',
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Task A',
+    };
+    const childTask = {
+      id: 'child-task-id',
+      assigneeId: userId,
+      parentTaskId: parentTask.id,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Sub-task A1',
+    };
+    taskQueryBuilder.getMany.mockResolvedValue([childTask]);
+    tasksRepository.find
+      ?.mockResolvedValueOnce([])
+      .mockResolvedValueOnce([parentTask]);
+
+    await expect(service.findMyTasks(userId)).resolves.toEqual([
+      expect.objectContaining({ id: parentTask.id }),
+      expect.objectContaining({ id: childTask.id }),
+    ]);
+  });
+
+  it('keeps personal task context bounded to directly assigned task branches', async () => {
+    const parentTask = {
+      id: 'parent-task-id',
+      assigneeId: userId,
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Task A',
+    };
+    taskQueryBuilder.getMany.mockResolvedValue([parentTask]);
+    tasksRepository.find?.mockResolvedValueOnce([]);
+
+    await service.findMyTasks(userId);
+
+    expect(tasksRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          parentTaskId: expect.any(Object),
+          projectId: expect.any(Object),
+        }),
+      }),
+    );
+  });
+
   it('omits empty authenticated user task filters', async () => {
     taskQueryBuilder.getMany.mockResolvedValue([]);
 
@@ -1002,6 +1090,33 @@ describe('TasksService', () => {
         status: TaskStatus.InProgress,
       }),
     );
+  });
+
+  it('does not grant edit authority over contextual child tasks to the parent owner', async () => {
+    const actor = {
+      email: 'parent-owner@example.com',
+      roleId: 'contributor-role-id',
+      userId,
+    };
+    tasksRepository.findOne?.mockResolvedValue({
+      id: 'child-task-id',
+      assigneeId: 'delegated-user-id',
+      parentTaskId: taskId,
+      projectId,
+      status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
+      title: 'Delegated child',
+    });
+
+    await expect(
+      service.update(
+        'child-task-id',
+        { status: TaskStatus.InProgress },
+        actor,
+      ),
+    ).rejects.toThrow('Only assigned team members can update this task');
+
+    expect(tasksRepository.save).not.toHaveBeenCalled();
   });
 
   it('rejects assigned team member edits to manager-only task fields', async () => {

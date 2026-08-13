@@ -59,6 +59,7 @@ import { getTaskExecutionUpdates } from "@/features/tasks";
 import { useProjectMembers } from "@/hooks/use-project-members";
 import type { ApiTask } from "@/lib/api/client";
 import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
+import { includePersonalWorkContext } from "@/lib/tasks/personal-work-context";
 import {
   readPersistedWorkspaceState,
   writePersistedWorkspaceState,
@@ -304,11 +305,18 @@ function ProjectDeliveryPageContent() {
       ),
     [currentUserId, filterState, searchTerm, standardTasks],
   );
+  const contextualMatchedTasks = useMemo(
+    () =>
+      filterState.owner === "mine"
+        ? includePersonalWorkContext(decoratedTasks, matchedTasks, currentUserId)
+        : matchedTasks,
+    [currentUserId, decoratedTasks, filterState.owner, matchedTasks],
+  );
   // List hierarchy visits roots only; keep summary ancestors so nested
   // matched standards remain reachable without a second task collection.
   const visibleTasks = useMemo(
-    () => includeTaskAncestors(decoratedTasks, matchedTasks),
-    [decoratedTasks, matchedTasks],
+    () => includeTaskAncestors(decoratedTasks, contextualMatchedTasks),
+    [contextualMatchedTasks, decoratedTasks],
   );
   const filterCounts = useMemo(
     () => getDeliveryFilterCounts(standardTasks, currentUserId),

@@ -487,6 +487,56 @@ describe("TodayWorkspace", () => {
     );
   });
 
+  it("shows delegated child context read-only in My Tasks scope", () => {
+    const project = createProject([
+      {
+        id: "task-a",
+        assigneeId: "user-2",
+        parentTaskId: null,
+        percentComplete: 40,
+        priority: "high",
+        projectId: "project-1",
+        sequenceNumber: 1,
+        status: "in_progress",
+        taskKind: "standard",
+        title: "Task A",
+      },
+      {
+        id: "task-a-1",
+        assigneeId: "user-1",
+        parentTaskId: "task-a",
+        percentComplete: 10,
+        priority: "medium",
+        projectId: "project-1",
+        sequenceNumber: 1,
+        status: "todo",
+        taskKind: "standard",
+        title: "Sub-task A1",
+      },
+      {
+        id: "task-other",
+        assigneeId: "user-1",
+        parentTaskId: null,
+        percentComplete: 0,
+        priority: "medium",
+        projectId: "project-1",
+        sequenceNumber: 2,
+        status: "todo",
+        taskKind: "standard",
+        title: "Someone else's task",
+      },
+    ]);
+
+    renderToday(project, { canEdit: false, currentUserId: "user-2" });
+
+    expect(screen.getByText("Task A")).toBeInTheDocument();
+    expect(screen.getByText("Sub-task A1")).toBeInTheDocument();
+    expect(screen.getByText("Ava Patel")).toBeInTheDocument();
+    expect(screen.queryByText("Someone else's task")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Status for Task A")).toBeEnabled();
+    expect(screen.getByLabelText("Status for Sub-task A1")).toBeDisabled();
+  });
+
   it("keeps Team Tasks read-only for contributors", () => {
     const project = createProject([
       {
