@@ -683,6 +683,7 @@ describe("PlanningWorkspace", () => {
 
     const toolbar = screen.getByLabelText("Planning toolbar");
     expect(toolbar).toHaveClass("sticky");
+    expect(toolbar).toHaveClass("z-40");
     const scrollableWorkspace = screen.getByLabelText(
       "Scrollable planning workspace",
     );

@@ -344,6 +344,26 @@ describe('AuthorizationPolicyService', () => {
       service.canManageRaid(projectId, actor(UserRole.TeamMember, 'user-team')),
     ).resolves.toBe(false);
   });
+
+  it('does not require project creation ownership for task execution authority', async () => {
+    membershipsByKey.set(
+      `${projectId}:user-technical-manager`,
+      ProjectRole.Manager,
+    );
+
+    await expect(
+      service.canManageProject(
+        projectId,
+        actor(UserRole.TeamMember, 'user-technical-manager'),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      service.canManageTask(
+        projectId,
+        actor(UserRole.TeamMember, 'user-technical-manager'),
+      ),
+    ).resolves.toBe(true);
+  });
 });
 
 function actor(

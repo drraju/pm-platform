@@ -12,6 +12,7 @@ import ProjectDocumentsPage from "@/app/(app)/projects/[id]/documents/page";
 import ProjectDeliveryPage from "@/app/(app)/projects/[id]/delivery/page";
 import ProjectExecutionPage from "@/app/(app)/projects/[id]/execution/page";
 import DailyReviewPage from "@/app/(app)/daily-review/page";
+import TodayPage from "@/app/(app)/today/page";
 import ProjectsPage from "@/app/(app)/projects/page";
 import ProjectPlanningPage from "@/app/(app)/projects/[id]/planning/page";
 import ProjectGovernPage from "@/app/(app)/projects/[id]/govern/page";
@@ -287,8 +288,7 @@ vi.mock("@/features/auth", () => ({
             member.userId === currentUserId &&
             ["owner", "manager"].includes(member.role),
         ));
-    const canManageProjectTasks =
-      canUpdateTasks && permissionKeys.includes("project.update") && isGovernor;
+    const canManageProjectTasks = canUpdateTasks && isGovernor;
     const canUpdateTask =
       canManageProjectTasks ||
       (canUpdateTasks && Boolean(currentUserId) && task?.assigneeId === currentUserId);
@@ -321,7 +321,8 @@ vi.mock("@/features/auth", () => ({
       canContributeDocuments: canReadProject,
       canEditDocument: canManageProject,
       canEditExecution: canUpdateTask,
-      canEditPlanning: canManageProjectTasks,
+      canEditPlanning:
+        canManageProjectTasks && permissionKeys.includes("project.update"),
       canExecuteAssignedTask: canUpdateTask,
       canManageDocuments: canManageProject,
       canManageProjectTasks,
@@ -399,6 +400,13 @@ vi.mock("@/features/users", () => ({
   getAssignableUsers: vi.fn(async () => []),
 }));
 
+vi.mock("@/components/projects/project-workspace-tasks", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/components/projects/project-workspace-tasks")
+  >("@/components/projects/project-workspace-tasks");
+  return actual;
+});
+
 describe("Projects List navigation", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -408,6 +416,8 @@ describe("Projects List navigation", () => {
       projectMocks.createDefaultProjectDetails(projectId),
     );
     projectMocks.getProjects.mockClear();
+    projectMocks.getProjectMembers.mockReset();
+    projectMocks.getProjectMembers.mockImplementation(async () => []);
     projectMocks.recordProjectTaskExecutionUpdate.mockReset();
     planningMocks.getPlanningWorkspace.mockClear();
     authMocks.getAuthMe.mockClear();
@@ -598,6 +608,81 @@ describe("Projects List navigation", () => {
 
     expect(await screen.findByText("Configure client integration")).toBeInTheDocument();
     expect(screen.queryByText("No tasks yet.")).not.toBeInTheDocument();
+  });
+
+  it("lets task-authorised project managers edit Today tasks without project creation ownership", async () => {
+    window.history.pushState({}, "", "/today");
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      permissions: [
+        { id: "permission-project-read", key: "project.read" },
+        { id: "permission-task-update", key: "task.update" },
+        { id: "permission-task-reassign", key: "task.reassign" },
+      ],
+      roles: [{ id: "role-team-member", name: "TEAM_MEMBER", permissions: [] }],
+      user: {
+        email: "technical.manager@example.com",
+        firstName: "Technical",
+        id: "user-1",
+        lastName: "Manager",
+        roleId: "role-team-member",
+        status: "active",
+      },
+    });
+    projectMocks.getProjects.mockResolvedValueOnce([
+      {
+        id: "project-123",
+        name: "Customer Experience Platform Upgrade",
+        ownerId: "user-creator",
+        status: "active",
+      },
+    ]);
+    projectMocks.getProject.mockResolvedValueOnce({
+      id: "project-123",
+      members: [
+        {
+          id: "member-manager",
+          projectId: "project-123",
+          role: "manager",
+          userId: "user-1",
+        },
+      ],
+      name: "Customer Experience Platform Upgrade",
+      ownerId: "user-creator",
+      status: "active",
+      tasks: [
+        {
+          assigneeId: "user-2",
+          id: "task-other-assignee",
+          percentComplete: 20,
+          priority: "high",
+          projectId: "project-123",
+          status: "todo",
+          taskKind: "standard",
+          title: "Update integration rollout",
+        },
+      ],
+    });
+    const managerMembers = [
+      {
+        id: "member-manager",
+        projectId: "project-123",
+        role: "manager",
+        userId: "user-1",
+      },
+    ];
+    projectMocks.getProjectMembers
+      .mockResolvedValueOnce(managerMembers)
+      .mockResolvedValueOnce(managerMembers);
+
+    render(<TodayPage />);
+
+    expect(await screen.findByLabelText("Task scope")).toHaveValue("team");
+    expect(
+      screen.getByLabelText("Status for Update integration rollout"),
+    ).toBeEnabled();
+    expect(
+      screen.getByLabelText("Priority for Update integration rollout"),
+    ).toBeEnabled();
   });
 
   it("renders Project Workspace tabs with the current tab highlighted", async () => {
@@ -977,7 +1062,8 @@ describe("Projects List navigation", () => {
   });
 
   it("keeps summary ancestors so Delivery List can render nested active tasks", async () => {
-    window.history.pushState({}, "", "/projects/project-123/delivery");
+    const projectId = "project-nested-delivery";
+    window.history.pushState({}, "", `/projects/${projectId}/delivery`);
     window.localStorage.setItem(
       "pm_platform_permissions",
       JSON.stringify([
@@ -1010,30 +1096,32 @@ describe("Projects List navigation", () => {
         status: "active",
       },
     });
-    projectMocks.getProject.mockResolvedValue({
-      id: "project-123",
-      members: [
-        {
-          id: "member-1",
-          projectId: "project-123",
-          role: "manager",
-          user: {
-            email: "project.manager@example.com",
-            firstName: "Project",
-            id: "user-1",
-            lastName: "Manager",
-            status: "active",
-          },
-          userId: "user-1",
+    const managerMembers = [
+      {
+        id: "member-1",
+        projectId,
+        role: "manager",
+        user: {
+          email: "project.manager@example.com",
+          firstName: "Project",
+          id: "user-1",
+          lastName: "Manager",
+          status: "active",
         },
-      ],
+        userId: "user-1",
+      },
+    ];
+    projectMocks.getProjectMembers.mockResolvedValue(managerMembers);
+    projectMocks.getProject.mockResolvedValue({
+      id: projectId,
+      members: managerMembers,
       name: "Selected Project Workspace",
       status: "active",
       tasks: [
         {
           id: "summary-package",
           priority: "medium",
-          projectId: "project-123",
+          projectId,
           status: "in_progress",
           taskKind: "summary",
           title: "Delivery package",
@@ -1044,8 +1132,9 @@ describe("Projects List navigation", () => {
           parentTaskId: "summary-package",
           percentComplete: 10,
           priority: "high",
-          projectId: "project-123",
+          projectId,
           status: "in_progress",
+          taskKind: "standard",
           title: "Nested active delivery task",
         },
         {
@@ -1054,8 +1143,9 @@ describe("Projects List navigation", () => {
           parentTaskId: "summary-package",
           percentComplete: 100,
           priority: "medium",
-          projectId: "project-123",
+          projectId,
           status: "done",
+          taskKind: "standard",
           title: "Nested completed delivery task",
         },
       ],
@@ -1082,6 +1172,9 @@ describe("Projects List navigation", () => {
     if (expandPackage?.getAttribute("aria-label")?.startsWith("Expand")) {
       fireEvent.click(expandPackage);
     }
+    expect(
+      await screen.findByRole("button", { name: "Collapse Delivery package" }),
+    ).toBeInTheDocument();
     expect(
       await screen.findByText("Nested active delivery task"),
     ).toBeInTheDocument();

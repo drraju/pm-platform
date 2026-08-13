@@ -59,6 +59,73 @@ describe("resolveProjectUiCapabilities standup access", () => {
     expect(capabilities.canManageProjectTasks).toBe(false);
   });
 
+  it("allows task-capable project managers to execute project tasks without being project creator", () => {
+    const capabilities = resolveProjectUiCapabilities({
+      currentUserId: "user-manager",
+      members: [
+        {
+          id: "member-1",
+          role: "manager",
+          userId: "user-manager",
+        },
+      ],
+      permissionKeys: ["project.read", "task.update", "task.reassign"],
+      project: {
+        ownerId: "user-creator",
+      },
+      roleNames: ["TEAM_MEMBER"],
+    });
+
+    expect(capabilities.canManageProjectTasks).toBe(true);
+    expect(capabilities.canEditExecution).toBe(true);
+    expect(capabilities.canReassignTask).toBe(true);
+    expect(capabilities.canEditPlanning).toBe(false);
+    expect(capabilities.canManageTeam).toBe(false);
+  });
+
+  it("keeps project task execution read-only for unauthorised project members", () => {
+    const capabilities = resolveProjectUiCapabilities({
+      currentUserId: "user-contributor",
+      members: [
+        {
+          id: "member-1",
+          role: "contributor",
+          userId: "user-contributor",
+        },
+      ],
+      permissionKeys: ["project.read", "task.update"],
+      project: {
+        ownerId: "user-creator",
+      },
+      task: { assigneeId: "user-other" },
+    });
+
+    expect(capabilities.canManageProjectTasks).toBe(false);
+    expect(capabilities.canEditExecution).toBe(false);
+    expect(capabilities.canUpdateTask).toBe(false);
+  });
+
+  it("preserves planning authority as a project update capability", () => {
+    const capabilities = resolveProjectUiCapabilities({
+      currentUserId: "user-manager",
+      members: [
+        {
+          id: "member-1",
+          role: "manager",
+          userId: "user-manager",
+        },
+      ],
+      permissionKeys: ["project.read", "project.update", "task.update"],
+      project: {
+        ownerId: "user-creator",
+      },
+    });
+
+    expect(capabilities.canManageProjectTasks).toBe(true);
+    expect(capabilities.canEditExecution).toBe(true);
+    expect(capabilities.canEditPlanning).toBe(true);
+  });
+
   it("allows document contribution and own-document edit", () => {
     const capabilities = resolveProjectUiCapabilities({
       currentUserId: "user-1",

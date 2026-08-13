@@ -2102,7 +2102,7 @@ export function PlanningWorkspace({
     >
       <section
         aria-label="Planning toolbar"
-        className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur"
+        className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur"
       >
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="min-w-0">

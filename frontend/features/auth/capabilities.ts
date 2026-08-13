@@ -81,14 +81,14 @@ export function resolveProjectUiCapabilities({
   const hasStandupLeadershipRole = roleNames.some((roleName) =>
     standupLeadershipRoles.has(normalizeRoleName(roleName)),
   );
-  const canManageProject =
-    canUpdateProject &&
-    isProjectGovernorOrManager({
-      currentUserId,
-      members,
-      project,
-    });
-  const canManageProjectTasks = canUpdateTasks && canManageProject;
+  const hasProjectExecutionAuthority = isProjectGovernorOrManager({
+    currentUserId,
+    members,
+    project,
+  });
+  const canManageProject = canUpdateProject && hasProjectExecutionAuthority;
+  const canManageProjectTasks = canUpdateTasks && hasProjectExecutionAuthority;
+  const canManagePlanningTasks = canUpdateProject && canManageProjectTasks;
   const canUpdateOwnTask =
     canUpdateTasks &&
     Boolean(currentUserId) &&
@@ -128,7 +128,7 @@ export function resolveProjectUiCapabilities({
     canContributeDocuments,
     canEditDocument: canManageProject || (canContributeDocuments && ownsDocument),
     canEditExecution: canUpdateTask,
-    canEditPlanning: canManageProjectTasks,
+    canEditPlanning: canManagePlanningTasks,
     canExecuteAssignedTask: canUpdateOwnTask || canManageProjectTasks,
     canManageDocuments: canManageProject,
     canManageProjectTasks,
