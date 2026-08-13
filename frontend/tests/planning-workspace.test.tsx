@@ -344,6 +344,68 @@ const nestedWorkspace: ApiPlanningWorkspace = {
   ],
 };
 
+const longTaskName =
+  "Review PFM data, PCA data columns and customer incident history before stakeholder review";
+
+const longTaskNameWorkspace: ApiPlanningWorkspace = {
+  ...workspace,
+  criticalPathTaskIds: [],
+  dependencies: [],
+  resourceAllocations: [],
+  schedules: [
+    {
+      ...workspace.schedules[0],
+      id: "long-summary-schedule",
+      parentTaskId: null,
+      sequenceNumber: 1,
+      taskId: "long-summary",
+      taskTitle:
+        "Change pipelines to read from GraphQL and validate customer impact across all environments",
+    },
+    {
+      ...workspace.schedules[1],
+      id: "long-task-schedule",
+      parentTaskId: "long-summary",
+      sequenceNumber: 1,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "long-task",
+        title: longTaskName,
+      },
+      taskId: "long-task",
+      taskTitle: longTaskName,
+    },
+    {
+      ...workspace.schedules[1],
+      id: "long-subtask-schedule",
+      parentTaskId: "long-task",
+      sequenceNumber: 1,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "long-subtask",
+        title:
+          "End points are empty, pipeline is failing. Also validate whether the records are being generated correctly",
+      },
+      taskId: "long-subtask",
+      taskTitle:
+        "End points are empty, pipeline is failing. Also validate whether the records are being generated correctly",
+    },
+    {
+      ...workspace.schedules[1],
+      id: "short-task-schedule",
+      parentTaskId: null,
+      sequenceNumber: 2,
+      task: {
+        ...workspace.schedules[1].task,
+        id: "short-task",
+        title: "Short task",
+      },
+      taskId: "short-task",
+      taskTitle: "Short task",
+    },
+  ],
+};
+
 const milestoneCategoryWorkspace: ApiPlanningWorkspace = {
   ...workspace,
   dependencies: [],
@@ -925,6 +987,52 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveStyle({
       gridTemplateColumns: "64px 300px 120px 96px 96px",
     });
+  });
+
+  it("expands long task-name rows and keeps timeline boundaries synchronized", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={longTaskNameWorkspace}
+      />,
+    );
+
+    const longSummaryRow = screen.getByRole("row", {
+      name: /1 Change pipelines to read from GraphQL/,
+    });
+    const longTaskRow = screen.getByRole("row", {
+      name: /1\.1 Review PFM data/,
+    });
+    const longSubtaskRow = screen.getByRole("row", {
+      name: /1\.1\.1 End points are empty/,
+    });
+    const shortTaskRow = screen.getByRole("row", { name: /2 Short task/ });
+
+    expect(longSummaryRow).toHaveStyle({ height: "96px" });
+    expect(longTaskRow).toHaveStyle({ height: "96px" });
+    expect(longSubtaskRow).toHaveStyle({ height: "96px" });
+    expect(shortTaskRow).toHaveStyle({ height: "42px" });
+    expect(
+      within(longTaskRow).getByRole("button", { name: "+ Add sub-task" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(longTaskName)).toHaveStyle({
+      WebkitLineClamp: "4",
+    });
+    expect(
+      screen.getByTestId("timeline-row-boundary-long-summary"),
+    ).toHaveAttribute("y1", "140");
+    expect(
+      screen.getByTestId("timeline-row-boundary-long-task"),
+    ).toHaveAttribute("y1", "236");
+    expect(
+      screen.getByTestId("timeline-row-boundary-long-subtask"),
+    ).toHaveAttribute("y1", "332");
+    expect(
+      screen.getByTestId("timeline-row-boundary-short-task"),
+    ).toHaveAttribute("y1", "374");
   });
 
   it("shows contextual task details without replacing the planning canvas", () => {

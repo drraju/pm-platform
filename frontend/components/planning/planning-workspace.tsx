@@ -134,6 +134,14 @@ type PlanningDisplayRow =
   | { kind: "schedule"; row: VisibleRow }
   | { kind: "draft"; placement: DraftCreateRowPlacement };
 
+type PlanningRowMetric = {
+  barY: number;
+  boundaryY: number;
+  centerY: number;
+  height: number;
+  offset: number;
+};
+
 type DragState = {
   mode: DragMode;
   originX: number;
@@ -183,7 +191,13 @@ type GridColumnDefinition = {
   minWidth: number;
 };
 
-const rowHeight = 42;
+const compactRowHeight = 42;
+const expandedRowLineHeight = 18;
+const maxTaskTitleLines = 4;
+const taskTitleAverageCharacterWidth = 7;
+const taskTitleBaseChromeWidth = 64;
+const taskTitleBadgeWidth = 68;
+const inlineSubtaskActionWidth = 104;
 const defaultGridWidth = 560;
 const minGridWidth = 420;
 const maxGridWidth = 720;
@@ -615,6 +629,10 @@ export function PlanningWorkspace({
     visibleColumns,
     gridContentWidth,
   );
+  const taskTitleColumnWidth = getTaskTitleColumnWidth(
+    visibleColumns,
+    gridContentWidth,
+  );
   const showGrid = viewMode !== "timeline";
   const showTimeline = viewMode !== "grid";
 
@@ -651,7 +669,24 @@ export function PlanningWorkspace({
     setNewTaskFocusId(null);
   }, [editingCell, newTaskFocusId, localSchedules]);
 
-  const totalHeight = headerHeight + displayRows.length * rowHeight + 24;
+  const rowMetrics = useMemo(
+    () =>
+      buildPlanningRowMetrics({
+        criticalPathTaskIds: workspace.criticalPathTaskIds,
+        displayRows,
+        draftTitle: draftCreateRow?.title ?? "",
+        localSchedules,
+        taskTitleColumnWidth,
+      }),
+    [
+      displayRows,
+      draftCreateRow?.title,
+      localSchedules,
+      taskTitleColumnWidth,
+      workspace.criticalPathTaskIds,
+    ],
+  );
+  const totalHeight = headerHeight + rowMetrics.totalHeight + 24;
   const totalWidth = timeline.width;
   const canZoomIn = zoom !== zoomModes[0];
   const canZoomOut = zoom !== zoomModes[zoomModes.length - 1];
@@ -1729,28 +1764,34 @@ export function PlanningWorkspace({
     if (column.id === "taskTitle") {
       return (
         <div
-          className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-3"
+          className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 py-1.5 pl-3 pr-3"
           key={column.id}
           style={{ paddingLeft: 12 + placement.depth * 16 }}
         >
-          <span aria-hidden="true" className="w-6 shrink-0" />
-          <span className="flex min-w-0 flex-1 font-medium text-slate-950">
-            <InlineEditor
-              error={draftCreateRow.error}
-              field="taskTitle"
-              onBlur={() => {}}
-              onChange={(value) =>
-                setDraftCreateRow((current) =>
-                  current ? { ...current, error: null, title: value } : current,
-                )
-              }
-              onKeyDown={handleDraftCreateKeyDown}
-              ownerOptions={ownerOptions}
-              value={draftCreateRow.title}
-            />
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span aria-hidden="true" className="w-6 shrink-0" />
+            <span className="flex min-w-0 flex-1 font-medium text-slate-950">
+              <InlineEditor
+                error={draftCreateRow.error}
+                field="taskTitle"
+                onBlur={() => {}}
+                onChange={(value) =>
+                  setDraftCreateRow((current) =>
+                    current
+                      ? { ...current, error: null, title: value }
+                      : current,
+                  )
+                }
+                onKeyDown={handleDraftCreateKeyDown}
+                ownerOptions={ownerOptions}
+                value={draftCreateRow.title}
+              />
+            </span>
           </span>
-          <span className="rounded-sm border border-brand/20 bg-brand/10 px-2 py-0.5 text-[10px] font-bold uppercase text-brand">
-            Draft
+          <span className="flex shrink-0 items-center">
+            <span className="rounded-sm border border-brand/20 bg-brand/10 px-2 py-0.5 text-[10px] font-bold uppercase text-brand">
+              Draft
+            </span>
           </span>
         </div>
       );
@@ -1822,82 +1863,96 @@ export function PlanningWorkspace({
     if (column.id === "taskTitle") {
       return (
         <div
-          className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 px-3"
+          className="flex h-full min-w-0 items-center gap-2 border-r border-slate-100 py-1.5 pl-3 pr-3"
           key={column.id}
           style={{ paddingLeft: 12 + depth * 16 }}
         >
-          {hasChildren ? (
-            <DisclosureButton
-              expanded={!collapsedIds.has(schedule.taskId)}
-              label={title}
-              onClick={() => toggleCollapse(schedule.taskId)}
-            />
-          ) : (
-            <span aria-hidden="true" className="w-6 shrink-0" />
-          )}
-          <span
-            className={`flex min-w-0 flex-1 text-slate-950 ${
-              isSummary ? "font-bold" : "font-medium"
-            }`}
-            onClick={
-              isEditing(editingCell, schedule.taskId, "taskTitle")
-                ? undefined
-                : (event) => {
-                    event.stopPropagation();
-                    startEditing(schedule, "taskTitle");
-                  }
-            }
-            ref={(element) => {
-              if (element) {
-                taskNameRefs.current.set(schedule.taskId, element);
-              } else {
-                taskNameRefs.current.delete(schedule.taskId);
-              }
-            }}
-            tabIndex={-1}
-            title={title}
-          >
-            {isEditing(editingCell, schedule.taskId, "taskTitle") ? (
-              <InlineEditor
-                error={editError}
-                field="taskTitle"
-                onBlur={() => void commitEdit()}
-                onChange={(value) =>
-                  setEditingCell((current) =>
-                    current ? { ...current, value } : current,
-                  )
-                }
-                onKeyDown={handleEditKeyDown}
-                ownerOptions={ownerOptions}
-                value={editingCell?.value ?? ""}
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            {hasChildren ? (
+              <DisclosureButton
+                expanded={!collapsedIds.has(schedule.taskId)}
+                label={title}
+                onClick={() => toggleCollapse(schedule.taskId)}
               />
             ) : (
-              title
+              <span aria-hidden="true" className="w-6 shrink-0" />
             )}
-          </span>
-          <TypeBadge schedule={schedule} />
-          {isSummary ? <ScheduleStateIcon kind="calculated" /> : null}
-          {!isSummary && isCritical ? (
-            <ScheduleStateIcon kind="critical" />
-          ) : null}
-          {canShowInlineSubtaskAction(schedule) ? (
-            <button
-              className="ml-auto h-7 shrink-0 rounded-md border border-dashed border-slate-300 px-2 text-[11px] font-semibold text-slate-600 transition hover:border-brand hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand"
-              disabled={isSaving || draftCreateRow?.isSaving}
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedTaskId(schedule.taskId);
-                openDraftCreateRow({
-                  keepSelectedTaskId: schedule.taskId,
-                  parentTaskId: schedule.taskId,
-                  typeLabel: "Sub-task",
-                });
+            <span
+              className={`block min-w-0 flex-1 whitespace-normal break-words leading-snug text-slate-950 ${
+                isSummary ? "font-bold" : "font-medium"
+              }`}
+              onClick={
+                isEditing(editingCell, schedule.taskId, "taskTitle")
+                  ? undefined
+                  : (event) => {
+                      event.stopPropagation();
+                      startEditing(schedule, "taskTitle");
+                    }
+              }
+              ref={(element) => {
+                if (element) {
+                  taskNameRefs.current.set(schedule.taskId, element);
+                } else {
+                  taskNameRefs.current.delete(schedule.taskId);
+                }
               }}
-              type="button"
+              style={
+                isEditing(editingCell, schedule.taskId, "taskTitle")
+                  ? undefined
+                  : {
+                      display: "-webkit-box",
+                      overflow: "hidden",
+                      WebkitBoxOrient: "vertical",
+                      WebkitLineClamp: maxTaskTitleLines,
+                    }
+              }
+              tabIndex={-1}
+              title={title}
             >
-              + Add sub-task
-            </button>
-          ) : null}
+              {isEditing(editingCell, schedule.taskId, "taskTitle") ? (
+                <InlineEditor
+                  error={editError}
+                  field="taskTitle"
+                  onBlur={() => void commitEdit()}
+                  onChange={(value) =>
+                    setEditingCell((current) =>
+                      current ? { ...current, value } : current,
+                    )
+                  }
+                  onKeyDown={handleEditKeyDown}
+                  ownerOptions={ownerOptions}
+                  value={editingCell?.value ?? ""}
+                />
+              ) : (
+                title
+              )}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1">
+            <TypeBadge schedule={schedule} />
+            {isSummary ? <ScheduleStateIcon kind="calculated" /> : null}
+            {!isSummary && isCritical ? (
+              <ScheduleStateIcon kind="critical" />
+            ) : null}
+            {canShowInlineSubtaskAction(schedule) ? (
+              <button
+                className="h-7 shrink-0 rounded-md border border-dashed border-slate-300 px-2 text-[11px] font-semibold text-slate-600 transition hover:border-brand hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand"
+                disabled={isSaving || draftCreateRow?.isSaving}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedTaskId(schedule.taskId);
+                  openDraftCreateRow({
+                    keepSelectedTaskId: schedule.taskId,
+                    parentTaskId: schedule.taskId,
+                    typeLabel: "Sub-task",
+                  });
+                }}
+                type="button"
+              >
+                + Add sub-task
+              </button>
+            ) : null}
+          </span>
         </div>
       );
     }
@@ -2572,7 +2627,8 @@ export function PlanningWorkspace({
                       </span>
                     ))}
                   </div>
-                  {displayRows.map((displayRow) => {
+                  {displayRows.map((displayRow, index) => {
+                    const metric = rowMetrics.rows[index];
                     if (displayRow.kind === "draft") {
                       const { placement } = displayRow;
                       return (
@@ -2580,10 +2636,11 @@ export function PlanningWorkspace({
                           aria-label={`Draft planning row ${placement.wbs} ${draftCreateRow?.typeLabel ?? "Task"}`}
                           className="grid items-center border-b border-brand/20 bg-brand/5 text-xs text-slate-700 shadow-[inset_3px_0_0_#0f766e]"
                           key="draft-create-row"
+                          data-row-height={metric.height}
                           role="row"
                           style={{
                             gridTemplateColumns,
-                            height: rowHeight,
+                            height: metric.height,
                             width: gridContentWidth,
                           }}
                         >
@@ -2618,6 +2675,7 @@ export function PlanningWorkspace({
                         }`}
                         draggable={!editingCell}
                         key={schedule.taskId}
+                        data-row-height={metric.height}
                         onClick={() => {
                           setSelectedTaskId(schedule.taskId);
                           setHierarchyError(null);
@@ -2653,7 +2711,7 @@ export function PlanningWorkspace({
                         role="row"
                         style={{
                           gridTemplateColumns,
-                          height: rowHeight,
+                          height: metric.height,
                           width: gridContentWidth,
                         }}
                         tabIndex={0}
@@ -2771,22 +2829,24 @@ export function PlanningWorkspace({
                       ) : null}
 
                       {displayRows.map((displayRow, index) => {
+                        const metric = rowMetrics.rows[index];
                         if (displayRow.kind === "draft") {
                           return (
                             <g key="draft-create-row">
                               <line
+                                data-testid="timeline-row-boundary-draft"
                                 stroke="#ccfbf1"
                                 x1={0}
                                 x2={totalWidth}
-                                y1={headerHeight + (index + 1) * rowHeight}
-                                y2={headerHeight + (index + 1) * rowHeight}
+                                y1={metric.boundaryY}
+                                y2={metric.boundaryY}
                               />
                             </g>
                           );
                         }
                         const { schedule } = displayRow.row;
                         const title = getTaskTitle(schedule);
-                        const y = headerHeight + index * rowHeight + 12;
+                        const y = metric.barY;
                         const geometry = getBarGeometry(schedule, timeline);
                         const isCritical = isScheduleCritical(schedule);
                         const shouldRenderScheduleBar =
@@ -2799,11 +2859,12 @@ export function PlanningWorkspace({
                         return (
                           <g key={schedule.taskId}>
                             <line
+                              data-testid={`timeline-row-boundary-${schedule.taskId}`}
                               stroke="#f1f5f9"
                               x1={0}
                               x2={totalWidth}
-                              y1={headerHeight + (index + 1) * rowHeight}
-                              y2={headerHeight + (index + 1) * rowHeight}
+                              y1={metric.boundaryY}
+                              y2={metric.boundaryY}
                             />
                             {geometry && shouldRenderScheduleBar ? (
                               schedule.taskKind === "milestone" ? (
@@ -2951,6 +3012,7 @@ export function PlanningWorkspace({
                         const line = getDependencyLine(
                           dependency,
                           displayRows,
+                          rowMetrics.rows,
                           timeline,
                         );
                         return line ? (
@@ -3377,6 +3439,115 @@ function buildGridTemplateColumns(
         : `${column.minWidth}px`,
     )
     .join(" ");
+}
+
+function getTaskTitleColumnWidth(
+  columns: GridColumnDefinition[],
+  contentWidth: number,
+) {
+  const fixedWidth = columns
+    .filter((column) => column.id !== "taskTitle")
+    .reduce((width, column) => width + column.minWidth, 0);
+  return Math.max(300, contentWidth - fixedWidth);
+}
+
+function buildPlanningRowMetrics({
+  criticalPathTaskIds,
+  displayRows,
+  draftTitle,
+  localSchedules,
+  taskTitleColumnWidth,
+}: {
+  criticalPathTaskIds: string[];
+  displayRows: PlanningDisplayRow[];
+  draftTitle: string;
+  localSchedules: ApiPlanningTaskSchedule[];
+  taskTitleColumnWidth: number;
+}) {
+  let offset = 0;
+  const rows = displayRows.map((displayRow) => {
+    const height = getPlanningRowHeight({
+      criticalPathTaskIds,
+      displayRow,
+      draftTitle,
+      localSchedules,
+      taskTitleColumnWidth,
+    });
+    const top = headerHeight + offset;
+    const metric: PlanningRowMetric = {
+      barY: top + Math.max(12, Math.round((height - barHeight) / 2)),
+      boundaryY: top + height,
+      centerY: top + Math.round(height / 2),
+      height,
+      offset,
+    };
+    offset += height;
+    return metric;
+  });
+
+  return { rows, totalHeight: offset };
+}
+
+function getPlanningRowHeight({
+  criticalPathTaskIds,
+  displayRow,
+  draftTitle,
+  localSchedules,
+  taskTitleColumnWidth,
+}: {
+  criticalPathTaskIds: string[];
+  displayRow: PlanningDisplayRow;
+  draftTitle: string;
+  localSchedules: ApiPlanningTaskSchedule[];
+  taskTitleColumnWidth: number;
+}) {
+  const title =
+    displayRow.kind === "draft"
+      ? draftTitle
+      : getTaskTitle(displayRow.row.schedule);
+  const depth =
+    displayRow.kind === "draft"
+      ? displayRow.placement.depth
+      : displayRow.row.depth;
+  const hasInlineSubtaskAction =
+    displayRow.kind === "schedule" &&
+    displayRow.row.schedule.taskKind === "standard" &&
+    canScheduleContainChildren(displayRow.row.schedule, localSchedules);
+  const statusIndicatorWidth =
+    displayRow.kind === "schedule" &&
+    (displayRow.row.schedule.taskKind === "summary" ||
+      displayRow.row.schedule.isCritical ||
+      criticalPathTaskIds.includes(displayRow.row.schedule.taskId))
+      ? 24
+      : 0;
+  const actionWidth =
+    taskTitleBadgeWidth +
+    statusIndicatorWidth +
+    (hasInlineSubtaskAction ? inlineSubtaskActionWidth : 0);
+  const leftPadding = 12 + depth * 16;
+  const availableTitleWidth = Math.max(
+    72,
+    taskTitleColumnWidth -
+      leftPadding -
+      12 -
+      taskTitleBaseChromeWidth -
+      actionWidth,
+  );
+  const estimatedLines = Math.min(
+    maxTaskTitleLines,
+    Math.max(
+      1,
+      Math.ceil(
+        title.trim().length /
+          Math.max(
+            8,
+            Math.floor(availableTitleWidth / taskTitleAverageCharacterWidth),
+          ),
+      ),
+    ),
+  );
+
+  return compactRowHeight + (estimatedLines - 1) * expandedRowLineHeight;
 }
 
 function readPreference(key: string) {
@@ -4982,6 +5153,7 @@ function getBarGeometry(
 function getDependencyLine(
   dependency: ApiTaskDependency,
   rows: PlanningDisplayRow[],
+  rowMetrics: PlanningRowMetric[],
   timeline: ReturnType<typeof buildTimeline>,
 ) {
   const predecessorIndex = rows.findIndex(
@@ -5012,6 +5184,11 @@ function getDependencyLine(
   if (!predecessorGeometry || !successorGeometry) {
     return null;
   }
+  const predecessorMetric = rowMetrics[predecessorIndex];
+  const successorMetric = rowMetrics[successorIndex];
+  if (!predecessorMetric || !successorMetric) {
+    return null;
+  }
   const sourceX =
     dependency.dependencyType === "SS"
       ? predecessorGeometry.x
@@ -5020,8 +5197,8 @@ function getDependencyLine(
     dependency.dependencyType === "FF"
       ? successorGeometry.x + successorGeometry.width
       : successorGeometry.x;
-  const sourceY = headerHeight + predecessorIndex * rowHeight + 20;
-  const targetY = headerHeight + successorIndex * rowHeight + 20;
+  const sourceY = predecessorMetric.centerY;
+  const targetY = successorMetric.centerY;
   const midX = sourceX + (targetX - sourceX) / 2;
   return `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
 }
