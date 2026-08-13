@@ -20,22 +20,30 @@ export function includePersonalWorkContext(
     childrenByParentId.set(task.parentTaskId, children);
   }
 
-  const includedTaskIds = new Set(directTasks.map((task) => task.id));
+  const orderedTasks: ApiTask[] = [];
+  const includedTaskIds = new Set<string>();
+  const include = (task?: ApiTask | null) => {
+    if (!task || includedTaskIds.has(task.id)) {
+      return;
+    }
+    includedTaskIds.add(task.id);
+    orderedTasks.push(task);
+  };
+
   for (const task of directTasks) {
     if (task.parentTaskId) {
-      const parentTask = tasksById.get(task.parentTaskId);
-      if (parentTask) {
-        includedTaskIds.add(parentTask.id);
-      }
+      include(tasksById.get(task.parentTaskId));
     }
+
+    include(task);
 
     if (task.assigneeId !== currentUserId) {
       continue;
     }
     for (const childTask of childrenByParentId.get(task.id) ?? []) {
-      includedTaskIds.add(childTask.id);
+      include(childTask);
     }
   }
 
-  return allTasks.filter((task) => includedTaskIds.has(task.id));
+  return orderedTasks;
 }

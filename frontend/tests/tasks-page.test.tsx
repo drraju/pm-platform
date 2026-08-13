@@ -1,5 +1,5 @@
 import React from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TasksPage from "@/app/(app)/tasks/page";
 
@@ -181,6 +181,226 @@ describe("Tasks page", () => {
       screen.queryByText("Plan executive readout"),
     ).not.toBeInTheDocument();
     expect(window.location.search).toBe("?scope=all&timing=overdue");
+  });
+
+  it("defaults to all personal work with hierarchy context and direct counts", async () => {
+    const parent = {
+      assigneeId: "user-1",
+      assignee: {
+        email: "team.member@example.com",
+        firstName: "Team",
+        id: "user-1",
+        lastName: "Member",
+        status: "active",
+      },
+      id: "task-a",
+      percentComplete: 40,
+      priority: "high",
+      projectId: "project-1",
+      sequenceNumber: 1,
+      status: "in_progress",
+      taskKind: "standard",
+      title: "Task A",
+    };
+    const delegatedChild = {
+      assigneeId: "user-2",
+      assignee: {
+        email: "ben@example.com",
+        firstName: "Ben",
+        id: "user-2",
+        lastName: "Ng",
+        status: "active",
+      },
+      id: "task-a-1",
+      parentTaskId: "task-a",
+      percentComplete: 20,
+      priority: "medium",
+      projectId: "project-1",
+      sequenceNumber: 1,
+      status: "todo",
+      taskKind: "standard",
+      title: "Sub-task A1",
+    };
+    const assignedChild = {
+      assigneeId: "user-1",
+      id: "task-a-2",
+      parentTaskId: "task-a",
+      percentComplete: 10,
+      priority: "medium",
+      projectId: "project-1",
+      sequenceNumber: 2,
+      status: "todo",
+      taskKind: "standard",
+      title: "Sub-task A2",
+    };
+    const unrelated = {
+      assigneeId: "user-2",
+      id: "task-b",
+      percentComplete: 0,
+      priority: "low",
+      projectId: "project-1",
+      sequenceNumber: 2,
+      status: "todo",
+      taskKind: "standard",
+      title: "Unrelated task",
+    };
+
+    taskMocks.getMyTasks.mockResolvedValue([
+      parent,
+      delegatedChild,
+      assignedChild,
+      unrelated,
+    ]);
+
+    render(<TasksPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Task A")).toBeInTheDocument();
+    });
+
+    expect(window.location.pathname + window.location.search).toBe("/tasks");
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("Sub-task A1")).toBeInTheDocument();
+    expect(screen.getByText("Sub-task A2")).toBeInTheDocument();
+    expect(screen.getByText("Ben Ng")).toBeInTheDocument();
+    expect(screen.queryByText("Unrelated task")).not.toBeInTheDocument();
+    expect(screen.getByText("2 direct tasks · All")).toBeInTheDocument();
+    expect(screen.getByLabelText("Status for Task A")).toBeEnabled();
+    expect(screen.getByLabelText("Status for Sub-task A2")).toBeEnabled();
+    expect(screen.queryByLabelText("Status for Sub-task A1")).not.toBeInTheDocument();
+  });
+
+  it("shows parent context for a subtask assignee without sibling context", async () => {
+    taskMocks.getMyTasks.mockResolvedValue([
+      {
+        assigneeId: "user-2",
+        id: "task-a",
+        percentComplete: 40,
+        priority: "high",
+        projectId: "project-1",
+        sequenceNumber: 1,
+        status: "in_progress",
+        taskKind: "standard",
+        title: "Task A",
+      },
+      {
+        assigneeId: "user-1",
+        id: "task-a-1",
+        parentTaskId: "task-a",
+        percentComplete: 20,
+        priority: "medium",
+        projectId: "project-1",
+        sequenceNumber: 1,
+        status: "todo",
+        taskKind: "standard",
+        title: "Sub-task A1",
+      },
+      {
+        assigneeId: "user-3",
+        id: "task-a-2",
+        parentTaskId: "task-a",
+        percentComplete: 10,
+        priority: "medium",
+        projectId: "project-1",
+        sequenceNumber: 2,
+        status: "todo",
+        taskKind: "standard",
+        title: "Sub-task A2",
+      },
+    ]);
+
+    render(<TasksPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Task A")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Sub-task A1")).toBeInTheDocument();
+    expect(screen.queryByText("Sub-task A2")).not.toBeInTheDocument();
+    expect(screen.getByText("1 direct task · All")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Status for Task A")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Status for Sub-task A1")).toBeEnabled();
+  });
+
+  it("filters personal work by Today, Upcoming, and Overdue tabs", async () => {
+    const today = new Date();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const todayDate = today.toISOString().slice(0, 10);
+    const tomorrow = new Date(today.getTime() + oneDay).toISOString().slice(0, 10);
+    const overdue = new Date(today.getTime() - oneDay).toISOString().slice(0, 10);
+
+    taskMocks.getMyTasks.mockResolvedValue([
+      {
+        assigneeId: "user-1",
+        dueDate: todayDate,
+        id: "task-today",
+        priority: "high",
+        projectId: "project-1",
+        status: "todo",
+        taskKind: "standard",
+        title: "Due today task",
+      },
+      {
+        assigneeId: "user-1",
+        dueDate: tomorrow,
+        id: "task-upcoming",
+        priority: "medium",
+        projectId: "project-1",
+        status: "todo",
+        taskKind: "standard",
+        title: "Upcoming task",
+      },
+      {
+        assigneeId: "user-1",
+        dueDate: overdue,
+        id: "task-overdue",
+        priority: "medium",
+        projectId: "project-1",
+        status: "blocked",
+        taskKind: "standard",
+        title: "Overdue task",
+      },
+    ]);
+
+    const { rerender } = render(<TasksPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Due today task")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Today" }));
+      rerender(<TasksPage />);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Due today task")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Upcoming task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Overdue task")).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Upcoming" }));
+      rerender(<TasksPage />);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Upcoming task")).toBeInTheDocument();
+      expect(screen.queryByText("Due today task")).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Overdue" }));
+      rerender(<TasksPage />);
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Overdue task")).toBeInTheDocument();
+      expect(screen.queryByText("Upcoming task")).not.toBeInTheDocument();
+    });
   });
 
   it("filters by priority and sorts high priority before lower priority", async () => {

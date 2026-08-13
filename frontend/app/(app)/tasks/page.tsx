@@ -26,6 +26,8 @@ import {
   createTaskEntityProvider,
   useEntityProvider,
 } from "@/features/entity-search";
+import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
+import { includePersonalWorkContext } from "@/lib/tasks/personal-work-context";
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
   { label: "Backlog", value: "backlog" },
@@ -43,6 +45,14 @@ const taskPriorities: Array<{ label: string; value: ApiTask["priority"] }> = [
 ];
 
 type SortMode = "priority" | "due-asc" | "due-desc";
+type TimingFilter = "all" | "today" | "overdue" | "upcoming";
+
+const timingFilters: Array<{ label: string; value: TimingFilter }> = [
+  { label: "All", value: "all" },
+  { label: "Today", value: "today" },
+  { label: "Upcoming", value: "upcoming" },
+  { label: "Overdue", value: "overdue" },
+];
 
 export default function TasksPage() {
   return (
@@ -83,8 +93,10 @@ function PageContent() {
     isTaskPriority(requestedPriority) ? requestedPriority : "all";
   const sortFilter = parseSortMode(searchParams.get("sort"));
   const requestedTiming = searchParams.get("timing");
-  const timingFilter: "all" | "overdue" | "upcoming" =
-    requestedTiming === "overdue" || requestedTiming === "upcoming"
+  const timingFilter: TimingFilter =
+    requestedTiming === "overdue" ||
+    requestedTiming === "upcoming" ||
+    requestedTiming === "today"
       ? requestedTiming
       : "all";
   const projectEntityProvider = useMemo(
@@ -104,7 +116,7 @@ function PageContent() {
     scope?: "mine" | "all";
     sort?: SortMode;
     status?: "all" | ApiTask["status"];
-    timing?: "all" | "overdue" | "upcoming";
+    timing?: TimingFilter;
   }) {
     const nextUrl = buildTaskFiltersUrl(pathname, {
       priority: nextFilters.priority ?? priorityFilter,
@@ -210,8 +222,17 @@ function PageContent() {
     }
   }
 
-  const visibleTasks = useMemo(() => {
-    return tasks
+  const directFilteredTasks = useMemo(() => {
+    const candidateTasks =
+      scopeFilter === "all"
+        ? tasks
+        : tasks.filter(
+            (task) =>
+              task.taskKind !== "summary" &&
+              task.assigneeId === currentUserId,
+          );
+
+    return candidateTasks
       .filter((task) =>
         statusFilter === "all" ? true : task.status === statusFilter,
       )
@@ -233,6 +254,10 @@ function PageContent() {
         const today = formatDateOnly(new Date());
         const dueDate = task.dueDate.slice(0, 10);
 
+        if (timingFilter === "today") {
+          return dueDate === today;
+        }
+
         if (timingFilter === "overdue") {
           return dueDate < today;
         }
@@ -241,7 +266,7 @@ function PageContent() {
         sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
         const latestUpcomingDate = formatDateOnly(sevenDaysFromNow);
 
-        return dueDate >= today && dueDate <= latestUpcomingDate;
+        return dueDate > today && dueDate <= latestUpcomingDate;
       })
       .slice()
       .sort((left, right) => {
@@ -266,13 +291,26 @@ function PageContent() {
         return leftTime - rightTime;
       });
   }, [
+    currentUserId,
     priorityFilter,
     projectFilter,
+    scopeFilter,
     sortFilter,
     statusFilter,
     tasks,
     timingFilter,
   ]);
+  const visibleTasks = useMemo(() => {
+    if (scopeFilter === "all") {
+      return directFilteredTasks;
+    }
+    return includeTaskAncestors(
+      tasks,
+      includePersonalWorkContext(tasks, directFilteredTasks, currentUserId),
+      { preserveTaskOrder: true },
+    );
+  }, [currentUserId, directFilteredTasks, scopeFilter, tasks]);
+  const directTaskCount = directFilteredTasks.length;
   const canUpdateMyTasks =
     hasPermission(permissionKeys, "task.update") ||
     hasPermission(permissionKeys, "task.comment") ||
@@ -297,83 +335,91 @@ function PageContent() {
 
       <section
         aria-label="My Tasks filters"
-        className="grid gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 sm:grid-cols-2 lg:grid-cols-5"
+        className="space-y-2 rounded-md border border-slate-200 bg-white px-2.5 py-2"
       >
-        <FilterSelect
-          label="Project"
-          onChange={(value) => syncTaskFilters({ projectId: value })}
-          value={projectFilter}
-        >
-          <option value="all">All projects</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
+        <div aria-label="Timing filters" className="flex flex-wrap gap-1">
+          {timingFilters.map((filter) => (
+            <button
+              aria-pressed={timingFilter === filter.value}
+              className={`rounded px-3 py-1.5 text-sm font-semibold transition ${
+                timingFilter === filter.value
+                  ? "bg-brand text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+              key={filter.value}
+              onClick={() => syncTaskFilters({ timing: filter.value })}
+              type="button"
+            >
+              {filter.label}
+            </button>
           ))}
-        </FilterSelect>
-        <FilterSelect
-          label="Status"
-          onChange={(value) =>
-            syncTaskFilters({
-              status: value as "all" | ApiTask["status"],
-            })
-          }
-          value={statusFilter}
-        >
-          <option value="all">All statuses</option>
-          {taskStatuses.map((status) => (
-            <option key={status.value} value={status.value}>
-              {status.label}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect
-          label="Priority"
-          onChange={(value) =>
-            syncTaskFilters({
-              priority: value as "all" | ApiTask["priority"],
-            })
-          }
-          value={priorityFilter}
-        >
-          <option value="all">All priorities</option>
-          {taskPriorities.map((priority) => (
-            <option key={priority.value} value={priority.value}>
-              {priority.label}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect
-          label="Due/Timing"
-          onChange={(value) =>
-            syncTaskFilters({
-              timing: value as "all" | "overdue" | "upcoming",
-            })
-          }
-          value={timingFilter}
-        >
-          <option value="all">All timing</option>
-          <option value="upcoming">Upcoming in 7 days</option>
-          <option value="overdue">Overdue</option>
-        </FilterSelect>
-        <FilterSelect
-          label="Sort"
-          onChange={(value) => syncTaskFilters({ sort: value as SortMode })}
-          value={sortFilter}
-        >
-          <option value="priority">Priority, then due</option>
-          <option value="due-asc">Due soonest</option>
-          <option value="due-desc">Due latest</option>
-        </FilterSelect>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <FilterSelect
+            label="Project"
+            onChange={(value) => syncTaskFilters({ projectId: value })}
+            value={projectFilter}
+          >
+            <option value="all">All projects</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </FilterSelect>
+          <FilterSelect
+            label="Status"
+            onChange={(value) =>
+              syncTaskFilters({
+                status: value as "all" | ApiTask["status"],
+              })
+            }
+            value={statusFilter}
+          >
+            <option value="all">All statuses</option>
+            {taskStatuses.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </FilterSelect>
+          <FilterSelect
+            label="Priority"
+            onChange={(value) =>
+              syncTaskFilters({
+                priority: value as "all" | ApiTask["priority"],
+              })
+            }
+            value={priorityFilter}
+          >
+            <option value="all">All priorities</option>
+            {taskPriorities.map((priority) => (
+              <option key={priority.value} value={priority.value}>
+                {priority.label}
+              </option>
+            ))}
+          </FilterSelect>
+          <FilterSelect
+            label="Sort"
+            onChange={(value) => syncTaskFilters({ sort: value as SortMode })}
+            value={sortFilter}
+          >
+            <option value="priority">Priority, then due</option>
+            <option value="due-asc">Due soonest</option>
+            <option value="due-desc">Due latest</option>
+          </FilterSelect>
+        </div>
       </section>
 
       <TaskTable
         currentUserId={currentUserId}
+        directTaskCount={directTaskCount}
         emptyMessage={
           tasks.length === 0
             ? "No tasks are assigned to you yet."
-            : "No tasks match the current filters."
+            : getEmptyMessage(timingFilter)
         }
+        filterLabel={getTimingFilterLabel(timingFilter)}
         isLoading={isLoading}
         isSavingTaskId={isSavingTaskId}
         membersByProjectId={membersByProjectId}
@@ -455,7 +501,7 @@ function buildTaskFiltersUrl(
     scope: "mine" | "all";
     sort: SortMode;
     status: "all" | ApiTask["status"];
-    timing: "all" | "overdue" | "upcoming";
+    timing: TimingFilter;
   },
 ) {
   const searchParams = new URLSearchParams();
@@ -492,4 +538,21 @@ function buildTaskFiltersUrl(
 
 function formatDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
+}
+
+function getTimingFilterLabel(filter: TimingFilter) {
+  return timingFilters.find((item) => item.value === filter)?.label ?? "All";
+}
+
+function getEmptyMessage(filter: TimingFilter) {
+  if (filter === "today") {
+    return "Nothing requires your attention today.";
+  }
+  if (filter === "upcoming") {
+    return "No upcoming tasks.";
+  }
+  if (filter === "overdue") {
+    return "You're up to date.";
+  }
+  return "No tasks match the current filters.";
 }

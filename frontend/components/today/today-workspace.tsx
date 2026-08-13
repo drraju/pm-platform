@@ -32,6 +32,11 @@ import type {
 import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
 import { includePersonalWorkContext } from "@/lib/tasks/personal-work-context";
 import {
+  buildTaskHierarchy,
+  getHierarchyParentTaskIds,
+  type TaskHierarchyRow,
+} from "@/lib/tasks/task-hierarchy";
+import {
   findAdjacentColumn,
   findAdjacentEditableTaskId,
   findAdjacentWorkPackageId,
@@ -73,12 +78,7 @@ type TodayWorkspaceProps = {
   taskScope?: TodayTaskScope;
 };
 
-type TodayRow = {
-  depth: number;
-  hasChildren: boolean;
-  task: ApiTask;
-  wbs: string;
-};
+type TodayRow = TaskHierarchyRow;
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -162,7 +162,7 @@ export function TodayWorkspace({
     setInternalTaskScope(canEdit ? "team" : "mine");
   }, [canEdit, project.id, taskScopeProp]);
 
-  const summaryTaskIds = useMemo(() => getSummaryTaskIds(tasks), [tasks]);
+  const summaryTaskIds = useMemo(() => getHierarchyParentTaskIds(tasks), [tasks]);
 
   const scopedTasks = useMemo(() => {
     if (taskScope !== "mine" || !currentUserId) {
@@ -180,13 +180,13 @@ export function TodayWorkspace({
 
   const visibleRows = useMemo(() => {
     if (taskScope === "mine") {
-      const hierarchy = buildTodayHierarchy(
+      const hierarchy = buildTaskHierarchy(
         scopedTasks,
-        getSummaryTaskIds(scopedTasks),
+        getHierarchyParentTaskIds(scopedTasks),
       );
       return filterRowsForSearch(hierarchy.rows, scopedTasks, searchTerm);
     }
-    const hierarchy = buildTodayHierarchy(scopedTasks, expandedTaskIds);
+    const hierarchy = buildTaskHierarchy(scopedTasks, expandedTaskIds);
     return filterRowsForSearch(hierarchy.rows, scopedTasks, searchTerm);
   }, [expandedTaskIds, scopedTasks, searchTerm, taskScope]);
 
@@ -1480,41 +1480,6 @@ function findFirstEditableChildId(
   return null;
 }
 
-function buildTodayHierarchy(
-  tasks: ApiTask[],
-  expandedTaskIds: readonly string[],
-) {
-  const tasksByParentId = new Map<string | null, ApiTask[]>();
-  const expanded = new Set(expandedTaskIds);
-  const rows: TodayRow[] = [];
-
-  for (const task of tasks) {
-    const parentTaskId = task.parentTaskId ?? null;
-    const siblings = tasksByParentId.get(parentTaskId) ?? [];
-    siblings.push(task);
-    tasksByParentId.set(parentTaskId, siblings);
-  }
-
-  for (const [parentTaskId, siblings] of tasksByParentId.entries()) {
-    tasksByParentId.set(parentTaskId, sortTasks(siblings));
-  }
-
-  function visit(parentTaskId: string | null, prefix: string, depth: number) {
-    const siblings = tasksByParentId.get(parentTaskId) ?? [];
-    siblings.forEach((task, index) => {
-      const wbs = prefix ? `${prefix}.${index + 1}` : `${index + 1}`;
-      const hasChildren = (tasksByParentId.get(task.id) ?? []).length > 0;
-      rows.push({ depth, hasChildren, task, wbs });
-      if (hasChildren && expanded.has(task.id)) {
-        visit(task.id, wbs, depth + 1);
-      }
-    });
-  }
-
-  visit(null, "", 0);
-  return { rows };
-}
-
 function filterRowsForSearch(
   rows: TodayRow[],
   allTasks: ApiTask[],
@@ -1546,20 +1511,6 @@ function filterRowsForSearch(
   }
 
   return rows.filter((row) => keepIds.has(row.task.id));
-}
-
-function getSummaryTaskIds(tasks: ApiTask[]) {
-  const parentIds = new Set<string>();
-  for (const task of tasks) {
-    if (task.parentTaskId) {
-      parentIds.add(task.parentTaskId);
-    }
-  }
-  return tasks
-    .filter(
-      (task) => task.taskKind === "summary" || parentIds.has(task.id),
-    )
-    .map((task) => task.id);
 }
 
 function collectAncestorIds(tasks: ApiTask[], taskIds: string[]) {
@@ -1607,23 +1558,6 @@ function matchesSearch(task: ApiTask, searchTerm: string) {
   ]
     .filter(Boolean)
     .some((value) => String(value).toLowerCase().includes(normalized));
-}
-
-function sortTasks(tasks: ApiTask[]) {
-  return [...tasks].sort((left, right) => {
-    const leftSequence =
-      typeof left.sequenceNumber === "number"
-        ? left.sequenceNumber
-        : Number.MAX_SAFE_INTEGER;
-    const rightSequence =
-      typeof right.sequenceNumber === "number"
-        ? right.sequenceNumber
-        : Number.MAX_SAFE_INTEGER;
-    if (leftSequence !== rightSequence) {
-      return leftSequence - rightSequence;
-    }
-    return left.title.localeCompare(right.title);
-  });
 }
 
 function validateTodayUpdate(

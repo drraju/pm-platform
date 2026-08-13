@@ -2,6 +2,11 @@ import React from "react";
 import { buildExecutionUpdatePayload } from "@/components/projects/execution-update-payload";
 import { resolveProjectUiCapabilities } from "@/features/auth";
 import type { ApiProjectMember, ApiTask } from "@/lib/api/client";
+import {
+  buildTaskHierarchy,
+  getHierarchyParentTaskIds,
+  type TaskHierarchyRow,
+} from "@/lib/tasks/task-hierarchy";
 
 type ExecutionUpdateInput = ReturnType<typeof buildExecutionUpdatePayload>;
 
@@ -9,7 +14,9 @@ export type TaskPriority = "critical" | "high" | "medium" | "low";
 
 type TaskTableProps = {
   currentUserId?: string | null;
+  directTaskCount?: number;
   emptyMessage: string;
+  filterLabel?: string;
   isLoading: boolean;
   isSavingTaskId?: string | null;
   membersByProjectId?: Record<string, ApiProjectMember[]>;
@@ -39,7 +46,9 @@ const taskPriorities: Array<{ label: string; value: TaskPriority }> = [
 
 export function TaskTable({
   currentUserId = null,
+  directTaskCount,
   emptyMessage,
+  filterLabel = "All",
   isLoading,
   isSavingTaskId,
   membersByProjectId = {},
@@ -49,18 +58,40 @@ export function TaskTable({
   saveStateByTaskId = {},
   tasks,
 }: TaskTableProps) {
+  const rows = React.useMemo(
+    () =>
+      buildTaskHierarchy(tasks, getHierarchyParentTaskIds(tasks), {
+        preserveInputOrder: true,
+      }).rows,
+    [tasks],
+  );
+  const displayedDirectCount =
+    directTaskCount ??
+    tasks.filter((task) => task.assigneeId === currentUserId).length;
+
   return (
     <section
       aria-label="My Tasks queue"
       className="overflow-hidden rounded-md border border-slate-200 bg-white"
     >
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-950">
+            Assigned / Accountable Work
+          </h2>
+          <p className="text-xs text-slate-500">
+            {displayedDirectCount} direct {displayedDirectCount === 1 ? "task" : "tasks"} · {filterLabel}
+          </p>
+        </div>
+      </div>
       <div className="max-h-[min(70vh,820px)] overflow-auto">
-        <table className="min-w-[1040px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[1120px] w-full border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               {[
                 "Task",
                 "Project",
+                "Owner",
                 "Priority",
                 "Status",
                 "Progress",
@@ -77,29 +108,29 @@ export function TaskTable({
           <tbody className="divide-y divide-slate-100">
             {isLoading ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={8}>
+                <td className="px-3 py-5 text-slate-500" colSpan={9}>
                   Loading tasks...
                 </td>
               </tr>
             ) : null}
-            {!isLoading && tasks.length === 0 ? (
+            {!isLoading && rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-5 text-slate-500" colSpan={8}>
+                <td className="px-3 py-5 text-slate-500" colSpan={9}>
                   {emptyMessage}
                 </td>
               </tr>
             ) : null}
-            {tasks.map((task) => (
+            {rows.map((row) => (
               <EditableTaskRow
                 currentUserId={currentUserId}
-                isSaving={isSavingTaskId === task.id}
-                key={task.id}
-                members={membersByProjectId[task.projectId] ?? []}
+                isSaving={isSavingTaskId === row.task.id}
+                key={row.task.id}
+                members={membersByProjectId[row.task.projectId] ?? []}
                 onRecordExecutionUpdate={onRecordExecutionUpdate}
                 permissionKeys={permissionKeys}
                 roleNames={roleNames}
-                saveState={saveStateByTaskId[task.id]}
-                task={task}
+                row={row}
+                saveState={saveStateByTaskId[row.task.id]}
               />
             ))}
           </tbody>
@@ -116,8 +147,8 @@ function EditableTaskRow({
   onRecordExecutionUpdate,
   permissionKeys,
   roleNames,
+  row,
   saveState,
-  task,
 }: {
   currentUserId?: string | null;
   isSaving: boolean;
@@ -125,9 +156,10 @@ function EditableTaskRow({
   onRecordExecutionUpdate?: TaskTableProps["onRecordExecutionUpdate"];
   permissionKeys: string[];
   roleNames: string[];
+  row: TaskHierarchyRow;
   saveState?: "saving" | "saved" | "error";
-  task: ApiTask;
 }) {
+  const { task } = row;
   const [status, setStatus] = React.useState(task.status);
   const [priority, setPriority] = React.useState(task.priority);
   const [percentComplete, setPercentComplete] = React.useState(
@@ -166,6 +198,9 @@ function EditableTaskRow({
     Boolean(onRecordExecutionUpdate) && capabilities.canExecuteAssignedTask;
   const canEditPriority =
     Boolean(onRecordExecutionUpdate) && capabilities.canManageProjectTasks;
+  const isContextual =
+    Boolean(currentUserId) && task.assigneeId !== currentUserId;
+  const isPackageHeader = task.taskKind === "summary" || row.hasChildren;
   const isDirty =
     status !== task.status ||
     priority !== task.priority ||
@@ -191,9 +226,42 @@ function EditableTaskRow({
   }
 
   return (
-    <tr className="align-top hover:bg-slate-50/70">
+    <tr
+      className={`align-top ${
+        isPackageHeader
+          ? "bg-slate-50/80"
+          : isContextual
+            ? "bg-white text-slate-700"
+            : "hover:bg-slate-50/70"
+      }`}
+    >
       <td className="max-w-[220px] px-2.5 py-2">
-        <p className="font-semibold text-slate-950">{task.title}</p>
+        <div
+          className="flex min-w-0 items-center gap-1.5"
+          style={{ paddingLeft: `${row.depth * 16}px` }}
+        >
+          <span
+            aria-hidden="true"
+            className="w-6 shrink-0 text-right text-xs font-semibold text-slate-400"
+          >
+            {row.wbs}
+          </span>
+          <p
+            className={`truncate ${
+              isPackageHeader
+                ? "font-semibold text-slate-950"
+                : "font-medium text-slate-800"
+            }`}
+            title={task.title}
+          >
+            {task.title}
+          </p>
+          {isContextual ? (
+            <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+              Context
+            </span>
+          ) : null}
+        </div>
         {saveState === "saving" || isSaving ? (
           <p className="mt-1 text-[11px] font-medium text-slate-500">Saving...</p>
         ) : null}
@@ -206,6 +274,9 @@ function EditableTaskRow({
       </td>
       <td className="px-2.5 py-2 text-slate-600">
         {task.project?.name ?? "No project"}
+      </td>
+      <td className="px-2.5 py-2 text-slate-600">
+        {formatAssignee(task, members)}
       </td>
       <td className="px-2.5 py-2">
         {canEditPriority ? (
@@ -347,6 +418,33 @@ function formatDate(value?: string | null) {
     day: "2-digit",
     month: "short",
   }).format(new Date(value));
+}
+
+function formatAssignee(task: ApiTask, members: ApiProjectMember[]) {
+  if (task.assignee) {
+    return (
+      task.assignee.displayName ||
+      `${task.assignee.firstName ?? ""} ${task.assignee.lastName ?? ""}`.trim() ||
+      task.assignee.email ||
+      "Unassigned"
+    );
+  }
+
+  if (!task.assigneeId) {
+    return "Unassigned";
+  }
+
+  const member = members.find((candidate) => candidate.userId === task.assigneeId);
+  if (!member?.user) {
+    return "Unknown";
+  }
+
+  return (
+    member.user.displayName ||
+    `${member.user.firstName ?? ""} ${member.user.lastName ?? ""}`.trim() ||
+    member.user.email ||
+    "Unknown"
+  );
 }
 
 function formatLabel(value: string) {

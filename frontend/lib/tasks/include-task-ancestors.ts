@@ -7,6 +7,7 @@ import type { ApiTask } from "@/lib/api/client";
 export function includeTaskAncestors(
   allTasks: ApiTask[],
   tasks: ApiTask[],
+  options: { preserveTaskOrder?: boolean } = {},
 ): ApiTask[] {
   const tasksById = new Map(allTasks.map((task) => [task.id, task]));
   const queue = [...tasks];
@@ -25,6 +26,41 @@ export function includeTaskAncestors(
 
     includedTaskIds.add(parentTask.id);
     queue.push(parentTask);
+  }
+
+  if (options.preserveTaskOrder) {
+    const orderedTasks: ApiTask[] = [];
+    const orderedTaskIds = new Set<string>();
+    const include = (task: ApiTask) => {
+      if (orderedTaskIds.has(task.id)) {
+        return;
+      }
+      orderedTaskIds.add(task.id);
+      orderedTasks.push(task);
+    };
+
+    for (const task of tasks) {
+      const ancestors: ApiTask[] = [];
+      let current = task;
+      while (current.parentTaskId && includedTaskIds.has(current.parentTaskId)) {
+        const parentTask = tasksById.get(current.parentTaskId);
+        if (!parentTask) {
+          break;
+        }
+        ancestors.push(parentTask);
+        current = parentTask;
+      }
+      ancestors.reverse().forEach(include);
+      include(task);
+    }
+
+    for (const task of allTasks) {
+      if (includedTaskIds.has(task.id)) {
+        include(task);
+      }
+    }
+
+    return orderedTasks;
   }
 
   return allTasks.filter((task) => includedTaskIds.has(task.id));

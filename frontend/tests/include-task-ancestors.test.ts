@@ -65,4 +65,28 @@ describe("includeTaskAncestors", () => {
       orphan,
     ]);
   });
+
+  it("can preserve the caller's task order while inserting ancestors first", () => {
+    const root = task({
+      id: "root",
+      taskKind: "summary",
+      title: "Root",
+    });
+    const low = task({
+      id: "low",
+      parentTaskId: "root",
+      title: "Low priority",
+    });
+    const high = task({
+      id: "high",
+      parentTaskId: "root",
+      title: "High priority",
+    });
+
+    expect(
+      includeTaskAncestors([root, low, high], [high, low], {
+        preserveTaskOrder: true,
+      }),
+    ).toEqual([root, high, low]);
+  });
 });
