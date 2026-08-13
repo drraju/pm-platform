@@ -492,28 +492,31 @@ function openAddMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
 }
 
-function openAddChildMenu() {
-  fireEvent.click(screen.getByRole("button", { name: /Add Child/ }));
+function getDraftPlanningRow() {
+  return screen.getByRole("row", { name: /Draft planning row/ });
 }
 
-function submitCreateTaskDialog({
+function submitDraftCreateRow({
   ownerId,
   title,
 }: {
   ownerId?: string;
   title?: string;
 } = {}) {
+  const draftRow = getDraftPlanningRow();
   if (title !== undefined) {
-    fireEvent.change(screen.getByLabelText(/Task Name/), {
+    fireEvent.change(within(draftRow).getByRole("textbox"), {
       target: { value: title },
     });
   }
   if (ownerId !== undefined) {
-    fireEvent.change(screen.getByLabelText("Owner"), {
+    fireEvent.change(within(draftRow).getByRole("combobox"), {
       target: { value: ownerId },
     });
   }
-  fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  fireEvent.keyDown(within(draftRow).getByRole("textbox"), {
+    key: "Enter",
+  });
 }
 
 function setViewportWidth(width: number) {
@@ -695,8 +698,8 @@ describe("PlanningWorkspace", () => {
       within(toolbar).getByRole("menuitem", { name: "Task" }),
     ).toBeInTheDocument();
     expect(
-      within(toolbar).getByRole("button", { name: /Add Child/ }),
-    ).toBeDisabled();
+      within(toolbar).queryByRole("button", { name: /Add Child/ }),
+    ).not.toBeInTheDocument();
     expect(
       within(toolbar).getByRole("menuitem", { name: "Summary" }),
     ).toBeInTheDocument();
@@ -1257,7 +1260,7 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByLabelText("Status")).toBeDisabled();
   });
 
-  it("enables Add Child for selected summaries and tasks", async () => {
+  it("creates a contextual sub-task draft only from eligible task rows", async () => {
     const onCreateTask = vi.fn().mockResolvedValue({
       ...workspace.schedules[1],
       id: "schedule-subtask",
@@ -1276,49 +1279,36 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
-      "title",
-      "Select a Summary or Task to add child work.",
-    );
-
-    fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
-    expect(screen.getByRole("button", { name: /Add Child/ })).toBeEnabled();
-    openAddChildMenu();
-    expect(screen.getByRole("menuitem", { name: "Task" })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: "Summary" })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: "Standard" })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: "Release" })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: "Drop" })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: "Go Live" })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: "Decision" })).toBeEnabled();
-    openAddChildMenu();
-
-    fireEvent.click(screen.getByRole("row", { name: /1\.2 Gate approved/ }));
-    expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
-      "title",
-      "Milestones are scheduling events and cannot contain child items.",
-    );
-
-    fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
-    expect(screen.getByRole("button", { name: /Add Child/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
-      "title",
-      "Add a sub-task under the selected Task.",
-    );
-    openAddChildMenu();
-    expect(screen.getByRole("menuitem", { name: "Sub-task" })).toBeEnabled();
     expect(
-      screen.queryByRole("menuitem", { name: "Summary" }),
+      screen.queryByRole("button", { name: /Add Child/ }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Sub-task" }));
-    expect(screen.getByText("Create Sub-task")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Task Name/)).toHaveValue("New Sub-task");
+
     expect(
-      screen.getByRole("option", { name: "Bob Stone" }),
+      within(screen.getByRole("row", { name: /1 Planning/ })).queryByRole(
+        "button",
+        { name: "+ Add sub-task" },
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("row", { name: /1\.2 Gate approved/ }),
+      ).queryByRole("button", { name: "+ Add sub-task" }),
+    ).not.toBeInTheDocument();
+
+    const taskRow = screen.getByRole("row", { name: /1\.1 Design schedule/ });
+    fireEvent.click(
+      within(taskRow).getByRole("button", { name: "+ Add sub-task" }),
+    );
+    expect(
+      screen.getByRole("row", { name: /Draft planning row 1\.1\.1 Sub-task/ }),
     ).toBeInTheDocument();
-    submitCreateTaskDialog({ ownerId: "user-2" });
+    expect(within(getDraftPlanningRow()).getByRole("textbox")).toHaveValue(
+      "New Sub-task",
+    );
+    expect(
+      within(getDraftPlanningRow()).getByRole("option", { name: "Bob Stone" }),
+    ).toBeInTheDocument();
+    submitDraftCreateRow({ ownerId: "user-2" });
     await waitFor(() =>
       expect(onCreateTask).toHaveBeenCalledWith({
         ownerId: "user-2",
@@ -1327,12 +1317,15 @@ describe("PlanningWorkspace", () => {
         title: "New Sub-task",
       }),
     );
+    expect(
+      screen.getByRole("row", { name: /1\.1 Design schedule/ }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
-  it("creates multiple children beneath the selected summary without changing selection", async () => {
+  it("creates an inline task draft beneath the selected summary", async () => {
     const onCreateTask = vi
       .fn()
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         durationDays: 1,
         id: "schedule-child-1",
         isCritical: false,
@@ -1346,22 +1339,6 @@ describe("PlanningWorkspace", () => {
         taskId: "child-1",
         taskKind: "standard",
         taskTitle: "New child task",
-      })
-      .mockResolvedValueOnce({
-        durationDays: 0,
-        id: "schedule-child-2",
-        isCritical: false,
-        milestoneCategory: "release",
-        parentTaskId: "task-1",
-        percentComplete: 0,
-        plannedFinishDate: null,
-        plannedStartDate: null,
-        projectId: "project-1",
-        sequenceNumber: 4,
-        snapshotId: "snapshot-1",
-        taskId: "child-2",
-        taskKind: "milestone",
-        taskTitle: "New release milestone",
       });
 
     render(
@@ -1376,9 +1353,12 @@ describe("PlanningWorkspace", () => {
 
     const summaryRow = screen.getByRole("row", { name: /1 Planning/ });
     fireEvent.click(summaryRow);
-    openAddChildMenu();
+    openAddMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
-    submitCreateTaskDialog();
+    expect(
+      screen.getByRole("row", { name: /Draft planning row 1\.3 Task/ }),
+    ).toBeInTheDocument();
+    submitDraftCreateRow();
 
     await waitFor(() => {
       expect(onCreateTask).toHaveBeenCalledWith({
@@ -1386,21 +1366,6 @@ describe("PlanningWorkspace", () => {
         parentTaskId: "task-1",
         taskType: "task",
         title: "New Task",
-      });
-    });
-    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-
-    openAddChildMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Release" }));
-
-    await waitFor(() => {
-      expect(onCreateTask).toHaveBeenLastCalledWith({
-        milestoneCategory: "release",
-        parentTaskId: "task-1",
-        taskType: "milestone",
       });
     });
     expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
@@ -1699,7 +1664,7 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByTitle("Recovered task title")).toBeInTheDocument();
   });
 
-  it("creates a sibling task with a selected owner from the create dialog", async () => {
+  it("creates a sibling task with a selected owner from the inline draft", async () => {
     const newSchedule = {
       ...workspace.schedules[1],
       id: "schedule-4",
@@ -1748,12 +1713,16 @@ describe("PlanningWorkspace", () => {
     fireEvent.click(screen.getByText("Design schedule"));
     openAddMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
-    expect(screen.getByText("Create Task")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Task Name/)).toHaveValue("New Task");
     expect(
-      screen.getByRole("option", { name: "Bob Stone" }),
+      screen.getByRole("row", { name: /Draft planning row 1\.3 Task/ }),
     ).toBeInTheDocument();
-    submitCreateTaskDialog({ ownerId: "user-2", title: "API handoff" });
+    expect(within(getDraftPlanningRow()).getByRole("textbox")).toHaveValue(
+      "New Task",
+    );
+    expect(
+      within(getDraftPlanningRow()).getByRole("option", { name: "Bob Stone" }),
+    ).toBeInTheDocument();
+    submitDraftCreateRow({ ownerId: "user-2", title: "API handoff" });
 
     await waitFor(() => {
       expect(onCreateTask).toHaveBeenCalledWith({
@@ -2462,8 +2431,11 @@ describe("PlanningWorkspace", () => {
 
     openAddMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
-    expect(screen.getByText("Create Task")).toBeInTheDocument();
-    submitCreateTaskDialog();
+    expect(
+      screen.getByRole("row", { name: /Draft planning row 4 Task/ }),
+    ).toBeInTheDocument();
+    expect(within(getDraftPlanningRow()).getByRole("textbox")).toHaveFocus();
+    submitDraftCreateRow();
 
     await waitFor(() => {
       expect(onCreateTask).toHaveBeenCalledWith({
@@ -2478,25 +2450,118 @@ describe("PlanningWorkspace", () => {
     ).toBeInTheDocument();
   });
 
-  it("adds a child without changing the parent's expansion state", async () => {
+  it("cancels an inline task draft with Escape", () => {
+    const onCreateTask = vi.fn();
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={onCreateTask}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={orderingWorkspace}
+      />,
+    );
+
+    openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+    fireEvent.keyDown(within(getDraftPlanningRow()).getByRole("textbox"), {
+      key: "Escape",
+    });
+
+    expect(
+      screen.queryByRole("row", { name: /Draft planning row/ }),
+    ).not.toBeInTheDocument();
+    expect(onCreateTask).not.toHaveBeenCalled();
+  });
+
+  it("keeps an inline task draft local when the title is empty", () => {
+    const onCreateTask = vi.fn();
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={onCreateTask}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={orderingWorkspace}
+      />,
+    );
+
+    openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+    submitDraftCreateRow({ title: "" });
+
+    expect(screen.getByText("Task name is required.")).toBeInTheDocument();
+    expect(getDraftPlanningRow()).toBeInTheDocument();
+    expect(onCreateTask).not.toHaveBeenCalled();
+  });
+
+  it("preserves an inline task draft when create fails", async () => {
+    const onCreateTask = vi
+      .fn()
+      .mockRejectedValue(new Error("Unable to create task."));
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={onCreateTask}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={orderingWorkspace}
+      />,
+    );
+
+    openAddMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+    submitDraftCreateRow({ title: "Blocked task" });
+
+    await waitFor(() =>
+      expect(screen.getAllByText("Unable to create task.").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    expect(getDraftPlanningRow()).toBeInTheDocument();
+    expect(within(getDraftPlanningRow()).getByRole("textbox")).toHaveValue(
+      "Blocked task",
+    );
+  });
+
+  it("expands a collapsed task parent when adding a sub-task draft", async () => {
+    const collapsedTaskWorkspace: ApiPlanningWorkspace = {
+      ...orderingWorkspace,
+      schedules: [
+        ...orderingWorkspace.schedules,
+        {
+          ...orderingWorkspace.schedules[1],
+          id: "schedule-6",
+          parentTaskId: "task-4",
+          sequenceNumber: 1,
+          task: {
+            ...orderingWorkspace.schedules[1].task,
+            id: "task-6",
+            title: "Execution child",
+          },
+          taskId: "task-6",
+          taskTitle: "Execution child",
+        },
+      ],
+    };
     const newSchedule = {
       ...orderingWorkspace.schedules[1],
-      id: "schedule-6",
-      parentTaskId: "task-1",
-      sequenceNumber: 3,
+      id: "schedule-7",
+      parentTaskId: "task-4",
+      sequenceNumber: 2,
       task: {
         ...orderingWorkspace.schedules[1].task,
-        id: "task-6",
-        title: "New Task",
+        id: "task-7",
+        title: "New Sub-task",
       },
-      taskId: "task-6",
-      taskTitle: "New Task",
+      taskId: "task-7",
+      taskTitle: "New Sub-task",
     };
     const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
 
     function Harness() {
       const [currentWorkspace, setCurrentWorkspace] =
-        React.useState(orderingWorkspace);
+        React.useState(collapsedTaskWorkspace);
       return (
         <PlanningWorkspace
           onCreateDependency={vi.fn()}
@@ -2517,31 +2582,41 @@ describe("PlanningWorkspace", () => {
 
     render(<Harness />);
 
-    fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
-    fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
-    openAddChildMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
-    submitCreateTaskDialog();
+    fireEvent.click(screen.getByRole("button", { name: /collapse execution/i }));
+    expect(
+      screen.queryByRole("row", { name: /2\.1 Execution child/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(screen.getByRole("row", { name: /2 Execution/ })).getByRole(
+        "button",
+        { name: "+ Add sub-task" },
+      ),
+    );
+    expect(
+      screen.getByRole("row", { name: /Draft planning row 2\.2 Sub-task/ }),
+    ).toBeInTheDocument();
+    expect(within(getDraftPlanningRow()).getByRole("textbox")).toHaveValue(
+      "New Sub-task",
+    );
+    submitDraftCreateRow();
 
     await waitFor(() => {
       expect(onCreateTask).toHaveBeenCalledWith({
         ownerId: null,
-        parentTaskId: "task-1",
+        parentTaskId: "task-4",
         taskType: "task",
-        title: "New Task",
+        title: "New Sub-task",
       });
     });
     await waitFor(() => expect(onCreateTask).toHaveBeenCalledTimes(1));
     expect(
-      screen.getByRole("button", { name: /expand planning/i }),
+      screen.getByRole("row", { name: /2\.1 Execution child/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("row", { name: /1\.3 New Task/ }),
+      within(
+        screen.getByRole("row", { name: /2\.1 Execution child/ }),
+      ).queryByRole("button", { name: "+ Add sub-task" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
   });
 
   it("updates local row order and WBS when a row is reordered", async () => {
