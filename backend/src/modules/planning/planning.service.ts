@@ -254,8 +254,18 @@ export class PlanningService {
 
     const schedule = await this.findPlanningTaskSchedule(projectId, scheduleId);
 
+    const taskKind = this.schedulingFoundationService.normalizeTaskKind(
+      { taskKind: schedule.taskKind ?? schedule.task?.taskKind },
+      TaskKind.Standard,
+    );
+
     if (input.parentTaskId !== undefined && input.parentTaskId !== null) {
-      await this.ensureTaskCanContainChildren(projectId, input.parentTaskId);
+      await this.ensureTaskCanContainChildren(
+        projectId,
+        input.parentTaskId,
+        taskKind,
+        schedule.taskId,
+      );
       await this.ensureNoPlanningHierarchyCycle(
         projectId,
         schedule.taskId,
@@ -267,10 +277,6 @@ export class PlanningService {
       await this.ensureUserExists(input.ownerId);
     }
 
-    const taskKind = this.schedulingFoundationService.normalizeTaskKind(
-      { taskKind: schedule.taskKind ?? schedule.task?.taskKind },
-      TaskKind.Standard,
-    );
     if (
       taskKind === TaskKind.Milestone &&
       schedule.task &&
@@ -334,12 +340,15 @@ export class PlanningService {
         input.durationDays !== undefined ||
         input.percentComplete !== undefined)
     ) {
-      const lifecycleInput = applyTaskCompletionTransition({
-        percentComplete: input.percentComplete,
-        status: input.status,
-        actualStartDate: schedule.task.actualStartDate,
-        actualEndDate: schedule.task.actualEndDate,
-      }, schedule.task);
+      const lifecycleInput = applyTaskCompletionTransition(
+        {
+          percentComplete: input.percentComplete,
+          status: input.status,
+          actualStartDate: schedule.task.actualStartDate,
+          actualEndDate: schedule.task.actualEndDate,
+        },
+        schedule.task,
+      );
       if (input.ownerId !== undefined) {
         schedule.task.assigneeId = input.ownerId;
       }
@@ -415,16 +424,22 @@ export class PlanningService {
   ): Promise<PlanningWorkspaceScheduleDto> {
     await this.ensureCanManageProject(projectId, actor);
 
-    if (input.parentTaskId) {
-      await this.ensureTaskCanContainChildren(projectId, input.parentTaskId);
-    }
-
     const latestSchedule = await this.ensureWorkspaceSnapshot(projectId, actor);
     const requestedTaskKind =
       this.schedulingFoundationService.normalizeTaskKind(
         input,
         TaskKind.Standard,
       );
+    if (input.parentTaskId) {
+      await this.ensureTaskCanContainChildren(
+        projectId,
+        input.parentTaskId,
+        requestedTaskKind,
+      );
+    }
+    if (input.ownerId !== undefined && input.ownerId !== null) {
+      await this.ensureUserExists(input.ownerId);
+    }
     if (
       requestedTaskKind === TaskKind.Milestone &&
       this.canonicalTasksService
@@ -446,6 +461,7 @@ export class PlanningService {
         latestSchedule.projectStartDate ?? this.todayDateString();
       const task = await this.canonicalTasksService.create(
         {
+          assigneeId: input.ownerId ?? null,
           milestoneCategory: input.milestoneCategory,
           parentTaskId,
           plannedEndDate: plannedDate,
@@ -525,6 +541,7 @@ export class PlanningService {
             dueDate: plannedEndDate,
             durationDays,
             milestoneCategory: normalizedTaskInput.milestoneCategory,
+            assigneeId: input.ownerId ?? null,
             parentTaskId,
             ...lifecycleInput,
             plannedEndDate,
@@ -984,25 +1001,30 @@ export class PlanningService {
       return;
     }
 
+    const { changedTasks } =
+      this.schedulingFoundationService.rollupTaskSubtaskSchedules(
+        taskSchedules,
+      );
     const { changedSummaries } =
       this.schedulingFoundationService.rollupSummarySchedules(taskSchedules);
-    if (changedSummaries.length === 0) {
+    const changedRollups = [...changedTasks, ...changedSummaries];
+    if (changedRollups.length === 0) {
       return;
     }
 
-    changedSummaries.forEach((summary) => {
-      summary.updatedById = actor?.userId;
-      if (summary.task) {
-        summary.task.updatedById = actor?.userId;
+    changedRollups.forEach((schedule) => {
+      schedule.updatedById = actor?.userId;
+      if (schedule.task) {
+        schedule.task.updatedById = actor?.userId;
       }
     });
 
-    await this.planningTaskSchedulesRepository.save(changedSummaries);
-    const summaryTasks = changedSummaries
-      .map((summary) => summary.task)
+    await this.planningTaskSchedulesRepository.save(changedRollups);
+    const rollupTasks = changedRollups
+      .map((schedule) => schedule.task)
       .filter((task): task is Task => Boolean(task));
-    if (summaryTasks.length > 0) {
-      await this.tasksRepository.save(summaryTasks);
+    if (rollupTasks.length > 0) {
+      await this.tasksRepository.save(rollupTasks);
     }
   }
 
@@ -1270,15 +1292,50 @@ export class PlanningService {
   private async ensureTaskCanContainChildren(
     projectId: string,
     taskId: string,
+    childTaskKind: TaskKind = TaskKind.Standard,
+    childTaskId?: string,
   ): Promise<Task> {
     const task = await this.findProjectTask(projectId, taskId);
-    if (task.taskKind !== TaskKind.Summary) {
+    if (task.taskKind === TaskKind.Summary) {
+      return task;
+    }
+
+    if (task.taskKind !== TaskKind.Standard) {
+      throw new BadRequestException('Milestones cannot contain child tasks');
+    }
+
+    if (childTaskKind !== TaskKind.Standard) {
       throw new BadRequestException(
-        'Only summary tasks can contain child tasks',
+        'Tasks can only contain executable subtasks',
       );
     }
 
+    if (task.parentTaskId) {
+      const parentTask = await this.findProjectTask(
+        projectId,
+        task.parentTaskId,
+      );
+      if (parentTask.taskKind === TaskKind.Standard) {
+        throw new BadRequestException('Subtasks cannot contain child tasks');
+      }
+    }
+
+    if (childTaskId) {
+      await this.ensureTaskHasNoChildren(projectId, childTaskId);
+    }
+
     return task;
+  }
+
+  private async ensureTaskHasNoChildren(projectId: string, taskId: string) {
+    const childTask = await this.tasksRepository.findOne({
+      select: { id: true },
+      where: { parentTaskId: taskId, projectId },
+    });
+
+    if (childTask) {
+      throw new BadRequestException('Subtasks cannot contain child tasks');
+    }
   }
 
   private async ensureNoPlanningHierarchyCycle(

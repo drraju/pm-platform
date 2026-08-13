@@ -1020,6 +1020,7 @@ export function createPlanningTask(
   projectId: string,
   input: {
     milestoneCategory?: ApiMilestoneCategory;
+    ownerId?: string | null;
     parentTaskId?: string | null;
     taskType?: ApiTaskType;
     title?: string;

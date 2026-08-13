@@ -147,8 +147,10 @@ function PageContent() {
 
   async function handleCreateTask(input: {
     milestoneCategory?: ApiMilestoneCategory;
+    ownerId?: string | null;
     parentTaskId?: string | null;
     taskType?: ApiTaskType;
+    title?: string;
   }): Promise<ApiPlanningTaskSchedule> {
     setError(null);
     setIsSaving(true);

@@ -14,6 +14,11 @@ export class CreatePlanningTaskDto {
   @IsUUID()
   parentTaskId?: string | null;
 
+  @ApiProperty({ format: 'uuid', required: false, nullable: true })
+  @IsOptional()
+  @IsUUID()
+  ownerId?: string | null;
+
   @ApiProperty({ enum: TaskType, default: TaskType.Task, required: false })
   @IsOptional()
   @IsEnum(TaskType)

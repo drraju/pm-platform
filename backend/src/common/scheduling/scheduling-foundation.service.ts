@@ -51,6 +51,7 @@ type RollupSchedule = {
   plannedEndDate?: string | null;
   plannedStartDate?: string | null;
   task?: {
+    estimatedHours?: number | string | null;
     percentComplete?: number | string | null;
     plannedEndDate?: string | null;
     plannedStartDate?: string | null;
@@ -63,6 +64,7 @@ type RollupSchedule = {
 type DependencyEndpoint = {
   deletedAt?: Date | string | null;
   id: string;
+  parentTaskId?: string | null;
   taskKind?: TaskKind | string | null;
 };
 
@@ -88,6 +90,11 @@ type DependencyValidationContext = {
 
 export type SummaryRollupResult<T extends RollupSchedule> = {
   changedSummaries: T[];
+  schedules: T[];
+};
+
+export type TaskSubtaskRollupResult<T extends RollupSchedule> = {
+  changedTasks: T[];
   schedules: T[];
 };
 
@@ -346,6 +353,9 @@ export class SchedulingFoundationService {
           this.mapTaskKind(descendant.taskKind ?? TaskKind.Standard) !==
           TaskKind.Summary,
       );
+      const progressContributors = executableDescendants.filter(
+        (descendant) => !this.hasStandardParent(descendant, byTaskId),
+      );
       const plannedStartDate = this.findEarliestDate(
         executableDescendants.map((descendant) => descendant.plannedStartDate),
       );
@@ -356,8 +366,9 @@ export class SchedulingFoundationService {
         plannedStartDate,
         plannedEndDate,
       );
-      const percentComplete = this.calculateWeightedProgress(
-        executableDescendants,
+      const percentComplete = this.calculateSummaryProgress(
+        progressContributors,
+        childrenByParentId,
       );
       const status = this.deriveSummaryStatus(children);
       const changed =
@@ -398,6 +409,67 @@ export class SchedulingFoundationService {
     };
   }
 
+  rollupTaskSubtaskSchedules<T extends RollupSchedule>(
+    schedules: T[],
+  ): TaskSubtaskRollupResult<T> {
+    const childrenByParentId = new Map<string, T[]>();
+    schedules.forEach((schedule) => {
+      if (!schedule.parentTaskId) {
+        return;
+      }
+      childrenByParentId.set(schedule.parentTaskId, [
+        ...(childrenByParentId.get(schedule.parentTaskId) ?? []),
+        schedule,
+      ]);
+    });
+
+    const changedTasks: T[] = [];
+
+    for (const schedule of schedules) {
+      if (
+        this.mapTaskKind(schedule.taskKind ?? TaskKind.Standard) !==
+        TaskKind.Standard
+      ) {
+        continue;
+      }
+
+      const subtasks = (childrenByParentId.get(schedule.taskId) ?? []).filter(
+        (child) =>
+          this.mapTaskKind(child.taskKind ?? TaskKind.Standard) ===
+          TaskKind.Standard,
+      );
+      if (subtasks.length === 0) {
+        continue;
+      }
+
+      const percentComplete = this.calculateSubtaskProgress(subtasks);
+      const status = this.deriveTaskStatusFromSubtasks(subtasks);
+      const changed =
+        Number(schedule.percentComplete ?? 0) !== percentComplete ||
+        Number(
+          schedule.task?.percentComplete ?? schedule.percentComplete ?? 0,
+        ) !== percentComplete ||
+        (status !== null && schedule.task?.status !== status);
+
+      schedule.percentComplete = percentComplete;
+      if (schedule.task) {
+        schedule.task.percentComplete = percentComplete;
+        if (status !== null) {
+          schedule.task.status = status;
+        }
+      }
+
+      if (changed) {
+        changedTasks.push(schedule);
+      }
+    }
+
+    return {
+      changedTasks,
+      schedules,
+    };
+  }
+
   validateTaskDependency(
     input: DependencyValidationInput,
     context: DependencyValidationContext,
@@ -422,6 +494,18 @@ export class SchedulingFoundationService {
       context.projectId,
       'successor',
     );
+
+    const predecessorParentTaskId =
+      context.predecessorTask?.parentTaskId ?? null;
+    const successorParentTaskId = context.successorTask?.parentTaskId ?? null;
+    if (
+      predecessorParentTaskId === input.successorTaskId ||
+      successorParentTaskId === input.predecessorTaskId
+    ) {
+      throw new BadRequestException(
+        'Parent tasks and their subtasks cannot depend on each other',
+      );
+    }
 
     const activeDependencies = context.dependencies.filter(
       (dependency) => dependency.id !== context.existingDependencyId,
@@ -812,6 +896,67 @@ export class SchedulingFoundationService {
     return Math.round(weighted.weightedProgress / weighted.totalWeight);
   }
 
+  private calculateSummaryProgress(
+    schedules: RollupSchedule[],
+    childrenByParentId: Map<string, RollupSchedule[]>,
+  ): number {
+    const weighted = schedules.reduce(
+      (accumulator, schedule) => {
+        const durationDays = this.getSummaryProgressWeight(
+          schedule,
+          childrenByParentId,
+        );
+        if (durationDays <= 0) {
+          return accumulator;
+        }
+        return {
+          totalWeight: accumulator.totalWeight + durationDays,
+          weightedProgress:
+            accumulator.weightedProgress +
+            durationDays * this.normalizePercent(schedule.percentComplete),
+        };
+      },
+      { totalWeight: 0, weightedProgress: 0 },
+    );
+
+    if (weighted.totalWeight === 0) {
+      return 0;
+    }
+
+    return Math.round(weighted.weightedProgress / weighted.totalWeight);
+  }
+
+  private getSummaryProgressWeight(
+    schedule: RollupSchedule,
+    childrenByParentId: Map<string, RollupSchedule[]>,
+  ): number {
+    const durationDays = this.getPlannedDuration(schedule);
+    if (durationDays > 0) {
+      return durationDays;
+    }
+
+    if (
+      this.mapTaskKind(schedule.taskKind ?? TaskKind.Standard) !==
+      TaskKind.Standard
+    ) {
+      return 0;
+    }
+
+    const subtasks = this.getDescendants(schedule.taskId, childrenByParentId)
+      .filter(
+        (descendant) =>
+          this.mapTaskKind(descendant.taskKind ?? TaskKind.Standard) !==
+          TaskKind.Summary,
+      )
+      .filter((descendant) => descendant.taskId !== schedule.taskId);
+
+    return subtasks.reduce(
+      (totalDuration, subtask) =>
+        totalDuration + this.getPlannedDuration(subtask),
+      0,
+    );
+  }
+
   private getPlannedDuration(schedule: RollupSchedule): number {
     if (typeof schedule.durationDays === 'number') {
       return Math.max(0, schedule.durationDays);
@@ -930,6 +1075,119 @@ export class SchedulingFoundationService {
         `Summary tasks cannot be dependency ${role} endpoints`,
       );
     }
+  }
+
+  private hasStandardParent(
+    schedule: RollupSchedule,
+    byTaskId: Map<string, RollupSchedule>,
+  ) {
+    if (!schedule.parentTaskId) {
+      return false;
+    }
+
+    const parent = byTaskId.get(schedule.parentTaskId);
+    return (
+      this.mapTaskKind(parent?.taskKind ?? TaskKind.Standard) ===
+      TaskKind.Standard
+    );
+  }
+
+  private calculateSubtaskProgress(schedules: RollupSchedule[]): number {
+    const effortWeights = schedules.map((schedule) =>
+      this.normalizePositiveNumber(schedule.task?.estimatedHours),
+    );
+    if (effortWeights.every((weight) => weight > 0)) {
+      return this.calculateWeightedAverage(schedules, effortWeights);
+    }
+
+    const durationWeights = schedules.map((schedule) =>
+      this.getPlannedDuration(schedule),
+    );
+    if (durationWeights.every((weight) => weight > 0)) {
+      return this.calculateWeightedAverage(schedules, durationWeights);
+    }
+
+    if (schedules.length === 0) {
+      return 0;
+    }
+
+    return Math.round(
+      schedules.reduce(
+        (total, schedule) =>
+          total + this.normalizePercent(schedule.percentComplete),
+        0,
+      ) / schedules.length,
+    );
+  }
+
+  private calculateWeightedAverage(
+    schedules: RollupSchedule[],
+    weights: number[],
+  ) {
+    const weighted = schedules.reduce(
+      (accumulator, schedule, index) => {
+        const weight = weights[index] ?? 0;
+        return {
+          totalWeight: accumulator.totalWeight + weight,
+          weightedProgress:
+            accumulator.weightedProgress +
+            weight * this.normalizePercent(schedule.percentComplete),
+        };
+      },
+      { totalWeight: 0, weightedProgress: 0 },
+    );
+
+    if (weighted.totalWeight === 0) {
+      return 0;
+    }
+
+    return Math.round(weighted.weightedProgress / weighted.totalWeight);
+  }
+
+  private deriveTaskStatusFromSubtasks(
+    children: RollupSchedule[],
+  ): TaskStatus | null {
+    if (children.length === 0) {
+      return null;
+    }
+
+    const statuses = children
+      .map((child) => child.task?.status)
+      .filter((status): status is TaskStatus =>
+        Object.values(TaskStatus).includes(status as TaskStatus),
+      );
+
+    if (statuses.length === 0) {
+      return TaskStatus.Todo;
+    }
+
+    if (statuses.some((status) => status === TaskStatus.Blocked)) {
+      return TaskStatus.Blocked;
+    }
+
+    if (statuses.every((status) => status === TaskStatus.Done)) {
+      return TaskStatus.Done;
+    }
+
+    if (
+      statuses.every(
+        (status) => status === TaskStatus.Backlog || status === TaskStatus.Todo,
+      )
+    ) {
+      return TaskStatus.Todo;
+    }
+
+    return TaskStatus.InProgress;
+  }
+
+  private normalizePositiveNumber(value?: number | string | null): number {
+    const numericValue =
+      typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+          ? Number(value)
+          : 0;
+    return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
   }
 
   private createsDependencyCycle(

@@ -111,4 +111,49 @@ describe('planning rollup', () => {
       }),
     );
   });
+
+  it('rolls subtask progress into a standard parent while retaining task fields', () => {
+    const tasks = decoratePlanningTasks([
+      {
+        assigneeId: 'owner-1',
+        estimatedHours: 12,
+        id: 'task-1',
+        parentTaskId: null,
+        percentComplete: 0,
+        status: TaskStatus.Todo,
+        taskKind: TaskKind.Standard,
+        title: 'Build integration',
+      },
+      {
+        estimatedHours: 2,
+        id: 'subtask-1',
+        parentTaskId: 'task-1',
+        percentComplete: 50,
+        status: TaskStatus.InProgress,
+        taskKind: TaskKind.Standard,
+        title: 'API mapping',
+      },
+      {
+        estimatedHours: 6,
+        id: 'subtask-2',
+        parentTaskId: 'task-1',
+        percentComplete: 100,
+        status: TaskStatus.Done,
+        taskKind: TaskKind.Standard,
+        title: 'Payload tests',
+      },
+    ]);
+
+    expect(tasks.find((task) => task.id === 'task-1')).toEqual(
+      expect.objectContaining({
+        assigneeId: 'owner-1',
+        childTaskCount: 2,
+        estimatedHours: 12,
+        percentComplete: 88,
+        phaseProgress: null,
+        status: TaskStatus.InProgress,
+        taskKind: TaskKind.Standard,
+      }),
+    );
+  });
 });

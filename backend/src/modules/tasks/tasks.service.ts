@@ -610,11 +610,12 @@ export class TasksService {
       );
     }
 
-    if (parentTask.taskKind !== TaskKind.Summary) {
-      throw new BadRequestException(
-        'Only summary tasks can contain child tasks',
-      );
-    }
+    await this.ensureParentCanContainPlanningChild(
+      projectId,
+      parentTask,
+      effectiveTaskKind,
+      existingTask,
+    );
 
     if (existingTask) {
       await this.ensureNoHierarchyCycle(existingTask.id, parentTask.id);
@@ -629,8 +630,42 @@ export class TasksService {
 
     if (childTask) {
       throw new BadRequestException(
-        'Only summary tasks can contain child tasks',
+        'Tasks with child tasks cannot become subtasks or milestones',
       );
+    }
+  }
+
+  private async ensureParentCanContainPlanningChild(
+    projectId: string,
+    parentTask: Task,
+    childTaskKind: TaskKind,
+    existingTask?: Task,
+  ) {
+    if (parentTask.taskKind === TaskKind.Summary) {
+      return;
+    }
+
+    if (parentTask.taskKind !== TaskKind.Standard) {
+      throw new BadRequestException('Milestones cannot contain child tasks');
+    }
+
+    if (childTaskKind !== TaskKind.Standard) {
+      throw new BadRequestException(
+        'Tasks can only contain executable subtasks',
+      );
+    }
+
+    if (parentTask.parentTaskId) {
+      const grandparentTask = await this.findPlanningTask(
+        parentTask.parentTaskId,
+      );
+      if (grandparentTask?.taskKind === TaskKind.Standard) {
+        throw new BadRequestException('Subtasks cannot contain child tasks');
+      }
+    }
+
+    if (existingTask) {
+      await this.ensureTaskHasNoChildren(existingTask.id);
     }
   }
 

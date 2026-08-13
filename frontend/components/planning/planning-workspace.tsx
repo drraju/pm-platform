@@ -26,10 +26,7 @@ import {
 } from "@/components/foundation";
 import { DisclosureButton } from "@/components/ui/disclosure-button";
 import { ToolbarGroup } from "@/components/ui/toolbar";
-import {
-  useDismissibleMenu,
-  useDropdownMenu,
-} from "@/hooks/use-dropdown-menu";
+import { useDismissibleMenu, useDropdownMenu } from "@/hooks/use-dropdown-menu";
 import { usePlanningExpansionState } from "./planning-expansion-state";
 import { PlanningDetailPanel } from "./planning-detail-panel";
 
@@ -77,8 +74,10 @@ type PlanningWorkspaceProps = {
   }) => Promise<void>;
   onCreateTask: (input: {
     milestoneCategory?: ApiMilestoneCategory;
+    ownerId?: string | null;
     parentTaskId?: string | null;
     taskType?: ApiTaskType;
+    title?: string;
   }) => Promise<ApiPlanningTaskSchedule>;
   onDeleteTask?: (taskId: string) => Promise<void>;
   onDeleteDependency: (dependencyId: string) => Promise<void>;
@@ -128,6 +127,15 @@ type RowDragState = {
 
 type SummaryDeleteDialogState = {
   taskId: string;
+};
+
+type CreateTaskDialogState = {
+  focusCreatedTask?: boolean;
+  keepSelectedTaskId?: string | null;
+  ownerId: string;
+  parentTaskId: string | null;
+  title: string;
+  typeLabel: "Task" | "Sub-task";
 };
 
 type MoveToSummaryState = {
@@ -238,6 +246,13 @@ const gridColumns: GridColumnDefinition[] = [
   },
   {
     defaultVisible: true,
+    editableField: "ownerId",
+    id: "ownerId",
+    label: "Owner",
+    minWidth: 120,
+  },
+  {
+    defaultVisible: true,
     editableField: "plannedStartDate",
     id: "plannedStartDate",
     label: "Start",
@@ -249,13 +264,6 @@ const gridColumns: GridColumnDefinition[] = [
     id: "plannedFinishDate",
     label: "Finish",
     minWidth: 96,
-  },
-  {
-    defaultVisible: false,
-    editableField: "ownerId",
-    id: "ownerId",
-    label: "Owner",
-    minWidth: 130,
   },
   {
     defaultVisible: false,
@@ -409,6 +417,8 @@ export function PlanningWorkspace({
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
+  const [createTaskDialog, setCreateTaskDialog] =
+    useState<CreateTaskDialogState | null>(null);
   const [summaryDeleteDialog, setSummaryDeleteDialog] =
     useState<SummaryDeleteDialogState | null>(null);
   const [moveToSummaryState, setMoveToSummaryState] =
@@ -634,14 +644,17 @@ export function PlanningWorkspace({
     [localSchedules],
   );
   const hasSummaryTasks = summaryTaskIds.size > 0;
-  const canCreateChildForSelection = selectedSchedule?.taskKind === "summary";
+  const canCreateChildForSelection = canScheduleContainChildren(
+    selectedSchedule,
+    localSchedules,
+  );
   const canMoveSelectionUp = Boolean(
     selectedTaskSiblingContext?.previousTaskId,
   );
   const canMoveSelectionDown = Boolean(selectedTaskSiblingContext?.nextTaskId);
   const canMoveSelectionToParent = Boolean(selectedSchedule?.parentTaskId);
   const canMoveSelectionToSummary = moveToSummaryOptions.length > 0;
-  const addChildTooltip = getAddChildTooltip(selectedSchedule);
+  const addChildTooltip = getAddChildTooltip(selectedSchedule, localSchedules);
 
   useLayoutEffect(() => {
     const pendingScroll = pendingTimelineScrollRef.current;
@@ -680,8 +693,10 @@ export function PlanningWorkspace({
       focusCreatedTask?: boolean;
       keepSelectedTaskId?: string | null;
       milestoneCategory?: ApiMilestoneCategory;
+      ownerId?: string | null;
       parentTaskId?: string | null;
       taskType?: ApiTaskType;
+      title?: string;
     } = {},
   ) {
     setHierarchyError(null);
@@ -713,6 +728,44 @@ export function PlanningWorkspace({
     }
     addMenu.close();
     addChildMenu.close();
+  }
+
+  function openCreateTaskDialog(input: {
+    focusCreatedTask?: boolean;
+    keepSelectedTaskId?: string | null;
+    parentTaskId?: string | null;
+    typeLabel: "Task" | "Sub-task";
+  }) {
+    setHierarchyError(null);
+    setCreateTaskDialog({
+      focusCreatedTask: input.focusCreatedTask,
+      keepSelectedTaskId: input.keepSelectedTaskId,
+      ownerId: "",
+      parentTaskId: input.parentTaskId ?? null,
+      title: input.typeLabel === "Sub-task" ? "New Sub-task" : "New Task",
+      typeLabel: input.typeLabel,
+    });
+    addMenu.close();
+    addChildMenu.close();
+  }
+
+  async function confirmCreateTaskDialog() {
+    if (!createTaskDialog) {
+      return;
+    }
+    const title = createTaskDialog.title.trim();
+    if (!title) {
+      return;
+    }
+    await createTask({
+      focusCreatedTask: createTaskDialog.focusCreatedTask ?? false,
+      keepSelectedTaskId: createTaskDialog.keepSelectedTaskId,
+      ownerId: createTaskDialog.ownerId || null,
+      parentTaskId: createTaskDialog.parentTaskId,
+      taskType: "task",
+      title,
+    });
+    setCreateTaskDialog(null);
   }
 
   function openDuplicateWorkPackageDialog(schedule: ApiPlanningTaskSchedule) {
@@ -922,7 +975,10 @@ export function PlanningWorkspace({
     if (primaryModifier && event.key === "Enter") {
       event.preventDefault();
       if (event.shiftKey) {
-        if (selectedSchedule?.taskKind === "summary") {
+        if (
+          selectedSchedule &&
+          canScheduleContainChildren(selectedSchedule, localSchedules)
+        ) {
           void createTask({
             parentTaskId: selectedSchedule.taskId,
             taskType: "task",
@@ -1156,8 +1212,17 @@ export function PlanningWorkspace({
 
     const sameParent =
       rowDragState.parentTaskId === (targetSchedule.parentTaskId ?? null);
-    const isSummaryTarget = targetSchedule.taskKind === "summary";
-    if (!sameParent && !isSummaryTarget) {
+    const draggedSchedule = localSchedules.find(
+      (schedule) => schedule.taskId === rowDragState.taskId,
+    );
+    const canDropIntoTarget =
+      draggedSchedule &&
+      canMoveScheduleUnderParent(
+        localSchedules,
+        draggedSchedule,
+        targetSchedule,
+      );
+    if (!sameParent && !canDropIntoTarget) {
       return;
     }
     event.preventDefault();
@@ -1184,8 +1249,18 @@ export function PlanningWorkspace({
 
     const sameParent =
       rowDragState.parentTaskId === (targetSchedule.parentTaskId ?? null);
-    if (!sameParent && targetSchedule.taskKind !== "summary") {
-      setHierarchyError("Only summary tasks can contain child items.");
+    const draggedSchedule = localSchedules.find(
+      (schedule) => schedule.taskId === rowDragState.taskId,
+    );
+    const canDropIntoTarget =
+      draggedSchedule &&
+      canMoveScheduleUnderParent(
+        localSchedules,
+        draggedSchedule,
+        targetSchedule,
+      );
+    if (!sameParent && !canDropIntoTarget) {
+      setHierarchyError(getMoveToParentError(localSchedules, targetSchedule));
       setRowDragState(null);
       return;
     }
@@ -1899,9 +1974,9 @@ export function PlanningWorkspace({
                     icon={<TaskTypeIcon taskKind="standard" />}
                     label="Task"
                     onClick={() => {
-                      void createTask({
+                      openCreateTaskDialog({
                         parentTaskId: selectedSchedule?.parentTaskId ?? null,
-                        taskType: "task",
+                        typeLabel: "Task",
                       });
                     }}
                   />
@@ -1955,53 +2030,66 @@ export function PlanningWorkspace({
                 >
                   <AddMenuButton
                     icon={<TaskTypeIcon taskKind="standard" />}
-                    label="Task"
+                    label={
+                      selectedSchedule?.taskKind === "standard"
+                        ? "Sub-task"
+                        : "Task"
+                    }
                     onClick={() => {
                       if (selectedSchedule) {
-                        void createTask({
+                        openCreateTaskDialog({
                           focusCreatedTask: false,
                           keepSelectedTaskId: selectedSchedule.taskId,
                           parentTaskId: selectedSchedule.taskId,
-                          taskType: "task",
+                          typeLabel:
+                            selectedSchedule.taskKind === "standard"
+                              ? "Sub-task"
+                              : "Task",
                         });
                       }
                     }}
                   />
-                  <AddMenuButton
-                    icon={<TaskTypeIcon taskKind="summary" />}
-                    label="Summary"
-                    onClick={() => {
-                      if (selectedSchedule) {
-                        void createTask({
-                          focusCreatedTask: false,
-                          keepSelectedTaskId: selectedSchedule.taskId,
-                          parentTaskId: selectedSchedule.taskId,
-                          taskType: "summary",
-                        });
-                      }
-                    }}
-                  />
-                  <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
-                    Milestone
-                  </span>
-                  {milestoneCategories.map(({ category, label }) => (
+                  {selectedSchedule?.taskKind === "summary" ? (
                     <AddMenuButton
-                      icon={<MilestoneCategoryIcon category={category} />}
-                      key={category}
-                      label={label}
+                      icon={<TaskTypeIcon taskKind="summary" />}
+                      label="Summary"
                       onClick={() => {
                         if (selectedSchedule) {
                           void createTask({
                             focusCreatedTask: false,
                             keepSelectedTaskId: selectedSchedule.taskId,
-                            milestoneCategory: category,
                             parentTaskId: selectedSchedule.taskId,
-                            taskType: "milestone",
+                            taskType: "summary",
                           });
                         }
                       }}
                     />
-                  ))}
+                  ) : null}
+                  {selectedSchedule?.taskKind === "summary" ? (
+                    <>
+                      <span className="mt-1 block border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-bold uppercase text-slate-500">
+                        Milestone
+                      </span>
+                      {milestoneCategories.map(({ category, label }) => (
+                        <AddMenuButton
+                          icon={<MilestoneCategoryIcon category={category} />}
+                          key={category}
+                          label={label}
+                          onClick={() => {
+                            if (selectedSchedule) {
+                              void createTask({
+                                focusCreatedTask: false,
+                                keepSelectedTaskId: selectedSchedule.taskId,
+                                milestoneCategory: category,
+                                parentTaskId: selectedSchedule.taskId,
+                                taskType: "milestone",
+                              });
+                            }
+                          }}
+                        />
+                      ))}
+                    </>
+                  ) : null}
                 </span>
               ) : null}
             </span>
@@ -2928,6 +3016,76 @@ export function PlanningWorkspace({
             </span>
           </button>
         </div>
+      ) : null}
+
+      {createTaskDialog ? (
+        <DialogBackdrop>
+          <DialogPanel title={`Create ${createTaskDialog.typeLabel}`}>
+            <div className="grid gap-4">
+              <label className="block text-sm font-semibold text-slate-700">
+                Task Name <span aria-hidden="true">*</span>
+                <input
+                  autoFocus
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  maxLength={255}
+                  onChange={(event) =>
+                    setCreateTaskDialog((current) =>
+                      current
+                        ? {
+                            ...current,
+                            title: event.target.value,
+                          }
+                        : current,
+                    )
+                  }
+                  required
+                  value={createTaskDialog.title}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                Owner
+                <select
+                  className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                  onChange={(event) =>
+                    setCreateTaskDialog((current) =>
+                      current
+                        ? {
+                            ...current,
+                            ownerId: event.target.value,
+                          }
+                        : current,
+                    )
+                  }
+                  value={createTaskDialog.ownerId}
+                >
+                  <option value="">Unassigned</option>
+                  {ownerOptions.map((owner) => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                className={toolbarButtonClassName}
+                onClick={() => setCreateTaskDialog(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-flex h-8 items-center rounded-md bg-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
+                disabled={isSaving || !createTaskDialog.title.trim()}
+                onClick={() => void confirmCreateTaskDialog()}
+                type="button"
+              >
+                Create
+              </button>
+            </div>
+          </DialogPanel>
+        </DialogBackdrop>
       ) : null}
 
       {duplicateWorkPackageDialog ? (
@@ -3906,6 +4064,9 @@ function isReadOnlyField(
   schedule: ApiPlanningTaskSchedule,
   field: EditableField,
 ) {
+  if (field === "ownerId" && schedule.taskKind !== "standard") {
+    return true;
+  }
   if (schedule.taskKind === "summary") {
     return field !== "taskTitle";
   }
@@ -4168,20 +4329,14 @@ function moveScheduleToParent(
   if (nextParentTaskId) {
     const targetParent = taskMap.get(nextParentTaskId);
     if (!targetParent) {
-      return { error: "The destination Summary could not be found." };
-    }
-    if (targetParent.taskKind === "milestone") {
-      return {
-        error:
-          "Milestones are scheduling events and cannot contain child items.",
-      };
-    }
-    if (targetParent.taskKind !== "summary") {
-      return { error: "Only summary tasks can contain child items." };
+      return { error: "The destination parent could not be found." };
     }
     const descendantIds = new Set(collectDescendantTaskIds(schedules, taskId));
     if (descendantIds.has(nextParentTaskId)) {
       return { error: "Task hierarchy cannot contain cycles." };
+    }
+    if (!canMoveScheduleUnderParent(schedules, movedSchedule, targetParent)) {
+      return { error: getMoveToParentError(schedules, targetParent) };
     }
   }
 
@@ -4446,6 +4601,68 @@ function getEligibleSummaryMoveTargets(
     }));
 }
 
+function canScheduleContainChildren(
+  schedule: ApiPlanningTaskSchedule | null | undefined,
+  schedules: ApiPlanningTaskSchedule[],
+) {
+  if (!schedule) {
+    return false;
+  }
+  if (schedule.taskKind === "summary") {
+    return true;
+  }
+  return (
+    schedule.taskKind === "standard" && !isSubtaskSchedule(schedule, schedules)
+  );
+}
+
+function canMoveScheduleUnderParent(
+  schedules: ApiPlanningTaskSchedule[],
+  movedSchedule: ApiPlanningTaskSchedule,
+  targetParent: ApiPlanningTaskSchedule,
+) {
+  if (targetParent.taskKind === "summary") {
+    return true;
+  }
+  if (!canScheduleContainChildren(targetParent, schedules)) {
+    return false;
+  }
+  if (movedSchedule.taskKind !== "standard") {
+    return false;
+  }
+  return collectDescendantTaskIds(schedules, movedSchedule.taskId).length === 0;
+}
+
+function isSubtaskSchedule(
+  schedule: ApiPlanningTaskSchedule,
+  schedules: ApiPlanningTaskSchedule[],
+) {
+  if (!schedule.parentTaskId) {
+    return false;
+  }
+  return schedules.some(
+    (candidate) =>
+      candidate.taskId === schedule.parentTaskId &&
+      candidate.taskKind === "standard",
+  );
+}
+
+function getMoveToParentError(
+  schedules: ApiPlanningTaskSchedule[],
+  targetParent: ApiPlanningTaskSchedule,
+) {
+  if (targetParent.taskKind === "milestone") {
+    return "Milestones are scheduling events and cannot contain child items.";
+  }
+  if (isSubtaskSchedule(targetParent, schedules)) {
+    return "Sub-tasks cannot contain child items.";
+  }
+  if (targetParent.taskKind === "standard") {
+    return "Only executable tasks can be moved under a Task, and only when they do not already have children.";
+  }
+  return "The selected row cannot be moved under this parent.";
+}
+
 function getDeletionOrder(
   schedules: ApiPlanningTaskSchedule[],
   taskId: string,
@@ -4674,6 +4891,9 @@ function groupAllocations(allocations: ApiResourceAllocation[]) {
 }
 
 function formatOwner(schedule: ApiPlanningTaskSchedule) {
+  if (schedule.taskKind !== "standard") {
+    return "—";
+  }
   const assignee = schedule.task?.assignee;
   if (!assignee) {
     return "Unassigned";
@@ -4752,17 +4972,25 @@ function getTypeTooltip(schedule: ApiPlanningTaskSchedule) {
   return "A milestone represents an event in the project schedule. Milestones cannot contain child work items.";
 }
 
-function getAddChildTooltip(schedule: ApiPlanningTaskSchedule | null) {
+function getAddChildTooltip(
+  schedule: ApiPlanningTaskSchedule | null,
+  schedules: ApiPlanningTaskSchedule[],
+) {
   if (!schedule) {
-    return "Select a Summary task to add child work.";
+    return "Select a Summary or Task to add child work.";
   }
   if (schedule.taskKind === "summary") {
     return "Add child work under the selected Summary.";
   }
+  if (schedule.taskKind === "standard") {
+    return isSubtaskSchedule(schedule, schedules)
+      ? "Sub-tasks cannot contain child items."
+      : "Add a sub-task under the selected Task.";
+  }
   if (schedule.taskKind === "milestone") {
     return "Milestones are scheduling events and cannot contain child items.";
   }
-  return "This item is an executable task. Convert it to a Summary if you want to organize child work.";
+  return "Select a Summary or Task to add child work.";
 }
 
 function getTaskTitle(schedule: ApiPlanningTaskSchedule) {

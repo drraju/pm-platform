@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -436,7 +436,7 @@ describe('TasksService', () => {
     );
   });
 
-  it('rejects child task creation under a non-summary parent', async () => {
+  it('creates a child task under a standard task parent', async () => {
     tasksRepository.findOne?.mockResolvedValueOnce({
       id: 'parent-task-id',
       parentTaskId: null,
@@ -444,14 +444,44 @@ describe('TasksService', () => {
       taskKind: TaskKind.Standard,
     });
 
-    await expect(
-      service.create({
+    await service.create({
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+  });
+
+  it('rejects child task creation under a subtask', async () => {
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'subtask-id',
         parentTaskId: 'parent-task-id',
         projectId,
         taskKind: TaskKind.Standard,
-        title: 'Prepare cutover checklist',
+      })
+      .mockResolvedValueOnce({
+        id: 'parent-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      });
+
+    await expect(
+      service.create({
+        parentTaskId: 'subtask-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Nested child',
       }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toThrow('Subtasks cannot contain child tasks');
   });
 
   it('rejects milestone creation when planned dates are explicitly conflicting', async () => {

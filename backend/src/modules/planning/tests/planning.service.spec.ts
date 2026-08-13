@@ -1266,7 +1266,7 @@ describe('PlanningService', () => {
         { parentTaskId: 'milestone-parent-id' },
         actor,
       ),
-    ).rejects.toThrow('Only summary tasks can contain child tasks');
+    ).rejects.toThrow('Milestones cannot contain child tasks');
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
 
@@ -1474,6 +1474,117 @@ describe('PlanningService', () => {
     );
   });
 
+  it('creates a planning task with an optional owner assignment', async () => {
+    const snapshot = {
+      id: 'snapshot-id',
+      projectCompletionPercent: 25,
+      projectFinishDate: '2026-07-10',
+      projectId,
+      projectStartDate: '2026-07-01',
+      scheduleVersion: 1,
+    } as PlanningScheduleSnapshot;
+
+    scheduleSnapshotsRepository.findOne
+      ?.mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot);
+    usersRepository.findOne?.mockResolvedValue({ id: userId });
+    tasksRepository.find?.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        assigneeId: userId,
+        dueDate: '2026-07-02',
+        id: taskId,
+        parentTaskId: null,
+        percentComplete: 0,
+        plannedEndDate: '2026-07-02',
+        plannedStartDate: '2026-07-01',
+        projectId,
+        sequenceNumber: 1,
+        startDate: '2026-07-01',
+        status: TaskStatus.Todo,
+        taskKind: TaskKind.Standard,
+        title: 'Owner assigned task',
+      },
+    ]);
+
+    const schedule = await service.createPlanningTask(
+      projectId,
+      { ownerId: userId, title: 'Owner assigned task' },
+      actor,
+    );
+
+    expect(usersRepository.findOne).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { id: userId },
+    });
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assigneeId: userId,
+        parentTaskId: null,
+        taskKind: TaskKind.Standard,
+        title: 'Owner assigned task',
+      }),
+    );
+    expect(schedule).toEqual(
+      expect.objectContaining({
+        ownerId: userId,
+        taskTitle: 'Owner assigned task',
+      }),
+    );
+  });
+
+  it('creates a planning subtask under a standard task parent', async () => {
+    const snapshot = {
+      id: 'snapshot-id',
+      projectCompletionPercent: 25,
+      projectFinishDate: '2026-07-10',
+      projectId,
+      projectStartDate: '2026-07-01',
+      scheduleVersion: 1,
+    } as PlanningScheduleSnapshot;
+
+    scheduleSnapshotsRepository.findOne
+      ?.mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce(snapshot);
+    tasksRepository.findOne?.mockResolvedValue({
+      id: 'parent-task-id',
+      parentTaskId: null,
+      projectId,
+      taskKind: TaskKind.Standard,
+    });
+    tasksRepository.find
+      ?.mockResolvedValueOnce([{ sequenceNumber: 1 }])
+      .mockResolvedValueOnce([
+        {
+          dueDate: '2026-07-02',
+          id: taskId,
+          parentTaskId: 'parent-task-id',
+          percentComplete: 0,
+          plannedEndDate: '2026-07-02',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 2,
+          startDate: '2026-07-01',
+          status: TaskStatus.Todo,
+          taskKind: TaskKind.Standard,
+          title: 'New Task',
+        },
+      ]);
+
+    await service.createPlanningTask(
+      projectId,
+      { parentTaskId: 'parent-task-id' },
+      actor,
+    );
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: 'parent-task-id',
+        sequenceNumber: 2,
+        taskKind: TaskKind.Standard,
+      }),
+    );
+  });
+
   it('creates a planning milestone through taskType while preserving taskKind compatibility', async () => {
     const snapshot = {
       id: 'snapshot-id',
@@ -1567,7 +1678,7 @@ describe('PlanningService', () => {
         { parentTaskId: 'milestone-parent-id' },
         actor,
       ),
-    ).rejects.toThrow('Only summary tasks can contain child tasks');
+    ).rejects.toThrow('Milestones cannot contain child tasks');
     expect(tasksRepository.save).not.toHaveBeenCalled();
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });

@@ -992,7 +992,7 @@ describe('ProjectsService', () => {
     });
   });
 
-  it('rejects child project task creation under a non-summary parent', async () => {
+  it('creates a child project task under a standard task parent', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne?.mockResolvedValueOnce({
       id: 'parent-task-id',
@@ -1001,13 +1001,43 @@ describe('ProjectsService', () => {
       taskKind: TaskKind.Standard,
     });
 
+    await service.createProjectTask(projectId, {
+      parentTaskId: 'parent-task-id',
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare cutover checklist',
+    });
+  });
+
+  it('rejects child project task creation under a subtask', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'subtask-id',
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'parent-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      });
+
     await expect(
       service.createProjectTask(projectId, {
-        parentTaskId: 'parent-task-id',
+        parentTaskId: 'subtask-id',
         taskKind: TaskKind.Standard,
-        title: 'Prepare cutover checklist',
+        title: 'Nested child',
       }),
-    ).rejects.toThrow('Only summary tasks can contain child tasks');
+    ).rejects.toThrow('Subtasks cannot contain child tasks');
   });
 
   it('rejects milestone project task creation when planned dates do not match', async () => {
@@ -1692,6 +1722,33 @@ describe('ProjectsService', () => {
     });
 
     expect(taskDependenciesRepository.create).toHaveBeenCalled();
+  });
+
+  it('rejects dependencies between a task and its subtask', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: 'parent-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Standard,
+      })
+      .mockResolvedValueOnce({
+        id: 'subtask-id',
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+      });
+
+    await expect(
+      service.createProjectTaskDependency(projectId, {
+        predecessorTaskId: 'parent-task-id',
+        successorTaskId: 'subtask-id',
+        dependencyType: TaskDependencyType.StartToStart,
+      }),
+    ).rejects.toThrow(
+      'Parent tasks and their subtasks cannot depend on each other',
+    );
   });
 
   it('rejects duplicate active dependencies between the same tasks', async () => {

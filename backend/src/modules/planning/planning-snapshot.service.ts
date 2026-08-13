@@ -143,17 +143,22 @@ export class PlanningSnapshotService {
         };
       }),
     );
+    const { changedTasks } =
+      this.schedulingFoundationService.rollupTaskSubtaskSchedules(
+        taskSchedules,
+      );
     const { changedSummaries } =
       this.schedulingFoundationService.rollupSummarySchedules(taskSchedules);
-    if (changedSummaries.length > 0) {
-      const summaryTasks = changedSummaries
+    const changedRollups = [...changedTasks, ...changedSummaries];
+    if (changedRollups.length > 0) {
+      const rollupTasks = changedRollups
         .map((schedule) => schedule.task)
         .filter((task): task is Task => Boolean(task));
-      if (summaryTasks.length > 0) {
-        summaryTasks.forEach((task) => {
+      if (rollupTasks.length > 0) {
+        rollupTasks.forEach((task) => {
           task.updatedById = actor?.userId;
         });
-        await tasksRepository.save(summaryTasks);
+        await tasksRepository.save(rollupTasks);
       }
     }
 

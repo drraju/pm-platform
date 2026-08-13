@@ -352,6 +352,167 @@ describe('SchedulingFoundationService', () => {
     ).toThrow('Task deleted-task not found for project project-id');
   });
 
+  it('rejects dependencies between a task and its subtask', () => {
+    expect(() =>
+      service.validateTaskDependency(
+        {
+          dependencyType: TaskDependencyType.FinishToStart,
+          predecessorTaskId: 'parent-task',
+          successorTaskId: 'subtask',
+        },
+        {
+          dependencies: [],
+          predecessorTask: {
+            id: 'parent-task',
+            taskKind: TaskKind.Standard,
+          },
+          projectId: 'project-id',
+          successorTask: {
+            id: 'subtask',
+            parentTaskId: 'parent-task',
+            taskKind: TaskKind.Standard,
+          },
+        },
+      ),
+    ).toThrow('Parent tasks and their subtasks cannot depend on each other');
+  });
+
+  it('rolls up standard task progress and status from executable subtasks', () => {
+    const schedules = [
+      {
+        parentTaskId: null,
+        percentComplete: 0,
+        task: {
+          estimatedHours: 5,
+          percentComplete: 0,
+          status: TaskStatus.Todo,
+        },
+        taskId: 'parent-task',
+        taskKind: TaskKind.Standard,
+      },
+      {
+        parentTaskId: 'parent-task',
+        percentComplete: 50,
+        task: {
+          estimatedHours: 2,
+          percentComplete: 50,
+          status: TaskStatus.InProgress,
+        },
+        taskId: 'subtask-a',
+        taskKind: TaskKind.Standard,
+      },
+      {
+        parentTaskId: 'parent-task',
+        percentComplete: 100,
+        task: {
+          estimatedHours: 6,
+          percentComplete: 100,
+          status: TaskStatus.Done,
+        },
+        taskId: 'subtask-b',
+        taskKind: TaskKind.Standard,
+      },
+    ];
+
+    const result = service.rollupTaskSubtaskSchedules(schedules);
+
+    expect(result.changedTasks).toEqual([schedules[0]]);
+    expect(schedules[0]).toEqual(
+      expect.objectContaining({
+        percentComplete: 88,
+      }),
+    );
+    expect(schedules[0].task).toEqual(
+      expect.objectContaining({
+        percentComplete: 88,
+        status: TaskStatus.InProgress,
+      }),
+    );
+  });
+
+  it('rolls summary progress through task parents without double-counting subtasks', () => {
+    const schedules = [
+      {
+        parentTaskId: null,
+        percentComplete: 0,
+        task: { percentComplete: 0, status: TaskStatus.Todo },
+        taskId: 'summary',
+        taskKind: TaskKind.Summary,
+      },
+      {
+        parentTaskId: 'summary',
+        percentComplete: 0,
+        task: { percentComplete: 0, status: TaskStatus.Todo },
+        taskId: 'task-a',
+        taskKind: TaskKind.Standard,
+      },
+      {
+        durationDays: 2,
+        parentTaskId: 'task-a',
+        percentComplete: 100,
+        plannedEndDate: '2026-09-03',
+        plannedStartDate: '2026-09-01',
+        task: { status: TaskStatus.Done },
+        taskId: 'task-a-1',
+        taskKind: TaskKind.Standard,
+      },
+      {
+        durationDays: 2,
+        parentTaskId: 'task-a',
+        percentComplete: 0,
+        plannedEndDate: '2026-09-06',
+        plannedStartDate: '2026-09-04',
+        task: { status: TaskStatus.Todo },
+        taskId: 'task-a-2',
+        taskKind: TaskKind.Standard,
+      },
+      {
+        parentTaskId: 'summary',
+        percentComplete: 0,
+        task: { percentComplete: 0, status: TaskStatus.Todo },
+        taskId: 'task-b',
+        taskKind: TaskKind.Standard,
+      },
+      {
+        durationDays: 1,
+        parentTaskId: 'task-b',
+        percentComplete: 100,
+        plannedEndDate: '2026-09-08',
+        plannedStartDate: '2026-09-07',
+        task: { status: TaskStatus.Done },
+        taskId: 'task-b-1',
+        taskKind: TaskKind.Standard,
+      },
+      {
+        durationDays: 1,
+        parentTaskId: 'task-b',
+        percentComplete: 100,
+        plannedEndDate: '2026-09-10',
+        plannedStartDate: '2026-09-09',
+        task: { status: TaskStatus.Done },
+        taskId: 'task-b-2',
+        taskKind: TaskKind.Standard,
+      },
+    ];
+
+    service.rollupTaskSubtaskSchedules(schedules);
+    service.rollupSummarySchedules(schedules);
+
+    expect(schedules[1]).toEqual(
+      expect.objectContaining({ percentComplete: 50 }),
+    );
+    expect(schedules[4]).toEqual(
+      expect.objectContaining({ percentComplete: 100 }),
+    );
+    expect(schedules[0]).toEqual(
+      expect.objectContaining({
+        percentComplete: 67,
+        plannedEndDate: '2026-09-10',
+        plannedStartDate: '2026-09-01',
+      }),
+    );
+  });
+
   it('rolls up a single-level summary from descendant executable work', () => {
     const schedules = [
       {

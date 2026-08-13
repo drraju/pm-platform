@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
-import type { ApiPlanningWorkspace } from "@/lib/api/client";
+import type { ApiPlanningWorkspace, ApiProjectMember } from "@/lib/api/client";
 
 const workspace: ApiPlanningWorkspace = {
   criticalPathTaskIds: ["task-2"],
@@ -132,6 +132,35 @@ const workspace: ApiPlanningWorkspace = {
     versionNumber: 1,
   },
 };
+
+const projectMembers: ApiProjectMember[] = [
+  {
+    id: "member-1",
+    projectId: "project-1",
+    role: "owner",
+    user: {
+      email: "alice@example.com",
+      firstName: "Alice",
+      id: "user-1",
+      lastName: "Ng",
+      status: "active",
+    },
+    userId: "user-1",
+  },
+  {
+    id: "member-2",
+    projectId: "project-1",
+    role: "contributor",
+    user: {
+      email: "bob@example.com",
+      firstName: "Bob",
+      id: "user-2",
+      lastName: "Stone",
+      status: "active",
+    },
+    userId: "user-2",
+  },
+];
 
 const orderingWorkspace: ApiPlanningWorkspace = {
   ...workspace,
@@ -467,6 +496,26 @@ function openAddChildMenu() {
   fireEvent.click(screen.getByRole("button", { name: /Add Child/ }));
 }
 
+function submitCreateTaskDialog({
+  ownerId,
+  title,
+}: {
+  ownerId?: string;
+  title?: string;
+} = {}) {
+  if (title !== undefined) {
+    fireEvent.change(screen.getByLabelText(/Task Name/), {
+      target: { value: title },
+    });
+  }
+  if (ownerId !== undefined) {
+    fireEvent.change(screen.getByLabelText("Owner"), {
+      target: { value: ownerId },
+    });
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Create" }));
+}
+
 function setViewportWidth(width: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -747,10 +796,91 @@ describe("PlanningWorkspace", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("WBS").length).toBeGreaterThan(0);
     expect(screen.getByText("Task Name")).toBeInTheDocument();
+    expect(screen.getByText("Owner")).toBeInTheDocument();
     expect(screen.getByText("Start")).toBeInTheDocument();
     expect(screen.getByText("Finish")).toBeInTheDocument();
-    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
     expect(screen.queryByText("Status")).not.toBeInTheDocument();
+  });
+
+  it("shows owners in the default WBS grid for executable work", () => {
+    const ownerWorkspace: ApiPlanningWorkspace = {
+      ...workspace,
+      schedules: [
+        {
+          ...workspace.schedules[0],
+          task: undefined,
+        },
+        {
+          ...workspace.schedules[1],
+          parentTaskId: null,
+          task: {
+            ...workspace.schedules[1].task,
+            assignee: {
+              email: "pm@example.com",
+              firstName: "Priya",
+              id: "user-pm",
+              lastName: "Mohan",
+              status: "active",
+            },
+            id: "task-parent",
+            title: "Implement Customer SSO",
+          },
+          taskId: "task-parent",
+          taskTitle: "Implement Customer SSO",
+        },
+        {
+          ...workspace.schedules[1],
+          id: "schedule-subtask-a",
+          parentTaskId: "task-parent",
+          sequenceNumber: 1,
+          task: {
+            ...workspace.schedules[1].task,
+            assignee: {
+              email: "engineer-a@example.com",
+              firstName: "Engineer",
+              id: "user-engineer-a",
+              lastName: "A",
+              status: "active",
+            },
+            id: "task-subtask-a",
+            title: "Configure Azure AD",
+          },
+          taskId: "task-subtask-a",
+          taskTitle: "Configure Azure AD",
+        },
+        {
+          ...workspace.schedules[1],
+          id: "schedule-subtask-b",
+          parentTaskId: "task-parent",
+          sequenceNumber: 2,
+          task: {
+            ...workspace.schedules[1].task,
+            assignee: undefined,
+            id: "task-subtask-b",
+            title: "Configure SAML",
+          },
+          taskId: "task-subtask-b",
+          taskTitle: "Configure SAML",
+        },
+        workspace.schedules[2],
+      ],
+    };
+
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={ownerWorkspace}
+      />,
+    );
+
+    expect(screen.getByText("Owner")).toBeInTheDocument();
+    expect(screen.getByText("Priya Mohan")).toBeInTheDocument();
+    expect(screen.getByText("Engineer A")).toBeInTheDocument();
+    expect(screen.getByText("Unassigned")).toBeInTheDocument();
+    expect(screen.getAllByText("—")).toHaveLength(2);
   });
 
   it("uses a compact grouped command surface and a wider task-name column", () => {
@@ -789,7 +919,7 @@ describe("PlanningWorkspace", () => {
     ).toHaveClass("h-8");
 
     expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveStyle({
-      gridTemplateColumns: "64px 304px 96px 96px",
+      gridTemplateColumns: "64px 300px 120px 96px 96px",
     });
   });
 
@@ -909,7 +1039,7 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    showColumns("Owner", "Status", "Priority", "Progress", "Duration");
+    showColumns("Status", "Priority", "Progress", "Duration");
 
     const splitWorkspace = screen.getByLabelText("Planning split workspace");
     expect(splitWorkspace).toHaveAttribute("data-grid-width", "560");
@@ -934,7 +1064,6 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    showColumns("Owner");
     const separator = screen.getByRole("separator", {
       name: "Resize planning panes",
     });
@@ -1122,19 +1251,27 @@ describe("PlanningWorkspace", () => {
     );
 
     expect(screen.getByText("Task Name")).toBeInTheDocument();
-    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
+    expect(screen.getByText("Owner")).toBeInTheDocument();
     expect(screen.queryByText("Status")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /columns/i }));
-    expect(screen.getByLabelText("Owner")).toBeDisabled();
+    expect(screen.getByLabelText("Status")).toBeDisabled();
   });
 
-  it("enables Add Child only for selected summary rows and explains disabled states", () => {
+  it("enables Add Child for selected summaries and tasks", async () => {
+    const onCreateTask = vi.fn().mockResolvedValue({
+      ...workspace.schedules[1],
+      id: "schedule-subtask",
+      parentTaskId: "task-2",
+      taskId: "task-subtask",
+      taskTitle: "New sub-task",
+    });
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
-        onCreateTask={vi.fn()}
+        onCreateTask={onCreateTask}
         onDeleteDependency={vi.fn()}
         onUpdateSchedule={vi.fn()}
+        projectMembers={projectMembers}
         workspace={workspace}
       />,
     );
@@ -1142,7 +1279,7 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
       "title",
-      "Select a Summary task to add child work.",
+      "Select a Summary or Task to add child work.",
     );
 
     fireEvent.click(screen.getByRole("row", { name: /1 Planning/ }));
@@ -1155,6 +1292,7 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByRole("menuitem", { name: "Drop" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Go Live" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Decision" })).toBeEnabled();
+    openAddChildMenu();
 
     fireEvent.click(screen.getByRole("row", { name: /1\.2 Gate approved/ }));
     expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
@@ -1164,10 +1302,30 @@ describe("PlanningWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("row", { name: /1\.1 Design schedule/ }));
-    expect(screen.getByRole("button", { name: /Add Child/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Add Child/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Add Child/ })).toHaveAttribute(
       "title",
-      "This item is an executable task. Convert it to a Summary if you want to organize child work.",
+      "Add a sub-task under the selected Task.",
+    );
+    openAddChildMenu();
+    expect(screen.getByRole("menuitem", { name: "Sub-task" })).toBeEnabled();
+    expect(
+      screen.queryByRole("menuitem", { name: "Summary" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sub-task" }));
+    expect(screen.getByText("Create Sub-task")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Task Name/)).toHaveValue("New Sub-task");
+    expect(
+      screen.getByRole("option", { name: "Bob Stone" }),
+    ).toBeInTheDocument();
+    submitCreateTaskDialog({ ownerId: "user-2" });
+    await waitFor(() =>
+      expect(onCreateTask).toHaveBeenCalledWith({
+        ownerId: "user-2",
+        parentTaskId: "task-2",
+        taskType: "task",
+        title: "New Sub-task",
+      }),
     );
   });
 
@@ -1220,11 +1378,14 @@ describe("PlanningWorkspace", () => {
     fireEvent.click(summaryRow);
     openAddChildMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+    submitCreateTaskDialog();
 
     await waitFor(() => {
       expect(onCreateTask).toHaveBeenCalledWith({
+        ownerId: null,
         parentTaskId: "task-1",
         taskType: "task",
+        title: "New Task",
       });
     });
     expect(screen.getByRole("row", { name: /1 Planning/ })).toHaveAttribute(
@@ -1355,7 +1516,6 @@ describe("PlanningWorkspace", () => {
       />,
     );
 
-    showColumns("Owner");
     fireEvent.click(screen.getByTitle("Alice Ng"));
     const ownerSelect = screen
       .getByRole("option", { name: "Bob Stone" })
@@ -1539,7 +1699,7 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByTitle("Recovered task title")).toBeInTheDocument();
   });
 
-  it("creates a sibling task and immediately opens the title editor", async () => {
+  it("creates a sibling task with a selected owner from the create dialog", async () => {
     const newSchedule = {
       ...workspace.schedules[1],
       id: "schedule-4",
@@ -1547,11 +1707,18 @@ describe("PlanningWorkspace", () => {
       sequenceNumber: 3,
       task: {
         ...workspace.schedules[1].task,
+        assignee: {
+          email: "bob@example.com",
+          firstName: "Bob",
+          id: "user-2",
+          lastName: "Stone",
+          status: "active",
+        },
         id: "task-4",
-        title: "New Task",
+        title: "API handoff",
       },
       taskId: "task-4",
-      taskTitle: "New Task",
+      taskTitle: "API handoff",
     };
     const onCreateTask = vi.fn().mockResolvedValue(newSchedule);
 
@@ -1570,6 +1737,7 @@ describe("PlanningWorkspace", () => {
           }}
           onDeleteDependency={vi.fn()}
           onUpdateSchedule={vi.fn()}
+          projectMembers={projectMembers}
           workspace={currentWorkspace}
         />
       );
@@ -1580,12 +1748,22 @@ describe("PlanningWorkspace", () => {
     fireEvent.click(screen.getByText("Design schedule"));
     openAddMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+    expect(screen.getByText("Create Task")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Task Name/)).toHaveValue("New Task");
+    expect(
+      screen.getByRole("option", { name: "Bob Stone" }),
+    ).toBeInTheDocument();
+    submitCreateTaskDialog({ ownerId: "user-2", title: "API handoff" });
 
-    expect(onCreateTask).toHaveBeenCalledWith({
-      parentTaskId: "task-1",
-      taskType: "task",
+    await waitFor(() => {
+      expect(onCreateTask).toHaveBeenCalledWith({
+        ownerId: "user-2",
+        parentTaskId: "task-1",
+        taskType: "task",
+        title: "API handoff",
+      });
     });
-    expect(await screen.findByDisplayValue("New Task")).toHaveFocus();
+    expect((await screen.findAllByText("Bob Stone")).length).toBeGreaterThan(0);
   });
 
   it("creates a sibling summary and immediately opens the title editor", async () => {
@@ -2284,15 +2462,20 @@ describe("PlanningWorkspace", () => {
 
     openAddMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+    expect(screen.getByText("Create Task")).toBeInTheDocument();
+    submitCreateTaskDialog();
 
-    expect(onCreateTask).toHaveBeenCalledWith({
-      parentTaskId: null,
-      taskType: "task",
+    await waitFor(() => {
+      expect(onCreateTask).toHaveBeenCalledWith({
+        ownerId: null,
+        parentTaskId: null,
+        taskType: "task",
+        title: "New Task",
+      });
     });
     expect(
       await screen.findByRole("row", { name: /4 New Task/ }),
     ).toBeInTheDocument();
-    expect(screen.getByDisplayValue("New Task")).toHaveFocus();
   });
 
   it("adds a child without changing the parent's expansion state", async () => {
@@ -2338,10 +2521,15 @@ describe("PlanningWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: /collapse planning/i }));
     openAddChildMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
+    submitCreateTaskDialog();
 
-    expect(onCreateTask).toHaveBeenCalledWith({
-      parentTaskId: "task-1",
-      taskType: "task",
+    await waitFor(() => {
+      expect(onCreateTask).toHaveBeenCalledWith({
+        ownerId: null,
+        parentTaskId: "task-1",
+        taskType: "task",
+        title: "New Task",
+      });
     });
     await waitFor(() => expect(onCreateTask).toHaveBeenCalledTimes(1));
     expect(
@@ -2445,22 +2633,41 @@ describe("PlanningWorkspace", () => {
     expect(onRefreshWorkspace).toHaveBeenCalled();
   });
 
-  it("rejects cross-summary row drops onto standard tasks", async () => {
+  it("rejects cross-summary row drops onto subtasks", async () => {
     const onUpdateSchedule = vi.fn();
+    const workspaceWithSubtaskTarget: ApiPlanningWorkspace = {
+      ...wbsEditingWorkspace,
+      schedules: [
+        ...wbsEditingWorkspace.schedules,
+        {
+          ...workspace.schedules[1],
+          id: "task-build-api-tests",
+          parentTaskId: "task-4",
+          sequenceNumber: 1,
+          task: {
+            ...workspace.schedules[1].task,
+            id: "task-5",
+            title: "Build API tests",
+          },
+          taskId: "task-5",
+          taskTitle: "Build API tests",
+        },
+      ],
+    };
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
         onCreateTask={vi.fn()}
         onDeleteDependency={vi.fn()}
         onUpdateSchedule={onUpdateSchedule}
-        workspace={wbsEditingWorkspace}
+        workspace={workspaceWithSubtaskTarget}
       />,
     );
 
-    dragRow(/1\.1 Design schedule/, /2\.1 Build API/);
+    dragRow(/1\.1 Design schedule/, /2\.1\.1 Build API tests/);
 
     expect(
-      screen.getByText("Only summary tasks can contain child items."),
+      screen.getByText("Sub-tasks cannot contain child items."),
     ).toBeInTheDocument();
     expect(onUpdateSchedule).not.toHaveBeenCalled();
   });
