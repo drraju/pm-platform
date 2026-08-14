@@ -10,13 +10,23 @@ import { PasswordModule } from './password.module';
 import { PasswordResetTokenService } from './password-reset-token.service';
 import { PasswordUpdateService } from './password-update.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { getJwtConfiguration, JWT_CONFIGURATION } from './jwt-configuration';
 
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'development-jwt-secret',
-      signOptions: { expiresIn: '1h' },
+    JwtModule.registerAsync({
+      useFactory: () => {
+        const configuration = getJwtConfiguration();
+        return {
+          secret: configuration.accessSecret,
+          signOptions: {
+            audience: configuration.accessAudience,
+            expiresIn: configuration.accessExpiresIn,
+            issuer: configuration.issuer,
+          },
+        };
+      },
     }),
     TypeOrmModule.forFeature([PasswordResetToken]),
     PasswordModule,
@@ -28,6 +38,10 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtStrategy,
     PasswordResetTokenService,
     PasswordUpdateService,
+    {
+      provide: JWT_CONFIGURATION,
+      useFactory: getJwtConfiguration,
+    },
   ],
   exports: [AuthService, PasswordUpdateService],
 })

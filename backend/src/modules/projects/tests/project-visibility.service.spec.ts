@@ -60,6 +60,11 @@ describe('ProjectVisibilityService', () => {
     service = moduleRef.get(ProjectVisibilityService);
   });
 
+  it('returns no projects when actor context is missing', async () => {
+    await expect(service.getVisibleProjectIds()).resolves.toEqual([]);
+    expect(projectsRepository.find).not.toHaveBeenCalled();
+  });
+
   it('returns all projects for users with portfolio or executive visibility', async () => {
     authorizationPolicyService.canViewPortfolio.mockResolvedValue(true);
 

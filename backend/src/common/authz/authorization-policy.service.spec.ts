@@ -152,6 +152,7 @@ describe('AuthorizationPolicyService', () => {
         const permissionKeys = permissionsByRoleName[roleName] ?? [];
         return Promise.resolve({
           id: where.id,
+          name: roleName,
           permissions: permissionKeys.map((key) => ({ key })),
         });
       }),
@@ -213,6 +214,35 @@ describe('AuthorizationPolicyService', () => {
       ).resolves.toBe(true);
     },
   );
+
+  it('fails closed when project visibility is evaluated without an actor', async () => {
+    await expect(service.canViewProject(projectId)).resolves.toBe(false);
+  });
+
+  it('allows portfolio visibility but rejects unrelated project mutation', async () => {
+    const portfolioActor = actor(UserRole.PortfolioManager, 'portfolio-user');
+
+    await expect(
+      service.canViewProject(projectId, portfolioActor),
+    ).resolves.toBe(true);
+    await expect(
+      service.canManageProject(projectId, portfolioActor),
+    ).resolves.toBe(false);
+    await expect(
+      service.canManageTask(projectId, portfolioActor),
+    ).resolves.toBe(false);
+  });
+
+  it('allows a portfolio manager to mutate a project they manage', async () => {
+    membershipsByKey.set(`${projectId}:portfolio-user`, ProjectRole.Manager);
+
+    await expect(
+      service.canManageProject(
+        projectId,
+        actor(UserRole.PortfolioManager, 'portfolio-user'),
+      ),
+    ).resolves.toBe(true);
+  });
 
   it('grants project visibility from membership without role-name logic', async () => {
     membershipsByKey.set(

@@ -86,6 +86,10 @@ describe('EnterpriseContextAssemblyService', () => {
 
     const service = new EnterpriseContextAssemblyService(registry);
     const result = await service.assemble({
+      authorization: {
+        allowSensitiveContext: true,
+        allowedProjectIds: ['project-1'],
+      },
       capabilityId: 'chat',
       executionContext,
       scope: executionContext.scope,
@@ -136,6 +140,7 @@ describe('EnterpriseContextAssemblyService', () => {
     const result = await new EnterpriseContextAssemblyService(registry).assemble({
       authorization: {
         allowSensitiveContext: false,
+        allowedProjectIds: ['project-1'],
         allowedResourceIds: { task: ['task-1', 'task-2', 'task-3'] },
       },
       capabilityId: 'chat',
@@ -148,5 +153,31 @@ describe('EnterpriseContextAssemblyService', () => {
     expect(result.context.documents).toEqual([]);
     expect(result.diagnostics.truncatedTypes).toContain('task');
     expect(result.diagnostics.omittedItemCount).toBe(3);
+  });
+
+  it('fails closed when server authorization context is absent', async () => {
+    const registry = {
+      assembleContext: jest.fn().mockResolvedValue([
+        {
+          fragment: {
+            contextType: 'task',
+            items: [{ id: 'task-1', projectId: 'project-1', title: 'Hidden' }],
+            providerId: 'task-context',
+          },
+          provider: { id: 'task-context' },
+        },
+      ]),
+    } as unknown as AiContextRegistryService;
+
+    const result = await new EnterpriseContextAssemblyService(
+      registry,
+    ).assemble({
+      capabilityId: 'chat',
+      executionContext,
+      scope: executionContext.scope,
+    });
+
+    expect(result.context.tasks).toEqual([]);
+    expect(result.diagnostics.omittedItemCount).toBe(1);
   });
 });

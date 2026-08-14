@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { Risk } from '../../raid/entities/risk.entity';
 import { RisksService } from '../risks.service';
@@ -19,6 +20,12 @@ describe('RisksService', () => {
     ProjectVisibilityService,
     'getVisibleProjectIds' | 'canViewProject'
   >;
+  let authorizationPolicyService: {
+    canContributeRaid: jest.Mock;
+    canManageRaid: jest.Mock;
+    hasPermission: jest.Mock;
+    isExternalActor: jest.Mock;
+  };
 
   beforeEach(async () => {
     risksRepository = {
@@ -32,6 +39,12 @@ describe('RisksService', () => {
       getVisibleProjectIds: jest.fn(),
       canViewProject: jest.fn(),
     };
+    authorizationPolicyService = {
+      canContributeRaid: jest.fn().mockResolvedValue(true),
+      canManageRaid: jest.fn().mockResolvedValue(true),
+      hasPermission: jest.fn().mockResolvedValue(true),
+      isExternalActor: jest.fn().mockResolvedValue(false),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -40,6 +53,10 @@ describe('RisksService', () => {
         {
           provide: ProjectVisibilityService,
           useValue: projectVisibilityService,
+        },
+        {
+          provide: AuthorizationPolicyService,
+          useValue: authorizationPolicyService,
         },
       ],
     }).compile();
@@ -70,6 +87,15 @@ describe('RisksService', () => {
 
     await expect(
       service.findAll({ roleId: 'role-1', userId: 'customer-1' }),
+    ).resolves.toEqual([]);
+    expect(risksRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('returns no risk register data to external actors', async () => {
+    authorizationPolicyService.isExternalActor.mockResolvedValueOnce(true);
+
+    await expect(
+      service.findAll({ roleId: 'partner-role', userId: 'partner-1' }),
     ).resolves.toEqual([]);
     expect(risksRepository.find).not.toHaveBeenCalled();
   });

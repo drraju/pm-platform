@@ -13,6 +13,7 @@ import {
 function authorizationPolicy(overrides: {
   canManageProject?: boolean;
   canViewProject?: boolean;
+  isExternalActor?: boolean;
 } = {}) {
   return {
     canManageProject: jest
@@ -21,6 +22,9 @@ function authorizationPolicy(overrides: {
     canViewProject: jest
       .fn()
       .mockResolvedValue(overrides.canViewProject ?? true),
+    isExternalActor: jest
+      .fn()
+      .mockResolvedValue(overrides.isExternalActor ?? false),
   };
 }
 
@@ -128,6 +132,12 @@ const storedDocument = {
 } as ProjectDocument;
 
 describe('DocumentsService', () => {
+  const managerActor = {
+    email: 'pm@example.com',
+    roleId: 'role-1',
+    userId: 'pm-1',
+  };
+
   it('creates provider-independent external document links with references and audit fields', async () => {
     const documentRepository = repository<ProjectDocument>();
     documentRepository.createQueryBuilder.mockReturnValue(
@@ -332,4 +342,206 @@ describe('DocumentsService', () => {
     expect(updated.category).toBe('Business');
     expect(updated.documentType).toBe('HLD');
   });
+
+  it('requires authority in both projects when moving a document', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    documentRepository.createQueryBuilder.mockReturnValue(
+      queryBuilder(storedDocument),
+    );
+    const projectRepository = repository<{ id: string }>();
+    projectRepository.findOne.mockResolvedValue({ id: 'target-project' });
+    const auth = authorizationPolicy();
+    auth.canManageProject
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const { service } = createService(
+      documentRepository,
+      projectRepository,
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      auth,
+    );
+
+    await expect(
+      service.update(
+        storedDocument.id,
+        { projectId: 'target-project' },
+        managerActor,
+      ),
+    ).rejects.toThrow('Document movement requires authority in both projects');
+    expect(auth.canManageProject).toHaveBeenNthCalledWith(
+      1,
+      storedDocument.projectId,
+      managerActor,
+    );
+    expect(auth.canManageProject).toHaveBeenNthCalledWith(
+      2,
+      'target-project',
+      managerActor,
+    );
+    expect(documentRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects document movement when source-project authority is missing', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    documentRepository.createQueryBuilder.mockReturnValue(
+      queryBuilder(storedDocument),
+    );
+    const auth = authorizationPolicy({ canManageProject: false });
+    auth.canManageProject
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const { service } = createService(
+      documentRepository,
+      repository<{ id: string }>(),
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      auth,
+    );
+
+    await expect(
+      service.update(
+        storedDocument.id,
+        { projectId: 'target-project' },
+        managerActor,
+      ),
+    ).rejects.toThrow(
+      'Only document owners or project managers can update this document',
+    );
+    expect(auth.canManageProject).toHaveBeenCalledTimes(1);
+    expect(documentRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves same-project document updates with one authority check', async () => {
+    const sourceProjectId = storedDocument.projectId;
+    const sourceDocument = { ...storedDocument } as ProjectDocument;
+    const updatedDocument = {
+      ...sourceDocument,
+      title: 'Updated in place',
+    } as ProjectDocument;
+    const documentRepository = repository<ProjectDocument>();
+    documentRepository.createQueryBuilder
+      .mockReturnValueOnce(queryBuilder(sourceDocument))
+      .mockReturnValueOnce(queryBuilder(updatedDocument));
+    const auth = authorizationPolicy();
+    const { service } = createService(
+      documentRepository,
+      repository<{ id: string }>(),
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      auth,
+    );
+
+    await expect(
+      service.update(
+        sourceDocument.id,
+        { projectId: sourceProjectId, title: 'Updated in place' },
+        managerActor,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ title: 'Updated in place' }));
+    expect(auth.canManageProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows document movement when the actor can manage both projects', async () => {
+    const sourceProjectId = storedDocument.projectId;
+    const sourceDocument = { ...storedDocument } as ProjectDocument;
+    const movedDocument = {
+      ...sourceDocument,
+      projectId: 'target-project',
+    } as ProjectDocument;
+    const documentRepository = repository<ProjectDocument>();
+    documentRepository.createQueryBuilder
+      .mockReturnValueOnce(queryBuilder(sourceDocument))
+      .mockReturnValueOnce(queryBuilder(movedDocument));
+    const projectRepository = repository<{ id: string }>();
+    projectRepository.findOne.mockResolvedValue({ id: 'target-project' });
+    const auth = authorizationPolicy();
+    const { service } = createService(
+      documentRepository,
+      projectRepository,
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      auth,
+    );
+
+    await expect(
+      service.update(
+        sourceDocument.id,
+        { projectId: 'target-project' },
+        managerActor,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ projectId: 'target-project' }),
+    );
+    expect(auth.canManageProject).toHaveBeenNthCalledWith(
+      1,
+      sourceProjectId,
+      managerActor,
+    );
+    expect(auth.canManageProject).toHaveBeenNthCalledWith(
+      2,
+      'target-project',
+      managerActor,
+    );
+    expect(documentRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'target-project' }),
+    );
+  });
+
+  it.each([
+    ['Customer', 'customer-role', 'customer-1'],
+    ['Partner', 'partner-role', 'partner-1'],
+  ])(
+    'projects approved document metadata for %s without external links or people',
+    async (_audience, roleId, externalUserId) => {
+      const documentRepository = repository<ProjectDocument>();
+      const externalDocument = {
+        ...storedDocument,
+        approvalStatus: DocumentApprovalStatus.APPROVED,
+        categoryId: category.id,
+        documentTypeId: documentType.id,
+        title: 'ADR-015',
+      } as ProjectDocument;
+      const builder = queryBuilder(externalDocument);
+      documentRepository.createQueryBuilder.mockReturnValue(builder);
+      const projectRepository = repository<{ id: string }>();
+      projectRepository.findOne.mockResolvedValue({
+        id: storedDocument.projectId,
+      });
+      const { service } = createService(
+        documentRepository,
+        projectRepository,
+        repository<DocumentType>(),
+        repository<DocumentCategory>(),
+        repository<{ id: string }>(),
+        authorizationPolicy({ isExternalActor: true }),
+      );
+
+      const [document] = await service.findProjectDocuments(
+        storedDocument.projectId,
+        {},
+        { roleId, userId: externalUserId },
+      );
+
+      expect(builder.andWhere).toHaveBeenCalledWith(
+        'document.approval_status = :externalApprovalStatus',
+        { externalApprovalStatus: DocumentApprovalStatus.APPROVED },
+      );
+      expect(document).toEqual(
+        expect.objectContaining({
+          approvalStatus: DocumentApprovalStatus.APPROVED,
+          id: externalDocument.id,
+          projectId: externalDocument.projectId,
+          title: externalDocument.title,
+        }),
+      );
+      expect(document).not.toHaveProperty('externalUrl');
+      expect(document).not.toHaveProperty('owner');
+      expect(document).not.toHaveProperty('createdBy');
+    },
+  );
 });

@@ -106,7 +106,7 @@ export default function ProjectDocumentsPage() {
         getDocumentStorageProviders(),
         getDocumentTypes(),
         getDocumentCategories(),
-        getAssignableUsers(),
+        getAssignableUsers(projectId),
         getProjectDocumentSummary(projectId),
         getAuthMe(),
       ]);

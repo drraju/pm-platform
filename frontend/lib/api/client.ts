@@ -1228,8 +1228,11 @@ export function getUsers() {
   return apiRequest<ApiUser[]>("/users");
 }
 
-export function getAssignableUsers() {
-  return apiRequest<ApiAssignableUser[]>("/users/assignable");
+export function getAssignableUsers(projectId?: string) {
+  const query = projectId
+    ? `?projectId=${encodeURIComponent(projectId)}`
+    : "";
+  return apiRequest<ApiAssignableUser[]>(`/users/assignable${query}`);
 }
 
 export function getRoles() {

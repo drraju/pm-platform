@@ -7,6 +7,7 @@ import { Project } from '../../modules/projects/entities/project.entity';
 import { Task } from '../../modules/tasks/entities/task.entity';
 import { Role } from '../../modules/users/entities/role.entity';
 import { PermissionKey } from './permissions';
+import { UserRole } from '../enums/user-role.enum';
 
 export type AuthorizationActor = {
   userId: string;
@@ -37,7 +38,7 @@ export class AuthorizationPolicyService {
     actor?: AuthorizationActor,
   ): Promise<boolean> {
     if (!actor) {
-      return true;
+      return false;
     }
 
     const permissionKeys = await this.getPermissionKeys(actor);
@@ -73,11 +74,7 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(
-      projectId,
-      actor,
-      permissionKeys,
-    );
+    return this.canManageProjectWithPermissions(projectId, actor);
   }
 
   async canDeleteProject(
@@ -93,11 +90,7 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(
-      projectId,
-      actor,
-      permissionKeys,
-    );
+    return this.canManageProjectWithPermissions(projectId, actor);
   }
 
   async canManageTask(
@@ -121,11 +114,7 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(
-      projectId,
-      actor,
-      permissionKeys,
-    );
+    return this.canManageProjectWithPermissions(projectId, actor);
   }
 
   async canManageRaid(
@@ -147,11 +136,28 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return this.canManageProjectWithPermissions(
-      projectId,
-      actor,
-      permissionKeys,
-    );
+    return this.canManageProjectWithPermissions(projectId, actor);
+  }
+
+  async canContributeRaid(
+    projectId: string,
+    actor?: AuthorizationActor,
+  ): Promise<boolean> {
+    if (!actor || (await this.isExternalActor(actor))) {
+      return false;
+    }
+    const permissionKeys = await this.getPermissionKeys(actor);
+    if (!permissionKeys.has(PermissionKey.RaidCreate)) {
+      return false;
+    }
+    if (await this.isPlatformAdministrator(actor)) {
+      return true;
+    }
+    const [governsProject, membership] = await Promise.all([
+      this.isProjectGovernor(projectId, actor.userId),
+      this.findMembership(projectId, actor.userId),
+    ]);
+    return Boolean(governsProject || membership);
   }
 
   async canViewPortfolio(actor?: AuthorizationActor): Promise<boolean> {
@@ -196,12 +202,34 @@ export class AuthorizationPolicyService {
     return this.getPermissionKeys(actor);
   }
 
+  async getActorRoleName(
+    actor: AuthorizationActor | undefined,
+  ): Promise<string | null> {
+    if (!actor) {
+      return null;
+    }
+    const role = await this.rolesRepository.findOne({
+      select: { id: true, name: true },
+      where: { id: actor.roleId },
+    });
+    return role?.name ?? null;
+  }
+
+  async isExternalActor(
+    actor: AuthorizationActor | undefined,
+  ): Promise<boolean> {
+    const roleName = await this.getActorRoleName(actor);
+    return roleName === UserRole.Customer || roleName === UserRole.Partner;
+  }
+
   private async canManageProjectWithPermissions(
     projectId: string,
     actor: AuthorizationActor,
-    permissionKeys: Set<string>,
   ): Promise<boolean> {
-    if (this.hasGlobalProjectAccess(permissionKeys)) {
+    if (await this.isExternalActor(actor)) {
+      return false;
+    }
+    if (await this.isPlatformAdministrator(actor)) {
       return true;
     }
 
@@ -264,6 +292,13 @@ export class AuthorizationPolicyService {
         permissionKeys.has(PermissionKey.RoleManage) ||
         permissionKeys.has(PermissionKey.PermissionManage))
     );
+  }
+
+  private async isPlatformAdministrator(
+    actor: AuthorizationActor,
+  ): Promise<boolean> {
+    const roleName = await this.getActorRoleName(actor);
+    return roleName === UserRole.PlatformAdmin;
   }
 
   private hasAnyGrantedPermission(

@@ -51,6 +51,7 @@ describe('ProjectsService', () => {
     canManageProject: jest.Mock;
     canManageTask: jest.Mock;
     hasPermission: jest.Mock;
+    isExternalActor: jest.Mock;
   };
   let projectVisibilityService: {
     canViewProject: jest.Mock;
@@ -165,6 +166,7 @@ describe('ProjectsService', () => {
       canManageProject: jest.fn().mockResolvedValue(true),
       canManageTask: jest.fn().mockResolvedValue(true),
       hasPermission: jest.fn().mockResolvedValue(true),
+      isExternalActor: jest.fn().mockResolvedValue(false),
     };
     projectVisibilityService = {
       canViewProject: jest.fn().mockResolvedValue(true),
@@ -465,6 +467,54 @@ describe('ProjectsService', () => {
       },
     });
   });
+
+  it.each([
+    ['Customer', 'customer-role', 'customer-1'],
+    ['Partner', 'partner-role', 'partner-1'],
+  ])(
+    'returns a conservative project projection to %s actors',
+    async (_audience, roleId, externalUserId) => {
+      authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+      projectsRepository.findOne?.mockResolvedValue({
+        assumptions: [{ id: 'assumption-1', title: 'Internal assumption' }],
+        businessOwner: { email: 'business-owner@example.com', id: 'owner-1' },
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        dependencies: [],
+        description: 'Approved project description',
+        id: projectId,
+        issues: [{ id: 'issue-1', title: 'Internal issue' }],
+        members: [{ id: 'member-1', userId: userId }],
+        name: 'ERP Modernization',
+        risks: [{ id: 'risk-1', title: 'Internal risk' }],
+        startDate: '2026-01-01',
+        status: 'active',
+        targetEndDate: '2026-12-31',
+        tasks: [{ id: taskId, projectId, title: 'Internal task detail' }],
+        updatedAt: new Date('2026-02-01T00:00:00Z'),
+      });
+
+      const result = await service.findOne(projectId, {
+        roleId,
+        userId: externalUserId,
+      });
+
+      expect(result).toEqual({
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        description: 'Approved project description',
+        health: { reasons: [], status: expect.any(String) },
+        id: projectId,
+        name: 'ERP Modernization',
+        startDate: '2026-01-01',
+        status: 'active',
+        targetEndDate: '2026-12-31',
+        updatedAt: new Date('2026-02-01T00:00:00Z'),
+      });
+      expect(result).not.toHaveProperty('members');
+      expect(result).not.toHaveProperty('risks');
+      expect(result).not.toHaveProperty('tasks');
+      expect(result).not.toHaveProperty('businessOwner');
+    },
+  );
 
   it('throws when project details are missing', async () => {
     projectsRepository.findOne?.mockResolvedValue(null);
@@ -837,6 +887,37 @@ describe('ProjectsService', () => {
     });
   });
 
+  it('limits external project member reads to the caller membership', async () => {
+    authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    projectMembersRepository.find?.mockResolvedValue([
+      {
+        id: 'customer-member',
+        projectId,
+        role: ProjectRole.Viewer,
+        userId: 'customer-1',
+        user: { id: 'customer-1', role: { name: UserRole.Customer } },
+      },
+      {
+        id: 'internal-member',
+        projectId,
+        role: ProjectRole.Manager,
+        userId: userId,
+        user: { id: userId, role: { name: UserRole.ProjectManager } },
+      },
+    ]);
+
+    const result = await service.findMembers(projectId, {
+      roleId: 'customer-role',
+      userId: 'customer-1',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(
+      expect.objectContaining({ id: 'customer-member', userId: 'customer-1' }),
+    );
+  });
+
   it('updates a project member role', async () => {
     const member = {
       id: 'member-id',
@@ -934,6 +1015,47 @@ describe('ProjectsService', () => {
         status: TaskStatus.InProgress,
       },
     });
+  });
+
+  it('limits external task reads to assigned execution fields', async () => {
+    authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    tasksRepository.find?.mockResolvedValue([
+      {
+        assigneeId: 'customer-1',
+        id: taskId,
+        latestExecutionUpdate: { updateNotes: 'Internal update' },
+        percentComplete: 25,
+        priority: 'high',
+        projectId,
+        remarks: 'Internal remarks',
+        status: TaskStatus.InProgress,
+        taskKind: TaskKind.Standard,
+        title: 'Customer action',
+      },
+    ]);
+
+    const [result] = await service.findProjectTasks(
+      projectId,
+      {},
+      { roleId: 'customer-role', userId: 'customer-1' },
+    );
+
+    expect(tasksRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ assigneeId: 'customer-1', projectId }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        assigneeId: 'customer-1',
+        id: taskId,
+        percentComplete: 25,
+        title: 'Customer action',
+      }),
+    );
+    expect(result).not.toHaveProperty('remarks');
+    expect(result).not.toHaveProperty('latestExecutionUpdate');
   });
 
   it('creates a project task when the assignee is a project member', async () => {
@@ -1153,13 +1275,18 @@ describe('ProjectsService', () => {
     projectMembersRepository.findOne?.mockResolvedValue({ id: 'member-id' });
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.updateProjectTask(projectId, taskId, {
-      assigneeId: userId,
-      sequenceNumber: 30,
-      status: TaskStatus.Done,
-      taskKind: TaskKind.Standard,
-      title: 'Updated task',
-    });
+    await service.updateProjectTask(
+      projectId,
+      taskId,
+      {
+        assigneeId: userId,
+        sequenceNumber: 30,
+        status: TaskStatus.Done,
+        taskKind: TaskKind.Standard,
+        title: 'Updated task',
+      },
+      actor,
+    );
 
     expect(tasksRepository.findOne).toHaveBeenCalledWith({
       relations: { assignee: true, project: true },
@@ -1193,9 +1320,14 @@ describe('ProjectsService', () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.updateProjectTask(projectId, taskId, {
-      status: TaskStatus.Done,
-    });
+    await service.updateProjectTask(
+      projectId,
+      taskId,
+      {
+        status: TaskStatus.Done,
+      },
+      actor,
+    );
 
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1221,9 +1353,14 @@ describe('ProjectsService', () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.updateProjectTask(projectId, taskId, {
-      percentComplete: 100,
-    });
+    await service.updateProjectTask(
+      projectId,
+      taskId,
+      {
+        percentComplete: 100,
+      },
+      actor,
+    );
 
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1249,9 +1386,14 @@ describe('ProjectsService', () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.updateProjectTask(projectId, taskId, {
-      status: TaskStatus.Done,
-    });
+    await service.updateProjectTask(
+      projectId,
+      taskId,
+      {
+        status: TaskStatus.Done,
+      },
+      actor,
+    );
 
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1272,9 +1414,14 @@ describe('ProjectsService', () => {
     });
 
     await expect(
-      service.updateProjectTask(projectId, taskId, {
-        status: TaskStatus.Done,
-      }),
+      service.updateProjectTask(
+        projectId,
+        taskId,
+        {
+          status: TaskStatus.Done,
+        },
+        actor,
+      ),
     ).rejects.toThrow('Summary task status is calculated from child work');
   });
 
@@ -1288,9 +1435,14 @@ describe('ProjectsService', () => {
     });
 
     await expect(
-      service.updateProjectTask(projectId, taskId, {
-        parentTaskId: taskId,
-      }),
+      service.updateProjectTask(
+        projectId,
+        taskId,
+        {
+          parentTaskId: taskId,
+        },
+        actor,
+      ),
     ).rejects.toThrow('A task cannot be its own parent');
   });
 
@@ -1299,9 +1451,14 @@ describe('ProjectsService', () => {
     tasksRepository.findOne?.mockResolvedValue(null);
 
     await expect(
-      service.updateProjectTask(projectId, taskId, {
-        title: 'Updated task',
-      }),
+      service.updateProjectTask(
+        projectId,
+        taskId,
+        {
+          title: 'Updated task',
+        },
+        actor,
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 

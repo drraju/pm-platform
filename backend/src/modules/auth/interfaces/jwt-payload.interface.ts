@@ -3,4 +3,5 @@ export interface JwtPayload {
   iat?: number;
   roleId: string;
   sub: string;
+  tokenType: 'access' | 'refresh';
 }

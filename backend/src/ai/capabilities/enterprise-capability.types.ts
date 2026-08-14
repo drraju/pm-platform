@@ -1,4 +1,5 @@
 import type { ContextType } from '../common';
+import type { EnterpriseContextAuthorization } from '../context';
 
 export type EnterpriseCapabilityCategory =
   | 'delivery'
@@ -44,6 +45,7 @@ export type CapabilityExecutionRequest = {
   actorId?: string;
   capabilityId: string;
   correlationId: string;
+  contextAuthorization?: EnterpriseContextAuthorization;
   contextSourceData?: unknown;
   input: unknown;
   permissions?: readonly string[];

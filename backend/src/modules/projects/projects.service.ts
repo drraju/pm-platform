@@ -77,6 +77,11 @@ const teamMemberEditableTaskFields = new Set([
   'percentComplete',
   'status',
 ]);
+const externalEditableTaskFields = new Set([
+  'remarks',
+  'percentComplete',
+  'status',
+]);
 
 @Injectable()
 export class ProjectsService {
@@ -155,15 +160,21 @@ export class ProjectsService {
     const projects =
       await this.projectVisibilityService.getVisibleProjects(actor);
     const lifecycle = options.lifecycle ?? 'active';
-    return projects
-      .filter((project) => {
-        if (lifecycle === 'all') {
-          return true;
-        }
-        const isArchived = project.status === archivedProjectStatus;
-        return lifecycle === 'archived' ? isArchived : !isArchived;
-      })
-      .map((project) => this.decorateProject(this.withHealth(project)));
+    const filteredProjects = projects.filter((project) => {
+      if (lifecycle === 'all') {
+        return true;
+      }
+      const isArchived = project.status === archivedProjectStatus;
+      return lifecycle === 'archived' ? isArchived : !isArchived;
+    });
+    return Promise.all(
+      filteredProjects.map((project) =>
+        this.projectForActor(
+          this.decorateProject(this.withHealth(project)),
+          actor,
+        ),
+      ),
+    );
   }
 
   async findOne(
@@ -197,7 +208,10 @@ export class ProjectsService {
         );
     }
 
-    return this.decorateProject(this.withHealth(project));
+    return this.projectForActor(
+      this.decorateProject(this.withHealth(project)),
+      actor,
+    );
   }
 
   async update(
@@ -313,7 +327,11 @@ export class ProjectsService {
       where: { projectId },
     });
 
-    return members.map((member) => this.toProjectMemberResponse(member));
+    const visibleMembers =
+      (await this.authorizationPolicyService.isExternalActor(actor))
+        ? members.filter((member) => member.userId === actor!.userId)
+        : members;
+    return visibleMembers.map((member) => this.toProjectMemberResponse(member));
   }
 
   async updateMember(
@@ -361,15 +379,21 @@ export class ProjectsService {
       relations: { assignee: true, project: true },
       where: {
         projectId,
+        ...((await this.authorizationPolicyService.isExternalActor(actor))
+          ? { assigneeId: actor!.userId }
+          : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.assigneeId ? { assigneeId: query.assigneeId } : {}),
         ...(query.priority ? { priority: query.priority } : {}),
       },
     });
     const decoratedTasks = decoratePlanningTasks(tasks);
-    return this.canonicalTasksService
-      ? this.canonicalTasksService.attachLatestExecutionUpdates(decoratedTasks)
+    const tasksWithUpdates = this.canonicalTasksService
+      ? await this.canonicalTasksService.attachLatestExecutionUpdates(
+          decoratedTasks,
+        )
       : decoratedTasks;
+    return this.projectTasksForActor(tasksWithUpdates, actor);
   }
 
   async createProjectTask(
@@ -408,7 +432,7 @@ export class ProjectsService {
     });
 
     const savedTask = await this.tasksRepository.save(task);
-    return this.decorateTask(savedTask);
+    return this.projectTaskForActor(this.decorateTask(savedTask), actor);
   }
 
   async updateProjectTask(
@@ -451,7 +475,7 @@ export class ProjectsService {
     });
 
     const savedTask = await this.tasksRepository.save(task);
-    return this.decorateTask(savedTask);
+    return this.projectTaskForActor(this.decorateTask(savedTask), actor);
   }
 
   async recordProjectTaskExecutionUpdate(
@@ -591,6 +615,9 @@ export class ProjectsService {
   ): Promise<ProjectBaseline[]> {
     await this.ensureProjectExists(projectId);
     await this.ensureProjectVisible(projectId, actor);
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      return [];
+    }
 
     return this.projectBaselinesRepository.find({
       order: { versionNumber: 'DESC' },
@@ -608,6 +635,11 @@ export class ProjectsService {
   ): Promise<ProjectBaseline> {
     await this.ensureProjectExists(projectId);
     await this.ensureProjectVisible(projectId, actor);
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      throw new NotFoundException(
+        `Project baseline ${baselineId} not found for project ${projectId}`,
+      );
+    }
 
     const baseline = await this.projectBaselinesRepository.findOne({
       relations: {
@@ -652,6 +684,9 @@ export class ProjectsService {
   ): Promise<TaskDependency[]> {
     await this.ensureProjectExists(projectId);
     await this.ensureProjectVisible(projectId, actor);
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      return [];
+    }
 
     return this.taskDependenciesRepository.find({
       order: { createdAt: 'ASC' },
@@ -673,6 +708,11 @@ export class ProjectsService {
   ): Promise<TaskDependency> {
     await this.ensureProjectExists(projectId);
     await this.ensureProjectVisible(projectId, actor);
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      throw new NotFoundException(
+        `Task dependency ${dependencyId} not found for project ${projectId}`,
+      );
+    }
     return this.findTaskDependency(projectId, dependencyId);
   }
 
@@ -683,6 +723,9 @@ export class ProjectsService {
   ): Promise<TaskDependency[]> {
     await this.ensureProjectExists(projectId);
     await this.ensureProjectVisible(projectId, actor);
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      return [];
+    }
     await this.ensurePlanningTaskExists(projectId, taskId);
 
     return this.taskDependenciesRepository.find({
@@ -705,6 +748,9 @@ export class ProjectsService {
   ): Promise<TaskDependency[]> {
     await this.ensureProjectExists(projectId);
     await this.ensureProjectVisible(projectId, actor);
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      return [];
+    }
     await this.ensurePlanningTaskExists(projectId, taskId);
 
     return this.taskDependenciesRepository.find({
@@ -1469,7 +1515,7 @@ export class ProjectsService {
     actor?: AuthenticatedActor,
   ): Promise<void> {
     if (!actor) {
-      return;
+      throw new ForbiddenException('Authenticated user is required');
     }
 
     if (await this.canManageTask(task.projectId, actor)) {
@@ -1482,8 +1528,12 @@ export class ProjectsService {
       );
     }
 
+    const editableFields =
+      (await this.authorizationPolicyService.isExternalActor(actor))
+        ? externalEditableTaskFields
+        : teamMemberEditableTaskFields;
     const disallowedFields = Object.keys(updateProjectTaskDto).filter(
-      (field) => !teamMemberEditableTaskFields.has(field),
+      (field) => !editableFields.has(field),
     );
     if (disallowedFields.length > 0) {
       throw new ForbiddenException(
@@ -1548,5 +1598,68 @@ export class ProjectsService {
 
   private decorateTask(task: Task): Task {
     return decoratePlanningTasks([task])[0];
+  }
+
+  private async projectForActor(
+    project: ProjectWithHealth,
+    actor?: ProjectVisibilityActor,
+  ): Promise<ProjectWithHealth> {
+    if (!(await this.authorizationPolicyService.isExternalActor(actor))) {
+      return project;
+    }
+    return {
+      createdAt: project.createdAt,
+      description: project.description ?? null,
+      health: {
+        reasons: [],
+        status: project.health.status,
+      },
+      id: project.id,
+      name: project.name,
+      startDate: project.startDate ?? null,
+      status: project.status,
+      targetEndDate: project.targetEndDate ?? null,
+      updatedAt: project.updatedAt,
+    } as unknown as ProjectWithHealth;
+  }
+
+  private async projectTaskForActor(
+    task: Task,
+    actor?: ProjectVisibilityActor,
+  ): Promise<Task> {
+    if (this.canonicalTasksService) {
+      return this.canonicalTasksService.projectTaskForActor(task, actor);
+    }
+    if (!(await this.authorizationPolicyService.isExternalActor(actor))) {
+      return task;
+    }
+    return {
+      actualEndDate: task.actualEndDate ?? null,
+      actualStartDate: task.actualStartDate ?? null,
+      assigneeId: task.assigneeId ?? null,
+      description: task.description ?? null,
+      dueDate: task.dueDate ?? null,
+      id: task.id,
+      milestoneCategory: task.milestoneCategory ?? null,
+      percentComplete: task.percentComplete,
+      priority: task.priority,
+      projectId: task.projectId,
+      startDate: task.startDate ?? null,
+      status: task.status,
+      taskKind: task.taskKind,
+      title: task.title,
+    } as Task;
+  }
+
+  private async projectTasksForActor(
+    tasks: Task[],
+    actor?: ProjectVisibilityActor,
+  ): Promise<Task[]> {
+    if (this.canonicalTasksService) {
+      return this.canonicalTasksService.projectTasksForActor(tasks, actor);
+    }
+    return Promise.all(
+      tasks.map((task) => this.projectTaskForActor(task, actor)),
+    );
   }
 }

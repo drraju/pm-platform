@@ -45,8 +45,11 @@ export class RisksController {
   @Post()
   @RequirePermissions(PermissionKey.RaidCreate)
   @ApiCreatedResponse({ type: Risk })
-  create(@Body() createRiskDto: CreateRiskDto): Promise<Risk> {
-    return this.risksService.create(createRiskDto);
+  create(
+    @Body() createRiskDto: CreateRiskDto,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<Risk> {
+    return this.risksService.create(createRiskDto, request.user);
   }
 
   @Get()

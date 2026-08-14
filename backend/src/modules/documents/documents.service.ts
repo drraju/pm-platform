@@ -216,22 +216,39 @@ export class DocumentsService {
   async findProjectDocuments(
     projectId: string,
     query: ProjectDocumentQueryDto = {},
+    actor?: AuthorizationActor,
   ): Promise<ProjectDocumentResponse[]> {
     await this.ensureProjectExists(projectId);
+    await this.ensureProjectVisible(projectId, actor);
+    const isExternal =
+      await this.authorizationPolicyService.isExternalActor(actor);
 
     const queryBuilder = this.baseDocumentQuery()
       .where('document.project_id = :projectId', { projectId })
       .andWhere('document.deleted_at IS NULL');
+    if (isExternal) {
+      queryBuilder.andWhere(
+        'document.approval_status = :externalApprovalStatus',
+        { externalApprovalStatus: DocumentApprovalStatus.APPROVED },
+      );
+    }
 
     this.applyFilters(queryBuilder, query);
     this.applySorting(queryBuilder, query);
 
     const documents = await queryBuilder.getMany();
-    return documents.map((document) => this.toResponse(document));
+    return documents.map((document) =>
+      isExternal
+        ? this.toExternalResponse(document)
+        : this.toResponse(document),
+    );
   }
 
-  async summary(projectId: string): Promise<ProjectDocumentSummary> {
-    const documents = await this.findProjectDocuments(projectId);
+  async summary(
+    projectId: string,
+    actor?: AuthorizationActor,
+  ): Promise<ProjectDocumentSummary> {
+    const documents = await this.findProjectDocuments(projectId, {}, actor);
     const summary: ProjectDocumentSummary = {
       approved: 0,
       byCategory: {},
@@ -255,7 +272,9 @@ export class DocumentsService {
       if (document.reviewStatus === DocumentReviewStatus.OVERDUE) {
         summary.overdueReviews += 1;
       }
-      increment(summary.byStorageProvider, document.storageProviderLabel);
+      if (document.storageProviderLabel) {
+        increment(summary.byStorageProvider, document.storageProviderLabel);
+      }
       increment(summary.byCategory, document.category ?? 'Uncategorized');
     }
 
@@ -290,6 +309,16 @@ export class DocumentsService {
         );
       }
       await this.ensureProjectExists(input.projectId);
+      if (
+        !(await this.authorizationPolicyService.canManageProject(
+          input.projectId,
+          actor,
+        ))
+      ) {
+        throw new ForbiddenException(
+          'Document movement requires authority in both projects',
+        );
+      }
     }
     await this.ensureUserExists(input.ownerId);
 
@@ -357,6 +386,11 @@ export class DocumentsService {
     projectId: string,
     actor?: AuthorizationActor,
   ): Promise<void> {
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      throw new ForbiddenException(
+        'External document contribution is not enabled',
+      );
+    }
     if (
       !(await this.authorizationPolicyService.canViewProject(projectId, actor))
     ) {
@@ -418,6 +452,18 @@ export class DocumentsService {
 
   private async findOne(documentId: string): Promise<ProjectDocumentResponse> {
     return this.toResponse(await this.findEntity(documentId));
+  }
+
+  private async ensureProjectVisible(
+    projectId: string,
+    actor?: AuthorizationActor,
+  ): Promise<void> {
+    if (
+      await this.authorizationPolicyService.canViewProject(projectId, actor)
+    ) {
+      return;
+    }
+    throw new ForbiddenException('Project document access is restricted');
   }
 
   private async findEntity(documentId: string): Promise<ProjectDocument> {
@@ -654,6 +700,23 @@ export class DocumentsService {
       updatedById: document.updatedById ?? null,
       version: document.version ?? null,
     };
+  }
+
+  private toExternalResponse(
+    document: ProjectDocument,
+  ): ProjectDocumentResponse {
+    return {
+      approvalStatus: document.approvalStatus,
+      category: document.category?.name ?? null,
+      categoryId: document.categoryId ?? null,
+      documentType: document.documentType.name,
+      documentTypeId: document.documentTypeId,
+      id: document.id,
+      projectId: document.projectId,
+      title: document.title,
+      updatedAt: document.updatedAt,
+      version: document.version ?? null,
+    } as ProjectDocumentResponse;
   }
 }
 

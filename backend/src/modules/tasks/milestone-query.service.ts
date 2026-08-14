@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { MilestoneCategory } from '../../common/enums/milestone-category.enum';
+import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { PlanningScheduleSnapshot } from '../planning/entities/planning-schedule-snapshot.entity';
 import { ProjectBaselineTask } from '../projects/entities/project-baseline-task.entity';
@@ -54,6 +55,7 @@ export class MilestoneQueryService {
     private readonly baselinesRepository: Repository<ProjectBaseline>,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectionComposer: MilestoneProjectionComposer,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
   ) {}
 
   async findProjectMilestones(
@@ -98,6 +100,8 @@ export class MilestoneQueryService {
     query: MilestoneQuery,
     actor?: ProjectVisibilityActor,
   ): Promise<MilestoneProjectionPage> {
+    const isExternal =
+      await this.authorizationPolicyService.isExternalActor(actor);
     const visibleProjectIds =
       await this.projectVisibilityService.getVisibleProjectIds(actor);
     const requestedIds = query.projectIds;
@@ -117,6 +121,7 @@ export class MilestoneQueryService {
       where: {
         ...(query.taskIds ? { id: In(query.taskIds) } : {}),
         ...(projectIds ? { projectId: In(projectIds) } : {}),
+        ...(isExternal ? { assigneeId: actor!.userId } : {}),
         taskKind: TaskKind.Milestone,
       },
     });

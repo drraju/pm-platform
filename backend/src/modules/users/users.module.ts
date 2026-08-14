@@ -8,10 +8,17 @@ import { RolePermission } from './entities/role-permission.entity';
 import { User } from './entities/user.entity';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import { ProjectMember } from '../projects/entities/project-member.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role, Permission, RolePermission]),
+    TypeOrmModule.forFeature([
+      User,
+      Role,
+      Permission,
+      RolePermission,
+      ProjectMember,
+    ]),
     PasswordModule,
   ],
   controllers: [UsersController],

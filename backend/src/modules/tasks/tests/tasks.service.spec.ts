@@ -20,6 +20,11 @@ type MockRepository<T extends object = object> = Partial<
 const taskId = '32b10c65-8a4b-4e03-a58c-ffea2ec860e6';
 const userId = 'f308d314-4cf3-4bc0-9607-e7ad88f264b8';
 const projectId = '2bbca1cb-1be2-4a04-b857-f1f8c7a26800';
+const managerActor = {
+  email: 'manager@example.com',
+  roleId: 'manager-role-id',
+  userId: 'manager-user-id',
+};
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -52,6 +57,8 @@ describe('TasksService', () => {
   let authorizationPolicyService: {
     canManageProject: jest.Mock;
     canManageTask: jest.Mock;
+    hasPermission: jest.Mock;
+    isExternalActor: jest.Mock;
   };
   let projectVisibilityService: {
     canViewProject: jest.Mock;
@@ -102,8 +109,9 @@ describe('TasksService', () => {
     };
     authorizationPolicyService = {
       canManageProject: jest.fn().mockResolvedValue(true),
-      canManageTask: jest.fn().mockResolvedValue(false),
+      canManageTask: jest.fn().mockResolvedValue(true),
       hasPermission: jest.fn().mockResolvedValue(true),
+      isExternalActor: jest.fn().mockResolvedValue(false),
     };
     projectVisibilityService = {
       canViewProject: jest.fn().mockResolvedValue(true),
@@ -393,6 +401,18 @@ describe('TasksService', () => {
     });
   });
 
+  it('does not expose execution history to external actors', async () => {
+    authorizationPolicyService.isExternalActor.mockResolvedValueOnce(true);
+
+    await expect(
+      service.findExecutionUpdates(taskId, {
+        roleId: 'partner-role',
+        userId: 'partner-1',
+      }),
+    ).rejects.toThrow(NotFoundException);
+    expect(taskExecutionUpdatesRepository.find).not.toHaveBeenCalled();
+  });
+
   it('creates a child task under a summary parent in the same project', async () => {
     tasksRepository.findOne?.mockResolvedValueOnce({
       id: 'parent-task-id',
@@ -653,6 +673,47 @@ describe('TasksService', () => {
     ]);
   });
 
+  it('does not expose unassigned contextual tasks to external actors', async () => {
+    const externalActor = {
+      email: 'customer@example.com',
+      roleId: 'customer-role',
+      userId,
+    };
+    const parentTask = {
+      assigneeId: userId,
+      id: 'parent-task-id',
+      parentTaskId: null,
+      percentComplete: 10,
+      priority: 'medium',
+      projectId,
+      status: TaskStatus.InProgress,
+      taskKind: TaskKind.Standard,
+      title: 'Customer action',
+    };
+    const childTask = {
+      assigneeId: 'internal-user-id',
+      id: 'child-task-id',
+      parentTaskId: parentTask.id,
+      projectId,
+      remarks: 'Internal detail',
+      taskKind: TaskKind.Standard,
+      title: 'Internal child task',
+    };
+    taskQueryBuilder.getMany.mockResolvedValue([parentTask]);
+    tasksRepository.find?.mockResolvedValueOnce([childTask]);
+    authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+
+    const result = await service.findMyTasks(userId, {}, externalActor);
+
+    expect(result).toEqual([
+      expect.objectContaining({ id: parentTask.id, title: parentTask.title }),
+    ]);
+    expect(result[0]).not.toHaveProperty('remarks');
+    expect(result).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: childTask.id })]),
+    );
+  });
+
   it('keeps personal task context bounded to directly assigned task branches', async () => {
     const parentTask = {
       id: 'parent-task-id',
@@ -780,9 +841,13 @@ describe('TasksService', () => {
     });
 
     await expect(
-      service.update(taskId, {
-        status: TaskStatus.Done,
-      }),
+      service.update(
+        taskId,
+        {
+          status: TaskStatus.Done,
+        },
+        managerActor,
+      ),
     ).rejects.toThrow('Summary task status is calculated from child work');
   });
 
@@ -808,10 +873,14 @@ describe('TasksService', () => {
     const task = { id: taskId, title: 'Original', status: TaskStatus.Backlog };
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.update(taskId, {
-      status: TaskStatus.Done,
-      title: 'Updated',
-    });
+    await service.update(
+      taskId,
+      {
+        status: TaskStatus.Done,
+        title: 'Updated',
+      },
+      managerActor,
+    );
 
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -820,6 +889,117 @@ describe('TasksService', () => {
         status: TaskStatus.Done,
       }),
     );
+  });
+
+  it('requires task authority in both projects when moving a task', async () => {
+    const targetProjectId = '79e91799-0c04-46da-a729-07cabf1da901';
+    tasksRepository.findOne?.mockResolvedValue({
+      id: taskId,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    });
+    authorizationPolicyService.canManageTask
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    await expect(
+      service.update(taskId, { projectId: targetProjectId }, managerActor),
+    ).rejects.toThrow('Task movement requires authority in both projects');
+
+    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
+      1,
+      projectId,
+      managerActor,
+    );
+    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
+      2,
+      targetProjectId,
+      managerActor,
+    );
+    expect(tasksRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects task movement when source-project authority is missing', async () => {
+    const targetProjectId = '79e91799-0c04-46da-a729-07cabf1da901';
+    tasksRepository.findOne?.mockResolvedValue({
+      assigneeId: 'another-user-id',
+      id: taskId,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    });
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
+
+    await expect(
+      service.update(taskId, { projectId: targetProjectId }, managerActor),
+    ).rejects.toThrow('Only assigned team members can update this task');
+
+    expect(authorizationPolicyService.canManageTask).toHaveBeenCalledTimes(1);
+    expect(tasksRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('allows task movement when the actor can manage both projects', async () => {
+    const targetProjectId = '79e91799-0c04-46da-a729-07cabf1da901';
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: taskId,
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Original',
+      })
+      .mockResolvedValueOnce({
+        id: taskId,
+        projectId: targetProjectId,
+        taskKind: TaskKind.Standard,
+        title: 'Original',
+      });
+
+    await service.update(taskId, { projectId: targetProjectId }, managerActor);
+
+    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
+      1,
+      projectId,
+      managerActor,
+    );
+    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
+      2,
+      targetProjectId,
+      managerActor,
+    );
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: targetProjectId }),
+    );
+  });
+
+  it('does not require a second authority check when the project is unchanged', async () => {
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce({
+        id: taskId,
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Original',
+      })
+      .mockResolvedValueOnce({ id: taskId, projectId });
+
+    await service.update(taskId, { projectId }, managerActor);
+
+    expect(authorizationPolicyService.canManageTask).toHaveBeenCalledTimes(1);
+    expect(tasksRepository.save).toHaveBeenCalled();
+  });
+
+  it('fails closed when task update is called without an actor', async () => {
+    tasksRepository.findOne?.mockResolvedValue({
+      id: taskId,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    });
+
+    await expect(service.update(taskId, { title: 'Updated' })).rejects.toThrow(
+      'Authenticated user is required',
+    );
+    expect(tasksRepository.save).not.toHaveBeenCalled();
   });
 
   it('persists reassignment on a raw mutation task and reloads the read model', async () => {
@@ -845,12 +1025,16 @@ describe('TasksService', () => {
       id: 'assignee-member-id',
     });
 
-    const result = await service.update(taskId, {
-      assigneeId: nextAssigneeId,
-      percentComplete: 0,
-      remarks: '',
-      status: TaskStatus.Todo,
-    });
+    const result = await service.update(
+      taskId,
+      {
+        assigneeId: nextAssigneeId,
+        percentComplete: 0,
+        remarks: '',
+        status: TaskStatus.Todo,
+      },
+      managerActor,
+    );
 
     expect(tasksRepository.findOne).toHaveBeenNthCalledWith(1, {
       where: { id: taskId },
@@ -887,9 +1071,13 @@ describe('TasksService', () => {
       ?.mockResolvedValueOnce(task)
       .mockResolvedValueOnce(reloadedTask);
 
-    const result = await service.update(taskId, {
-      assigneeId: null,
-    });
+    const result = await service.update(
+      taskId,
+      {
+        assigneeId: null,
+      },
+      managerActor,
+    );
 
     expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
     expect(tasksRepository.save).toHaveBeenCalledWith(
@@ -915,9 +1103,13 @@ describe('TasksService', () => {
     };
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.update(taskId, {
-      status: TaskStatus.Done,
-    });
+    await service.update(
+      taskId,
+      {
+        status: TaskStatus.Done,
+      },
+      managerActor,
+    );
 
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -942,9 +1134,13 @@ describe('TasksService', () => {
     };
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.update(taskId, {
-      percentComplete: 100,
-    });
+    await service.update(
+      taskId,
+      {
+        percentComplete: 100,
+      },
+      managerActor,
+    );
 
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -969,9 +1165,13 @@ describe('TasksService', () => {
     };
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.update(taskId, {
-      status: TaskStatus.Done,
-    });
+    await service.update(
+      taskId,
+      {
+        status: TaskStatus.Done,
+      },
+      managerActor,
+    );
 
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -997,9 +1197,13 @@ describe('TasksService', () => {
     tasksRepository.findOne?.mockResolvedValue(task);
 
     await expect(
-      service.update(taskId, {
-        status: TaskStatus.Done,
-      }),
+      service.update(
+        taskId,
+        {
+          status: TaskStatus.Done,
+        },
+        managerActor,
+      ),
     ).rejects.toThrow('Task cannot be completed before its actual start date');
     expect(tasksRepository.save).not.toHaveBeenCalled();
   });
@@ -1013,9 +1217,13 @@ describe('TasksService', () => {
     });
 
     await expect(
-      service.update(taskId, {
-        parentTaskId: taskId,
-      }),
+      service.update(
+        taskId,
+        {
+          parentTaskId: taskId,
+        },
+        managerActor,
+      ),
     ).rejects.toThrow('A task cannot be its own parent');
   });
 
@@ -1047,9 +1255,13 @@ describe('TasksService', () => {
       });
 
     await expect(
-      service.update(taskId, {
-        parentTaskId: 'child-task-id',
-      }),
+      service.update(
+        taskId,
+        {
+          parentTaskId: 'child-task-id',
+        },
+        managerActor,
+      ),
     ).rejects.toThrow('Task hierarchy cannot contain cycles');
   });
 
@@ -1069,6 +1281,7 @@ describe('TasksService', () => {
     projectMembersRepository.findOne?.mockResolvedValueOnce({
       id: 'assignee-member-id',
     });
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
 
     await service.update(
       taskId,
@@ -1107,6 +1320,7 @@ describe('TasksService', () => {
       taskKind: TaskKind.Standard,
       title: 'Delegated child',
     });
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
 
     await expect(
       service.update(
@@ -1131,6 +1345,7 @@ describe('TasksService', () => {
       projectId,
       title: 'Original',
     });
+    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
 
     await expect(
       service.update(taskId, { title: 'Manager-only edit' }, actor),

@@ -10,6 +10,17 @@ import { PasswordResetTokenService } from '../password-reset-token.service';
 import { PasswordUpdateService } from '../password-update.service';
 import { PasswordService } from '../password.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
+import { JwtConfiguration, JWT_CONFIGURATION } from '../jwt-configuration';
+
+const jwtConfiguration: JwtConfiguration = {
+  accessAudience: 'pm-platform-api',
+  accessExpiresIn: '15m',
+  accessSecret: 'test-access-secret',
+  issuer: 'pm-platform',
+  refreshAudience: 'pm-platform-refresh',
+  refreshExpiresIn: '7d',
+  refreshSecret: 'test-refresh-secret',
+};
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -23,19 +34,28 @@ describe('AuthService', () => {
     create: jest.Mock;
     findAuthenticationUserById: jest.Mock;
     findByEmail: jest.Mock;
+    findTokenValidationUser: jest.Mock;
     getSessionProfile: jest.Mock;
     recordLogin: jest.Mock;
     updatePassword: jest.Mock;
   };
+  let jwtService: { sign: jest.Mock; verifyAsync: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
       create: jest.fn(),
       findAuthenticationUserById: jest.fn(),
       findByEmail: jest.fn(),
+      findTokenValidationUser: jest.fn(),
       getSessionProfile: jest.fn(),
       recordLogin: jest.fn(),
       updatePassword: jest.fn(),
+    };
+    jwtService = {
+      sign: jest.fn(
+        (payload: { tokenType: string }) => `${payload.tokenType}-token`,
+      ),
+      verifyAsync: jest.fn(),
     };
     passwordResetTokenService = {
       consumeToken: jest.fn(),
@@ -55,14 +75,13 @@ describe('AuthService', () => {
         },
         {
           provide: JwtService,
-          useValue: {
-            sign: jest.fn(() => 'signed-token'),
-          },
+          useValue: jwtService,
         },
         {
           provide: PasswordResetTokenService,
           useValue: passwordResetTokenService,
         },
+        { provide: JWT_CONFIGURATION, useValue: jwtConfiguration },
       ],
     }).compile();
 
@@ -168,11 +187,78 @@ describe('AuthService', () => {
     await expect(
       service.login({ email: 'new.user@example.com', password: 'TempPass1!' }),
     ).resolves.toEqual({
-      accessToken: 'signed-token',
-      refreshToken: 'signed-token',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
       requiresPasswordChange: true,
     });
     expect(usersService.recordLogin).toHaveBeenCalledWith('user-new');
+    expect(jwtService.sign).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ tokenType: 'access' }),
+      expect.objectContaining({ secret: 'test-access-secret' }),
+    );
+    expect(jwtService.sign).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ tokenType: 'refresh' }),
+      expect.objectContaining({ secret: 'test-refresh-secret' }),
+    );
+  });
+
+  it('rejects an access token at the refresh boundary', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'user@example.com',
+      iat: 1,
+      roleId: 'role-1',
+      sub: 'user-1',
+      tokenType: 'access',
+    });
+
+    await expect(service.refresh('access-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(usersService.findTokenValidationUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a refresh token after the user role changes', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'user@example.com',
+      iat: 1,
+      roleId: 'old-role',
+      sub: 'user-1',
+      tokenType: 'refresh',
+    });
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'user@example.com',
+      id: 'user-1',
+      passwordChangedAt: null,
+      roleId: 'new-role',
+      status: 'active',
+    });
+
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects a refresh token after the account is disabled', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'user@example.com',
+      iat: 1,
+      roleId: 'role-1',
+      sub: 'user-1',
+      tokenType: 'refresh',
+    });
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'user@example.com',
+      id: 'user-1',
+      passwordChangedAt: null,
+      roleId: 'role-1',
+      status: 'disabled',
+    });
+
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('rejects disabled users during authentication', async () => {
@@ -325,13 +411,18 @@ describe('PasswordPolicyService', () => {
 
 describe('JwtStrategy', () => {
   it('rejects tokens issued before the latest password change', async () => {
-    const strategy = new JwtStrategy({
-      findTokenValidationUser: jest.fn().mockResolvedValue({
-        id: 'user-1',
-        passwordChangedAt: new Date('2026-07-26T10:00:00.000Z'),
-        status: 'active',
-      }),
-    } as unknown as UsersService);
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn().mockResolvedValue({
+          id: 'user-1',
+          email: 'user@example.com',
+          passwordChangedAt: new Date('2026-07-26T10:00:00.000Z'),
+          roleId: UserRole.TeamMember,
+          status: 'active',
+        }),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
 
     await expect(
       strategy.validate({
@@ -339,18 +430,24 @@ describe('JwtStrategy', () => {
         iat: Math.floor(new Date('2026-07-26T09:59:59.000Z').getTime() / 1000),
         roleId: UserRole.TeamMember,
         sub: 'user-1',
+        tokenType: 'access',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('accepts current active-user tokens', async () => {
-    const strategy = new JwtStrategy({
-      findTokenValidationUser: jest.fn().mockResolvedValue({
-        id: 'user-1',
-        passwordChangedAt: new Date('2026-07-26T10:00:00.000Z'),
-        status: 'active',
-      }),
-    } as unknown as UsersService);
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn().mockResolvedValue({
+          id: 'user-1',
+          email: 'user@example.com',
+          passwordChangedAt: new Date('2026-07-26T10:00:00.000Z'),
+          roleId: UserRole.TeamMember,
+          status: 'active',
+        }),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
 
     await expect(
       strategy.validate({
@@ -358,6 +455,7 @@ describe('JwtStrategy', () => {
         iat: Math.floor(new Date('2026-07-26T10:00:01.000Z').getTime() / 1000),
         roleId: UserRole.TeamMember,
         sub: 'user-1',
+        tokenType: 'access',
       }),
     ).resolves.toEqual({
       email: 'user@example.com',
@@ -367,13 +465,18 @@ describe('JwtStrategy', () => {
   });
 
   it('accepts first-login-pending tokens for forced password change', async () => {
-    const strategy = new JwtStrategy({
-      findTokenValidationUser: jest.fn().mockResolvedValue({
-        id: 'user-1',
-        passwordChangedAt: null,
-        status: 'first_login_pending',
-      }),
-    } as unknown as UsersService);
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn().mockResolvedValue({
+          id: 'user-1',
+          email: 'user@example.com',
+          passwordChangedAt: null,
+          roleId: UserRole.TeamMember,
+          status: 'first_login_pending',
+        }),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
 
     await expect(
       strategy.validate({
@@ -381,11 +484,81 @@ describe('JwtStrategy', () => {
         iat: Math.floor(new Date('2026-07-26T10:00:01.000Z').getTime() / 1000),
         roleId: UserRole.TeamMember,
         sub: 'user-1',
+        tokenType: 'access',
       }),
     ).resolves.toEqual({
       email: 'user@example.com',
       roleId: UserRole.TeamMember,
       userId: 'user-1',
     });
+  });
+
+  it('rejects refresh tokens presented as bearer access tokens', async () => {
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn(),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(
+      strategy.validate({
+        email: 'user@example.com',
+        iat: 1,
+        roleId: UserRole.TeamMember,
+        sub: 'user-1',
+        tokenType: 'refresh',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects an access token after the user role changes', async () => {
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn().mockResolvedValue({
+          email: 'user@example.com',
+          id: 'user-1',
+          passwordChangedAt: null,
+          roleId: UserRole.ProjectManager,
+          status: 'active',
+        }),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(
+      strategy.validate({
+        email: 'user@example.com',
+        iat: 1,
+        roleId: UserRole.TeamMember,
+        sub: 'user-1',
+        tokenType: 'access',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects an access token after the account is disabled', async () => {
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn().mockResolvedValue({
+          email: 'user@example.com',
+          id: 'user-1',
+          passwordChangedAt: null,
+          roleId: UserRole.TeamMember,
+          status: 'disabled',
+        }),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(
+      strategy.validate({
+        email: 'user@example.com',
+        iat: 1,
+        roleId: UserRole.TeamMember,
+        sub: 'user-1',
+        tokenType: 'access',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

@@ -1,4 +1,5 @@
 import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
@@ -15,6 +16,9 @@ describe('DependencyQueryService', () => {
   const projectVisibilityService = {
     getVisibleProjectIds: jest.fn(),
   };
+  const authorizationPolicyService = {
+    isExternalActor: jest.fn().mockResolvedValue(false),
+  };
   const composer = new DependencyProjectionComposer(
     new DependencyHealthEvaluator(),
     new DependencyImpactAnalyzer(),
@@ -24,6 +28,7 @@ describe('DependencyQueryService', () => {
     dependenciesRepository as never,
     projectVisibilityService as unknown as ProjectVisibilityService,
     composer,
+    authorizationPolicyService as unknown as AuthorizationPolicyService,
   );
   const task = (
     id: string,
@@ -58,6 +63,18 @@ describe('DependencyQueryService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     projectVisibilityService.getVisibleProjectIds.mockResolvedValue('all');
+    authorizationPolicyService.isExternalActor.mockResolvedValue(false);
+  });
+
+  it('does not expose dependency topology to external actors', async () => {
+    authorizationPolicyService.isExternalActor.mockResolvedValueOnce(true);
+
+    await expect(
+      service.findProjectDependencies('p1', {}, {
+        userId: 'customer-1',
+      } as never),
+    ).resolves.toMatchObject({ items: [], total: 0 });
+    expect(dependenciesRepository.find).not.toHaveBeenCalled();
   });
 
   it('uses one set-based dependency query with both endpoint relations', async () => {

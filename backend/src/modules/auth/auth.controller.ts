@@ -15,6 +15,7 @@ import { LoginDto } from './dto/login.dto';
 import { PasswordResetResponseDto } from './dto/password-reset-response.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SessionDto } from './dto/session.dto';
+import { RefreshSessionDto } from './dto/refresh-session.dto';
 import { AuthService } from './auth.service';
 
 type AuthenticatedRequest = Request & {
@@ -34,6 +35,13 @@ export class AuthController {
   @ApiOkResponse({ type: SessionDto })
   login(@Body() loginDto: LoginDto): Promise<SessionDto> {
     return this.authService.login(loginDto);
+  }
+
+  @Post('refresh')
+  @ApiOkResponse({ type: SessionDto })
+  @ApiUnauthorizedResponse({ description: 'Invalid refresh token' })
+  refresh(@Body() refreshSessionDto: RefreshSessionDto): Promise<SessionDto> {
+    return this.authService.refresh(refreshSessionDto.refreshToken);
   }
 
   @Post('forgot-password')

@@ -37,7 +37,7 @@ Contributors should:
 
 PM Platform uses:
 
-- JWT authentication
+- purpose-separated JWT access and refresh tokens with distinct secrets
 - hashed password storage
 - short-lived, single-use password reset tokens stored only as hashes
 - RBAC and permission policies
@@ -49,6 +49,17 @@ Password reset requests return a generic success response regardless of whether
 an account exists. Reset tokens expire after a short window, are marked consumed
 after use, and password updates refresh `password_changed_at` so older JWTs are
 rejected by token validation.
+
+Access tokens default to 15 minutes and refresh tokens default to 7 days. Token
+validation checks current account status, role, email, and password-change time,
+so those changes invalidate previously issued authority. Non-test startup fails
+when either JWT secret is missing or when both token purposes share one secret.
+
+The browser client currently stores both tokens in `localStorage`. This leaves
+them accessible to JavaScript running in the page and increases the impact of an
+XSS defect. Replacing refresh-token storage with a Secure, HttpOnly, SameSite
+cookie requires a separately designed CSRF and session-delivery change; it is a
+required hardening follow-up and is not silently approximated by this P0 change.
 
 Related documentation:
 
@@ -63,7 +74,7 @@ Local defaults in development files are not production credentials.
 Production deployments should provide secure values for:
 
 - database credentials
-- JWT secrets
+- distinct `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` values
 - integration credentials
 - object storage credentials
 - external service tokens

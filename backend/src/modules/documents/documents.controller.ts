@@ -82,8 +82,9 @@ export class DocumentsController {
   @ApiOkResponse()
   summary(
     @Param('projectId') projectId: string,
+    @Req() request: AuthenticatedRequest,
   ): Promise<ProjectDocumentSummary> {
-    return this.documentsService.summary(projectId);
+    return this.documentsService.summary(projectId, request.user);
   }
 
   @Get('projects/:projectId/documents')
@@ -92,8 +93,13 @@ export class DocumentsController {
   findProjectDocuments(
     @Param('projectId') projectId: string,
     @Query() query: ProjectDocumentQueryDto,
+    @Req() request: AuthenticatedRequest,
   ): Promise<ProjectDocumentResponse[]> {
-    return this.documentsService.findProjectDocuments(projectId, query);
+    return this.documentsService.findProjectDocuments(
+      projectId,
+      query,
+      request.user,
+    );
   }
 
   @Patch('documents/:documentId')

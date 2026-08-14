@@ -525,6 +525,12 @@ describe("project API client", () => {
       "http://localhost:3001/users/assignable",
       expect.any(Object),
     );
+
+    await getAssignableUsers("project-1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3001/users/assignable?projectId=project-1",
+      expect.any(Object),
+    );
   });
 
   it("creates and updates project tasks", async () => {

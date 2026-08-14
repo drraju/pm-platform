@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import {
   ProjectVisibilityActor,
   ProjectVisibilityService,
@@ -24,6 +25,7 @@ export class DependencyQueryService {
     private readonly dependenciesRepository: Repository<TaskDependency>,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectionComposer: DependencyProjectionComposer,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
   ) {}
 
   findProjectDependencies(
@@ -51,6 +53,9 @@ export class DependencyQueryService {
     query: DependencyQuery = {},
     actor?: ProjectVisibilityActor,
   ): Promise<DependencyProjectionPage> {
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      return this.toPage([], query);
+    }
     const visibleProjectIds =
       await this.projectVisibilityService.getVisibleProjectIds(actor);
     const projectIds = this.intersectProjectIds(

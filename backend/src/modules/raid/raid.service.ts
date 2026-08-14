@@ -43,6 +43,9 @@ export class RaidService {
   ) {}
 
   async findAll(actor?: ProjectVisibilityActor) {
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      return [];
+    }
     const relations = { project: true, owner: true };
     const visibleProjectIds =
       await this.projectVisibilityService.getVisibleProjectIds(actor);
@@ -77,7 +80,14 @@ export class RaidService {
     createRaidItemDto: CreateRaidItemDto,
     actor?: ProjectVisibilityActor,
   ) {
-    await this.ensureProjectVisible(createRaidItemDto.projectId, actor);
+    if (
+      !(await this.authorizationPolicyService.canContributeRaid(
+        createRaidItemDto.projectId,
+        actor,
+      ))
+    ) {
+      throw new ForbiddenException('Insufficient RAID create permissions');
+    }
 
     switch (createRaidItemDto.type) {
       case RaidType.Risk:
@@ -161,6 +171,9 @@ export class RaidService {
     id: string,
     actor?: ProjectVisibilityActor,
   ): Promise<Risk | Issue | Assumption | Dependency> {
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      throw new NotFoundException(`RAID item ${id} not found`);
+    }
     const relations = { project: true, owner: true };
     const lookups = await Promise.all([
       this.risksRepository.findOne({ relations, where: { id } }),

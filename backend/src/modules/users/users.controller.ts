@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -123,8 +124,11 @@ export class UsersController {
     PermissionKey.ProjectTeamManage,
   )
   @ApiOkResponse({ type: AssignableUserResponseDto, isArray: true })
-  findAssignable(): Promise<AssignableUserResponseDto[]> {
-    return this.usersService.findAssignableUsers();
+  findAssignable(
+    @Req() request: AuthenticatedRequest,
+    @Query('projectId') projectId?: string,
+  ): Promise<AssignableUserResponseDto[]> {
+    return this.usersService.findAssignableUsers(request.user, projectId);
   }
 
   @Get(':id')

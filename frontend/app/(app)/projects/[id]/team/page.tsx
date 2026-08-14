@@ -45,7 +45,7 @@ export default function ProjectTeamPage() {
       try {
         const [projectDetails, assignableUsers, authMe] = await Promise.all([
           getProject(projectId),
-          getAssignableUsers(),
+          getAssignableUsers(projectId),
           getAuthMe(),
         ]);
         storeAuthMe(authMe);

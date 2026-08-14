@@ -1,7 +1,10 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { UserRole } from '../../../common/enums/user-role.enum';
+import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Permission } from '../entities/permission.entity';
 import { Role } from '../entities/role.entity';
 import { User } from '../entities/user.entity';
@@ -15,6 +18,18 @@ describe('UsersService', () => {
   let service: UsersService;
   let rolesRepository: MockRepository<Role>;
   let usersRepository: MockRepository<User>;
+  let projectMembersRepository: MockRepository<ProjectMember>;
+  let authorizationPolicyService: {
+    canManageProject: jest.Mock;
+    canViewProject: jest.Mock;
+    hasAnyPermission: jest.Mock;
+    isExternalActor: jest.Mock;
+  };
+  const actor = {
+    email: 'pm@example.com',
+    roleId: 'role-project-manager',
+    userId: 'pm-1',
+  };
 
   beforeEach(async () => {
     const createUserMock = jest.fn((input: Partial<User>) => input);
@@ -36,6 +51,15 @@ describe('UsersService', () => {
         name: UserRole.TeamMember,
       }),
     };
+    projectMembersRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    authorizationPolicyService = {
+      canManageProject: jest.fn().mockResolvedValue(true),
+      canViewProject: jest.fn().mockResolvedValue(true),
+      hasAnyPermission: jest.fn().mockResolvedValue(true),
+      isExternalActor: jest.fn().mockResolvedValue(false),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -43,6 +67,14 @@ describe('UsersService', () => {
         { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: getRepositoryToken(Role), useValue: rolesRepository },
         { provide: getRepositoryToken(Permission), useValue: {} },
+        {
+          provide: getRepositoryToken(ProjectMember),
+          useValue: projectMembersRepository,
+        },
+        {
+          provide: AuthorizationPolicyService,
+          useValue: authorizationPolicyService,
+        },
       ],
     }).compile();
 
@@ -127,7 +159,7 @@ describe('UsersService', () => {
       },
     ]);
 
-    const result = await service.findAssignableUsers();
+    const result = await service.findAssignableUsers(actor);
 
     expect(usersRepository.find).toHaveBeenCalledWith({
       order: { firstName: 'ASC', lastName: 'ASC', email: 'ASC' },
@@ -145,6 +177,56 @@ describe('UsersService', () => {
       },
     ]);
     expect(JSON.stringify(result)).not.toContain('passwordHash');
+  });
+
+  it.each([
+    ['Customer', 'customer-role', 'customer-1'],
+    ['Partner', 'partner-role', 'partner-1'],
+  ])(
+    'denies assignable-user discovery to %s actors',
+    async (_audience, roleId, externalUserId) => {
+      authorizationPolicyService.isExternalActor.mockResolvedValueOnce(true);
+
+      await expect(
+        service.findAssignableUsers(
+          { roleId, userId: externalUserId },
+          'project-1',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(usersRepository.find).not.toHaveBeenCalled();
+    },
+  );
+
+  it('scopes assignable users to project members for read-only actors', async () => {
+    authorizationPolicyService.canManageProject.mockResolvedValueOnce(false);
+    projectMembersRepository.find?.mockResolvedValue([
+      { projectId: 'project-1', userId: 'member-1' },
+    ]);
+    usersRepository.find?.mockResolvedValue([
+      {
+        email: 'member@example.com',
+        firstName: 'Project',
+        id: 'member-1',
+        lastName: 'Member',
+        role: { id: 'role-team', name: UserRole.TeamMember },
+        roleId: 'role-team',
+        status: 'active',
+      },
+    ]);
+
+    await expect(
+      service.findAssignableUsers(actor, 'project-1'),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'member-1', role: UserRole.TeamMember }),
+    ]);
+    expect(projectMembersRepository.find).toHaveBeenCalledWith({
+      select: { userId: true },
+      where: { projectId: 'project-1' },
+    });
+    expect(authorizationPolicyService.canViewProject).toHaveBeenCalledWith(
+      'project-1',
+      actor,
+    );
   });
 
   it.each([

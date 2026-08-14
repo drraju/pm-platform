@@ -46,6 +46,11 @@ const teamMemberEditableTaskFields = new Set([
   'percentComplete',
   'status',
 ]);
+const externalEditableTaskFields = new Set([
+  'remarks',
+  'percentComplete',
+  'status',
+]);
 /** Assigned contributors may post stand-up execution fields only. */
 const assigneeExecutionUpdateFields = new Set([
   'assigneeId',
@@ -53,6 +58,13 @@ const assigneeExecutionUpdateFields = new Set([
   'nextStep',
   'percentComplete',
   'priority',
+  'status',
+  'targetCompletionDate',
+  'updateNotes',
+]);
+const externalExecutionUpdateFields = new Set([
+  'nextStep',
+  'percentComplete',
   'status',
   'targetCompletionDate',
   'updateNotes',
@@ -167,14 +179,23 @@ export class TasksService {
         projectIds: visibleProjectIds,
       });
     }
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      taskQuery.andWhere('task.assignee_id = :externalActorId', {
+        externalActorId: actor!.userId,
+      });
+    }
 
     const tasks = await taskQuery.getMany();
-    return this.attachLatestExecutionUpdates(decoratePlanningTasks(tasks));
+    const decorated = await this.attachLatestExecutionUpdates(
+      decoratePlanningTasks(tasks),
+    );
+    return this.projectTasksForActor(decorated, actor);
   }
 
   async findMyTasks(
     userId: string,
     query: MyTasksQueryDto = {},
+    actor?: ProjectVisibilityActor,
   ): Promise<Task[]> {
     const taskQuery = this.createVisibleTasksQuery()
       .where('task.assignee_id = :userId', { userId })
@@ -200,7 +221,13 @@ export class TasksService {
 
     const tasks = await taskQuery.getMany();
     const tasksWithContext = await this.includePersonalTaskContext(tasks);
-    return this.attachLatestExecutionUpdates(tasksWithContext);
+    const decorated = await this.attachLatestExecutionUpdates(tasksWithContext);
+    const visibleTasks = (await this.authorizationPolicyService.isExternalActor(
+      actor,
+    ))
+      ? decorated.filter((task) => task.assigneeId === actor!.userId)
+      : decorated;
+    return this.projectTasksForActor(visibleTasks, actor);
   }
 
   async getMyTasksSummary(userId: string): Promise<MyTasksSummaryDto> {
@@ -256,7 +283,17 @@ export class TasksService {
       throw new NotFoundException(`Task ${id} not found`);
     }
 
-    return this.decorateTaskWithLatest(task);
+    if (
+      (await this.authorizationPolicyService.isExternalActor(actor)) &&
+      task.assigneeId !== actor!.userId
+    ) {
+      throw new NotFoundException(`Task ${id} not found`);
+    }
+
+    return this.projectTaskForActor(
+      await this.decorateTaskWithLatest(task),
+      actor,
+    );
   }
 
   async update(
@@ -266,6 +303,9 @@ export class TasksService {
   ): Promise<Task> {
     const task = await this.findTaskForMutation(id, actor);
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
+    if (updateTaskDto.projectId && updateTaskDto.projectId !== task.projectId) {
+      await this.ensureCanManageTaskProject(updateTaskDto.projectId, actor);
+    }
     const normalizedInput =
       this.schedulingFoundationService.normalizeTaskMutation(
         applyTaskCompletionTransition(updateTaskDto, task),
@@ -307,7 +347,7 @@ export class TasksService {
       input.nextActionOwnerId,
     );
 
-    return this.tasksRepository.manager.transaction(
+    const updatedTask = await this.tasksRepository.manager.transaction(
       async (transactionalEntityManager) => {
         const normalizedInput = applyTaskCompletionTransition(
           {
@@ -361,6 +401,7 @@ export class TasksService {
         });
       },
     );
+    return this.projectTaskForActor(updatedTask, actor);
   }
 
   async attachLatestExecutionUpdates<T extends Task>(tasks: T[]): Promise<T[]> {
@@ -396,6 +437,9 @@ export class TasksService {
     id: string,
     actor?: ProjectVisibilityActor,
   ): Promise<TaskExecutionUpdateDto[]> {
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      throw new NotFoundException(`Task ${id} not found`);
+    }
     const task = await this.findOne(id, actor);
     const updates = await this.taskExecutionUpdatesRepository.find({
       order: { createdAt: 'DESC' },
@@ -543,7 +587,7 @@ export class TasksService {
     actor?: AuthenticatedActor,
   ): Promise<void> {
     if (!actor) {
-      return;
+      throw new ForbiddenException('Authenticated user is required');
     }
 
     if (await this.canManageTask(task.projectId, actor)) {
@@ -556,8 +600,12 @@ export class TasksService {
       );
     }
 
+    const editableFields =
+      (await this.authorizationPolicyService.isExternalActor(actor))
+        ? externalEditableTaskFields
+        : teamMemberEditableTaskFields;
     const disallowedFields = Object.keys(updateTaskDto).filter(
-      (field) => !teamMemberEditableTaskFields.has(field),
+      (field) => !editableFields.has(field),
     );
     if (disallowedFields.length > 0) {
       throw new ForbiddenException(
@@ -572,7 +620,7 @@ export class TasksService {
     actor?: AuthenticatedActor,
   ): Promise<void> {
     if (!actor) {
-      return;
+      throw new ForbiddenException('Authenticated user is required');
     }
 
     if (await this.canManageTask(task.projectId, actor)) {
@@ -585,8 +633,12 @@ export class TasksService {
       );
     }
 
+    const editableFields =
+      (await this.authorizationPolicyService.isExternalActor(actor))
+        ? externalExecutionUpdateFields
+        : assigneeExecutionUpdateFields;
     const disallowedFields = Object.keys(input).filter(
-      (field) => !assigneeExecutionUpdateFields.has(field),
+      (field) => !editableFields.has(field),
     );
     if (disallowedFields.length > 0) {
       throw new ForbiddenException(
@@ -619,6 +671,58 @@ export class TasksService {
     actor: AuthenticatedActor,
   ): Promise<boolean> {
     return this.authorizationPolicyService.canManageTask(projectId, actor);
+  }
+
+  private async ensureCanManageTaskProject(
+    projectId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
+    if (
+      actor &&
+      (await this.authorizationPolicyService.canManageTask(projectId, actor))
+    ) {
+      return;
+    }
+    throw new ForbiddenException(
+      'Task movement requires authority in both projects',
+    );
+  }
+
+  async projectTaskForActor(
+    task: Task,
+    actor?: ProjectVisibilityActor,
+  ): Promise<Task> {
+    if (!(await this.authorizationPolicyService.isExternalActor(actor))) {
+      return task;
+    }
+    return {
+      actualEndDate: task.actualEndDate ?? null,
+      actualStartDate: task.actualStartDate ?? null,
+      assigneeId: task.assigneeId ?? null,
+      description: task.description ?? null,
+      dueDate: task.dueDate ?? null,
+      id: task.id,
+      milestoneCategory: task.milestoneCategory ?? null,
+      percentComplete: task.percentComplete,
+      priority: task.priority,
+      projectId: task.projectId,
+      startDate: task.startDate ?? null,
+      status: task.status,
+      taskKind: task.taskKind,
+      title: task.title,
+    } as Task;
+  }
+
+  async projectTasksForActor(
+    tasks: Task[],
+    actor?: ProjectVisibilityActor,
+  ): Promise<Task[]> {
+    if (!(await this.authorizationPolicyService.isExternalActor(actor))) {
+      return tasks;
+    }
+    return Promise.all(
+      tasks.map((task) => this.projectTaskForActor(task, actor)),
+    );
   }
 
   private async validateAssigneeMembership(

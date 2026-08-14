@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
+import { PermissionKey } from '../../common/authz/permissions';
+import { ProjectMember } from '../projects/entities/project-member.entity';
 import {
   canonicalUserRoles,
   UserRole,
@@ -37,6 +40,11 @@ export type CreateUserPersistenceInput = {
   status?: string;
 };
 
+const externalUserRoleNames = new Set<string>([
+  UserRole.Customer,
+  UserRole.Partner,
+]);
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -48,6 +56,9 @@ export class UsersService {
     private readonly rolesRepository: Repository<Role>,
     @InjectRepository(Permission)
     private readonly permissionsRepository: Repository<Permission>,
+    @InjectRepository(ProjectMember)
+    private readonly projectMembersRepository: Repository<ProjectMember>,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
   ) {}
 
   async create(
@@ -89,13 +100,65 @@ export class UsersService {
     return users.map((user) => this.toUserResponse(user));
   }
 
-  async findAssignableUsers(): Promise<AssignableUserResponseDto[]> {
+  async findAssignableUsers(
+    actor?: UserAdministrationActor,
+    projectId?: string,
+  ): Promise<AssignableUserResponseDto[]> {
+    if (
+      !actor ||
+      (await this.authorizationPolicyService.isExternalActor(actor))
+    ) {
+      throw new ForbiddenException('Assignable user access is restricted');
+    }
+
+    let scopedUserIds: string[] | undefined;
+    if (projectId) {
+      const canManageProject =
+        await this.authorizationPolicyService.canManageProject(
+          projectId,
+          actor,
+        );
+      if (!canManageProject) {
+        if (
+          !(await this.authorizationPolicyService.canViewProject(
+            projectId,
+            actor,
+          ))
+        ) {
+          throw new ForbiddenException('Assignable user access is restricted');
+        }
+        const memberships = await this.projectMembersRepository.find({
+          select: { userId: true },
+          where: { projectId },
+        });
+        scopedUserIds = memberships.map((membership) => membership.userId);
+        if (scopedUserIds.length === 0) {
+          return [];
+        }
+      }
+    } else if (
+      !(await this.authorizationPolicyService.hasAnyPermission(actor, [
+        PermissionKey.ProjectCreate,
+        PermissionKey.ProjectTeamManage,
+        PermissionKey.RaidCreate,
+        PermissionKey.TaskReassign,
+        PermissionKey.UserManage,
+      ]))
+    ) {
+      throw new ForbiddenException('Assignable user access is restricted');
+    }
+
     const users = await this.usersRepository.find({
       order: { firstName: 'ASC', lastName: 'ASC', email: 'ASC' },
       relations: { role: true },
-      where: { status: 'active' },
+      where: {
+        ...(scopedUserIds ? { id: In(scopedUserIds) } : {}),
+        status: 'active',
+      },
     });
-    return users.map((user) => this.toAssignableUserResponse(user));
+    return users
+      .filter((user) => !externalUserRoleNames.has(user.role?.name ?? ''))
+      .map((user) => this.toAssignableUserResponse(user));
   }
 
   async findOne(
@@ -136,7 +199,13 @@ export class UsersService {
 
   findTokenValidationUser(userId: string): Promise<User | null> {
     return this.usersRepository.findOne({
-      select: { id: true, passwordChangedAt: true, status: true },
+      select: {
+        email: true,
+        id: true,
+        passwordChangedAt: true,
+        roleId: true,
+        status: true,
+      },
       where: { id: userId },
     });
   }

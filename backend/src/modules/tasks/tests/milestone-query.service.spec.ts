@@ -1,5 +1,6 @@
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
@@ -36,6 +37,10 @@ describe('MilestoneQueryService', () => {
           useValue: {
             getVisibleProjectIds: jest.fn().mockResolvedValue('all'),
           },
+        },
+        {
+          provide: AuthorizationPolicyService,
+          useValue: { isExternalActor: jest.fn().mockResolvedValue(false) },
         },
       ],
     }).compile();

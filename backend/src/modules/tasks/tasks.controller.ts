@@ -75,7 +75,11 @@ export class TasksController {
     @Req() request: AuthenticatedRequest,
     @Query() query: MyTasksQueryDto,
   ): Promise<Task[]> {
-    return this.tasksService.findMyTasks(request.user.userId, query);
+    return this.tasksService.findMyTasks(
+      request.user.userId,
+      query,
+      request.user,
+    );
   }
 
   @Get('my/summary')

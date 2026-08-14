@@ -28,8 +28,10 @@ describe('RaidService', () => {
   let raidCommentsRepository: MockRepository<RaidComment>;
   let raidHistoryRepository: MockRepository<RaidHistoryEntry>;
   let authorizationPolicyService: {
+    canContributeRaid: jest.Mock;
     canManageRaid: jest.Mock;
     hasPermission: jest.Mock;
+    isExternalActor: jest.Mock;
   };
   let projectVisibilityService: Pick<
     ProjectVisibilityService,
@@ -77,8 +79,10 @@ describe('RaidService', () => {
     assumptionsRepository.findOne = jest.fn();
     dependenciesRepository.findOne = jest.fn();
     authorizationPolicyService = {
+      canContributeRaid: jest.fn().mockResolvedValue(true),
       canManageRaid: jest.fn().mockResolvedValue(false),
       hasPermission: jest.fn().mockResolvedValue(false),
+      isExternalActor: jest.fn().mockResolvedValue(false),
     };
     projectVisibilityService = {
       canViewProject: jest.fn(),
@@ -183,6 +187,16 @@ describe('RaidService', () => {
 
     await expect(
       service.findAll({ roleId: 'role-1', userId: 'customer-1' }),
+    ).resolves.toEqual([]);
+    expect(risksRepository.find).not.toHaveBeenCalled();
+    expect(issuesRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('returns no RAID register data to external actors', async () => {
+    authorizationPolicyService.isExternalActor.mockResolvedValueOnce(true);
+
+    await expect(
+      service.findAll({ roleId: 'customer-role', userId: 'customer-1' }),
     ).resolves.toEqual([]);
     expect(risksRepository.find).not.toHaveBeenCalled();
     expect(issuesRepository.find).not.toHaveBeenCalled();

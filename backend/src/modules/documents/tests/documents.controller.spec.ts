@@ -6,15 +6,22 @@ describe('DocumentsController', () => {
       findProjectDocuments: jest.fn(() => [{ id: 'document-1' }]),
     };
     const controller = new DocumentsController(service as never);
+    const request = {
+      user: { email: 'user@example.com', roleId: 'role-1', userId: 'user-1' },
+    } as never;
 
     expect(
-      await controller.findProjectDocuments('project-1', {
-        storageProvider: 'Confluence',
-      }),
+      await controller.findProjectDocuments(
+        'project-1',
+        { storageProvider: 'Confluence' },
+        request,
+      ),
     ).toEqual([{ id: 'document-1' }]);
-    expect(service.findProjectDocuments).toHaveBeenCalledWith('project-1', {
-      storageProvider: 'Confluence',
-    });
+    expect(service.findProjectDocuments).toHaveBeenCalledWith(
+      'project-1',
+      { storageProvider: 'Confluence' },
+      request.user,
+    );
   });
 
   it('returns provider labels without provider authentication', () => {

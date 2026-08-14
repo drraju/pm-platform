@@ -62,9 +62,15 @@ export class CapabilityExecutionService {
         capabilityId: capability.executionCapabilityId,
         correlationId: request.correlationId,
         input: request.input,
-        metadata: request.contextSourceData
-          ? { enterpriseContext: { sourceData: request.contextSourceData } }
-          : undefined,
+        metadata: {
+          enterpriseContext: {
+            authorization: request.contextAuthorization ?? {
+              allowedProjectIds: [],
+              allowSensitiveContext: false,
+            },
+            sourceData: request.contextSourceData,
+          },
+        },
         requestId: request.requestId,
         responseMode: 'sync',
         scope: {

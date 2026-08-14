@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
@@ -14,6 +14,9 @@ import {
   PasswordUpdateService,
 } from './password-update.service';
 import { PasswordService } from './password.service';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { JWT_CONFIGURATION } from './jwt-configuration';
+import type { JwtConfiguration } from './jwt-configuration';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +26,8 @@ export class AuthService {
     private readonly passwordService: PasswordService,
     private readonly passwordResetTokenService: PasswordResetTokenService,
     private readonly passwordUpdateService: PasswordUpdateService,
+    @Inject(JWT_CONFIGURATION)
+    private readonly jwtConfiguration: JwtConfiguration,
   ) {}
 
   async login(loginDto: LoginDto): Promise<SessionDto> {
@@ -50,6 +55,40 @@ export class AuthService {
 
   getMe(userId: string) {
     return this.usersService.getSessionProfile(userId);
+  }
+
+  async refresh(refreshToken: string): Promise<SessionDto> {
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        audience: this.jwtConfiguration.refreshAudience,
+        issuer: this.jwtConfiguration.issuer,
+        secret: this.jwtConfiguration.refreshSecret,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (payload.tokenType !== 'refresh' || !payload.iat) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    const user = await this.usersService.findTokenValidationUser(payload.sub);
+    if (!user || !['active', 'first_login_pending'].includes(user.status)) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    if (user.roleId !== payload.roleId || user.email !== payload.email) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    if (
+      user.passwordChangedAt &&
+      payload.iat * 1000 < user.passwordChangedAt.getTime()
+    ) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return this.issueSession(user.id, user.email, user.roleId, {
+      requiresPasswordChange: user.status === 'first_login_pending',
+    });
   }
 
   async changePassword(
@@ -114,9 +153,24 @@ export class AuthService {
     roleId: string,
     options: { requiresPasswordChange?: boolean } = {},
   ): SessionDto {
-    const payload = { sub: userId, email, roleId };
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const accessToken = this.jwtService.sign(
+      { sub: userId, email, roleId, tokenType: 'access' },
+      {
+        audience: this.jwtConfiguration.accessAudience,
+        expiresIn: this.jwtConfiguration.accessExpiresIn,
+        issuer: this.jwtConfiguration.issuer,
+        secret: this.jwtConfiguration.accessSecret,
+      },
+    );
+    const refreshToken = this.jwtService.sign(
+      { sub: userId, email, roleId, tokenType: 'refresh' },
+      {
+        audience: this.jwtConfiguration.refreshAudience,
+        expiresIn: this.jwtConfiguration.refreshExpiresIn,
+        issuer: this.jwtConfiguration.issuer,
+        secret: this.jwtConfiguration.refreshSecret,
+      },
+    );
 
     return {
       accessToken,

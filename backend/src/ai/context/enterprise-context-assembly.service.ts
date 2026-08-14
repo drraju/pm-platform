@@ -17,6 +17,14 @@ const sensitiveTypes = new Set<AiContextResourceType>([
   'document',
   'raid',
 ]);
+const projectBoundTypes = new Set<AiContextResourceType>([
+  'document',
+  'execution',
+  'project',
+  'raid',
+  'task',
+  'team',
+]);
 
 @Injectable()
 export class EnterpriseContextAssemblyService {
@@ -137,6 +145,9 @@ export class EnterpriseContextAssemblyService {
     request: EnterpriseContextAssemblyRequest,
   ) {
     const authorization = request.authorization;
+    if (!authorization) {
+      return false;
+    }
     if (request.scope.projectIds?.length) {
       const scopedProjectId =
         type === 'project' ? item.id : item.projectId;
@@ -144,21 +155,17 @@ export class EnterpriseContextAssemblyService {
         return false;
       }
     }
-    if (!authorization) {
-      return true;
-    }
     if (
       authorization.allowSensitiveContext === false &&
       sensitiveTypes.has(type)
     ) {
       return false;
     }
-    if (
-      authorization.allowedProjectIds &&
-      item.projectId &&
-      !authorization.allowedProjectIds.includes(item.projectId)
-    ) {
-      return false;
+    if (projectBoundTypes.has(type)) {
+      const projectId = type === 'project' ? item.id : item.projectId;
+      if (!projectId || !authorization.allowedProjectIds?.includes(projectId)) {
+        return false;
+      }
     }
     const allowedResourceIds = authorization.allowedResourceIds?.[type];
     return !allowedResourceIds || allowedResourceIds.includes(item.id);

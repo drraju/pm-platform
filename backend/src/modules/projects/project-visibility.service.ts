@@ -48,7 +48,7 @@ export class ProjectVisibilityService {
     actor?: ProjectVisibilityActor,
   ): Promise<string[] | 'all'> {
     if (!actor) {
-      return 'all';
+      return [];
     }
 
     if (await this.hasPlatformWideVisibility(actor)) {
