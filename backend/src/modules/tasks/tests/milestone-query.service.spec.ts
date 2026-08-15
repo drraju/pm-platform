@@ -19,6 +19,7 @@ describe('MilestoneQueryService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-01T12:00:00Z'));
     const moduleRef = await Test.createTestingModule({
       providers: [
         MilestoneQueryService,
@@ -67,6 +68,10 @@ describe('MilestoneQueryService', () => {
     ]);
     snapshotFind.mockResolvedValue([]);
     baselineFind.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('filters, sorts and paginates milestone projections', async () => {

@@ -17,6 +17,10 @@ type MockRepository<T extends object = object> = Partial<
   Record<keyof Repository<T>, jest.Mock>
 >;
 
+type RaidServiceInternals = {
+  normalizeHistoryValue(value: unknown): string | null;
+};
+
 describe('RaidService', () => {
   it.todo('defines RAID register behavior');
 
@@ -319,6 +323,39 @@ describe('RaidService', () => {
     expect(raidHistoryRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'commented' }),
     );
+  });
+
+  describe('normalizeHistoryValue', () => {
+    it('normalizes Date values to ISO strings', () => {
+      expect(
+        (service as unknown as RaidServiceInternals).normalizeHistoryValue(
+          new Date('2026-01-01T12:30:45.000Z'),
+        ),
+      ).toBe('2026-01-01T12:30:45.000Z');
+    });
+
+    it('normalizes plain objects to JSON strings', () => {
+      expect(
+        (service as unknown as RaidServiceInternals).normalizeHistoryValue({
+          level: 'high',
+          owner: 'team-a',
+        }),
+      ).toBe('{"level":"high","owner":"team-a"}');
+    });
+
+    it('normalizes number and boolean values to strings', () => {
+      const internals = service as unknown as RaidServiceInternals;
+
+      expect(internals.normalizeHistoryValue(42)).toBe('42');
+      expect(internals.normalizeHistoryValue(false)).toBe('false');
+    });
+
+    it('normalizes null and undefined values to null', () => {
+      const internals = service as unknown as RaidServiceInternals;
+
+      expect(internals.normalizeHistoryValue(null)).toBeNull();
+      expect(internals.normalizeHistoryValue(undefined)).toBeNull();
+    });
   });
 
   it('registers all RAID entities with TypeORM', () => {
