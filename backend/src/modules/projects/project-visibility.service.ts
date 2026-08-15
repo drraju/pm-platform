@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Task } from '../tasks/entities/task.entity';
+import { CanonicalCapabilityResolverService } from '../../common/authz/canonical-capability-resolver.service';
 import { PermissionKey } from '../../common/authz/permissions';
 import {
   AuthorizationActor,
@@ -22,6 +23,7 @@ export class ProjectVisibilityService {
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
+    private readonly canonicalCapabilityResolver: CanonicalCapabilityResolverService,
   ) {}
 
   async getVisibleProjects(actor?: ProjectVisibilityActor): Promise<Project[]> {
@@ -51,6 +53,15 @@ export class ProjectVisibilityService {
       return [];
     }
 
+    if (
+      !(await this.authorizationPolicyService.hasPermission(
+        actor,
+        PermissionKey.ProjectRead,
+      ))
+    ) {
+      return [];
+    }
+
     if (await this.hasPlatformWideVisibility(actor)) {
       return 'all';
     }
@@ -62,10 +73,15 @@ export class ProjectVisibilityService {
         PermissionKey.TaskReassign,
       ]);
 
-    const [ownedProjects, memberships, assignedTasks] = await Promise.all([
+    const [governedProjects, memberships, assignedTasks] = await Promise.all([
       this.projectsRepository.find({
         select: { id: true },
-        where: { ownerId: actor.userId },
+        where: [
+          { ownerId: actor.userId },
+          { businessOwnerId: actor.userId },
+          { deliveryLeadId: actor.userId },
+          { executiveSponsorId: actor.userId },
+        ],
       }),
       this.projectMembersRepository.find({
         select: { projectId: true },
@@ -81,7 +97,7 @@ export class ProjectVisibilityService {
 
     return Array.from(
       new Set([
-        ...ownedProjects.map((project) => project.id),
+        ...governedProjects.map((project) => project.id),
         ...memberships.map((membership) => membership.projectId),
         ...assignedTasks.map((task) => task.projectId),
       ]),
@@ -92,7 +108,26 @@ export class ProjectVisibilityService {
     projectId: string,
     actor?: ProjectVisibilityActor,
   ): Promise<boolean> {
-    return this.authorizationPolicyService.canViewProject(projectId, actor);
+    const legacyAllowed = await this.authorizationPolicyService.canViewProject(
+      projectId,
+      actor,
+    );
+
+    if (!actor) {
+      return legacyAllowed;
+    }
+
+    return this.canonicalCapabilityResolver.compareWithLegacy({
+      legacyAllowed,
+      resolverInput: {
+        actor,
+        capability: 'project.view',
+        resource: {
+          projectId,
+          type: 'project',
+        },
+      },
+    });
   }
 
   private async hasPlatformWideVisibility(actor: ProjectVisibilityActor) {
