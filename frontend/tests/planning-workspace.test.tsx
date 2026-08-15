@@ -2221,6 +2221,79 @@ describe("PlanningWorkspace", () => {
     expect(onDeleteDependency).toHaveBeenCalledWith("dep-1");
   });
 
+  it("offers standard parent tasks as dependency endpoints while excluding summaries", () => {
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={{
+          ...workspace,
+          schedules: [
+            ...workspace.schedules,
+            {
+              durationDays: 5,
+              earlyFinish: null,
+              earlyStart: null,
+              freeFloatDays: null,
+              id: "schedule-4",
+              isCritical: false,
+              lateFinish: null,
+              lateStart: null,
+              parentTaskId: "task-1",
+              percentComplete: 20,
+              plannedFinishDate: "2026-07-11",
+              plannedStartDate: "2026-07-07",
+              projectId: "project-1",
+              sequenceNumber: 3,
+              snapshotId: "snapshot-1",
+              taskId: "task-4",
+              taskKind: "standard",
+              taskTitle: "Huawei ELAN",
+              totalFloatDays: null,
+            },
+            {
+              durationDays: 2,
+              earlyFinish: null,
+              earlyStart: null,
+              freeFloatDays: null,
+              id: "schedule-5",
+              isCritical: false,
+              lateFinish: null,
+              lateStart: null,
+              parentTaskId: "task-4",
+              percentComplete: 0,
+              plannedFinishDate: "2026-07-09",
+              plannedStartDate: "2026-07-08",
+              projectId: "project-1",
+              sequenceNumber: 1,
+              snapshotId: "snapshot-1",
+              taskId: "task-5",
+              taskKind: "standard",
+              taskTitle: "Huawei ELAN Pipeline",
+              totalFloatDays: null,
+            },
+          ],
+        }}
+      />,
+    );
+
+    const predecessor = screen.getByRole("combobox", { name: "Predecessor" });
+
+    expect(
+      within(predecessor).getByRole("option", { name: /Huawei ELAN$/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(predecessor).getByRole("option", {
+        name: /Huawei ELAN Pipeline$/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(predecessor).queryByRole("option", { name: /Planning$/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("updates task dates when a bar is dragged", async () => {
     const onUpdateSchedule = vi.fn().mockResolvedValue(undefined);
     render(

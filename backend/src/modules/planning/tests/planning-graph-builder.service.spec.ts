@@ -121,6 +121,43 @@ describe('PlanningGraphBuilderService', () => {
     expect(graph.edges).toHaveLength(1);
   });
 
+  it('keeps dependencies on standard parent tasks as direct task edges', () => {
+    const graph = service.buildGraph({
+      dependencies: [dependency('dep-1', 'task-a', 'task-b')],
+      tasks: [
+        task('task-a'),
+        task('task-b'),
+        task('task-b-1', TaskKind.Standard, 'task-b'),
+        task('task-b-2', TaskKind.Standard, 'task-b'),
+      ],
+    });
+
+    expect(graph.edges).toEqual([
+      expect.objectContaining({
+        predecessorTaskId: 'task-a',
+        successorTaskId: 'task-b',
+      }),
+    ]);
+    expect(graph.nodes.get('task-b')?.children).toEqual([
+      'task-b-1',
+      'task-b-2',
+    ]);
+    expect(graph.nodes.get('task-b')?.incomingDependencies).toEqual([
+      expect.objectContaining({
+        predecessorTaskId: 'task-a',
+        successorTaskId: 'task-b',
+      }),
+    ]);
+    expect(graph.nodes.get('task-b-1')?.incomingDependencies).toEqual([]);
+    expect(graph.nodes.get('task-b-2')?.incomingDependencies).toEqual([]);
+    expect(graph.nodes.get('task-a')?.outgoingDependencies).toEqual([
+      expect.objectContaining({
+        predecessorTaskId: 'task-a',
+        successorTaskId: 'task-b',
+      }),
+    ]);
+  });
+
   it('includes milestones as valid leaf dependency endpoints', () => {
     const graph = service.buildGraph({
       dependencies: [dependency('dep-1', 'task-1', 'milestone-1')],

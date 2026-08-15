@@ -408,27 +408,8 @@ function createEmptyDependencyForm(): DependencyFormState {
 }
 
 function getEligibleDependencyTasks(tasks: ApiTask[]) {
-  const childrenByParentId = new Map<string | null, ApiTask[]>();
-
-  for (const task of tasks) {
-    const parentTaskId = task.parentTaskId ?? null;
-    const childTasks = childrenByParentId.get(parentTaskId) ?? [];
-    childTasks.push(task);
-    childrenByParentId.set(parentTaskId, childTasks);
-  }
-
   return tasks
-    .filter((task) => {
-      if (task.taskKind === "milestone") {
-        return true;
-      }
-
-      if (task.taskKind === "summary") {
-        return false;
-      }
-
-      return (childrenByParentId.get(task.id) ?? []).length === 0;
-    })
+    .filter((task) => task.taskKind !== "summary")
     .sort((leftTask, rightTask) => {
       const leftSequenceNumber =
         typeof leftTask.sequenceNumber === "number"

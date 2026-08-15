@@ -1942,6 +1942,16 @@ describe("Project workspace components", () => {
             title: "Prepare release plan",
           },
           {
+            id: "task-1-child",
+            parentTaskId: "task-1",
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 11,
+            status: "todo",
+            taskKind: "standard",
+            title: "Prepare release plan detail",
+          },
+          {
             id: "task-2",
             priority: "medium",
             projectId: "project-1",
@@ -1949,6 +1959,15 @@ describe("Project workspace components", () => {
             status: "todo",
             taskKind: "milestone",
             title: "Executive checkpoint",
+          },
+          {
+            id: "summary-1",
+            priority: "medium",
+            projectId: "project-1",
+            sequenceNumber: 30,
+            status: "todo",
+            taskKind: "summary",
+            title: "Summary package",
           },
         ]}
       />,
@@ -1961,6 +1980,20 @@ describe("Project workspace components", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /add dependency/i }));
     let dialog = screen.getByRole("dialog");
+    const predecessor = within(dialog).getByLabelText(/^predecessor$/i);
+    expect(
+      within(predecessor).getByRole("option", {
+        name: "Prepare release plan",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(predecessor).getByRole("option", {
+        name: "Prepare release plan detail",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(predecessor).queryByRole("option", { name: "Summary package" }),
+    ).not.toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText(/^predecessor$/i), {
       target: { value: "task-1" },
     });

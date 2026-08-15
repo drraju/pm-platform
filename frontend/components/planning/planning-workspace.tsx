@@ -550,9 +550,9 @@ export function PlanningWorkspace({
     () => getSummaryTaskIds(localSchedules),
     [localSchedules],
   );
-  const leafRows = useMemo(
-    () => rows.filter((row) => !summaryTaskIds.has(row.schedule.taskId)),
-    [rows, summaryTaskIds],
+  const dependencyCandidateRows = useMemo(
+    () => rows.filter((row) => row.schedule.taskKind !== "summary"),
+    [rows],
   );
   const timeline = useMemo(
     () => buildTimeline(localSchedules, zoom, fitTimelineWidth),
@@ -640,11 +640,15 @@ export function PlanningWorkspace({
     setDependencyDraft((currentDraft) => ({
       dependencyType: currentDraft.dependencyType,
       predecessorTaskId:
-        currentDraft.predecessorTaskId || leafRows[0]?.schedule.taskId || "",
+        currentDraft.predecessorTaskId ||
+        dependencyCandidateRows[0]?.schedule.taskId ||
+        "",
       successorTaskId:
-        currentDraft.successorTaskId || leafRows[1]?.schedule.taskId || "",
+        currentDraft.successorTaskId ||
+        dependencyCandidateRows[1]?.schedule.taskId ||
+        "",
     }));
-  }, [leafRows]);
+  }, [dependencyCandidateRows]);
 
   useLayoutEffect(() => {
     if (!newTaskFocusId) {
@@ -3066,7 +3070,7 @@ export function PlanningWorkspace({
                     }
                     value={dependencyDraft.predecessorTaskId}
                   >
-                    {leafRows.map((row) => (
+                    {dependencyCandidateRows.map((row) => (
                       <option
                         key={row.schedule.taskId}
                         value={row.schedule.taskId}
@@ -3090,7 +3094,7 @@ export function PlanningWorkspace({
                     }
                     value={dependencyDraft.successorTaskId}
                   >
-                    {leafRows.map((row) => (
+                    {dependencyCandidateRows.map((row) => (
                       <option
                         key={row.schedule.taskId}
                         value={row.schedule.taskId}
