@@ -1,4 +1,8 @@
-import { apiBaseUrl } from "@/lib/config/env";
+import {
+  apiBaseUrl,
+  apiExportTimeoutMs,
+  apiTimeoutMs,
+} from "@/lib/config/env";
 
 export type ApiRole = {
   id: string;
@@ -697,58 +701,104 @@ export function storeAuthMe(authMe: ApiAuthMe) {
   notifyAuthSessionChange();
 }
 
+async function withRequestTimeout<T>(
+  timeoutMs: number,
+  requestSignal: AbortSignal | null | undefined,
+  request: (signal: AbortSignal) => Promise<T>,
+) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromRequest = () => controller.abort(requestSignal?.reason);
+
+  if (requestSignal?.aborted) {
+    abortFromRequest();
+  } else {
+    requestSignal?.addEventListener("abort", abortFromRequest, { once: true });
+  }
+
+  const timeout = setTimeout(() => {
+    if (!controller.signal.aborted) {
+      timedOut = true;
+      controller.abort();
+    }
+  }, timeoutMs);
+
+  try {
+    return await request(controller.signal);
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(`Request timed out after ${timeoutMs / 1000} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    requestSignal?.removeEventListener("abort", abortFromRequest);
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   { token = getStoredAccessToken(), headers, ...options }: RequestOptions = {},
 ): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    cache: "no-store",
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-  });
+  return withRequestTimeout(apiTimeoutMs, options.signal, async (signal) => {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      cache: "no-store",
+      ...options,
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+    });
 
-  if (!response.ok) {
-    let message = `Request failed with ${response.status}`;
-    try {
-      const body = (await response.json()) as { message?: string | string[] };
-      if (Array.isArray(body.message)) {
-        message = body.message.join(", ");
-      } else if (body.message) {
-        message = body.message;
+    if (!response.ok) {
+      let message = `Request failed with ${response.status}`;
+      try {
+        const body = (await response.json()) as { message?: string | string[] };
+        if (Array.isArray(body.message)) {
+          message = body.message.join(", ");
+        } else if (body.message) {
+          message = body.message;
+        }
+      } catch {
+        // Keep the status-based message when the API returns no JSON body.
       }
-    } catch {
-      // Keep the status-based message when the API returns no JSON body.
+      throw new Error(message);
     }
-    throw new Error(message);
-  }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
+    if (response.status === 204) {
+      return undefined as T;
+    }
 
-  if (response.headers.get("content-length") === "0") {
-    return undefined as T;
-  }
+    if (response.headers.get("content-length") === "0") {
+      return undefined as T;
+    }
 
-  const responseText = await response.text();
-  if (!responseText.trim()) {
-    return undefined as T;
-  }
+    const responseText = await response.text();
+    if (!responseText.trim()) {
+      return undefined as T;
+    }
 
-  return JSON.parse(responseText) as T;
+    return JSON.parse(responseText) as T;
+  });
 }
 
 export async function downloadProjectExcel(projectId: string) {
-  const response = await fetch(`${apiBaseUrl}/projects/${projectId}/export/excel`, {
-    cache: "no-store",
-    headers: { Authorization: `Bearer ${getStoredAccessToken() ?? ""}` },
+  return withRequestTimeout(apiExportTimeoutMs, undefined, async (signal) => {
+    const response = await fetch(
+      `${apiBaseUrl}/projects/${projectId}/export/excel`,
+      {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${getStoredAccessToken() ?? ""}` },
+        signal,
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Unable to export project (${response.status})`);
+    }
+    return response.blob();
   });
-  if (!response.ok) throw new Error(`Unable to export project (${response.status})`);
-  return response.blob();
 }
 
 export function getAiEnterpriseCapabilities() {

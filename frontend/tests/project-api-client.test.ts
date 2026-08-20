@@ -25,6 +25,7 @@ import {
   deleteProjectTask,
   deleteRaidItem,
   disableUser,
+  downloadProjectExcel,
   enableUser,
   getMyTasks,
   getProjectBaseline,
@@ -101,6 +102,88 @@ describe("project API client", () => {
         headers: { "Content-Type": "application/json" },
       }),
     );
+  });
+
+  it("preserves the authentication header", async () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === "pm_platform_access_token" ? "access-token" : null,
+    );
+    const fetchMock = mockFetch([{ id: "project-1", name: "ERP" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getProjects();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects",
+      expect.objectContaining({
+        headers: {
+          Authorization: "Bearer access-token",
+          "Content-Type": "application/json",
+        },
+      }),
+    );
+  });
+
+  it("preserves normal HTTP errors", async () => {
+    const fetchMock = mockFetch(
+      { message: "Project access denied" },
+      { status: 403 },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getProjects()).rejects.toThrow("Project access denied");
+  });
+
+  it("converts an application timeout into a clear error", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      (_url: string, options: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted", "AbortError"));
+          });
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const expectation = expect(getProjects()).rejects.toThrow(
+      "Request timed out after 60 seconds.",
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expectation;
+  });
+
+  it("cleans up the timeout after a request completes", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetch([{ id: "project-1", name: "ERP" }]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getProjects();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("uses the longer timeout for Excel exports", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      (_url: string, options: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted", "AbortError"));
+          });
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const expectation = expect(downloadProjectExcel("project-1")).rejects.toThrow(
+      "Request timed out after 120 seconds.",
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock.mock.calls[0][1].signal).not.toHaveProperty("aborted", true);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expectation;
   });
 
   it("loads project details", async () => {
