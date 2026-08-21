@@ -54,7 +54,7 @@ export class PlanningForwardPassService {
     durationDays: number,
     tasks: Map<string, PlanningForwardPassTaskResult>,
   ) {
-    let earlyStart = 0;
+    let earlyStart = node.minimumStartOffset;
 
     for (const dependency of node.incomingDependencies) {
       const predecessor = tasks.get(dependency.predecessorTaskId);
@@ -63,17 +63,23 @@ export class PlanningForwardPassService {
       }
 
       if (dependency.dependencyType === TaskDependencyType.FinishToStart) {
-        earlyStart = Math.max(earlyStart, predecessor.earlyFinish);
+        earlyStart = Math.max(
+          earlyStart,
+          predecessor.earlyFinish + dependency.lagDays,
+        );
       }
 
       if (dependency.dependencyType === TaskDependencyType.StartToStart) {
-        earlyStart = Math.max(earlyStart, predecessor.earlyStart);
+        earlyStart = Math.max(
+          earlyStart,
+          predecessor.earlyStart + dependency.lagDays,
+        );
       }
 
       if (dependency.dependencyType === TaskDependencyType.FinishToFinish) {
         earlyStart = Math.max(
           earlyStart,
-          predecessor.earlyFinish - durationDays,
+          predecessor.earlyFinish + dependency.lagDays - durationDays,
         );
       }
     }

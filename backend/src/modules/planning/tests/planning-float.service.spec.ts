@@ -152,9 +152,49 @@ describe('PlanningFloatService', () => {
     });
 
     expectFloat(result, 'task-1', 1, 0);
-    expectFloat(result, 'task-2', 5, -3);
-    expectFloat(result, 'task-3', 1, -3);
+    expectFloat(result, 'task-2', 0, 4);
+    expectFloat(result, 'task-3', 1, 0);
     expectFloat(result, 'task-4', 1, 1);
+  });
+
+  it('calculates start-to-start free float from task starts', () => {
+    const result = calculate({
+      dependencies: [
+        dependency(
+          'dep-1',
+          'task-1',
+          'task-2',
+          TaskDependencyType.StartToStart,
+        ),
+      ],
+      tasks: [task('task-1', 5), task('task-2', 2)],
+    });
+
+    expectFloat(result, 'task-1', 0, 0);
+    expectFloat(result, 'task-2', 3, 3);
+  });
+
+  it('calculates finish-to-finish free float from task finishes and lag', () => {
+    const graph = graphBuilder.buildGraph({
+      dependencies: [
+        {
+          ...dependency(
+            'dep-1',
+            'task-1',
+            'task-2',
+            TaskDependencyType.FinishToFinish,
+          ),
+          lagDays: 2,
+        },
+      ],
+      tasks: [task('task-1', 5), task('task-2', 2)],
+    });
+    const forward = forwardPass.calculate(graph);
+    const backward = backwardPass.calculate(graph, forward);
+    const result = floatService.calculate(graph, forward, backward);
+
+    expectFloat(result, 'task-1', 0, 0);
+    expectFloat(result, 'task-2', 0, 0);
   });
 
   function calculate(input: {

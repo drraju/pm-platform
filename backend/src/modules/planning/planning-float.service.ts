@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { PlanningBackwardPassResult } from './planning-backward-pass.service';
 import { PlanningForwardPassResult } from './planning-forward-pass.service';
@@ -63,19 +64,33 @@ export class PlanningFloatService {
       return totalFloat;
     }
 
-    const successorEarlyStarts = node.outgoingDependencies
-      .map(
-        (dependency) =>
-          forwardPass.tasks.get(dependency.successorTaskId)?.earlyStart,
-      )
-      .filter(
-        (earlyStart): earlyStart is number => typeof earlyStart === 'number',
-      );
+    const dependencyFloat = node.outgoingDependencies
+      .map((dependency) => {
+        const successor = forwardPass.tasks.get(dependency.successorTaskId);
+        if (!successor) {
+          return null;
+        }
 
-    if (successorEarlyStarts.length === 0) {
+        if (dependency.dependencyType === TaskDependencyType.FinishToStart) {
+          return (
+            successor.earlyStart - forwardTask.earlyFinish - dependency.lagDays
+          );
+        }
+        if (dependency.dependencyType === TaskDependencyType.StartToStart) {
+          return (
+            successor.earlyStart - forwardTask.earlyStart - dependency.lagDays
+          );
+        }
+        return (
+          successor.earlyFinish - forwardTask.earlyFinish - dependency.lagDays
+        );
+      })
+      .filter((value): value is number => typeof value === 'number');
+
+    if (dependencyFloat.length === 0) {
       return totalFloat;
     }
 
-    return Math.min(...successorEarlyStarts) - forwardTask.earlyFinish;
+    return Math.min(...dependencyFloat);
   }
 }

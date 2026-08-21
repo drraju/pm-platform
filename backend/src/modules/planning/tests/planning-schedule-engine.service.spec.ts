@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { PlanningBackwardPassService } from '../planning-backward-pass.service';
 import { PlanningCriticalPathService } from '../planning-critical-path.service';
@@ -152,6 +154,8 @@ describe('PlanningScheduleEngineService', () => {
         totalFloat: 0,
       }),
     );
+    expect(analysis.scheduleAnchorDate).toBeNull();
+    expect(analysis.nodes[0].scheduledStartDate).toBeNull();
   });
 
   it('stops the pipeline when graph validation fails', () => {
@@ -266,7 +270,233 @@ describe('PlanningScheduleEngineService', () => {
     ]);
     expect(analysis.validationMessages).toEqual([]);
   });
+
+  it('calculates the authoritative dated finish-to-start acceptance scenario', () => {
+    const service = createEngine();
+    const context = {
+      dependencies: [
+        {
+          dependencyType: TaskDependencyType.FinishToStart,
+          id: 'dep-a-b',
+          lagDays: 0,
+          predecessorTaskId: 'task-a',
+          successorTaskId: 'task-b',
+        },
+      ],
+      scheduleAnchorDate: '2026-09-01',
+      tasks: [
+        {
+          durationDays: 5,
+          plannedEndDate: '2026-09-06',
+          plannedStartDate: '2026-09-01',
+          taskId: 'task-a',
+          taskKind: TaskKind.Standard,
+        },
+        {
+          durationDays: 3,
+          plannedEndDate: '2026-09-06',
+          plannedStartDate: '2026-09-03',
+          taskId: 'task-b',
+          taskKind: TaskKind.Standard,
+        },
+      ],
+    } as const;
+    const original = JSON.stringify(context);
+
+    const result = service.calculateDatedForecast(context);
+
+    expect(result.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scheduledEndDate: '2026-09-06',
+          scheduledStartDate: '2026-09-01',
+          taskId: 'task-a',
+        }),
+        expect.objectContaining({
+          scheduledEndDate: '2026-09-09',
+          scheduledStartDate: '2026-09-06',
+          taskId: 'task-b',
+        }),
+      ]),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        criticalPathTaskIds: ['task-a', 'task-b'],
+        projectFinishDate: '2026-09-09',
+        projectStartDate: '2026-09-01',
+        scheduleAnchorDate: '2026-09-01',
+      }),
+    );
+    expect(JSON.stringify(context)).toBe(original);
+    expect(context.tasks[1].plannedStartDate).toBe('2026-09-03');
+    expect(context.tasks[1].plannedEndDate).toBe('2026-09-06');
+  });
+
+  it.each([
+    { expectedEnd: '2026-09-11', expectedStart: '2026-09-08', lagDays: 2 },
+    { expectedEnd: '2026-09-08', expectedStart: '2026-09-05', lagDays: -1 },
+  ])(
+    'calculates absolute dates with signed FS lag $lagDays',
+    ({ expectedEnd, expectedStart, lagDays }) => {
+      const result = createEngine().calculateDatedForecast({
+        dependencies: [
+          {
+            dependencyType: TaskDependencyType.FinishToStart,
+            lagDays,
+            predecessorTaskId: 'task-a',
+            successorTaskId: 'task-b',
+          },
+        ],
+        scheduleAnchorDate: '2026-09-01',
+        tasks: [
+          task('task-a', 5),
+          {
+            ...task('task-b', 3),
+            plannedStartDate: '2026-09-03',
+          },
+        ],
+      });
+      const taskB = result.nodes.find((node) => node.taskId === 'task-b');
+
+      expect(taskB).toEqual(
+        expect.objectContaining({
+          scheduledEndDate: expectedEnd,
+          scheduledStartDate: expectedStart,
+        }),
+      );
+    },
+  );
+
+  it('uses the earliest executable planned start when no project anchor is supplied', () => {
+    const result = createEngine().calculateDatedForecast({
+      tasks: [
+        { ...task('task-a', 2), plannedStartDate: '2026-09-04' },
+        { ...task('task-b', 1), plannedStartDate: '2026-09-02' },
+      ],
+    });
+
+    expect(result.scheduleAnchorDate).toBe('2026-09-02');
+    expect(result.projectStartDate).toBe('2026-09-02');
+    expect(
+      result.nodes.find((node) => node.taskId === 'task-a')?.scheduledStartDate,
+    ).toBe('2026-09-04');
+  });
+
+  it('fails a dated calculation without a deterministic schedule anchor', () => {
+    const service = createEngine();
+
+    try {
+      service.calculateDatedForecast({ tasks: [task('task-a', 2)] });
+      throw new Error('Expected dated forecast calculation to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanningScheduleEngineError);
+      expect((error as PlanningScheduleEngineError).issues).toEqual([
+        expect.objectContaining({ code: 'MISSING_SCHEDULE_ANCHOR' }),
+      ]);
+    }
+  });
+
+  it('rejects start-to-finish dependencies with a structured engine error', () => {
+    const service = createEngine();
+
+    try {
+      service.calculateDatedForecast({
+        dependencies: [
+          {
+            dependencyType: TaskDependencyType.StartToFinish,
+            id: 'unsupported-dependency',
+            predecessorTaskId: 'task-a',
+            successorTaskId: 'task-b',
+          },
+        ],
+        scheduleAnchorDate: '2026-09-01',
+        tasks: [task('task-a', 2), task('task-b', 1)],
+      });
+      throw new Error('Expected dated forecast calculation to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanningScheduleEngineError);
+      expect((error as PlanningScheduleEngineError).issues).toEqual([
+        expect.objectContaining({ code: 'UNSUPPORTED_DEPENDENCY_TYPE' }),
+      ]);
+    }
+  });
+
+  it('rolls up nested Summary forecast dates without scheduling summaries', () => {
+    const result = createEngine().calculateDatedForecast({
+      scheduleAnchorDate: '2026-09-01',
+      tasks: [
+        task('summary-project', 0, TaskKind.Summary),
+        task('summary-phase', 0, TaskKind.Summary, 'summary-project'),
+        {
+          ...task('task-a', 3, TaskKind.Standard, 'summary-phase'),
+          plannedStartDate: '2026-09-02',
+        },
+        {
+          ...task('milestone', 99, TaskKind.Milestone, 'summary-project'),
+          milestoneCategory: 'release',
+          plannedStartDate: '2026-09-10',
+        },
+      ],
+    });
+    const project = result.nodes.find(
+      (node) => node.taskId === 'summary-project',
+    );
+    const phase = result.nodes.find((node) => node.taskId === 'summary-phase');
+    const milestone = result.nodes.find((node) => node.taskId === 'milestone');
+
+    expect(phase).toEqual(
+      expect.objectContaining({
+        durationDays: 3,
+        freeFloat: null,
+        isCritical: false,
+        scheduledEndDate: '2026-09-05',
+        scheduledStartDate: '2026-09-02',
+        totalFloat: null,
+      }),
+    );
+    expect(project).toEqual(
+      expect.objectContaining({
+        durationDays: 8,
+        scheduledEndDate: '2026-09-10',
+        scheduledStartDate: '2026-09-02',
+      }),
+    );
+    expect(milestone).toEqual(
+      expect.objectContaining({
+        durationDays: 0,
+        milestoneCategory: 'release',
+        scheduledEndDate: '2026-09-10',
+        scheduledStartDate: '2026-09-10',
+      }),
+    );
+  });
+
+  it('returns the same immutable result for repeated identical calculations', () => {
+    const service = createEngine();
+    const context = {
+      scheduleAnchorDate: '2026-09-01',
+      tasks: [{ ...task('task-a', 2), plannedStartDate: '2026-09-03' }],
+    } as const;
+
+    const first = service.calculateDatedForecast(context);
+    const second = service.calculateDatedForecast(context);
+
+    expect(second).toEqual(first);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.nodes)).toBe(true);
+    expect(Object.isFrozen(first.criticalPathTaskIds)).toBe(true);
+  });
 });
+
+function createEngine() {
+  return new PlanningScheduleEngineService(
+    new PlanningGraphBuilderService(),
+    new PlanningForwardPassService(),
+    new PlanningBackwardPassService(),
+    new PlanningFloatService(),
+    new PlanningCriticalPathService(),
+  );
+}
 
 function task(
   taskId: string,

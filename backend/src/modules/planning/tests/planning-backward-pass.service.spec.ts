@@ -90,7 +90,7 @@ describe('PlanningBackwardPassService', () => {
     });
 
     expect(result.projectFinish).toBe(5);
-    expectWindow(result, 'task-1', 3, 8);
+    expectWindow(result, 'task-1', 0, 5);
     expectWindow(result, 'task-2', 3, 5);
   });
 
@@ -142,11 +142,24 @@ describe('PlanningBackwardPassService', () => {
 
     expect(result.projectFinish).toBe(7);
     expectWindow(result, 'task-1', 1, 5);
-    expectWindow(result, 'task-2', 5, 12);
+    expectWindow(result, 'task-2', 0, 7);
     expectWindow(result, 'task-3', 5, 7);
     expectWindow(result, 'task-4', 4, 7);
     expectWindow(result, 'task-5', 4, 5);
     expectWindow(result, 'task-6', 5, 7);
+  });
+
+  it('applies signed finish-to-start lag during the backward pass', () => {
+    const result = calculate({
+      dependencies: [
+        { ...dependency('dep-1', 'task-1', 'task-2'), lagDays: 2 },
+      ],
+      tasks: [task('task-1', 3), task('task-2', 2)],
+    });
+
+    expect(result.projectFinish).toBe(7);
+    expectWindow(result, 'task-1', 0, 3);
+    expectWindow(result, 'task-2', 5, 7);
   });
 
   it('skips nested summaries and schedules only executable descendants', () => {

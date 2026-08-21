@@ -115,7 +115,7 @@ describe('PlanningCriticalPathService', () => {
     expectCritical(result, 'task-2', true);
   });
 
-  it('does not mark negative-float activities critical', () => {
+  it('bounds start-to-start predecessors by project finish', () => {
     const result = identify({
       dependencies: [
         dependency(
@@ -128,7 +128,7 @@ describe('PlanningCriticalPathService', () => {
       tasks: [task('task-1', 5), task('task-2', 2)],
     });
 
-    expectCritical(result, 'task-1', false);
+    expectCritical(result, 'task-1', true);
     expectCritical(result, 'task-2', false);
   });
 

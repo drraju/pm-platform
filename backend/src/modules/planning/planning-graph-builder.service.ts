@@ -11,7 +11,11 @@ const SUPPORTED_GRAPH_DEPENDENCY_TYPES = new Set<TaskDependencyType>([
 export type PlanningGraphTaskInput = {
   durationDays?: number | null;
   id?: string;
+  milestoneCategory?: string | null;
+  minimumStartOffset?: number | null;
   parentTaskId?: string | null;
+  plannedEndDate?: string | null;
+  plannedStartDate?: string | null;
   taskId?: string;
   taskKind?: TaskKind | string | null;
 };
@@ -19,6 +23,7 @@ export type PlanningGraphTaskInput = {
 export type PlanningGraphDependencyInput = {
   dependencyType: TaskDependencyType | string;
   id?: string;
+  lagDays?: number | null;
   predecessorTaskId?: string | null;
   successorTaskId?: string | null;
 };
@@ -26,6 +31,7 @@ export type PlanningGraphDependencyInput = {
 export type PlanningGraphEdge = {
   dependencyId?: string;
   dependencyType: TaskDependencyType;
+  lagDays: number;
   predecessorTaskId: string;
   successorTaskId: string;
 };
@@ -34,6 +40,8 @@ export type PlanningGraphNode = {
   children: string[];
   durationDays: number;
   incomingDependencies: PlanningGraphEdge[];
+  milestoneCategory: string | null;
+  minimumStartOffset: number;
   outgoingDependencies: PlanningGraphEdge[];
   parentTaskId: string | null;
   taskId: string;
@@ -53,8 +61,10 @@ export type PlanningGraphValidationIssueCode =
   | 'INVALID_TASK_TYPE'
   | 'MISSING_PARENT'
   | 'MISSING_PREDECESSOR'
+  | 'MISSING_SCHEDULE_ANCHOR'
   | 'MISSING_SUCCESSOR'
-  | 'SUMMARY_DEPENDENCY_ENDPOINT';
+  | 'SUMMARY_DEPENDENCY_ENDPOINT'
+  | 'UNSUPPORTED_DEPENDENCY_TYPE';
 
 export type PlanningGraphValidationIssue = {
   code: PlanningGraphValidationIssueCode;
@@ -129,8 +139,13 @@ export class PlanningGraphBuilderService {
 
       nodes.set(taskId, {
         children: [],
-        durationDays: this.getDurationDays(task.taskKind, task.durationDays),
+        durationDays: this.getDurationDays(task),
         incomingDependencies: [],
+        milestoneCategory: task.milestoneCategory ?? null,
+        minimumStartOffset: Math.max(
+          0,
+          Math.trunc(Number(task.minimumStartOffset ?? 0)),
+        ),
         outgoingDependencies: [],
         parentTaskId: task.parentTaskId ?? null,
         taskId,
@@ -172,13 +187,21 @@ export class PlanningGraphBuilderService {
     const edges: PlanningGraphEdge[] = [];
 
     for (const dependency of dependencies) {
-      if (dependency.dependencyType === TaskDependencyType.StartToFinish) {
+      if (
+        String(dependency.dependencyType) ===
+        String(TaskDependencyType.StartToFinish)
+      ) {
+        issues.push({
+          code: 'UNSUPPORTED_DEPENDENCY_TYPE',
+          dependencyId: dependency.id,
+          message: `Dependency ${dependency.id ?? '<unknown>'} uses unsupported dependency type ${dependency.dependencyType}.`,
+        });
         continue;
       }
 
       if (!this.isSupportedDependencyType(dependency.dependencyType)) {
         issues.push({
-          code: 'INVALID_DEPENDENCY_TARGET',
+          code: 'UNSUPPORTED_DEPENDENCY_TYPE',
           dependencyId: dependency.id,
           message: `Dependency ${dependency.id ?? '<unknown>'} has an unsupported dependency type.`,
         });
@@ -252,6 +275,7 @@ export class PlanningGraphBuilderService {
       const edge: PlanningGraphEdge = {
         dependencyId: dependency.id,
         dependencyType: dependency.dependencyType,
+        lagDays: Math.trunc(Number(dependency.lagDays ?? 0)),
         predecessorTaskId: predecessor.taskId,
         successorTaskId: successor.taskId,
       };
@@ -330,14 +354,37 @@ export class PlanningGraphBuilderService {
     );
   }
 
-  private getDurationDays(
-    taskKind: TaskKind,
-    durationDays: PlanningGraphTaskInput['durationDays'],
-  ) {
-    if (taskKind === TaskKind.Milestone || taskKind === TaskKind.Summary) {
+  private getDurationDays(task: PlanningGraphTaskInput) {
+    if (
+      task.taskKind === TaskKind.Milestone ||
+      task.taskKind === TaskKind.Summary
+    ) {
       return 0;
     }
 
-    return Math.max(0, Math.trunc(Number(durationDays ?? 1)));
+    if (task.durationDays !== null && task.durationDays !== undefined) {
+      return Math.max(0, Math.trunc(Number(task.durationDays)));
+    }
+
+    if (task.plannedStartDate && task.plannedEndDate) {
+      const plannedDuration = this.daysBetween(
+        task.plannedStartDate,
+        task.plannedEndDate,
+      );
+      if (plannedDuration !== null) {
+        return Math.max(0, plannedDuration);
+      }
+    }
+
+    return 1;
+  }
+
+  private daysBetween(startDate: string, endDate: string): number | null {
+    const start = new Date(`${startDate}T00:00:00Z`).getTime();
+    const end = new Date(`${endDate}T00:00:00Z`).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      return null;
+    }
+    return Math.round((end - start) / 86_400_000);
   }
 }

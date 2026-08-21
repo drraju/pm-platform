@@ -26,6 +26,34 @@ describe('PlanningForwardPassService', () => {
     expectWindow(result, 'task-3', 5, 9);
   });
 
+  it('respects a task minimum-start constraint', () => {
+    const result = calculate({
+      tasks: [
+        {
+          ...task('task-1', 2),
+          minimumStartOffset: 4,
+        },
+      ],
+    });
+
+    expectWindow(result, 'task-1', 4, 6);
+  });
+
+  it.each([
+    { expectedFinish: 7, expectedStart: 5, lagDays: 2 },
+    { expectedFinish: 4, expectedStart: 2, lagDays: -1 },
+  ])(
+    'applies signed finish-to-start lag $lagDays',
+    ({ expectedFinish, expectedStart, lagDays }) => {
+      const result = calculate({
+        dependencies: [{ ...dependency('dep-1', 'task-1', 'task-2'), lagDays }],
+        tasks: [task('task-1', 3), task('task-2', 2)],
+      });
+
+      expectWindow(result, 'task-2', expectedStart, expectedFinish);
+    },
+  );
+
   it('calculates early dates for a fork', () => {
     const result = calculate({
       dependencies: [
@@ -86,6 +114,31 @@ describe('PlanningForwardPassService', () => {
     expectWindow(result, 'task-2', 0, 2);
   });
 
+  it.each([
+    { expectedStart: 2, lagDays: 2 },
+    { expectedStart: 0, lagDays: -1 },
+  ])(
+    'applies signed start-to-start lag $lagDays',
+    ({ expectedStart, lagDays }) => {
+      const result = calculate({
+        dependencies: [
+          {
+            ...dependency(
+              'dep-1',
+              'task-1',
+              'task-2',
+              TaskDependencyType.StartToStart,
+            ),
+            lagDays,
+          },
+        ],
+        tasks: [task('task-1', 5), task('task-2', 2)],
+      });
+
+      expectWindow(result, 'task-2', expectedStart, expectedStart + 2);
+    },
+  );
+
   it('supports finish-to-finish dependencies', () => {
     const result = calculate({
       dependencies: [
@@ -101,6 +154,47 @@ describe('PlanningForwardPassService', () => {
 
     expectWindow(result, 'task-1', 0, 5);
     expectWindow(result, 'task-2', 3, 5);
+  });
+
+  it.each([
+    { expectedStart: 5, lagDays: 2 },
+    { expectedStart: 2, lagDays: -1 },
+  ])(
+    'applies signed finish-to-finish lag $lagDays',
+    ({ expectedStart, lagDays }) => {
+      const result = calculate({
+        dependencies: [
+          {
+            ...dependency(
+              'dep-1',
+              'task-1',
+              'task-2',
+              TaskDependencyType.FinishToFinish,
+            ),
+            lagDays,
+          },
+        ],
+        tasks: [task('task-1', 5), task('task-2', 2)],
+      });
+
+      expectWindow(result, 'task-2', expectedStart, expectedStart + 2);
+    },
+  );
+
+  it('uses the maximum of planned-start and multiple dependency constraints', () => {
+    const result = calculate({
+      dependencies: [
+        dependency('dep-1', 'task-1', 'task-3'),
+        dependency('dep-2', 'task-2', 'task-3'),
+      ],
+      tasks: [
+        task('task-1', 2),
+        task('task-2', 5),
+        { ...task('task-3', 2), minimumStartOffset: 4 },
+      ],
+    });
+
+    expectWindow(result, 'task-3', 5, 7);
   });
 
   it('calculates a mixed dependency graph with disconnected task chains', () => {

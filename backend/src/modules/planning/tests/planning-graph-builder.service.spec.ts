@@ -24,6 +24,8 @@ describe('PlanningGraphBuilderService', () => {
       children: [],
       durationDays: 1,
       incomingDependencies: [],
+      milestoneCategory: null,
+      minimumStartOffset: 0,
       outgoingDependencies: [],
       parentTaskId: null,
       taskId: 'task-1',
@@ -54,6 +56,32 @@ describe('PlanningGraphBuilderService', () => {
     expect(graph.topologicalTaskIds.indexOf('task-1')).toBeLessThan(
       graph.topologicalTaskIds.indexOf('task-2'),
     );
+  });
+
+  it('preserves signed dependency lag on graph edges', () => {
+    const graph = service.buildGraph({
+      dependencies: [
+        { ...dependency('dep-1', 'task-1', 'task-2'), lagDays: -2 },
+      ],
+      tasks: [task('task-1'), task('task-2')],
+    });
+
+    expect(graph.edges[0]).toEqual(expect.objectContaining({ lagDays: -2 }));
+  });
+
+  it('derives standard duration from planned dates when duration is absent', () => {
+    const graph = service.buildGraph({
+      tasks: [
+        {
+          plannedEndDate: '2026-09-06',
+          plannedStartDate: '2026-09-01',
+          taskId: 'task-1',
+          taskKind: TaskKind.Standard,
+        },
+      ],
+    });
+
+    expect(graph.nodes.get('task-1')?.durationDays).toBe(5);
   });
 
   it('builds a branch graph', () => {
@@ -235,22 +263,22 @@ describe('PlanningGraphBuilderService', () => {
     );
   });
 
-  it('ignores legacy start-to-finish dependencies for new graphs', () => {
-    const graph = service.buildGraph({
-      dependencies: [
-        dependency(
-          'dep-legacy',
-          'task-1',
-          'task-2',
-          TaskDependencyType.StartToFinish,
-        ),
-      ],
-      tasks: [task('task-1'), task('task-2')],
-    });
-
-    expect(graph.edges).toEqual([]);
-    expect(graph.nodes.get('task-1')?.outgoingDependencies).toEqual([]);
-    expect(graph.nodes.get('task-2')?.incomingDependencies).toEqual([]);
+  it('rejects unsupported start-to-finish dependencies explicitly', () => {
+    expectValidationIssues(
+      () =>
+        service.buildGraph({
+          dependencies: [
+            dependency(
+              'dep-legacy',
+              'task-1',
+              'task-2',
+              TaskDependencyType.StartToFinish,
+            ),
+          ],
+          tasks: [task('task-1'), task('task-2')],
+        }),
+      ['UNSUPPORTED_DEPENDENCY_TYPE'],
+    );
   });
 });
 

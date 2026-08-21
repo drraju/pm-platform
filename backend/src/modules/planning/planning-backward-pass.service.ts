@@ -62,8 +62,7 @@ export class PlanningBackwardPassService {
     projectFinish: number,
     tasks: Map<string, PlanningBackwardPassTaskResult>,
   ) {
-    const lateFinishConstraints: number[] = [];
-    const lateStartConstraints: number[] = [];
+    let lateStart = projectFinish - durationDays;
 
     for (const dependency of node.outgoingDependencies) {
       const successor = tasks.get(dependency.successorTaskId);
@@ -72,40 +71,26 @@ export class PlanningBackwardPassService {
       }
 
       if (dependency.dependencyType === TaskDependencyType.FinishToStart) {
-        lateFinishConstraints.push(successor.lateStart);
+        lateStart = Math.min(
+          lateStart,
+          successor.lateStart - dependency.lagDays - durationDays,
+        );
       }
 
       if (dependency.dependencyType === TaskDependencyType.FinishToFinish) {
-        lateFinishConstraints.push(successor.lateFinish);
+        lateStart = Math.min(
+          lateStart,
+          successor.lateFinish - dependency.lagDays - durationDays,
+        );
       }
 
       if (dependency.dependencyType === TaskDependencyType.StartToStart) {
-        lateStartConstraints.push(successor.lateStart);
+        lateStart = Math.min(
+          lateStart,
+          successor.lateStart - dependency.lagDays,
+        );
       }
     }
-
-    if (
-      lateFinishConstraints.length === 0 &&
-      lateStartConstraints.length === 0
-    ) {
-      return {
-        lateFinish: projectFinish,
-        lateStart: projectFinish - durationDays,
-      };
-    }
-
-    const latestStartFromFinishConstraints =
-      lateFinishConstraints.length > 0
-        ? Math.min(...lateFinishConstraints) - durationDays
-        : Number.POSITIVE_INFINITY;
-    const latestStartFromStartConstraints =
-      lateStartConstraints.length > 0
-        ? Math.min(...lateStartConstraints)
-        : Number.POSITIVE_INFINITY;
-    const lateStart = Math.min(
-      latestStartFromFinishConstraints,
-      latestStartFromStartConstraints,
-    );
 
     return {
       lateFinish: lateStart + durationDays,
