@@ -514,7 +514,7 @@ describe("Tasks page", () => {
     });
 
     expect(
-      screen.getByText("Resolve collector rollout blocker"),
+      await screen.findByText("Resolve collector rollout blocker"),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Plan executive readout"),

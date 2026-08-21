@@ -25,6 +25,7 @@ import {
   WorkspaceSection,
 } from "@/components/foundation";
 import { DisclosureButton } from "@/components/ui/disclosure-button";
+import { AppModal } from "@/components/ui/app-modal";
 import { ToolbarGroup } from "@/components/ui/toolbar";
 import { useDismissibleMenu, useDropdownMenu } from "@/hooks/use-dropdown-menu";
 import { usePlanningExpansionState } from "./planning-expansion-state";
@@ -457,6 +458,7 @@ export function PlanningWorkspace({
     closeOnWindowResize: true,
     isOpen: workPackageContextMenu !== null,
     onClose: () => setWorkPackageContextMenu(null),
+    restoreFocusRef: structureMenu.triggerRef,
   });
   const [duplicateUndoStack, setDuplicateUndoStack] = useState<
     DuplicateHistoryEntry[]
@@ -3217,12 +3219,15 @@ export function PlanningWorkspace({
       ) : null}
 
       {duplicateWorkPackageDialog ? (
-        <DialogBackdrop>
-          <DialogPanel title="Duplicate Work Package">
-            <label className="block text-sm font-semibold text-slate-700">
+        <AppModal
+          labelledById="duplicate-work-package-dialog-title"
+          onClose={() => setDuplicateWorkPackageDialog(null)}
+          title="Duplicate Work Package"
+          widthClassName="max-w-md"
+        >
+          <label className="block text-sm font-semibold text-slate-700">
               New Summary Name <span aria-hidden="true">*</span>
               <input
-                autoFocus
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 maxLength={255}
                 onChange={(event) =>
@@ -3241,8 +3246,8 @@ export function PlanningWorkspace({
                 required
                 value={duplicateWorkPackageDialog.input.newSummaryName}
               />
-            </label>
-            <fieldset className="mt-4 grid gap-2 sm:grid-cols-2">
+          </label>
+          <fieldset className="mt-4 grid gap-2 sm:grid-cols-2">
               <legend className="mb-2 text-xs font-bold uppercase text-slate-500">
                 Copy options
               </legend>
@@ -3297,12 +3302,12 @@ export function PlanningWorkspace({
                   <span>{label} (not available)</span>
                 </label>
               ))}
-            </fieldset>
-            <p className="mt-2 text-xs text-slate-500">
+          </fieldset>
+          <p className="mt-2 text-xs text-slate-500">
               Only dependencies whose predecessor and successor are both copied
               will be preserved. Audit history is never copied.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
               <button
                 className={toolbarButtonClassName}
                 onClick={() => setDuplicateWorkPackageDialog(null)}
@@ -3321,18 +3326,21 @@ export function PlanningWorkspace({
               >
                 Duplicate
               </button>
-            </div>
-          </DialogPanel>
-        </DialogBackdrop>
+          </div>
+        </AppModal>
       ) : null}
 
       {summaryDeleteDialog ? (
-        <DialogBackdrop>
-          <DialogPanel title="Delete Summary">
-            <p className="text-sm text-slate-700">
+        <AppModal
+          labelledById="delete-summary-dialog-title"
+          onClose={() => setSummaryDeleteDialog(null)}
+          title="Delete Summary"
+          widthClassName="max-w-md"
+        >
+          <p className="text-sm text-slate-700">
               This Summary contains child items.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
               <button
                 className={toolbarButtonClassName}
                 onClick={() => void deleteSummaryAndMoveChildrenToParent()}
@@ -3354,15 +3362,18 @@ export function PlanningWorkspace({
               >
                 Cancel
               </button>
-            </div>
-          </DialogPanel>
-        </DialogBackdrop>
+          </div>
+        </AppModal>
       ) : null}
 
       {moveToSummaryState ? (
-        <DialogBackdrop>
-          <DialogPanel title="Move to Summary">
-            <label className="block text-sm font-semibold text-slate-700">
+        <AppModal
+          labelledById="move-to-summary-dialog-title"
+          onClose={() => setMoveToSummaryState(null)}
+          title="Move to Summary"
+          widthClassName="max-w-md"
+        >
+          <label className="block text-sm font-semibold text-slate-700">
               Destination Summary
               <select
                 className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -3384,8 +3395,8 @@ export function PlanningWorkspace({
                   </option>
                 ))}
               </select>
-            </label>
-            <div className="mt-4 flex flex-wrap gap-2">
+          </label>
+          <div className="mt-4 flex flex-wrap gap-2">
               <button
                 className={toolbarButtonClassName}
                 onClick={() => void confirmMoveToSummary()}
@@ -3400,9 +3411,8 @@ export function PlanningWorkspace({
               >
                 Cancel
               </button>
-            </div>
-          </DialogPanel>
-        </DialogBackdrop>
+          </div>
+        </AppModal>
       ) : null}
 
       <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
@@ -3743,29 +3753,6 @@ function CommandIcon({
     >
       {paths[name]}
     </svg>
-  );
-}
-
-function DialogBackdrop({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/20 px-4">
-      {children}
-    </div>
-  );
-}
-
-function DialogPanel({
-  children,
-  title,
-}: {
-  children: React.ReactNode;
-  title: string;
-}) {
-  return (
-    <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
-      <h3 className="text-base font-semibold text-slate-950">{title}</h3>
-      <div className="mt-3">{children}</div>
-    </div>
   );
 }
 

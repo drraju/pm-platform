@@ -1165,10 +1165,10 @@ describe("Projects List navigation", () => {
     });
     const statusFilter = within(deliveryToolbar).getByLabelText("Status");
     expect(statusFilter).toHaveValue("all");
-    expect(screen.getByText("Delivery package")).toBeInTheDocument();
-    const expandPackage =
-      screen.queryByRole("button", { name: "Expand Delivery package" }) ??
-      screen.queryByRole("button", { name: "Collapse Delivery package" });
+    expect(await screen.findByText("Delivery package")).toBeInTheDocument();
+    const expandPackage = await screen.findByRole("button", {
+      name: /Delivery package/,
+    });
     if (expandPackage?.getAttribute("aria-label")?.startsWith("Expand")) {
       fireEvent.click(expandPackage);
     }

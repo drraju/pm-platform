@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addProjectMember,
   adminResetUserPassword,
+  apiRequest,
   archiveProject,
   captureProjectBaseline,
   changePassword,
+  clearSession,
   forgotPassword,
   getDocumentCategories,
   createProjectDocument,
@@ -42,6 +44,7 @@ import {
   recordProjectTaskExecutionUpdate,
   resetPassword,
   restoreProject,
+  storeSession,
   updateRolePermissions,
   updateUser,
   updateProject,
@@ -75,16 +78,48 @@ function mockFetch(
   });
 }
 
+function createAccessToken(exp: number) {
+  return `header.${window.btoa(JSON.stringify({ exp }))}.signature`;
+}
+
+function createDeferred<T>() {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function response(
+  body: unknown,
+  status = 200,
+  extras: { blob?: () => Promise<Blob> } = {},
+) {
+  const text = typeof body === "undefined" ? "" : JSON.stringify(body);
+  return {
+    blob: extras.blob ?? vi.fn().mockResolvedValue(new Blob()),
+    headers: { get: vi.fn(() => (text ? String(text.length) : null)) },
+    json: vi.fn().mockResolvedValue(body),
+    ok: status < 400,
+    status,
+    text: vi.fn().mockResolvedValue(text),
+  } as unknown as Response;
+}
+
 describe("project API client", () => {
   beforeEach(() => {
+    const storage = new Map<string, string>();
     vi.stubGlobal("localStorage", {
-      getItem: vi.fn(() => null),
-      removeItem: vi.fn(),
-      setItem: vi.fn(),
+      getItem: vi.fn((key: string) => storage.get(key) ?? null),
+      removeItem: vi.fn((key: string) => storage.delete(key)),
+      setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
     });
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -132,6 +167,646 @@ describe("project API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getProjects()).rejects.toThrow("Project access denied");
+  });
+
+  it("refreshes an expired access token and retries the request once", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => {
+      if (key === "pm_platform_access_token") return expiredAccessToken;
+      if (key === "pm_platform_refresh_token") return "valid-refresh-token";
+      return null;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        headers: { get: vi.fn(() => null) },
+        json: vi.fn().mockResolvedValue({ message: "Unauthorized" }),
+        ok: false,
+        status: 401,
+        text: vi.fn(),
+      })
+      .mockResolvedValueOnce({
+        headers: { get: vi.fn(() => null) },
+        json: vi.fn().mockResolvedValue({
+          accessToken: "new-access-token",
+          refreshToken: "new-refresh-token",
+        }),
+        ok: true,
+        status: 200,
+        text: vi.fn(),
+      })
+      .mockImplementationOnce(
+        mockFetch([{ id: "project-1", name: "ERP" }]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getProjects()).resolves.toEqual([
+      { id: "project-1", name: "ERP" },
+    ]);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:3001/auth/refresh",
+      expect.objectContaining({
+        body: JSON.stringify({ refreshToken: "valid-refresh-token" }),
+        method: "POST",
+      }),
+    );
+    expect(localStorage.setItem).toHaveBeenCalledWith(
+      "pm_platform_access_token",
+      "new-access-token",
+    );
+    expect(localStorage.setItem).toHaveBeenCalledWith(
+      "pm_platform_refresh_token",
+      "new-refresh-token",
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:3001/projects",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer new-access-token",
+        }),
+      }),
+    );
+  });
+
+  it("clears an expired session when refresh is rejected", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => {
+      if (key === "pm_platform_access_token") return expiredAccessToken;
+      if (key === "pm_platform_refresh_token") return "invalid-refresh-token";
+      return null;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        headers: { get: vi.fn(() => null) },
+        json: vi.fn().mockResolvedValue({ message: "Unauthorized" }),
+        ok: false,
+        status: 401,
+        text: vi.fn(),
+      })
+      .mockResolvedValueOnce({
+        headers: { get: vi.fn(() => null) },
+        json: vi.fn().mockResolvedValue({ message: "Invalid refresh token" }),
+        ok: false,
+        status: 401,
+        text: vi.fn(),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getProjects()).rejects.toThrow(
+      "Session expired. Please sign in again.",
+    );
+    expect(localStorage.removeItem).toHaveBeenCalledWith(
+      "pm_platform_access_token",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves application-level 401 errors for a valid access token", async () => {
+    const validAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) + 3_600,
+    );
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === "pm_platform_access_token" ? validAccessToken : null,
+    );
+    const fetchMock = mockFetch(
+      { message: "Current password is incorrect" },
+      { status: 401 },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      changePassword({
+        confirmPassword: "new-password",
+        currentPassword: "wrong-password",
+        newPassword: "new-password",
+      }),
+    ).rejects.toThrow("Current password is incorrect");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(localStorage.removeItem).not.toHaveBeenCalled();
+  });
+
+  it("uses one refresh for concurrent expired requests", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const refreshDeferred = createDeferred<Response>();
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi.fn((url: string, options: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        return refreshDeferred.promise;
+      }
+      if (
+        (options.headers as Record<string, string>).Authorization ===
+        `Bearer ${expiredAccessToken}`
+      ) {
+        return Promise.resolve(response({ message: "Unauthorized" }, 401));
+      }
+      return Promise.resolve(response([{ id: "project-1", name: "ERP" }]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const requests = [getProjects(), getProjects(), getProjects()];
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).endsWith("/auth/refresh"),
+        ),
+      ).toHaveLength(1);
+    });
+    refreshDeferred.resolve(
+      response({
+        accessToken: "access-token-2",
+        refreshToken: "refresh-token-2",
+      }),
+    );
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(3);
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/auth/refresh"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("retries a late expired-token 401 with the exact completed refresh transition", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const lateOriginalResponse = createDeferred<Response>();
+    let oldTokenRequestCount = 0;
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi.fn((url: string, options: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        return Promise.resolve(
+          response({
+            accessToken: "access-token-2",
+            refreshToken: "refresh-token-2",
+          }),
+        );
+      }
+      if (
+        (options.headers as Record<string, string>).Authorization ===
+        `Bearer ${expiredAccessToken}`
+      ) {
+        oldTokenRequestCount += 1;
+        return oldTokenRequestCount === 1
+          ? Promise.resolve(response({ message: "Unauthorized" }, 401))
+          : lateOriginalResponse.promise;
+      }
+      return Promise.resolve(response([{ id: "project-1", name: "ERP" }]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const firstRequest = getProjects();
+    const lateRequest = getProjects();
+
+    await expect(firstRequest).resolves.toEqual([
+      { id: "project-1", name: "ERP" },
+    ]);
+    lateOriginalResponse.resolve(response({ message: "Unauthorized" }, 401));
+
+    await expect(lateRequest).resolves.toEqual([
+      { id: "project-1", name: "ERP" },
+    ]);
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/auth/refresh"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/projects") &&
+          (options.headers as Record<string, string>).Authorization ===
+            "Bearer access-token-2",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("does not let a late old-generation 401 revive a logged-out session", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const lateOriginalResponse = createDeferred<Response>();
+    let oldTokenRequestCount = 0;
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi.fn((url: string, options: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        return Promise.resolve(
+          response({
+            accessToken: "access-token-2",
+            refreshToken: "refresh-token-2",
+          }),
+        );
+      }
+      if (
+        (options.headers as Record<string, string>).Authorization ===
+        `Bearer ${expiredAccessToken}`
+      ) {
+        oldTokenRequestCount += 1;
+        return oldTokenRequestCount === 1
+          ? Promise.resolve(response({ message: "Unauthorized" }, 401))
+          : lateOriginalResponse.promise;
+      }
+      return Promise.resolve(response([{ id: "project-1", name: "ERP" }]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const firstRequest = getProjects();
+    const lateRequest = getProjects();
+    await expect(firstRequest).resolves.toHaveLength(1);
+    clearSession();
+    lateOriginalResponse.resolve(response({ message: "Unauthorized" }, 401));
+
+    await expect(lateRequest).rejects.toThrow(
+      "Session changed while the request was in progress.",
+    );
+    expect(localStorage.getItem("pm_platform_access_token")).toBeNull();
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBeNull();
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/auth/refresh"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("does not let a late old-generation 401 consume a newer login", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const lateOriginalResponse = createDeferred<Response>();
+    let oldTokenRequestCount = 0;
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi.fn((url: string, options: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        return Promise.resolve(
+          response({
+            accessToken: "access-token-2",
+            refreshToken: "refresh-token-2",
+          }),
+        );
+      }
+      if (
+        (options.headers as Record<string, string>).Authorization ===
+        `Bearer ${expiredAccessToken}`
+      ) {
+        oldTokenRequestCount += 1;
+        return oldTokenRequestCount === 1
+          ? Promise.resolve(response({ message: "Unauthorized" }, 401))
+          : lateOriginalResponse.promise;
+      }
+      return Promise.resolve(response([{ id: "project-1", name: "ERP" }]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const firstRequest = getProjects();
+    const lateRequest = getProjects();
+    await expect(firstRequest).resolves.toHaveLength(1);
+    storeSession("new-user-access-token", "new-user-refresh-token");
+    lateOriginalResponse.resolve(response({ message: "Unauthorized" }, 401));
+
+    await expect(lateRequest).rejects.toThrow(
+      "Session changed while the request was in progress.",
+    );
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      "new-user-access-token",
+    );
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBe(
+      "new-user-refresh-token",
+    );
+  });
+
+  it("does not let a late old-generation 401 consume a newer refresh lineage", async () => {
+    const firstExpiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const secondExpiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 30,
+    );
+    const lateOriginalResponse = createDeferred<Response>();
+    let firstTokenRequestCount = 0;
+    let refreshRequestCount = 0;
+    let secondTokenRequestCount = 0;
+    storeSession(firstExpiredAccessToken, "refresh-token-1");
+    const fetchMock = vi.fn((url: string, options: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        refreshRequestCount += 1;
+        return Promise.resolve(
+          response(
+            refreshRequestCount === 1
+              ? {
+                  accessToken: secondExpiredAccessToken,
+                  refreshToken: "refresh-token-2",
+                }
+              : {
+                  accessToken: "access-token-3",
+                  refreshToken: "refresh-token-3",
+                },
+          ),
+        );
+      }
+      const authorization = (options.headers as Record<string, string>)
+        .Authorization;
+      if (authorization === `Bearer ${firstExpiredAccessToken}`) {
+        firstTokenRequestCount += 1;
+        return firstTokenRequestCount === 1
+          ? Promise.resolve(response({ message: "Unauthorized" }, 401))
+          : lateOriginalResponse.promise;
+      }
+      if (authorization === `Bearer ${secondExpiredAccessToken}`) {
+        secondTokenRequestCount += 1;
+        return Promise.resolve(
+          secondTokenRequestCount === 1
+            ? response([{ id: "project-1", name: "ERP" }])
+            : response({ message: "Unauthorized" }, 401),
+        );
+      }
+      return Promise.resolve(response([{ id: "project-1", name: "ERP" }]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const firstRequest = getProjects();
+    const lateRequest = getProjects();
+    await expect(firstRequest).resolves.toHaveLength(1);
+    await expect(getProjects()).resolves.toHaveLength(1);
+    lateOriginalResponse.resolve(response({ message: "Unauthorized" }, 401));
+
+    await expect(lateRequest).rejects.toThrow(
+      "Session changed while the request was in progress.",
+    );
+    expect(refreshRequestCount).toBe(2);
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      "access-token-3",
+    );
+  });
+
+  it("does not resurrect a session when logout occurs during refresh", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const refreshDeferred = createDeferred<Response>();
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockImplementationOnce(() => refreshDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = getProjects();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    clearSession();
+    refreshDeferred.resolve(
+      response({
+        accessToken: "access-token-2",
+        refreshToken: "refresh-token-2",
+      }),
+    );
+
+    await expect(request).rejects.toThrow(
+      "Session changed while the request was in progress.",
+    );
+    expect(localStorage.getItem("pm_platform_access_token")).toBeNull();
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBeNull();
+  });
+
+  it("does not let a successful old refresh overwrite a newer login", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const refreshDeferred = createDeferred<Response>();
+    storeSession(expiredAccessToken, "old-refresh-token");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockImplementationOnce(() => refreshDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const oldRequest = getProjects();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    clearSession();
+    storeSession("new-user-access-token", "new-user-refresh-token");
+    refreshDeferred.resolve(
+      response({
+        accessToken: "old-user-access-token-2",
+        refreshToken: "old-user-refresh-token-2",
+      }),
+    );
+
+    await expect(oldRequest).rejects.toThrow(
+      "Session changed while the request was in progress.",
+    );
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      "new-user-access-token",
+    );
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBe(
+      "new-user-refresh-token",
+    );
+  });
+
+  it("does not let a failed old refresh clear a newer login", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const refreshDeferred = createDeferred<Response>();
+    storeSession(expiredAccessToken, "old-refresh-token");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockImplementationOnce(() => refreshDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const oldRequest = getProjects();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    clearSession();
+    storeSession("new-user-access-token", "new-user-refresh-token");
+    refreshDeferred.resolve(response({ message: "Invalid refresh token" }, 401));
+
+    await expect(oldRequest).rejects.toThrow(
+      "Session expired. Please sign in again.",
+    );
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      "new-user-access-token",
+    );
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBe(
+      "new-user-refresh-token",
+    );
+  });
+
+  it.each([
+    [401, "Current password is incorrect"],
+    [403, "Project access denied"],
+    [500, "Unexpected service failure"],
+  ])(
+    "surfaces a retry %s without refreshing again",
+    async (status, message) => {
+      const expiredAccessToken = createAccessToken(
+        Math.floor(Date.now() / 1000) - 60,
+      );
+      storeSession(expiredAccessToken, "refresh-token-1");
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+        .mockResolvedValueOnce(
+          response({
+            accessToken: "access-token-2",
+            refreshToken: "refresh-token-2",
+          }),
+        )
+        .mockResolvedValueOnce(response({ message }, status));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(getProjects()).rejects.toThrow(message);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(localStorage.getItem("pm_platform_access_token")).toBe(
+        "access-token-2",
+      );
+    },
+  );
+
+  it("lets one caller abort without cancelling another caller's refresh", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const refreshDeferred = createDeferred<Response>();
+    const firstController = new AbortController();
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi.fn((url: string, options: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        return refreshDeferred.promise;
+      }
+      if (
+        (options.headers as Record<string, string>).Authorization ===
+        `Bearer ${expiredAccessToken}`
+      ) {
+        return Promise.resolve(response({ message: "Unauthorized" }, 401));
+      }
+      return Promise.resolve(response([{ id: "project-1", name: "ERP" }]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const abortedRequest = apiRequest("/projects", {
+      signal: firstController.signal,
+    });
+    const activeRequest = getProjects();
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).endsWith("/auth/refresh"),
+        ),
+      ).toHaveLength(1);
+    });
+    firstController.abort();
+    const abortedExpectation = expect(abortedRequest).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    refreshDeferred.resolve(
+      response({
+        accessToken: "access-token-2",
+        refreshToken: "refresh-token-2",
+      }),
+    );
+
+    await abortedExpectation;
+    await expect(activeRequest).resolves.toEqual([
+      { id: "project-1", name: "ERP" },
+    ]);
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      "access-token-2",
+    );
+  });
+
+  it("enforces the normal deadline while refresh is pending", async () => {
+    vi.useFakeTimers();
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockImplementationOnce(
+        (_url: string, options: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            options.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError")),
+            );
+          }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const expectation = expect(getProjects()).rejects.toThrow(
+      "Request timed out after 60 seconds.",
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expectation;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("enforces the normal deadline while the retry is pending", async () => {
+    vi.useFakeTimers();
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockResolvedValueOnce(
+        response({
+          accessToken: "access-token-2",
+          refreshToken: "refresh-token-2",
+        }),
+      )
+      .mockImplementationOnce(
+        (_url: string, options: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            options.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError")),
+            );
+          }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const expectation = expect(getProjects()).rejects.toThrow(
+      "Request timed out after 60 seconds.",
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expectation;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cleans up timers after refresh and retry complete", async () => {
+    vi.useFakeTimers();
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockResolvedValueOnce(
+        response({
+          accessToken: "access-token-2",
+          refreshToken: "refresh-token-2",
+        }),
+      )
+      .mockResolvedValueOnce(response([{ id: "project-1", name: "ERP" }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getProjects();
+
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("converts an application timeout into a clear error", async () => {
@@ -184,6 +859,121 @@ describe("project API client", () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     await expectation;
+  });
+
+  it("refreshes an expired session and retries an Excel export", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const exportBlob = new Blob(["workbook"]);
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockResolvedValueOnce(
+        response({
+          accessToken: "access-token-2",
+          refreshToken: "refresh-token-2",
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(undefined, 200, {
+          blob: vi.fn().mockResolvedValue(exportBlob),
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(downloadProjectExcel("project-1")).resolves.toBe(exportBlob);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      "access-token-2",
+    );
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBe(
+      "refresh-token-2",
+    );
+  });
+
+  it("clears the current session when Excel export refresh fails", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    storeSession(expiredAccessToken, "invalid-refresh-token");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockResolvedValueOnce(response({ message: "Invalid refresh token" }, 401));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(downloadProjectExcel("project-1")).rejects.toThrow(
+      "Session expired. Please sign in again.",
+    );
+    expect(localStorage.getItem("pm_platform_access_token")).toBeNull();
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBeNull();
+  });
+
+  it("surfaces an Excel retry 401 without another refresh", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockResolvedValueOnce(
+        response({
+          accessToken: "access-token-2",
+          refreshToken: "refresh-token-2",
+        }),
+      )
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(downloadProjectExcel("project-1")).rejects.toThrow(
+      "Unable to export project (401)",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      "access-token-2",
+    );
+  });
+
+  it("aborts an Excel caller while shared refresh remains independent", async () => {
+    const expiredAccessToken = createAccessToken(
+      Math.floor(Date.now() / 1000) - 60,
+    );
+    const controller = new AbortController();
+    const refreshDeferred = createDeferred<Response>();
+    storeSession(expiredAccessToken, "refresh-token-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response({ message: "Unauthorized" }, 401))
+      .mockImplementationOnce(() => refreshDeferred.promise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = downloadProjectExcel("project-1", {
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const expectation = expect(request).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    controller.abort();
+    await expectation;
+    refreshDeferred.resolve(
+      response({
+        accessToken: "access-token-2",
+        refreshToken: "refresh-token-2",
+      }),
+    );
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem("pm_platform_access_token")).toBe(
+      expiredAccessToken,
+    );
+    expect(localStorage.getItem("pm_platform_refresh_token")).toBe(
+      "refresh-token-1",
+    );
   });
 
   it("loads project details", async () => {

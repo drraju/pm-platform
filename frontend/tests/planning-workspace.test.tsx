@@ -3509,6 +3509,12 @@ describe("PlanningWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Duplicate Work Package" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Duplicate Work Package" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Close Duplicate Work Package" }),
+    ).toHaveFocus();
     expect(screen.getByLabelText(/Copy child tasks/)).toBeChecked();
     expect(screen.getByLabelText(/Copy planned dates/)).not.toBeChecked();
     fireEvent.change(screen.getByLabelText(/New Summary Name/), {
@@ -3530,6 +3536,7 @@ describe("PlanningWorkspace", () => {
     expect(
       await screen.findByRole("row", { name: /Planning Wave 2/ }),
     ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /Structure/ })).toHaveFocus();
     expect(
       screen.getByRole("button", { name: /expand planning wave 2/i }),
     ).toBeInTheDocument();

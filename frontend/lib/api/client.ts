@@ -587,6 +587,38 @@ export function getStoredAccessToken() {
   return window.localStorage.getItem("pm_platform_access_token");
 }
 
+function getStoredRefreshToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem("pm_platform_refresh_token");
+}
+
+function isAccessTokenExpired(token: string) {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) {
+      return false;
+    }
+    const normalizedPayload = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      "=",
+    );
+    const decodedPayload = JSON.parse(window.atob(paddedPayload)) as {
+      exp?: number;
+    };
+
+    return (
+      typeof decodedPayload.exp === "number" &&
+      decodedPayload.exp * 1000 <= Date.now()
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function getStoredSessionUser(): ApiSessionUser | null {
   const token = getStoredAccessToken();
   if (!token) {
@@ -631,6 +663,8 @@ export function getStoredSessionUser(): ApiSessionUser | null {
 export function storeSession(accessToken: string, refreshToken: string) {
   window.localStorage.setItem("pm_platform_access_token", accessToken);
   window.localStorage.setItem("pm_platform_refresh_token", refreshToken);
+  sessionRevision += 1;
+  completedRefreshTransition = null;
 }
 
 const authSessionChangeListeners = new Set<() => void>();
@@ -654,6 +688,8 @@ export function clearSession() {
   window.localStorage.removeItem("pm_platform_permissions");
   window.localStorage.removeItem("pm_platform_role_names");
   window.localStorage.removeItem("pm_platform_session_user");
+  sessionRevision += 1;
+  completedRefreshTransition = null;
   notifyAuthSessionChange();
 }
 
@@ -736,69 +772,316 @@ async function withRequestTimeout<T>(
   }
 }
 
+type ApiSession = {
+  accessToken: string;
+  refreshToken: string;
+  requiresPasswordChange?: boolean;
+};
+
+type SessionSnapshot = {
+  accessToken: string;
+  refreshToken: string | null;
+  revision: number;
+};
+
+type RefreshSessionRequest = {
+  promise: Promise<ApiSession>;
+  snapshot: SessionSnapshot;
+};
+
+type CompletedRefreshTransition = {
+  source: SessionSnapshot;
+  session: ApiSession;
+  sessionRevision: number;
+};
+
+let sessionRevision = 0;
+let refreshSessionRequest: RefreshSessionRequest | null = null;
+let completedRefreshTransition: CompletedRefreshTransition | null = null;
+
+function captureSessionSnapshot(accessToken: string): SessionSnapshot | null {
+  if (getStoredAccessToken() !== accessToken) {
+    return null;
+  }
+
+  return {
+    accessToken,
+    refreshToken: getStoredRefreshToken(),
+    revision: sessionRevision,
+  };
+}
+
+function isCurrentSession(snapshot: SessionSnapshot) {
+  return (
+    snapshot.revision === sessionRevision &&
+    snapshot.accessToken === getStoredAccessToken() &&
+    snapshot.refreshToken === getStoredRefreshToken()
+  );
+}
+
+function isSameSession(left: SessionSnapshot, right: SessionSnapshot) {
+  return (
+    left.revision === right.revision &&
+    left.accessToken === right.accessToken &&
+    left.refreshToken === right.refreshToken
+  );
+}
+
+function applyRefreshedSession(
+  snapshot: SessionSnapshot,
+  session: ApiSession,
+) {
+  if (isCurrentSession(snapshot)) {
+    storeSession(session.accessToken, session.refreshToken);
+    completedRefreshTransition = {
+      session,
+      sessionRevision,
+      source: snapshot,
+    };
+    return true;
+  }
+
+  return (
+    getStoredAccessToken() === session.accessToken &&
+    getStoredRefreshToken() === session.refreshToken
+  );
+}
+
+function getCompletedRefreshTransition(snapshot: SessionSnapshot) {
+  const transition = completedRefreshTransition;
+  if (
+    !transition ||
+    !isSameSession(transition.source, snapshot) ||
+    transition.sessionRevision !== sessionRevision ||
+    getStoredAccessToken() !== transition.session.accessToken ||
+    getStoredRefreshToken() !== transition.session.refreshToken
+  ) {
+    return null;
+  }
+
+  return transition.session;
+}
+
+function clearSessionIfCurrent(snapshot: SessionSnapshot) {
+  if (isCurrentSession(snapshot)) {
+    clearSession();
+  }
+}
+
+function refreshSession(snapshot: SessionSnapshot): Promise<ApiSession> {
+  const refreshToken = snapshot.refreshToken;
+  if (!refreshToken) {
+    return Promise.reject(new Error("Session expired. Please sign in again."));
+  }
+
+  if (
+    refreshSessionRequest &&
+    isSameSession(refreshSessionRequest.snapshot, snapshot)
+  ) {
+    return refreshSessionRequest.promise;
+  }
+
+  const promise = withRequestTimeout(
+    apiTimeoutMs,
+    undefined,
+    async (signal) => {
+      const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
+        body: JSON.stringify({ refreshToken }),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error("Session expired. Please sign in again.");
+      }
+
+      return (await response.json()) as ApiSession;
+    },
+  ).finally(() => {
+    if (refreshSessionRequest?.promise === promise) {
+      refreshSessionRequest = null;
+    }
+  });
+  refreshSessionRequest = { promise, snapshot };
+
+  return promise;
+}
+
+function abortError(signal: AbortSignal) {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException("The operation was aborted", "AbortError");
+}
+
+function waitForSharedRefresh<T>(promise: Promise<T>, signal: AbortSignal) {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener("abort", handleAbort);
+      callback();
+    };
+    const handleAbort = () => finish(() => reject(abortError(signal)));
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+    if (signal.aborted) {
+      handleAbort();
+    }
+  });
+}
+
+async function renewExpiredSession(
+  snapshot: SessionSnapshot,
+  signal: AbortSignal,
+) {
+  if (!isCurrentSession(snapshot)) {
+    const completedTransition = getCompletedRefreshTransition(snapshot);
+    if (completedTransition) {
+      return completedTransition.accessToken;
+    }
+    throw new Error("Session changed while the request was in progress.");
+  }
+
+  try {
+    const session = await waitForSharedRefresh(refreshSession(snapshot), signal);
+    if (signal.aborted) {
+      throw abortError(signal);
+    }
+    if (!applyRefreshedSession(snapshot, session)) {
+      throw new Error("Session changed while the request was in progress.");
+    }
+    return session.accessToken;
+  } catch (error) {
+    if (signal.aborted) {
+      throw error;
+    }
+    if (
+      error instanceof Error &&
+      error.message === "Session changed while the request was in progress."
+    ) {
+      throw error;
+    }
+    clearSessionIfCurrent(snapshot);
+    throw new Error("Session expired. Please sign in again.");
+  }
+}
+
+async function requestWithExpiredSessionRecovery(input: {
+  request: (accessToken: string | null) => Promise<Response>;
+  signal: AbortSignal;
+  token: string | null;
+}) {
+  const snapshot = input.token
+    ? captureSessionSnapshot(input.token)
+    : null;
+  const response = await input.request(input.token);
+  if (
+    response.status !== 401 ||
+    !input.token ||
+    !snapshot ||
+    !isAccessTokenExpired(input.token)
+  ) {
+    return response;
+  }
+
+  const accessToken = await renewExpiredSession(snapshot, input.signal);
+  return input.request(accessToken);
+}
+
+async function parseApiResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let message = `Request failed with ${response.status}`;
+    try {
+      const body = (await response.json()) as { message?: string | string[] };
+      if (Array.isArray(body.message)) {
+        message = body.message.join(", ");
+      } else if (body.message) {
+        message = body.message;
+      }
+    } catch {
+      // Keep the status-based message when the API returns no JSON body.
+    }
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  if (response.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
+
+  const responseText = await response.text();
+  if (!responseText.trim()) {
+    return undefined as T;
+  }
+
+  return JSON.parse(responseText) as T;
+}
+
 export async function apiRequest<T>(
   path: string,
   { token = getStoredAccessToken(), headers, ...options }: RequestOptions = {},
 ): Promise<T> {
   return withRequestTimeout(apiTimeoutMs, options.signal, async (signal) => {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      cache: "no-store",
-      ...options,
+    const request = (accessToken: string | null) =>
+      fetch(`${apiBaseUrl}${path}`, {
+        cache: "no-store",
+        ...options,
+        signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...headers,
+        },
+      });
+
+    const response = await requestWithExpiredSessionRecovery({
+      request,
       signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...headers,
-      },
+      token,
     });
 
-    if (!response.ok) {
-      let message = `Request failed with ${response.status}`;
-      try {
-        const body = (await response.json()) as { message?: string | string[] };
-        if (Array.isArray(body.message)) {
-          message = body.message.join(", ");
-        } else if (body.message) {
-          message = body.message;
-        }
-      } catch {
-        // Keep the status-based message when the API returns no JSON body.
-      }
-      throw new Error(message);
-    }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    if (response.headers.get("content-length") === "0") {
-      return undefined as T;
-    }
-
-    const responseText = await response.text();
-    if (!responseText.trim()) {
-      return undefined as T;
-    }
-
-    return JSON.parse(responseText) as T;
+    return parseApiResponse<T>(response);
   });
 }
 
-export async function downloadProjectExcel(projectId: string) {
-  return withRequestTimeout(apiExportTimeoutMs, undefined, async (signal) => {
-    const response = await fetch(
-      `${apiBaseUrl}/projects/${projectId}/export/excel`,
-      {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${getStoredAccessToken() ?? ""}` },
+export async function downloadProjectExcel(
+  projectId: string,
+  options: { signal?: AbortSignal } = {},
+) {
+  return withRequestTimeout(
+    apiExportTimeoutMs,
+    options.signal,
+    async (signal) => {
+      const token = getStoredAccessToken();
+      const request = (accessToken: string | null) =>
+        fetch(`${apiBaseUrl}/projects/${projectId}/export/excel`, {
+          cache: "no-store",
+          headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+          signal,
+        });
+      const response = await requestWithExpiredSessionRecovery({
+        request,
         signal,
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`Unable to export project (${response.status})`);
-    }
-    return response.blob();
-  });
+        token,
+      });
+      if (!response.ok) {
+        throw new Error(`Unable to export project (${response.status})`);
+      }
+      return response.blob();
+    },
+  );
 }
 
 export function getAiEnterpriseCapabilities() {
@@ -822,11 +1105,7 @@ export function executeAiEnterpriseCapability(
 }
 
 export function login(email: string, password: string) {
-  return apiRequest<{
-    accessToken: string;
-    refreshToken: string;
-    requiresPasswordChange?: boolean;
-  }>("/auth/login", {
+  return apiRequest<ApiSession>("/auth/login", {
     method: "POST",
     token: null,
     body: JSON.stringify({ email, password }),
