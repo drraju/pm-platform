@@ -4,7 +4,7 @@ import { In, Repository } from 'typeorm';
 import { MilestoneCategory } from '../../common/enums/milestone-category.enum';
 import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import { TaskKind } from '../../common/enums/task-kind.enum';
-import { PlanningScheduleSnapshot } from '../planning/entities/planning-schedule-snapshot.entity';
+import { PlanningSnapshotService } from '../planning/planning-snapshot.service';
 import { ProjectBaselineTask } from '../projects/entities/project-baseline-task.entity';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
 import {
@@ -49,13 +49,12 @@ export class MilestoneQueryService {
   constructor(
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
-    @InjectRepository(PlanningScheduleSnapshot)
-    private readonly snapshotsRepository: Repository<PlanningScheduleSnapshot>,
     @InjectRepository(ProjectBaseline)
     private readonly baselinesRepository: Repository<ProjectBaseline>,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectionComposer: MilestoneProjectionComposer,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
+    private readonly planningSnapshotService: PlanningSnapshotService,
   ) {}
 
   async findProjectMilestones(
@@ -133,22 +132,19 @@ export class MilestoneQueryService {
     }
 
     const [snapshots, baselines] = await Promise.all([
-      this.snapshotsRepository.find({
-        order: { scheduleVersion: 'DESC' },
-        relations: { taskSchedules: true },
-        where: { projectId: In(milestoneProjectIds) },
-      }),
+      Promise.all(
+        milestoneProjectIds.map((projectId) =>
+          this.planningSnapshotService.calculateOperationalForecast(projectId),
+        ),
+      ),
       this.baselinesRepository.find({
         relations: { tasks: true },
         where: { isCurrent: true, projectId: In(milestoneProjectIds) },
       }),
     ]);
-    const snapshotByProject = new Map<string, PlanningScheduleSnapshot>();
-    for (const snapshot of snapshots) {
-      if (!snapshotByProject.has(snapshot.projectId)) {
-        snapshotByProject.set(snapshot.projectId, snapshot);
-      }
-    }
+    const snapshotByProject = new Map(
+      snapshots.map((snapshot) => [snapshot.projectId, snapshot]),
+    );
     const baselineTaskByTaskId = new Map<string, ProjectBaselineTask>();
     baselines
       .flatMap((baseline) => baseline.tasks ?? [])

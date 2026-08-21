@@ -58,17 +58,25 @@ describe('MilestoneProjectionComposer', () => {
   });
 
   it('derives overdue, completed and unscheduled states without persistence', () => {
-    expect(composer.compose({ task }, '2026-07-21').state).toBe('overdue');
+    expect(
+      composer.compose(
+        {
+          schedule: {
+            scheduledEndDate: '2026-07-20',
+          } as PlanningTaskSchedule,
+          task,
+        },
+        '2026-07-21',
+      ).state,
+    ).toBe('overdue');
     expect(
       composer.compose(
         { task: { ...task, status: TaskStatus.Done } },
         '2026-07-21',
       ).state,
     ).toBe('completed');
-    expect(
-      composer.compose({
-        task: { ...task, dueDate: null, plannedEndDate: null },
-      }).state,
-    ).toBe('unscheduled');
+    const unscheduled = composer.compose({ task });
+    expect(unscheduled.state).toBe('unscheduled');
+    expect(unscheduled.forecastDate).toBeNull();
   });
 });

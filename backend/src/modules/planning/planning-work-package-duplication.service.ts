@@ -13,7 +13,6 @@ import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { DuplicateWorkPackageDto } from './dto/duplicate-work-package.dto';
 import { ResourceAllocation } from './entities/resource-allocation.entity';
-import { PlanningSnapshotService } from './planning-snapshot.service';
 
 type DuplicationActor = { userId?: string | null };
 
@@ -27,7 +26,6 @@ export class PlanningWorkPackageDuplicationService {
   constructor(
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
-    private readonly planningSnapshotService: PlanningSnapshotService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
   ) {}
 
@@ -194,12 +192,6 @@ export class PlanningWorkPackageDuplicationService {
         input,
         actor,
       );
-      await this.planningSnapshotService.rebuildWorkspaceSnapshot(
-        projectId,
-        actor,
-        manager,
-      );
-
       return {
         copiedTaskIds: copiedTasks.map((task) => task.id),
         newSummaryTaskId: idMap.get(sourceSummaryTaskId)!,
@@ -263,11 +255,6 @@ export class PlanningWorkPackageDuplicationService {
       if (followingSiblings.length > 0) {
         await tasksRepository.save(followingSiblings);
       }
-      await this.planningSnapshotService.rebuildWorkspaceSnapshot(
-        projectId,
-        actor,
-        manager,
-      );
     });
   }
 

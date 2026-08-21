@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -139,6 +140,7 @@ const planningMocks = vi.hoisted(() => ({
   createPlanningDependency: vi.fn(),
   createPlanningTask: vi.fn(),
   deletePlanningDependency: vi.fn(),
+  duplicatePlanningWorkPackage: vi.fn(),
   getPlanningWorkspace: vi.fn(async (projectId: string) => ({
     criticalPathTaskIds: [],
     dependencies: [],
@@ -158,6 +160,12 @@ const planningMocks = vi.hoisted(() => ({
     },
   })),
   updatePlanningTaskSchedule: vi.fn(),
+  regeneratePlanningWorkspace: vi.fn(),
+  removeDuplicatedPlanningWorkPackage: vi.fn(),
+}));
+
+const planningWorkspaceCapture = vi.hoisted(() => ({
+  current: null as null | Record<string, unknown>,
 }));
 
 const navigationMocks = vi.hoisted(() => ({
@@ -364,9 +372,25 @@ vi.mock("@/features/planning", () => ({
   createPlanningDependency: planningMocks.createPlanningDependency,
   createPlanningTask: planningMocks.createPlanningTask,
   deletePlanningDependency: planningMocks.deletePlanningDependency,
+  duplicatePlanningWorkPackage: planningMocks.duplicatePlanningWorkPackage,
   getPlanningWorkspace: planningMocks.getPlanningWorkspace,
+  regeneratePlanningWorkspace: planningMocks.regeneratePlanningWorkspace,
+  removeDuplicatedPlanningWorkPackage:
+    planningMocks.removeDuplicatedPlanningWorkPackage,
   updatePlanningTaskSchedule: planningMocks.updatePlanningTaskSchedule,
 }));
+
+vi.mock("@/components/planning/planning-workspace", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/components/planning/planning-workspace")
+  >("@/components/planning/planning-workspace");
+  return {
+    PlanningWorkspace: (props: Record<string, unknown>) => {
+      planningWorkspaceCapture.current = props;
+      return React.createElement(actual.PlanningWorkspace, props as never);
+    },
+  };
+});
 
 vi.mock("@/features/projects", () => ({
   addProjectMember: projectMocks.addProjectMember,
@@ -420,6 +444,7 @@ describe("Projects List navigation", () => {
     projectMocks.getProjectMembers.mockImplementation(async () => []);
     projectMocks.recordProjectTaskExecutionUpdate.mockReset();
     planningMocks.getPlanningWorkspace.mockClear();
+    planningWorkspaceCapture.current = null;
     authMocks.getAuthMe.mockClear();
     authMocks.storeAuthMe.mockClear();
   });
@@ -786,6 +811,157 @@ describe("Projects List navigation", () => {
         })
         .closest("header"),
     ).toHaveClass("shadow-ui-subtle");
+  });
+
+  it("reloads one coherent workspace after a Planning task mutation", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+    const initialWorkspace = await planningMocks.getPlanningWorkspace(
+      "project-123",
+    );
+    planningMocks.getPlanningWorkspace.mockClear();
+    const scheduleDefaults = {
+      durationDays: 1,
+      isCritical: false,
+      percentComplete: 0,
+      projectId: "project-123",
+      taskKind: "standard",
+      taskType: "task",
+    };
+    const coherentWorkspace = {
+      ...initialWorkspace,
+      schedules: [
+        {
+          ...scheduleDefaults,
+          id: "task-1",
+          snapshotId: "working-2",
+          taskId: "task-1",
+          taskTitle: "Task one",
+        },
+        {
+          ...scheduleDefaults,
+          id: "task-2",
+          snapshotId: "working-2",
+          taskId: "task-2",
+          taskTitle: "Task two",
+        },
+      ],
+      snapshot: {
+        ...initialWorkspace.snapshot,
+        id: "working-2",
+        isOfficial: false,
+        versionNumber: 0,
+      },
+    };
+    planningMocks.getPlanningWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(coherentWorkspace);
+    planningMocks.updatePlanningTaskSchedule.mockResolvedValue({
+      id: "task-1",
+      snapshotId: "discarded-mutation-result",
+      taskId: "task-1",
+    });
+
+    render(<ProjectPlanningPage />);
+    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
+    const update = planningWorkspaceCapture.current?.onUpdateSchedule as (
+      taskId: string,
+      input: Record<string, unknown>,
+    ) => Promise<unknown>;
+    await act(async () => {
+      await update("task-1", { durationDays: 3 });
+    });
+
+    await waitFor(() => {
+      const workspace = planningWorkspaceCapture.current?.workspace as {
+        schedules: Array<{ snapshotId: string }>;
+        snapshot: { id: string };
+      };
+      expect(workspace.snapshot.id).toBe("working-2");
+      expect(new Set(workspace.schedules.map((row) => row.snapshotId))).toEqual(
+        new Set(["working-2"]),
+      );
+    });
+    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
+  });
+
+  it("reloads complete workspaces after task creation and dependency mutation", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+    const initialWorkspace = await planningMocks.getPlanningWorkspace(
+      "project-123",
+    );
+    planningMocks.getPlanningWorkspace.mockClear();
+    const schedule = (taskId: string, snapshotId: string) => ({
+      durationDays: 1,
+      id: taskId,
+      isCritical: false,
+      percentComplete: 0,
+      projectId: "project-123",
+      snapshotId,
+      taskId,
+      taskKind: "standard",
+      taskTitle: taskId,
+      taskType: "task",
+    });
+    const afterTask = {
+      ...initialWorkspace,
+      schedules: [schedule("task-1", "working-task")],
+      snapshot: {
+        ...initialWorkspace.snapshot,
+        id: "working-task",
+        isOfficial: false,
+        versionNumber: 0,
+      },
+    };
+    const afterDependency = {
+      ...afterTask,
+      schedules: [
+        schedule("task-1", "working-dependency"),
+        schedule("task-2", "working-dependency"),
+      ],
+      snapshot: { ...afterTask.snapshot, id: "working-dependency" },
+    };
+    planningMocks.getPlanningWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(afterTask)
+      .mockResolvedValueOnce(afterDependency);
+    planningMocks.createPlanningTask.mockResolvedValue(
+      schedule("task-1", "discarded-row"),
+    );
+    planningMocks.createPlanningDependency.mockResolvedValue({ id: "dep-1" });
+
+    render(<ProjectPlanningPage />);
+    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
+    await act(async () => {
+      const createTask = planningWorkspaceCapture.current?.onCreateTask as (
+        input: Record<string, unknown>,
+      ) => Promise<unknown>;
+      await createTask({ title: "Task one" });
+    });
+    expect(
+      (planningWorkspaceCapture.current?.workspace as { snapshot: { id: string } })
+        .snapshot.id,
+    ).toBe("working-task");
+
+    await act(async () => {
+      const createDependency = planningWorkspaceCapture.current
+        ?.onCreateDependency as (
+        input: Record<string, unknown>,
+      ) => Promise<void>;
+      await createDependency({
+        dependencyType: "FS",
+        predecessorTaskId: "task-1",
+        successorTaskId: "task-2",
+      });
+    });
+    const workspace = planningWorkspaceCapture.current?.workspace as {
+      schedules: Array<{ snapshotId: string }>;
+      snapshot: { id: string };
+    };
+    expect(workspace.snapshot.id).toBe("working-dependency");
+    expect(new Set(workspace.schedules.map((row) => row.snapshotId))).toEqual(
+      new Set(["working-dependency"]),
+    );
+    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(3);
   });
 
   it("redirects legacy Tasks route into Delivery", async () => {

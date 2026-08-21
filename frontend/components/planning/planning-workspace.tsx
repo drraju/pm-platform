@@ -2172,7 +2172,9 @@ export function PlanningWorkspace({
             </h2>
             <p className="truncate text-[11px] text-slate-500">
               {workspace.snapshot
-                ? `Schedule v${workspace.snapshot.versionNumber}`
+                ? workspace.snapshot.isOfficial === false
+                  ? "Working schedule"
+                  : `Schedule v${workspace.snapshot.versionNumber}`
                 : "No schedule snapshot"}{" "}
               · {workspace.snapshot?.projectStartDate ?? "Unscheduled"} to{" "}
               {workspace.snapshot?.projectFinishDate ?? "Unscheduled"}

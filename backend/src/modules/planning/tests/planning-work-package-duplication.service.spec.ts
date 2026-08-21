@@ -102,12 +102,8 @@ describe('PlanningWorkPackageDuplicationService', () => {
         transaction: jest.fn(async (operation) => operation(manager)),
       },
     };
-    const planningSnapshotService = {
-      rebuildWorkspaceSnapshot: jest.fn().mockResolvedValue({}),
-    };
     const service = new PlanningWorkPackageDuplicationService(
       tasksRepository as never,
-      planningSnapshotService as never,
       {
         calculateDurationDays: jest.fn().mockReturnValue(null),
       } as never,
@@ -152,9 +148,6 @@ describe('PlanningWorkPackageDuplicationService', () => {
         successorTaskId: 'copy-3',
       }),
     ]);
-    expect(
-      planningSnapshotService.rebuildWorkspaceSnapshot,
-    ).toHaveBeenCalledWith('project-1', { userId: 'manager-1' }, manager);
   });
 
   it('rejects a standard task as a work package source', async () => {
@@ -169,7 +162,6 @@ describe('PlanningWorkPackageDuplicationService', () => {
           transaction: jest.fn(async (operation) => operation(manager)),
         },
       } as never,
-      {} as never,
       {} as never,
     );
 
@@ -241,9 +233,6 @@ describe('PlanningWorkPackageDuplicationService', () => {
         manager: {
           transaction: jest.fn(async (operation) => operation(manager)),
         },
-      } as never,
-      {
-        rebuildWorkspaceSnapshot: jest.fn().mockResolvedValue({}),
       } as never,
       {
         calculateDurationDays: jest.fn().mockReturnValue(null),

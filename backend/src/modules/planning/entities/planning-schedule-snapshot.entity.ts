@@ -22,6 +22,9 @@ export class PlanningScheduleSnapshot extends AuditableEntity {
   @Column({ name: 'calculated_at', type: 'timestamptz', nullable: true })
   calculatedAt?: Date | null;
 
+  @Column({ name: 'schedule_anchor_date', type: 'date', nullable: true })
+  scheduleAnchorDate?: string | null;
+
   @Column({ name: 'project_start_date', type: 'date', nullable: true })
   projectStartDate?: string | null;
 

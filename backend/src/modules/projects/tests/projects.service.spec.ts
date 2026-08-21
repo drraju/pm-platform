@@ -1472,7 +1472,7 @@ describe('ProjectsService', () => {
     expect(tasksRepository.softRemove).toHaveBeenCalledWith(task);
     expect(
       planningSnapshotService.rebuildWorkspaceSnapshot,
-    ).toHaveBeenCalledWith(projectId, undefined);
+    ).not.toHaveBeenCalled();
   });
 
   it('captures a project baseline with immutable snapshot rows', async () => {

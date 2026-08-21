@@ -255,6 +255,7 @@ export type ApiPlanningTaskSchedule = {
 
 export type ApiScheduleSnapshot = {
   id: string;
+  isOfficial?: boolean;
   projectId: string;
   versionNumber: number;
   projectStartDate?: string | null;

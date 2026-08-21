@@ -19,7 +19,6 @@ import { PermissionKey } from '../../common/authz/permissions';
 import { ProjectRole } from '../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
-import { TaskStatus } from '../../common/enums/task-status.enum';
 import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
@@ -57,7 +56,6 @@ import {
   ProjectVisibilityActor,
   ProjectVisibilityService,
 } from './project-visibility.service';
-import { PlanningSnapshotService } from '../planning/planning-snapshot.service';
 import { TasksService } from '../tasks/tasks.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
@@ -108,7 +106,6 @@ export class ProjectsService {
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
-    private readonly planningSnapshotService: PlanningSnapshotService,
     @Inject(forwardRef(() => TasksService))
     @Optional()
     private readonly canonicalTasksService?: TasksService,
@@ -507,10 +504,6 @@ export class ProjectsService {
     const task = await this.findProjectTask(projectId, taskId);
     if (task.taskKind === TaskKind.Milestone && this.canonicalTasksService) {
       await this.canonicalTasksService.cancelMilestone(taskId, actor);
-      await this.planningSnapshotService.rebuildWorkspaceSnapshot(
-        projectId,
-        actor,
-      );
       return;
     }
     if (actor?.userId) {
@@ -518,10 +511,6 @@ export class ProjectsService {
       task.updatedById = actor.userId;
     }
     await this.tasksRepository.softRemove(task);
-    await this.planningSnapshotService.rebuildWorkspaceSnapshot(
-      projectId,
-      actor,
-    );
   }
 
   async captureProjectBaseline(

@@ -28,11 +28,16 @@ describe('enterprise milestone architecture', () => {
       join(sourceRoot, 'modules/planning/planning.service.ts'),
       'utf8',
     );
+    const snapshotPersistence = readFileSync(
+      join(sourceRoot, 'modules/planning/planning-snapshot.service.ts'),
+      'utf8',
+    );
     const tasks = readFileSync(
       join(sourceRoot, 'modules/tasks/tasks.service.ts'),
       'utf8',
     );
-    expect(planning).toContain('PlanningScheduleEngineService');
+    expect(snapshotPersistence).toContain('PlanningScheduleEngineService');
+    expect(snapshotPersistence).toContain('calculateDatedForecast');
     expect(planning).toContain('canonicalTasksService');
     expect(tasks).toContain('completeMilestone');
     expect(tasks).toContain('reopenMilestone');

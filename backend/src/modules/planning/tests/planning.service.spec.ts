@@ -11,7 +11,6 @@ import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
 import { SchedulingContextFactory } from '../../../common/scheduling/scheduling-context.factory';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
-import { ProjectBaseline } from '../../projects/entities/project-baseline.entity';
 import { Project } from '../../projects/entities/project.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { ProjectsService } from '../../projects/projects.service';
@@ -58,6 +57,7 @@ describe('PlanningService', () => {
   let portfolioDependenciesRepository: MockRepository<PortfolioDependency>;
   let projectsRepository: MockRepository<Project>;
   let tasksRepository: MockRepository<Task>;
+  let taskDependenciesRepository: MockRepository<TaskDependency>;
   let usersRepository: MockRepository<User>;
   let transactionManager: { getRepository: jest.Mock };
   let authorizationPolicyService: { canManageProject: jest.Mock };
@@ -65,7 +65,6 @@ describe('PlanningService', () => {
     canViewProject: jest.Mock;
     getVisibleProjectIds: jest.Mock;
   };
-  let planningScheduleEngineService: PlanningScheduleEngineService;
   let projectsService: {
     captureProjectBaseline: jest.Mock;
     createProjectTaskDependency: jest.Mock;
@@ -131,13 +130,22 @@ describe('PlanningService', () => {
       softRemove: jest.fn(),
     };
     projectsRepository = {
-      findOne: jest.fn().mockResolvedValue({ id: projectId }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: projectId, startDate: '2026-07-01' }),
     };
     tasksRepository = {
       create: jest.fn((input) => input),
-      find: jest.fn().mockResolvedValue([]),
+      find: jest.fn(async () => {
+        const persistedSchedule =
+          await planningTaskSchedulesRepository.findOne?.();
+        return persistedSchedule?.task ? [persistedSchedule.task] : [];
+      }),
       findOne: jest.fn(),
       save: jest.fn((input) => Promise.resolve({ id: taskId, ...input })),
+    };
+    taskDependenciesRepository = {
+      find: jest.fn().mockResolvedValue([]),
     };
     usersRepository = {
       findOne: jest.fn(),
@@ -156,12 +164,16 @@ describe('PlanningService', () => {
         if (entity === Task) {
           return tasksRepository;
         }
+        if (entity === TaskDependency) {
+          return taskDependenciesRepository;
+        }
         throw new Error(`Unexpected repository ${String(entity)}`);
       }),
     };
     (
       scheduleSnapshotsRepository as Repository<PlanningScheduleSnapshot>
     ).manager = {
+      getRepository: transactionManager.getRepository,
       transaction: jest.fn((callback) => callback(transactionManager)),
     } as Repository<PlanningScheduleSnapshot>['manager'];
     authorizationPolicyService = {
@@ -252,9 +264,6 @@ describe('PlanningService', () => {
 
     service = moduleRef.get(PlanningService);
     planningSnapshotService = moduleRef.get(PlanningSnapshotService);
-    planningScheduleEngineService = moduleRef.get(
-      PlanningScheduleEngineService,
-    );
   });
 
   afterEach(() => {
@@ -262,7 +271,11 @@ describe('PlanningService', () => {
   });
 
   it('aggregates the planning workspace from thin API contracts', async () => {
-    const project = { id: projectId, name: 'ERP Modernization' } as Project;
+    const project = {
+      id: projectId,
+      name: 'ERP Modernization',
+      startDate: '2026-07-01',
+    } as Project;
     const task = {
       assigneeId: userId,
       id: taskId,
@@ -273,24 +286,33 @@ describe('PlanningService', () => {
     } as Task;
     const allocation = { id: 'allocation-id' } as ResourceAllocation;
     const schedule = {
+      calculationStatus: PlanningCalculationStatus.Calculated,
       criticalPathTaskIds: [taskId],
       id: 'snapshot-id',
       projectCompletionPercent: 25,
       projectFinishDate: '2026-07-10',
       projectId,
       projectStartDate: '2026-07-01',
+      scheduleAnchorDate: '2026-07-01',
       scheduleVersion: 2,
       taskSchedules: [
         {
           durationDays: 4,
+          earlyFinish: 4,
+          earlyStart: 0,
+          freeFloatDays: 0,
           id: 'schedule-row-id',
           isCritical: true,
+          lateFinish: 4,
+          lateStart: 0,
           percentComplete: 50,
           plannedEndDate: '2026-07-05',
           plannedStartDate: '2026-07-01',
           projectId,
           sequenceNumber: 1,
           snapshotId: 'snapshot-id',
+          scheduledEndDate: '2026-07-05',
+          scheduledStartDate: '2026-07-01',
           status: null,
           task,
           taskId,
@@ -304,6 +326,13 @@ describe('PlanningService', () => {
     projectsService.findProjectTaskDependencies.mockResolvedValue([]);
     resourceAllocationsRepository.find?.mockResolvedValue([allocation]);
     scheduleSnapshotsRepository.findOne?.mockResolvedValue(schedule);
+    jest
+      .spyOn(planningSnapshotService, 'calculateOperationalForecast')
+      .mockResolvedValue({
+        ...schedule,
+        metadata: { lifecycle: 'operational' },
+        scheduleVersion: 0,
+      });
 
     await expect(service.getWorkspace(projectId, actor)).resolves.toEqual({
       criticalPathTaskIds: [taskId],
@@ -329,6 +358,8 @@ describe('PlanningService', () => {
           projectId,
           sequenceNumber: 1,
           snapshotId: 'snapshot-id',
+          scheduledFinishDate: '2026-07-05',
+          scheduledStartDate: '2026-07-01',
           status: null,
           task,
           taskId,
@@ -340,13 +371,16 @@ describe('PlanningService', () => {
       ],
       snapshot: {
         calculatedAt: null,
+        calculationStatus: PlanningCalculationStatus.Calculated,
         criticalPathTaskIds: [taskId],
         id: 'snapshot-id',
+        isOfficial: false,
         projectCompletionPercent: 25,
         projectFinishDate: '2026-07-10',
         projectId,
         projectStartDate: '2026-07-01',
-        versionNumber: 2,
+        scheduleAnchorDate: '2026-07-01',
+        versionNumber: 0,
       },
     });
   });
@@ -387,7 +421,7 @@ describe('PlanningService', () => {
       ],
     } as PlanningScheduleSnapshot;
     const rebuildSpy = jest
-      .spyOn(planningSnapshotService, 'rebuildWorkspaceSnapshot')
+      .spyOn(planningSnapshotService, 'regenerateOfficialSnapshot')
       .mockResolvedValue(schedule);
 
     projectsRepository.findOne?.mockResolvedValue(project);
@@ -424,7 +458,7 @@ describe('PlanningService', () => {
   it('rejects workspace regeneration without project manager access', async () => {
     const rebuildSpy = jest.spyOn(
       planningSnapshotService,
-      'rebuildWorkspaceSnapshot',
+      'regenerateOfficialSnapshot',
     );
     authorizationPolicyService.canManageProject.mockResolvedValue(false);
 
@@ -434,8 +468,12 @@ describe('PlanningService', () => {
     expect(rebuildSpy).not.toHaveBeenCalled();
   });
 
-  it('returns calculated schedule analysis fields in the planning workspace', async () => {
-    const project = { id: projectId, name: 'ERP Modernization' } as Project;
+  it('returns calculated operational forecast fields in the planning workspace', async () => {
+    const project = {
+      id: projectId,
+      name: 'ERP Modernization',
+      startDate: '2026-07-01',
+    } as Project;
     const summaryTask = {
       id: 'summary-task-id',
       parentTaskId: null,
@@ -469,7 +507,8 @@ describe('PlanningService', () => {
       title: 'Go Live',
     } as Task;
     const schedule = {
-      criticalPathTaskIds: [],
+      calculationStatus: PlanningCalculationStatus.Calculated,
+      criticalPathTaskIds: ['long-task-id', 'milestone-task-id'],
       id: 'snapshot-id',
       projectCompletionPercent: 25,
       projectId,
@@ -478,7 +517,7 @@ describe('PlanningService', () => {
         {
           durationDays: 5,
           id: 'summary-schedule-id',
-          isCritical: true,
+          isCritical: false,
           parentTaskId: null,
           percentComplete: 50,
           plannedEndDate: '2026-07-05',
@@ -489,12 +528,17 @@ describe('PlanningService', () => {
           task: summaryTask,
           taskId: 'summary-task-id',
           taskKind: TaskKind.Summary,
-          totalFloatDays: 0,
+          totalFloatDays: null,
         },
         {
           durationDays: 2,
+          earlyFinish: 2,
+          earlyStart: 0,
+          freeFloatDays: 3,
           id: 'short-schedule-id',
           isCritical: false,
+          lateFinish: 5,
+          lateStart: 3,
           parentTaskId: 'summary-task-id',
           percentComplete: 0,
           plannedEndDate: '2026-07-02',
@@ -505,12 +549,17 @@ describe('PlanningService', () => {
           task: shortTask,
           taskId: 'short-task-id',
           taskKind: TaskKind.Standard,
-          totalFloatDays: null,
+          totalFloatDays: 3,
         },
         {
           durationDays: 5,
+          earlyFinish: 5,
+          earlyStart: 0,
+          freeFloatDays: 0,
           id: 'long-schedule-id',
-          isCritical: false,
+          isCritical: true,
+          lateFinish: 5,
+          lateStart: 0,
           parentTaskId: 'summary-task-id',
           percentComplete: 0,
           plannedEndDate: '2026-07-05',
@@ -521,12 +570,17 @@ describe('PlanningService', () => {
           task: longTask,
           taskId: 'long-task-id',
           taskKind: TaskKind.Standard,
-          totalFloatDays: null,
+          totalFloatDays: 0,
         },
         {
           durationDays: 0,
+          earlyFinish: 5,
+          earlyStart: 5,
+          freeFloatDays: 0,
           id: 'milestone-schedule-id',
-          isCritical: false,
+          isCritical: true,
+          lateFinish: 5,
+          lateStart: 5,
           parentTaskId: 'summary-task-id',
           percentComplete: 0,
           plannedEndDate: '2026-07-05',
@@ -537,12 +591,10 @@ describe('PlanningService', () => {
           task: milestoneTask,
           taskId: 'milestone-task-id',
           taskKind: TaskKind.Milestone,
-          totalFloatDays: null,
+          totalFloatDays: 0,
         },
       ],
     } as PlanningScheduleSnapshot;
-    const analyzeSpy = jest.spyOn(planningScheduleEngineService, 'analyze');
-
     projectsRepository.findOne?.mockResolvedValue(project);
     projectsService.findProjectTaskDependencies.mockResolvedValue([
       {
@@ -560,10 +612,16 @@ describe('PlanningService', () => {
     ] as TaskDependency[]);
     resourceAllocationsRepository.find?.mockResolvedValue([]);
     scheduleSnapshotsRepository.findOne?.mockResolvedValue(schedule);
+    jest
+      .spyOn(planningSnapshotService, 'calculateOperationalForecast')
+      .mockResolvedValue({
+        ...schedule,
+        metadata: { lifecycle: 'operational' },
+        scheduleVersion: 0,
+      });
 
     const workspace = await service.getWorkspace(projectId, actor);
 
-    expect(analyzeSpy).toHaveBeenCalledTimes(1);
     expect(workspace.criticalPathTaskIds).toEqual([
       'long-task-id',
       'milestone-task-id',
@@ -618,7 +676,7 @@ describe('PlanningService', () => {
     ]);
   });
 
-  it('creates the initial planning schedule on first Planning open', async () => {
+  it('calculates the initial working schedule without creating official history', async () => {
     const project = { id: projectId, name: 'ERP Modernization' } as Project;
     const task = {
       assigneeId: userId,
@@ -645,31 +703,14 @@ describe('PlanningService', () => {
 
     const workspace = await service.getWorkspace(projectId, actor);
 
-    expect(scheduleSnapshotsRepository.manager.transaction).toHaveBeenCalled();
-    expect(scheduleSnapshotsRepository.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        calculationStatus: PlanningCalculationStatus.Calculated,
-        projectFinishDate: '2026-07-05',
-        projectId,
-        projectStartDate: '2026-07-01',
-        scheduleVersion: 1,
-      }),
+    expect(
+      scheduleSnapshotsRepository.manager.transaction,
+    ).not.toHaveBeenCalled();
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+    expect(workspace.snapshot).toEqual(
+      expect.objectContaining({ isOfficial: false, versionNumber: 0 }),
     );
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith([
-      expect.objectContaining({
-        durationDays: 4,
-        parentTaskId: null,
-        percentComplete: 25,
-        plannedEndDate: '2026-07-05',
-        plannedStartDate: '2026-07-01',
-        projectId,
-        sequenceNumber: 1,
-        snapshotId: 'snapshot-id',
-        taskId,
-        taskKind: 'standard',
-      }),
-    ]);
-    expect(workspace.snapshot.versionNumber).toBe(1);
     expect(workspace.schedules).toEqual([
       expect.objectContaining({
         plannedFinishDate: '2026-07-05',
@@ -679,7 +720,7 @@ describe('PlanningService', () => {
     ]);
   });
 
-  it('locks only the snapshot row when rebuilding the planning workspace snapshot', async () => {
+  it('allocates the next version while holding the project lock', async () => {
     const task = {
       assigneeId: userId,
       dueDate: '2026-07-05',
@@ -697,7 +738,7 @@ describe('PlanningService', () => {
     tasksRepository.find?.mockResolvedValue([task]);
 
     await expect(
-      planningSnapshotService.rebuildWorkspaceSnapshot(projectId, actor),
+      planningSnapshotService.regenerateOfficialSnapshot(projectId, actor),
     ).resolves.toEqual(
       expect.objectContaining({
         id: 'snapshot-id',
@@ -711,14 +752,20 @@ describe('PlanningService', () => {
       }),
     );
 
-    expect(scheduleSnapshotsRepository.findOne).toHaveBeenCalledWith({
+    expect(projectsRepository.findOne).toHaveBeenCalledWith({
       lock: { mode: 'pessimistic_write' },
+      select: { id: true, startDate: true },
+      where: { id: projectId },
+    });
+    expect(scheduleSnapshotsRepository.findOne).toHaveBeenCalledWith({
       order: { scheduleVersion: 'DESC' },
+      select: { id: true, scheduleVersion: true },
+      withDeleted: true,
       where: { projectId },
     });
   });
 
-  it('reuses an existing planning schedule on second Planning open', async () => {
+  it('does not reuse a stale official snapshot on Planning open', async () => {
     const existingSchedule = {
       criticalPathTaskIds: [],
       id: 'existing-snapshot-id',
@@ -739,12 +786,18 @@ describe('PlanningService', () => {
     ).not.toHaveBeenCalled();
     expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
-    expect(workspace.snapshot.id).toBe('existing-snapshot-id');
-    expect(workspace.snapshot.versionNumber).toBe(1);
+    expect(workspace.snapshot.id).not.toBe('existing-snapshot-id');
+    expect(workspace.snapshot).toEqual(
+      expect.objectContaining({ isOfficial: false, versionNumber: 0 }),
+    );
   });
 
-  it('rebuilds the current snapshot when Planning reloads orphaned schedule rows', async () => {
-    const project = { id: projectId, name: 'ERP Modernization' } as Project;
+  it('ignores orphaned historical rows and calculates from live tasks without writes', async () => {
+    const project = {
+      id: projectId,
+      name: 'ERP Modernization',
+      startDate: '2026-07-01',
+    } as Project;
     const orphanedSchedule = {
       id: 'orphaned-schedule-row',
       parentTaskId: null,
@@ -792,10 +845,9 @@ describe('PlanningService', () => {
 
     const workspace = await service.getWorkspace(projectId, actor);
 
-    expect(planningTaskSchedulesRepository.delete).toHaveBeenCalledWith({
-      projectId,
-      snapshotId: 'existing-snapshot-id',
-    });
+    expect(planningTaskSchedulesRepository.delete).not.toHaveBeenCalled();
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
     expect(workspace.schedules).toEqual([
       expect.objectContaining({
         plannedFinishDate: '2026-07-05',
@@ -806,8 +858,12 @@ describe('PlanningService', () => {
     ]);
   });
 
-  it('creates an empty initial planning schedule for projects without tasks', async () => {
-    const project = { id: projectId, name: 'Empty Project' } as Project;
+  it('returns an empty working schedule for projects without tasks', async () => {
+    const project = {
+      id: projectId,
+      name: 'Empty Project',
+      startDate: '2026-07-01',
+    } as Project;
 
     projectsRepository.findOne?.mockResolvedValue(project);
     scheduleSnapshotsRepository.findOne
@@ -819,20 +875,19 @@ describe('PlanningService', () => {
 
     const workspace = await service.getWorkspace(projectId, actor);
 
-    expect(scheduleSnapshotsRepository.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectCompletionPercent: 0,
-        projectFinishDate: null,
-        projectStartDate: null,
-        scheduleVersion: 1,
-      }),
-    );
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
     expect(workspace.schedules).toEqual([]);
-    expect(workspace.snapshot.versionNumber).toBe(1);
+    expect(workspace.snapshot).toEqual(
+      expect.objectContaining({
+        isOfficial: false,
+        projectCompletionPercent: 0,
+        versionNumber: 0,
+      }),
+    );
   });
 
-  it('populates initial planning schedules from current project tasks', async () => {
+  it('populates working schedules from current project tasks without persistence', async () => {
     const project = { id: projectId, name: 'ERP Modernization' } as Project;
     const summaryTask = {
       dueDate: '2026-07-10',
@@ -867,41 +922,27 @@ describe('PlanningService', () => {
 
     const workspace = await service.getWorkspace(projectId, actor);
 
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith([
-      expect.objectContaining({
-        parentTaskId: null,
-        percentComplete: 100,
-        plannedEndDate: '2026-07-05',
-        plannedStartDate: '2026-07-02',
-        sequenceNumber: 1,
-        taskId: 'summary-task-id',
-        taskKind: 'summary',
-      }),
-      expect.objectContaining({
-        parentTaskId: 'summary-task-id',
-        percentComplete: 100,
-        plannedEndDate: '2026-07-05',
-        plannedStartDate: '2026-07-02',
-        sequenceNumber: 2,
-        taskId,
-        taskKind: 'milestone',
-      }),
-    ]);
-    expect(workspace.snapshot.projectStartDate).toBe('2026-07-01');
-    expect(workspace.snapshot.projectFinishDate).toBe('2026-07-10');
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
+    expect(workspace.snapshot.projectStartDate).toBe('2026-07-02');
+    expect(workspace.snapshot.projectFinishDate).toBe('2026-07-02');
     expect(workspace.snapshot.projectCompletionPercent).toBe(75);
     expect(workspace.schedules).toHaveLength(2);
     expect(workspace.schedules[0]).toEqual(
       expect.objectContaining({
-        percentComplete: 100,
-        plannedFinishDate: '2026-07-05',
-        plannedStartDate: '2026-07-02',
+        percentComplete: 50,
+        plannedFinishDate: '2026-07-10',
+        plannedStartDate: '2026-07-01',
       }),
     );
   });
 
-  it('propagates initialization failures so the transaction rolls back', async () => {
-    const project = { id: projectId, name: 'ERP Modernization' } as Project;
+  it('does not invoke persistence during ordinary workspace GET', async () => {
+    const project = {
+      id: projectId,
+      name: 'ERP Modernization',
+      startDate: '2026-07-01',
+    } as Project;
     const task = {
       id: taskId,
       percentComplete: 0,
@@ -909,22 +950,21 @@ describe('PlanningService', () => {
       taskKind: 'standard',
       title: 'Design schedule',
     } as Task;
-    const failure = new Error('task schedule insert failed');
-
     projectsRepository.findOne?.mockResolvedValue(project);
     scheduleSnapshotsRepository.findOne
       ?.mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
     tasksRepository.find?.mockResolvedValue([task]);
-    planningTaskSchedulesRepository.save?.mockRejectedValue(failure);
-
-    await expect(service.getWorkspace(projectId, actor)).rejects.toThrow(
-      'task schedule insert failed',
+    await expect(service.getWorkspace(projectId, actor)).resolves.toEqual(
+      expect.objectContaining({
+        schedules: [expect.objectContaining({ taskId })],
+      }),
     );
-    expect(scheduleSnapshotsRepository.manager.transaction).toHaveBeenCalled();
-    expect(scheduleSnapshotsRepository.save).toHaveBeenCalled();
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalled();
-    expect(projectsService.findProjectTaskDependencies).not.toHaveBeenCalled();
+    expect(
+      scheduleSnapshotsRepository.manager.transaction,
+    ).not.toHaveBeenCalled();
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
 
   it('updates a planning task schedule using the task id expected by the frontend', async () => {
@@ -936,7 +976,12 @@ describe('PlanningService', () => {
       plannedStartDate: '2026-07-01',
       projectId,
       snapshotId: 'snapshot-id',
-      task: { id: taskId, assigneeId: userId, projectId } as Task,
+      task: {
+        id: taskId,
+        assigneeId: userId,
+        projectId,
+        taskKind: TaskKind.Standard,
+      } as Task,
       taskId,
     } as PlanningTaskSchedule;
 
@@ -967,28 +1012,9 @@ describe('PlanningService', () => {
       }),
     );
 
-    expect(planningTaskSchedulesRepository.findOne).toHaveBeenCalledWith({
-      relations: { task: { assignee: true } },
-      where: { id: taskId, projectId },
-    });
-    expect(planningTaskSchedulesRepository.findOne).toHaveBeenCalledWith({
-      relations: { task: { assignee: true } },
-      where: {
-        projectId,
-        snapshotId: 'snapshot-id',
-        taskId,
-      },
-    });
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          durationDays: 4,
-          plannedEndDate: '2026-07-12',
-          plannedStartDate: '2026-07-08',
-          updatedById: actor.userId,
-        }),
-      ]),
-    );
+    expect(planningTaskSchedulesRepository.findOne).not.toHaveBeenCalled();
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
   });
 
   it('updates schedule fields and task owner when supplied', async () => {
@@ -1001,7 +1027,12 @@ describe('PlanningService', () => {
       plannedStartDate: '2026-07-01',
       projectId,
       sequenceNumber: 1,
-      task: { id: taskId, assigneeId: userId, projectId } as Task,
+      task: {
+        id: taskId,
+        assigneeId: userId,
+        projectId,
+        taskKind: TaskKind.Standard,
+      } as Task,
       taskId,
     } as PlanningTaskSchedule;
 
@@ -1017,7 +1048,16 @@ describe('PlanningService', () => {
       projectId,
       scheduleVersion: 1,
     });
-    tasksRepository.find?.mockResolvedValue([schedule.task]);
+    tasksRepository.find?.mockResolvedValue([
+      {
+        id: 'parent-task-id',
+        parentTaskId: null,
+        projectId,
+        taskKind: TaskKind.Summary,
+        title: 'Parent',
+      },
+      schedule.task,
+    ]);
 
     await service.updatePlanningTaskSchedule(
       projectId,
@@ -1048,16 +1088,8 @@ describe('PlanningService', () => {
         updatedById: actor.userId,
       }),
     );
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          durationDays: 7,
-          parentTaskId: 'parent-task-id',
-          percentComplete: 80,
-          sequenceNumber: 3,
-        }),
-      ]),
-    );
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
   });
 
   it('updates inline-editable task fields through the planning schedule endpoint', async () => {
@@ -1074,8 +1106,11 @@ describe('PlanningService', () => {
         id: taskId,
         assigneeId: userId,
         percentComplete: 25,
+        plannedEndDate: '2026-07-05',
+        plannedStartDate: '2026-07-01',
         projectId,
         status: TaskStatus.Todo,
+        taskKind: TaskKind.Standard,
         title: 'Design schedule',
       } as Task,
       taskId,
@@ -1110,15 +1145,7 @@ describe('PlanningService', () => {
         title: 'Build delivery plan',
       }),
     );
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          durationDays: 5,
-          percentComplete: 80,
-          plannedEndDate: '2026-07-06',
-        }),
-      ]),
-    );
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
         durationDays: 5,
@@ -1219,16 +1246,7 @@ describe('PlanningService', () => {
       actor,
     );
 
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          durationDays: 0,
-          milestoneCategory: MilestoneCategory.GoLive,
-          plannedEndDate: '2026-07-12',
-          plannedStartDate: '2026-07-12',
-        }),
-      ]),
-    );
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         milestoneCategory: MilestoneCategory.GoLive,
@@ -1350,7 +1368,13 @@ describe('PlanningService', () => {
       plannedEndDate: '2026-07-05',
       plannedStartDate: '2026-07-01',
       projectId,
-      task: { id: taskId, projectId } as Task,
+      task: {
+        id: taskId,
+        plannedEndDate: '2026-07-05',
+        plannedStartDate: '2026-07-01',
+        projectId,
+        taskKind: TaskKind.Standard,
+      } as Task,
       taskId,
     });
 
@@ -1386,7 +1410,8 @@ describe('PlanningService', () => {
       taskKind: TaskKind.Summary,
     });
     tasksRepository.find
-      ?.mockResolvedValueOnce([{ sequenceNumber: 1 }, { sequenceNumber: 2 }])
+      ?.mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ sequenceNumber: 1 }, { sequenceNumber: 2 }])
       .mockResolvedValueOnce([
         {
           dueDate: '2026-07-10',
@@ -1442,27 +1467,8 @@ describe('PlanningService', () => {
         title: 'New Task',
       }),
     );
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          durationDays: 1,
-          parentTaskId: 'parent-task-id',
-          plannedEndDate: '2026-07-02',
-          plannedStartDate: '2026-07-01',
-          projectId,
-          sequenceNumber: 3,
-          snapshotId: 'snapshot-id',
-          taskId,
-        }),
-      ]),
-    );
-    expect(scheduleSnapshotsRepository.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectFinishDate: '2026-07-10',
-        projectStartDate: '2026-07-01',
-        updatedById: actor.userId,
-      }),
-    );
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
+    expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
     expect(schedule).toEqual(
       expect.objectContaining({
         durationDays: 1,
@@ -1488,23 +1494,26 @@ describe('PlanningService', () => {
       ?.mockResolvedValueOnce(snapshot)
       .mockResolvedValueOnce(snapshot);
     usersRepository.findOne?.mockResolvedValue({ id: userId });
-    tasksRepository.find?.mockResolvedValueOnce([]).mockResolvedValueOnce([
-      {
-        assigneeId: userId,
-        dueDate: '2026-07-02',
-        id: taskId,
-        parentTaskId: null,
-        percentComplete: 0,
-        plannedEndDate: '2026-07-02',
-        plannedStartDate: '2026-07-01',
-        projectId,
-        sequenceNumber: 1,
-        startDate: '2026-07-01',
-        status: TaskStatus.Todo,
-        taskKind: TaskKind.Standard,
-        title: 'Owner assigned task',
-      },
-    ]);
+    tasksRepository.find
+      ?.mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          assigneeId: userId,
+          dueDate: '2026-07-02',
+          id: taskId,
+          parentTaskId: null,
+          percentComplete: 0,
+          plannedEndDate: '2026-07-02',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 1,
+          startDate: '2026-07-01',
+          status: TaskStatus.Todo,
+          taskKind: TaskKind.Standard,
+          title: 'Owner assigned task',
+        },
+      ]);
 
     const schedule = await service.createPlanningTask(
       projectId,
@@ -1552,8 +1561,22 @@ describe('PlanningService', () => {
       taskKind: TaskKind.Standard,
     });
     tasksRepository.find
-      ?.mockResolvedValueOnce([{ sequenceNumber: 1 }])
+      ?.mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ sequenceNumber: 1 }])
       .mockResolvedValueOnce([
+        {
+          dueDate: '2026-07-10',
+          id: 'parent-task-id',
+          parentTaskId: null,
+          percentComplete: 25,
+          plannedEndDate: '2026-07-10',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 1,
+          startDate: '2026-07-01',
+          taskKind: TaskKind.Standard,
+          title: 'Parent task',
+        },
         {
           dueDate: '2026-07-02',
           id: taskId,
@@ -1598,23 +1621,26 @@ describe('PlanningService', () => {
     scheduleSnapshotsRepository.findOne
       ?.mockResolvedValueOnce(snapshot)
       .mockResolvedValueOnce(snapshot);
-    tasksRepository.find?.mockResolvedValueOnce([]).mockResolvedValueOnce([
-      {
-        dueDate: '2026-07-01',
-        id: taskId,
-        milestoneCategory: MilestoneCategory.Release,
-        parentTaskId: null,
-        percentComplete: 0,
-        plannedEndDate: '2026-07-01',
-        plannedStartDate: '2026-07-01',
-        projectId,
-        sequenceNumber: 1,
-        startDate: '2026-07-01',
-        status: TaskStatus.Todo,
-        taskKind: TaskKind.Milestone,
-        title: 'Release drop',
-      },
-    ]);
+    tasksRepository.find
+      ?.mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          dueDate: '2026-07-01',
+          id: taskId,
+          milestoneCategory: MilestoneCategory.Release,
+          parentTaskId: null,
+          percentComplete: 0,
+          plannedEndDate: '2026-07-01',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          sequenceNumber: 1,
+          startDate: '2026-07-01',
+          status: TaskStatus.Todo,
+          taskKind: TaskKind.Milestone,
+          title: 'Release drop',
+        },
+      ]);
 
     const schedule = await service.createPlanningTask(
       projectId,
@@ -1634,17 +1660,7 @@ describe('PlanningService', () => {
         taskKind: TaskKind.Milestone,
       }),
     );
-    expect(planningTaskSchedulesRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          durationDays: 0,
-          milestoneCategory: MilestoneCategory.Release,
-          plannedEndDate: '2026-07-01',
-          plannedStartDate: '2026-07-01',
-          taskKind: TaskKind.Milestone,
-        }),
-      ]),
-    );
+    expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
     expect(schedule).toEqual(
       expect.objectContaining({
         durationDays: 0,
@@ -1707,7 +1723,7 @@ describe('PlanningService', () => {
     ).rejects.toThrow('Planning schedule missing-schedule-id not found');
   });
 
-  it('creates a pending schedule recalculation snapshot with the next version', async () => {
+  it('creates an authoritative calculated snapshot with the next version', async () => {
     scheduleSnapshotsRepository.findOne?.mockResolvedValue({
       id: 'previous-snapshot-id',
       scheduleVersion: 4,
@@ -1717,7 +1733,7 @@ describe('PlanningService', () => {
       service.requestScheduleRecalculation(projectId, actor),
     ).resolves.toEqual(
       expect.objectContaining({
-        calculationStatus: PlanningCalculationStatus.Pending,
+        calculationStatus: PlanningCalculationStatus.Calculated,
         criticalPathTaskIds: [],
         projectId,
         scheduleVersion: 5,

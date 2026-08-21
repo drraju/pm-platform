@@ -45,6 +45,18 @@ export class PlanningTaskSchedule extends AuditableEntity {
   @Column({ name: 'duration_days', type: 'int', nullable: true })
   durationDays?: number | null;
 
+  @Column({ name: 'early_start', type: 'int', nullable: true })
+  earlyStart?: number | null;
+
+  @Column({ name: 'early_finish', type: 'int', nullable: true })
+  earlyFinish?: number | null;
+
+  @Column({ name: 'late_start', type: 'int', nullable: true })
+  lateStart?: number | null;
+
+  @Column({ name: 'late_finish', type: 'int', nullable: true })
+  lateFinish?: number | null;
+
   @Column({ name: 'total_float_days', type: 'int', nullable: true })
   totalFloatDays?: number | null;
 

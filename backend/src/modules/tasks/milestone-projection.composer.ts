@@ -23,8 +23,7 @@ export class MilestoneProjectionComposer {
   ): MilestoneProjection {
     const { baselineTask, schedule, snapshot, task } = input;
     const plannedDate = task.plannedEndDate ?? task.dueDate ?? null;
-    const forecastDate =
-      schedule?.scheduledEndDate ?? schedule?.plannedEndDate ?? plannedDate;
+    const forecastDate = schedule?.scheduledEndDate ?? null;
     const actualDate = task.actualEndDate ?? task.actualStartDate ?? null;
     const baselineDate = baselineTask?.plannedEndDate ?? null;
     const state = this.calculateState(task, forecastDate, today);

@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import { ProjectsModule } from '../projects/projects.module';
-import { PlanningScheduleSnapshot } from '../planning/entities/planning-schedule-snapshot.entity';
+import { PlanningSnapshotModule } from '../planning/planning-snapshot.module';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
 import { TaskDependency } from './entities/task-dependency.entity';
 import { TaskExecutionUpdate } from './entities/task-execution-update.entity';
@@ -27,12 +27,12 @@ import { DependencyResponseMapper } from './dependency-response.mapper';
 @Module({
   imports: [
     forwardRef(() => ProjectsModule),
+    PlanningSnapshotModule,
     TypeOrmModule.forFeature([
       Task,
       TaskDependency,
       TaskExecutionUpdate,
       ProjectMember,
-      PlanningScheduleSnapshot,
       ProjectBaseline,
     ]),
   ],

@@ -16,7 +16,6 @@ import { ResourceAllocationUnit } from '../../common/enums/resource-allocation-u
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
-import { SchedulingContextFactory } from '../../common/scheduling/scheduling-context.factory';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
@@ -58,13 +57,11 @@ import { ResourceAllocation } from './entities/resource-allocation.entity';
 import { ResourceCapacity } from './entities/resource-capacity.entity';
 import { ResourceWorkloadSnapshot } from './entities/resource-workload-snapshot.entity';
 import { PlanningSnapshotService } from './planning-snapshot.service';
-import { PlanningWorkPackageDuplicationService } from './planning-work-package-duplication.service';
 import {
-  PlanningScheduleEngineError,
-  PlanningScheduleEngineService,
-  ScheduleAnalysis,
-  ScheduleAnalysisNode,
-} from './planning-schedule-engine.service';
+  findCurrentCalculatedSnapshot,
+  findCurrentCalculatedSnapshots,
+} from './planning-current-snapshot.repository';
+import { PlanningWorkPackageDuplicationService } from './planning-work-package-duplication.service';
 
 type AuthenticatedActor = AuthorizationActor;
 
@@ -93,8 +90,6 @@ export class PlanningService {
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectsService: ProjectsService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
-    private readonly schedulingContextFactory: SchedulingContextFactory,
-    private readonly planningScheduleEngineService: PlanningScheduleEngineService,
     private readonly planningSnapshotService: PlanningSnapshotService,
     private readonly workPackageDuplicationService: PlanningWorkPackageDuplicationService,
     @Optional()
@@ -107,9 +102,18 @@ export class PlanningService {
   ): Promise<PlanningWorkspaceDto> {
     await this.ensureProjectVisible(projectId, actor);
 
-    const latestSchedule = await this.ensureWorkspaceSnapshot(projectId, actor);
-    await this.persistSummaryRollups(latestSchedule, actor);
+    const latestSchedule =
+      await this.planningSnapshotService.calculateOperationalForecast(
+        projectId,
+      );
+    return this.buildWorkspace(projectId, latestSchedule, actor);
+  }
 
+  private async buildWorkspace(
+    projectId: string,
+    latestSchedule: PlanningScheduleSnapshot,
+    actor?: ProjectVisibilityActor,
+  ): Promise<PlanningWorkspaceDto> {
     const [project, dependencies, resourceAllocations] = await Promise.all([
       this.projectsRepository.findOne({
         where: { id: projectId },
@@ -127,14 +131,7 @@ export class PlanningService {
     }
 
     const snapshot = this.toWorkspaceSnapshot(projectId, latestSchedule);
-    const scheduleAnalysis = this.analyzeWorkspaceSchedule(
-      latestSchedule,
-      dependencies,
-    );
-    const schedules = this.toWorkspaceSchedules(
-      latestSchedule,
-      scheduleAnalysis,
-    );
+    const schedules = this.toWorkspaceSchedules(latestSchedule);
 
     return {
       criticalPathTaskIds: schedules
@@ -153,11 +150,12 @@ export class PlanningService {
     actor?: AuthenticatedActor,
   ): Promise<PlanningWorkspaceDto> {
     await this.ensureCanManageProject(projectId, actor);
-    await this.planningSnapshotService.rebuildWorkspaceSnapshot(
-      projectId,
-      actor,
-    );
-    return this.getWorkspace(projectId, actor);
+    const officialSnapshot =
+      await this.planningSnapshotService.regenerateOfficialSnapshot(
+        projectId,
+        actor,
+      );
+    return this.buildWorkspace(projectId, officialSnapshot, actor);
   }
 
   async getLatestSchedule(
@@ -165,11 +163,11 @@ export class PlanningService {
     actor?: ProjectVisibilityActor,
   ): Promise<PlanningScheduleSnapshot | null> {
     await this.ensureProjectVisible(projectId, actor);
-    return this.scheduleSnapshotsRepository.findOne({
-      order: { scheduleVersion: 'DESC' },
-      relations: { taskSchedules: { task: { assignee: true } } },
-      where: { projectId },
-    });
+    return findCurrentCalculatedSnapshot(
+      this.scheduleSnapshotsRepository,
+      projectId,
+      { taskSchedules: { task: { assignee: true } } },
+    );
   }
 
   async requestScheduleRecalculation(
@@ -177,54 +175,7 @@ export class PlanningService {
     actor?: AuthenticatedActor,
   ): Promise<PlanningScheduleSnapshot> {
     await this.ensureCanManageProject(projectId, actor);
-
-    const latest = await this.scheduleSnapshotsRepository.findOne({
-      order: { scheduleVersion: 'DESC' },
-      select: { id: true, scheduleVersion: true },
-      where: { projectId },
-    });
-
-    const snapshot = this.scheduleSnapshotsRepository.create({
-      calculationStatus: PlanningCalculationStatus.Pending,
-      createdById: actor?.userId,
-      criticalPathTaskIds: [],
-      metadata: {
-        phase: 'v0.2.0-phase-1',
-        reason: 'Scheduling calculation is implemented in Phase 2.',
-      },
-      projectCompletionPercent: 0,
-      projectId,
-      scheduleVersion: (latest?.scheduleVersion ?? 0) + 1,
-      updatedById: actor?.userId,
-    });
-
-    return this.scheduleSnapshotsRepository.save(snapshot);
-  }
-
-  private async ensureWorkspaceSnapshot(
-    projectId: string,
-    actor?: ProjectVisibilityActor,
-  ): Promise<PlanningScheduleSnapshot> {
-    const latestSchedule = await this.scheduleSnapshotsRepository.findOne({
-      order: { scheduleVersion: 'DESC' },
-      relations: { taskSchedules: { task: { assignee: true } } },
-      where: { projectId },
-    });
-
-    if (latestSchedule) {
-      const hasOrphanedTaskSchedules = (
-        latestSchedule.taskSchedules ?? []
-      ).some((taskSchedule) => !taskSchedule.task);
-      if (hasOrphanedTaskSchedules) {
-        return this.planningSnapshotService.rebuildWorkspaceSnapshot(
-          projectId,
-          actor,
-        );
-      }
-      return latestSchedule;
-    }
-
-    return this.planningSnapshotService.rebuildWorkspaceSnapshot(
+    return this.planningSnapshotService.regenerateOfficialSnapshot(
       projectId,
       actor,
     );
@@ -234,13 +185,15 @@ export class PlanningService {
     projectId: string,
     actor?: ProjectVisibilityActor,
   ): Promise<CriticalPathDto> {
-    const latestSchedule = await this.getLatestSchedule(projectId, actor);
-
+    await this.ensureProjectVisible(projectId, actor);
+    const latestSchedule =
+      await this.planningSnapshotService.calculateOperationalForecast(
+        projectId,
+      );
     return {
-      calculationStatus:
-        latestSchedule?.calculationStatus ?? PlanningCalculationStatus.Pending,
+      calculationStatus: latestSchedule.calculationStatus,
       projectId,
-      taskIds: latestSchedule?.criticalPathTaskIds ?? [],
+      taskIds: latestSchedule.criticalPathTaskIds ?? [],
     };
   }
 
@@ -310,9 +263,8 @@ export class PlanningService {
         actor,
       );
       const rebuiltSnapshot =
-        await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+        await this.planningSnapshotService.calculateOperationalForecast(
           projectId,
-          actor,
         );
       return this.requireWorkspaceSchedule(
         rebuiltSnapshot,
@@ -391,9 +343,8 @@ export class PlanningService {
         await this.scheduleSnapshotsRepository.manager.transaction(
           async (manager) => {
             await manager.getRepository(Task).save(schedule.task);
-            return this.planningSnapshotService.rebuildWorkspaceSnapshot(
+            return this.planningSnapshotService.calculateOperationalForecast(
               projectId,
-              actor,
               manager,
             );
           },
@@ -406,9 +357,8 @@ export class PlanningService {
     }
 
     const rebuiltSnapshot =
-      await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+      await this.planningSnapshotService.calculateOperationalForecast(
         projectId,
-        actor,
       );
     return this.requireWorkspaceSchedule(
       rebuiltSnapshot,
@@ -424,12 +374,23 @@ export class PlanningService {
   ): Promise<PlanningWorkspaceScheduleDto> {
     await this.ensureCanManageProject(projectId, actor);
 
-    const latestSchedule = await this.ensureWorkspaceSnapshot(projectId, actor);
+    const latestSchedule =
+      await this.planningSnapshotService.calculateOperationalForecast(
+        projectId,
+      );
     const requestedTaskKind =
       this.schedulingFoundationService.normalizeTaskKind(
         input,
         TaskKind.Standard,
       );
+    const projectScheduleAnchor = await this.projectsRepository.findOne({
+      select: { startDate: true },
+      where: { id: projectId },
+    });
+    const defaultPlanningStartDate =
+      latestSchedule.projectStartDate ??
+      projectScheduleAnchor?.startDate ??
+      this.todayDateString();
     if (input.parentTaskId) {
       await this.ensureTaskCanContainChildren(
         projectId,
@@ -457,8 +418,7 @@ export class PlanningService {
           (maximum, sibling) => Math.max(maximum, sibling.sequenceNumber ?? 0),
           0,
         ) + 1;
-      const plannedDate =
-        latestSchedule.projectStartDate ?? this.todayDateString();
+      const plannedDate = defaultPlanningStartDate;
       const task = await this.canonicalTasksService.create(
         {
           assigneeId: input.ownerId ?? null,
@@ -475,9 +435,8 @@ export class PlanningService {
         actor,
       );
       const rebuiltSnapshot =
-        await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+        await this.planningSnapshotService.calculateOperationalForecast(
           projectId,
-          actor,
         );
       return this.requireWorkspaceSchedule(rebuiltSnapshot, task.id, projectId);
     }
@@ -510,9 +469,7 @@ export class PlanningService {
             taskKind,
           });
         const plannedStartDate =
-          taskKind === TaskKind.Summary
-            ? null
-            : (latestSchedule.projectStartDate ?? this.todayDateString());
+          taskKind === TaskKind.Summary ? null : defaultPlanningStartDate;
         const plannedEndDate =
           taskKind === TaskKind.Milestone
             ? plannedStartDate
@@ -557,9 +514,8 @@ export class PlanningService {
         );
 
         const rebuiltSnapshot =
-          await this.planningSnapshotService.rebuildWorkspaceSnapshot(
+          await this.planningSnapshotService.calculateOperationalForecast(
             projectId,
-            actor,
             manager,
           );
 
@@ -818,10 +774,6 @@ export class PlanningService {
       return { dependencies: [], schedules: [] };
     }
 
-    const projectWhere =
-      visibleProjectIds === 'all'
-        ? undefined
-        : { projectId: In(visibleProjectIds) };
     const dependencyWhere =
       visibleProjectIds === 'all'
         ? undefined
@@ -831,11 +783,17 @@ export class PlanningService {
           ];
 
     const [schedules, dependencies] = await Promise.all([
-      this.scheduleSnapshotsRepository.find({
-        order: { projectFinishDate: 'ASC', scheduleVersion: 'DESC' },
-        relations: { project: true },
-        where: projectWhere,
-      }),
+      findCurrentCalculatedSnapshots(
+        this.scheduleSnapshotsRepository,
+        visibleProjectIds === 'all' ? undefined : visibleProjectIds,
+        { project: true },
+      ).then((current) =>
+        current.sort((left, right) =>
+          (left.projectFinishDate ?? '').localeCompare(
+            right.projectFinishDate ?? '',
+          ),
+        ),
+      ),
       this.portfolioDependenciesRepository.find({
         order: { createdAt: 'ASC' },
         relations: {
@@ -906,141 +864,42 @@ export class PlanningService {
   ): PlanningWorkspaceSnapshotDto {
     return {
       calculatedAt: latestSchedule?.calculatedAt ?? null,
+      calculationStatus:
+        latestSchedule?.calculationStatus ?? PlanningCalculationStatus.Pending,
       criticalPathTaskIds: latestSchedule?.criticalPathTaskIds ?? [],
       id: latestSchedule?.id ?? '',
+      isOfficial: latestSchedule?.metadata?.lifecycle !== 'operational',
       projectCompletionPercent: Number(
         latestSchedule?.projectCompletionPercent ?? 0,
       ),
       projectFinishDate: latestSchedule?.projectFinishDate ?? null,
       projectId,
       projectStartDate: latestSchedule?.projectStartDate ?? null,
+      scheduleAnchorDate: latestSchedule?.scheduleAnchorDate ?? null,
       versionNumber: latestSchedule?.scheduleVersion ?? 0,
     };
   }
 
-  private analyzeWorkspaceSchedule(
-    latestSchedule: PlanningScheduleSnapshot | null,
-    dependencies: TaskDependency[],
-  ): ScheduleAnalysis | null {
-    const taskSchedules = latestSchedule?.taskSchedules ?? [];
-    if (taskSchedules.length === 0) {
-      return null;
-    }
-
-    try {
-      const schedulingContext = this.schedulingContextFactory.create({
-        dependencies: dependencies.map((dependency) => ({
-          dependencyType: dependency.dependencyType,
-          id: dependency.id,
-          predecessorTaskId: dependency.predecessorTaskId,
-          successorTaskId: dependency.successorTaskId,
-        })),
-        tasks: taskSchedules.map((taskSchedule) => ({
-          durationDays: taskSchedule.durationDays ?? 0,
-          parentTaskId:
-            taskSchedule.parentTaskId ??
-            taskSchedule.task?.parentTaskId ??
-            null,
-          taskId: taskSchedule.taskId,
-          taskKind: taskSchedule.taskKind,
-        })),
-      });
-
-      return this.planningScheduleEngineService.analyze(schedulingContext);
-    } catch (error) {
-      if (error instanceof PlanningScheduleEngineError) {
-        throw new BadRequestException({
-          errors: error.issues,
-          message: error.message,
-        });
-      }
-
-      throw error;
-    }
-  }
-
   private toWorkspaceSchedules(
     latestSchedule: PlanningScheduleSnapshot | null,
-    scheduleAnalysis: ScheduleAnalysis | null = null,
   ): PlanningWorkspaceScheduleDto[] {
-    const analysisByTaskId = new Map(
-      scheduleAnalysis?.nodes.map((node) => [node.taskId, node]) ?? [],
-    );
-
     return (latestSchedule?.taskSchedules ?? []).map((taskSchedule) =>
-      this.toWorkspaceSchedule(
-        taskSchedule,
-        analysisByTaskId.get(taskSchedule.taskId) ?? null,
-      ),
+      this.toWorkspaceSchedule(taskSchedule),
     );
-  }
-
-  private async rollupSnapshotById(
-    projectId: string,
-    snapshotId: string,
-    actor?: AuthenticatedActor,
-  ) {
-    const snapshot = await this.scheduleSnapshotsRepository.findOne({
-      relations: { taskSchedules: { task: { assignee: true } } },
-      where: { id: snapshotId, projectId },
-    });
-
-    if (!snapshot) {
-      return;
-    }
-
-    await this.persistSummaryRollups(snapshot, actor);
-  }
-
-  private async persistSummaryRollups(
-    snapshot: PlanningScheduleSnapshot,
-    actor?: AuthenticatedActor,
-  ) {
-    const taskSchedules = snapshot.taskSchedules ?? [];
-    if (taskSchedules.length === 0) {
-      return;
-    }
-
-    const { changedTasks } =
-      this.schedulingFoundationService.rollupTaskSubtaskSchedules(
-        taskSchedules,
-      );
-    const { changedSummaries } =
-      this.schedulingFoundationService.rollupSummarySchedules(taskSchedules);
-    const changedRollups = [...changedTasks, ...changedSummaries];
-    if (changedRollups.length === 0) {
-      return;
-    }
-
-    changedRollups.forEach((schedule) => {
-      schedule.updatedById = actor?.userId;
-      if (schedule.task) {
-        schedule.task.updatedById = actor?.userId;
-      }
-    });
-
-    await this.planningTaskSchedulesRepository.save(changedRollups);
-    const rollupTasks = changedRollups
-      .map((schedule) => schedule.task)
-      .filter((task): task is Task => Boolean(task));
-    if (rollupTasks.length > 0) {
-      await this.tasksRepository.save(rollupTasks);
-    }
   }
 
   private toWorkspaceSchedule(
     taskSchedule: PlanningTaskSchedule,
-    analysisNode: ScheduleAnalysisNode | null = null,
   ): PlanningWorkspaceScheduleDto {
     return {
       durationDays: taskSchedule.durationDays ?? 0,
-      earlyFinish: analysisNode?.earlyFinish ?? null,
-      earlyStart: analysisNode?.earlyStart ?? null,
-      freeFloatDays: analysisNode?.freeFloat ?? null,
+      earlyFinish: taskSchedule.earlyFinish ?? null,
+      earlyStart: taskSchedule.earlyStart ?? null,
+      freeFloatDays: taskSchedule.freeFloatDays ?? null,
       id: taskSchedule.id,
-      isCritical: analysisNode?.isCritical ?? false,
-      lateFinish: analysisNode?.lateFinish ?? null,
-      lateStart: analysisNode?.lateStart ?? null,
+      isCritical: taskSchedule.isCritical,
+      lateFinish: taskSchedule.lateFinish ?? null,
+      lateStart: taskSchedule.lateStart ?? null,
       ownerId: taskSchedule.task?.assigneeId ?? null,
       parentTaskId:
         taskSchedule.parentTaskId ?? taskSchedule.task?.parentTaskId ?? null,
@@ -1053,6 +912,8 @@ export class PlanningService {
         taskSchedule.task?.sequenceNumber ??
         null,
       snapshotId: taskSchedule.snapshotId,
+      scheduledFinishDate: taskSchedule.scheduledEndDate ?? null,
+      scheduledStartDate: taskSchedule.scheduledStartDate ?? null,
       status: taskSchedule.task?.status ?? null,
       task: taskSchedule.task ?? null,
       taskId: taskSchedule.taskId,
@@ -1065,26 +926,8 @@ export class PlanningService {
         taskSchedule.task?.milestoneCategory ??
         null,
       taskTitle: taskSchedule.task?.title ?? taskSchedule.taskId,
-      totalFloatDays: analysisNode?.totalFloat ?? null,
+      totalFloatDays: taskSchedule.totalFloatDays ?? null,
     };
-  }
-
-  private findEarliestTaskDate(tasks: Task[]): string | null {
-    const dates = tasks
-      .map((task) => task.plannedStartDate ?? task.startDate)
-      .filter((date): date is string => Boolean(date))
-      .sort();
-
-    return dates[0] ?? null;
-  }
-
-  private findLatestTaskDate(tasks: Task[]): string | null {
-    const dates = tasks
-      .map((task) => task.plannedEndDate ?? task.dueDate)
-      .filter((date): date is string => Boolean(date))
-      .sort();
-
-    return dates[dates.length - 1] ?? null;
   }
 
   private todayDateString(): string {
@@ -1106,32 +949,6 @@ export class PlanningService {
     }
 
     return this.toWorkspaceSchedule(schedule);
-  }
-
-  private minDateString(
-    left?: string | null,
-    right?: string | null,
-  ): string | null {
-    if (!left) {
-      return right ?? null;
-    }
-    if (!right) {
-      return left;
-    }
-    return left < right ? left : right;
-  }
-
-  private maxDateString(
-    left?: string | null,
-    right?: string | null,
-  ): string | null {
-    if (!left) {
-      return right ?? null;
-    }
-    if (!right) {
-      return left;
-    }
-    return left > right ? left : right;
   }
 
   private async ensureProjectVisible(
@@ -1361,43 +1178,30 @@ export class PlanningService {
     projectId: string,
     scheduleId: string,
   ): Promise<PlanningTaskSchedule> {
-    const byScheduleId = await this.planningTaskSchedulesRepository.findOne({
-      relations: { task: { assignee: true } },
-      where: { id: scheduleId, projectId },
-    });
-
-    if (byScheduleId) {
-      return byScheduleId;
-    }
-
-    const latestSchedule = await this.scheduleSnapshotsRepository.findOne({
-      order: { scheduleVersion: 'DESC' },
-      select: { id: true },
-      where: { projectId },
-    });
-
-    if (!latestSchedule) {
-      throw new NotFoundException(
-        `Planning schedule ${scheduleId} not found for project ${projectId}`,
-      );
-    }
-
-    const byTaskId = await this.planningTaskSchedulesRepository.findOne({
-      relations: { task: { assignee: true } },
-      where: {
+    const operational =
+      await this.planningSnapshotService.calculateOperationalForecast(
         projectId,
-        snapshotId: latestSchedule.id,
-        taskId: scheduleId,
-      },
-    });
+      );
+    const schedule = (operational.taskSchedules ?? []).find(
+      (candidate) =>
+        candidate.id === scheduleId || candidate.taskId === scheduleId,
+    );
+    if (schedule) return schedule;
 
-    if (!byTaskId) {
+    const persistedReference =
+      await this.planningTaskSchedulesRepository.findOne({
+        select: { taskId: true },
+        where: { id: scheduleId, projectId },
+      });
+    const currentForReferencedTask = (operational.taskSchedules ?? []).find(
+      (candidate) => candidate.taskId === persistedReference?.taskId,
+    );
+    if (!currentForReferencedTask) {
       throw new NotFoundException(
         `Planning schedule ${scheduleId} not found for project ${projectId}`,
       );
     }
-
-    return byTaskId;
+    return currentForReferencedTask;
   }
 
   private async ensureUserExists(userId: string): Promise<void> {

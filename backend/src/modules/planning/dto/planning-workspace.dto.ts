@@ -3,6 +3,7 @@ import { Project } from '../../projects/entities/project.entity';
 import { TaskDependency } from '../../tasks/entities/task-dependency.entity';
 import { Task } from '../../tasks/entities/task.entity';
 import { ResourceAllocation } from '../entities/resource-allocation.entity';
+import { PlanningCalculationStatus } from '../../../common/enums/planning-calculation-status.enum';
 
 export class PlanningWorkspaceSnapshotDto {
   @ApiProperty()
@@ -13,6 +14,17 @@ export class PlanningWorkspaceSnapshotDto {
 
   @ApiProperty()
   versionNumber: number;
+
+  @ApiProperty({
+    description: 'True only for a persisted immutable forecast checkpoint',
+  })
+  isOfficial: boolean;
+
+  @ApiProperty({ enum: PlanningCalculationStatus })
+  calculationStatus: PlanningCalculationStatus;
+
+  @ApiProperty({ required: false, nullable: true })
+  scheduleAnchorDate?: string | null;
 
   @ApiProperty({ required: false, nullable: true })
   projectStartDate?: string | null;
@@ -69,6 +81,12 @@ export class PlanningWorkspaceScheduleDto {
 
   @ApiProperty({ required: false, nullable: true })
   plannedFinishDate?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  scheduledStartDate?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  scheduledFinishDate?: string | null;
 
   @ApiProperty()
   durationDays: number;

@@ -98,19 +98,7 @@ function PageContent() {
         taskId,
         input,
       );
-      setWorkspace((currentWorkspace) =>
-        currentWorkspace
-          ? {
-              ...currentWorkspace,
-              schedules: currentWorkspace.schedules.map((currentSchedule) =>
-                currentSchedule.taskId === schedule.taskId ||
-                currentSchedule.id === schedule.id
-                  ? schedule
-                  : currentSchedule,
-              ),
-            }
-          : currentWorkspace,
-      );
+      await loadWorkspace();
       return schedule;
     } catch (requestError) {
       setError(
@@ -156,14 +144,7 @@ function PageContent() {
     setIsSaving(true);
     try {
       const schedule = await createPlanningTask(projectId, input);
-      setWorkspace((currentWorkspace) =>
-        currentWorkspace
-          ? {
-              ...currentWorkspace,
-              schedules: [...currentWorkspace.schedules, schedule],
-            }
-          : currentWorkspace,
-      );
+      await loadWorkspace();
       return schedule;
     } catch (requestError) {
       setError(
@@ -267,6 +248,7 @@ function PageContent() {
     setIsSaving(true);
     try {
       await deleteProjectTask(projectId, taskId);
+      await loadWorkspace();
     } catch (requestError) {
       setError(
         requestError instanceof Error
