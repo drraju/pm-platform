@@ -32,6 +32,7 @@ import {
   getMyTasks,
   getProjectBaseline,
   getProjectBaselines,
+  getProjectForecastHistory,
   getProjectForecastOverview,
   getProject,
   getProjectAssumptions,
@@ -154,6 +155,23 @@ describe("project API client", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects/project-1/forecast",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("gets Forecast History using the cursor pagination contract", async () => {
+    const history = { hasMore: false, items: [], nextCursor: null };
+    const fetchMock = mockFetch(history);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getProjectForecastHistory("project-1", {
+        beforeVersion: 26,
+        limit: 25,
+      }),
+    ).resolves.toEqual(history);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/forecast/history?limit=25&beforeVersion=26",
       expect.objectContaining({ cache: "no-store" }),
     );
   });

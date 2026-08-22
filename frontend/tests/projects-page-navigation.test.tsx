@@ -141,6 +141,11 @@ const planningMocks = vi.hoisted(() => ({
   createPlanningTask: vi.fn(),
   deletePlanningDependency: vi.fn(),
   duplicatePlanningWorkPackage: vi.fn(),
+  getProjectForecastHistory: vi.fn(async () => ({
+    hasMore: false,
+    items: [],
+    nextCursor: null,
+  })),
   getProjectForecastOverview: vi.fn(async (projectId: string) => ({
     activeBaseline: null,
     availability: {
@@ -391,6 +396,7 @@ vi.mock("@/features/planning", () => ({
   deletePlanningDependency: planningMocks.deletePlanningDependency,
   duplicatePlanningWorkPackage: planningMocks.duplicatePlanningWorkPackage,
   getPlanningWorkspace: planningMocks.getPlanningWorkspace,
+  getProjectForecastHistory: planningMocks.getProjectForecastHistory,
   getProjectForecastOverview: planningMocks.getProjectForecastOverview,
   regeneratePlanningWorkspace: planningMocks.regeneratePlanningWorkspace,
   removeDuplicatedPlanningWorkPackage:
@@ -462,6 +468,7 @@ describe("Projects List navigation", () => {
     projectMocks.getProjectMembers.mockImplementation(async () => []);
     projectMocks.recordProjectTaskExecutionUpdate.mockReset();
     planningMocks.getPlanningWorkspace.mockClear();
+    planningMocks.getProjectForecastHistory.mockClear();
     planningMocks.getProjectForecastOverview.mockClear();
     planningWorkspaceCapture.current = null;
     authMocks.getAuthMe.mockClear();

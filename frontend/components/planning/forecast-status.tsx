@@ -7,9 +7,11 @@ import {
   StatusBadge,
   WorkspaceSection,
 } from "@/components/foundation";
+import { ForecastHistoryDrawer } from "@/components/planning/forecast-history-drawer";
 import {
   getProjectForecastOverview,
   regeneratePlanningWorkspace,
+  type ApiForecastHistoryItem,
   type ApiForecastOverview,
 } from "@/features/planning";
 
@@ -32,6 +34,9 @@ export function ForecastStatus({
   const [isLoading, setIsLoading] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [selectedForecast, setSelectedForecast] =
+    useState<ApiForecastHistoryItem | null>(null);
 
   const loadOverview = useCallback(async () => {
     setError(null);
@@ -73,12 +78,13 @@ export function ForecastStatus({
   const variance = overview?.finishVarianceFromCurrentActiveBaselineDays ?? null;
 
   return (
-    <WorkspaceSection
-      aria-labelledby="forecast-status-heading"
-      className="overflow-hidden"
-      padding="compact"
-      surface="card"
-    >
+    <>
+      <WorkspaceSection
+        aria-labelledby="forecast-status-heading"
+        className="overflow-hidden"
+        padding="compact"
+        surface="card"
+      >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -86,16 +92,22 @@ export function ForecastStatus({
               className="text-sm font-semibold text-slate-950"
               id="forecast-status-heading"
             >
-              Forecast
+              {selectedForecast ? "Historical Forecast" : "Forecast"}
             </h2>
-            {currentForecast ? (
+            {selectedForecast ? (
+              <StatusBadge size="sm" tone="neutral">
+                Read only
+              </StatusBadge>
+            ) : currentForecast ? (
               <StatusBadge dot size="sm" tone="success">
                 Current
               </StatusBadge>
             ) : null}
           </div>
           <p className="mt-1 text-xs text-slate-600">
-            Authoritative projection compared with the Active Baseline.
+            {selectedForecast
+              ? `Schedule v${selectedForecast.scheduleVersion} is selected for review. The Working Schedule below remains live.`
+              : "Authoritative projection compared with the Active Baseline."}
           </p>
         </div>
         <div
@@ -103,26 +115,34 @@ export function ForecastStatus({
           className="flex flex-wrap items-center gap-2"
           role="group"
         >
+          {selectedForecast ? (
+            <button
+              className={primaryButtonClassName}
+              onClick={() => setSelectedForecast(null)}
+              type="button"
+            >
+              Back to Current Forecast
+            </button>
+          ) : (
+            <button
+              className={primaryButtonClassName}
+              disabled={isLoading || isRegenerating}
+              onClick={() => void regenerateForecast()}
+              type="button"
+            >
+              {isRegenerating
+                ? "Regenerating Forecast…"
+                : "Regenerate Forecast"}
+            </button>
+          )}
           <button
-            className={primaryButtonClassName}
-            disabled={isLoading || isRegenerating}
-            onClick={() => void regenerateForecast()}
-            type="button"
-          >
-            {isRegenerating ? "Regenerating Forecast…" : "Regenerate Forecast"}
-          </button>
-          <button
-            aria-describedby="forecast-history-unavailable"
             className={secondaryButtonClassName}
-            disabled
-            title="Forecast History will be available in a future update"
+            disabled={isRegenerating}
+            onClick={() => setHistoryOpen(true)}
             type="button"
           >
             Forecast History
           </button>
-          <span className="sr-only" id="forecast-history-unavailable">
-            Forecast History is not available yet.
-          </span>
         </div>
       </div>
 
@@ -152,7 +172,9 @@ export function ForecastStatus({
         />
       ) : null}
 
-      {!isLoading && overview ? (
+      {selectedForecast ? (
+        <HistoricalForecastSelection forecast={selectedForecast} />
+      ) : !isLoading && overview ? (
         <div className="mt-3 grid min-w-0 gap-3 border-t border-slate-100 pt-3 md:grid-cols-3 md:divide-x md:divide-slate-200">
           <div className="min-w-0 md:pr-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -229,14 +251,99 @@ export function ForecastStatus({
         </div>
       ) : null}
 
-      <div aria-live="polite" className="mt-2 min-h-5 text-xs">
+      <div
+        aria-live="polite"
+        className={successMessage ? "mt-2 text-xs" : "sr-only"}
+      >
         {successMessage ? (
           <span className="font-medium text-status-success-strong">
             {successMessage}
           </span>
         ) : null}
       </div>
-    </WorkspaceSection>
+      </WorkspaceSection>
+
+      {historyOpen ? (
+        <ForecastHistoryDrawer
+          onClose={() => setHistoryOpen(false)}
+          onRegenerateForecast={() => void regenerateForecast()}
+          onSelectForecast={(forecast) =>
+            setSelectedForecast(forecast.isCurrent ? null : forecast)
+          }
+          projectId={projectId}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function HistoricalForecastSelection({
+  forecast,
+}: {
+  forecast: ApiForecastHistoryItem;
+}) {
+  return (
+    <div className="mt-3 grid min-w-0 gap-3 border-t border-slate-100 pt-3 sm:grid-cols-3 sm:divide-x sm:divide-slate-200">
+      <div className="min-w-0 sm:pr-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Selected Version
+        </p>
+        <p className="mt-1 text-sm font-semibold text-slate-900">
+          Schedule v{forecast.scheduleVersion}
+        </p>
+        <p className="mt-1 text-xl font-semibold text-slate-950">
+          {formatDate(forecast.projectFinishDate, "Not scheduled")}
+        </p>
+      </div>
+      <div className="min-w-0 border-t border-slate-200 pt-3 sm:border-t-0 sm:px-4 sm:pt-0">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Change from Previous
+        </p>
+        <HistoricalVariance
+          variance={forecast.finishVarianceFromPreviousDays}
+        />
+      </div>
+      <div className="min-w-0 border-t border-slate-200 pt-3 sm:border-t-0 sm:pl-4 sm:pt-0">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Capture Details
+        </p>
+        <p className="mt-1 text-sm font-medium text-slate-900">
+          {formatGeneratedByHistory(forecast)}
+        </p>
+        <p className="mt-1 text-xs leading-5 text-slate-600">
+          Read-only summary. Historical Gantt rendering is reserved for the
+          comparison workspace.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function HistoricalVariance({ variance }: { variance: number | null }) {
+  if (variance === null) {
+    return <p className="mt-1 text-sm font-medium text-slate-900">Initial Forecast</p>;
+  }
+  if (variance === 0) {
+    return (
+      <div className="mt-1">
+        <StatusBadge size="sm" tone="neutral">
+          On previous
+        </StatusBadge>
+      </div>
+    );
+  }
+
+  const absoluteDays = Math.abs(variance);
+  return (
+    <div className="mt-1">
+      <StatusBadge size="sm" tone={variance > 0 ? "warning" : "success"}>
+        {variance > 0 ? "+" : "-"}
+        {absoluteDays} {absoluteDays === 1 ? "day" : "days"}
+      </StatusBadge>
+      <p className="mt-2 text-xs text-slate-600">
+        {variance > 0 ? "Later than previous" : "Earlier than previous"}
+      </p>
+    </div>
   );
 }
 
@@ -289,6 +396,15 @@ function VarianceStatus({
       </p>
     </div>
   );
+}
+
+function formatGeneratedByHistory(forecast: ApiForecastHistoryItem) {
+  const generatedDate = formatDate(forecast.calculatedAt, null);
+  const generatedBy = forecast.generatedBy?.name ?? null;
+  if (!generatedDate && !generatedBy) return "Generation details unavailable";
+  if (!generatedDate) return `Generated by ${generatedBy}`;
+  if (!generatedBy) return `Generated ${generatedDate}`;
+  return `Generated ${generatedDate} · ${generatedBy}`;
 }
 
 function formatGeneratedBy(

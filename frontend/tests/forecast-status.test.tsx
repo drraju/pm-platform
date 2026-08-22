@@ -1,21 +1,32 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ForecastStatus } from "@/components/planning/forecast-status";
-import type { ApiForecastOverview } from "@/lib/api/client";
+import type {
+  ApiForecastHistoryItem,
+  ApiForecastOverview,
+} from "@/lib/api/client";
 
 const planningMocks = vi.hoisted(() => ({
+  getProjectForecastHistory: vi.fn(),
   getProjectForecastOverview: vi.fn(),
   regeneratePlanningWorkspace: vi.fn(),
 }));
 
 vi.mock("@/features/planning", () => ({
+  getProjectForecastHistory: planningMocks.getProjectForecastHistory,
   getProjectForecastOverview: planningMocks.getProjectForecastOverview,
   regeneratePlanningWorkspace: planningMocks.regeneratePlanningWorkspace,
 }));
 
 describe("Forecast status", () => {
   beforeEach(() => {
+    planningMocks.getProjectForecastHistory.mockReset();
+    planningMocks.getProjectForecastHistory.mockResolvedValue({
+      hasMore: false,
+      items: [],
+      nextCursor: null,
+    });
     planningMocks.getProjectForecastOverview.mockReset();
     planningMocks.getProjectForecastOverview.mockResolvedValue(overview());
     planningMocks.regeneratePlanningWorkspace.mockReset();
@@ -188,6 +199,43 @@ describe("Forecast status", () => {
     ).toBeInTheDocument();
   });
 
+  it("fetches fresh History after Forecast regeneration", async () => {
+    const refreshedOverview = overview();
+    refreshedOverview.currentForecast!.scheduleVersion = 4;
+    planningMocks.getProjectForecastOverview
+      .mockResolvedValueOnce(overview())
+      .mockResolvedValueOnce(refreshedOverview);
+    planningMocks.getProjectForecastHistory
+      .mockResolvedValueOnce({
+        hasMore: false,
+        items: [historyItem({ isCurrent: true, scheduleVersion: 3 })],
+        nextCursor: null,
+      })
+      .mockResolvedValueOnce({
+        hasMore: false,
+        items: [historyItem({ isCurrent: true, scheduleVersion: 4 })],
+        nextCursor: null,
+      });
+    renderStatus();
+    await screen.findByText("Schedule v3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
+    let dialog = await screen.findByRole("dialog", { name: "Forecast History" });
+    expect(within(dialog).getByText("Schedule v3")).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close Forecast History" }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate Forecast" }),
+    );
+    expect(await screen.findByText("Schedule v4")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
+    dialog = await screen.findByRole("dialog", { name: "Forecast History" });
+    expect(within(dialog).getByText("Schedule v4")).toBeInTheDocument();
+    expect(planningMocks.getProjectForecastHistory).toHaveBeenCalledTimes(2);
+  });
+
   it("preserves displayed Forecast state and reports regeneration failure", async () => {
     planningMocks.regeneratePlanningWorkspace.mockRejectedValue(
       new Error("Unable to schedule"),
@@ -205,17 +253,52 @@ describe("Forecast status", () => {
     expect(screen.getByText("Schedule v3")).toBeInTheDocument();
   });
 
-  it("shows a disabled accessible Forecast History entry point", async () => {
+  it("opens Forecast History from its accessible entry point", async () => {
     renderStatus();
     await screen.findByText("Schedule v3");
 
     const history = screen.getByRole("button", { name: "Forecast History" });
-    expect(history).toBeDisabled();
-    expect(history).toHaveAttribute("aria-describedby");
-    expect(history).toHaveAttribute(
-      "title",
-      "Forecast History will be available in a future update",
+    expect(history).toBeEnabled();
+    fireEvent.click(history);
+
+    expect(
+      await screen.findByRole("dialog", { name: "Forecast History" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close Forecast History" }),
     );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Schedule v3")).toBeInTheDocument();
+  });
+
+  it("enters and exits a read-only historical Forecast selection", async () => {
+    planningMocks.getProjectForecastHistory.mockResolvedValue({
+      hasMore: false,
+      items: [historyItem({ scheduleVersion: 2 })],
+      nextCursor: null,
+    });
+    renderStatus();
+    await screen.findByText("Schedule v3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "View Schedule v2" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Historical Forecast" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Read only")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /activate/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Working Schedule below remains live/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Current Forecast" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Forecast" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Schedule v3")).toBeInTheDocument();
   });
 
   it("uses responsive stacking without horizontal overflow", async () => {
@@ -301,6 +384,30 @@ function forecast(): NonNullable<ApiForecastOverview["currentForecast"]> {
     scheduleAnchorDate: "2026-08-01",
     scheduleVersion: 3,
     snapshotId: "forecast-3",
+    taskCount: 10,
+    unscheduledExecutableTaskCount: 0,
+  };
+}
+
+function historyItem({
+  isCurrent = false,
+  scheduleVersion,
+}: {
+  isCurrent?: boolean;
+  scheduleVersion: number;
+}): ApiForecastHistoryItem {
+  return {
+    calculatedAt: "2026-08-21T10:00:00.000Z",
+    criticalTaskCount: 1,
+    finishVarianceFromCurrentActiveBaselineDays: 0,
+    finishVarianceFromPreviousDays: 1,
+    generatedBy: { id: "user-1", name: "Ram Datla" },
+    isCurrent,
+    milestoneCount: 2,
+    projectFinishDate: "2026-08-25",
+    projectStartDate: "2026-08-01",
+    scheduleVersion,
+    snapshotId: `forecast-${scheduleVersion}`,
     taskCount: 10,
     unscheduledExecutableTaskCount: 0,
   };

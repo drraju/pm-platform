@@ -18,6 +18,7 @@ type AppModalProps = {
   footer?: ReactNode;
   labelledById: string;
   onClose: () => void;
+  placement?: "center" | "right";
   title: string;
   widthClassName?: string;
 };
@@ -29,6 +30,7 @@ export function AppModal({
   footer,
   labelledById,
   onClose,
+  placement = "center",
   title,
   widthClassName = "max-w-3xl",
 }: AppModalProps) {
@@ -92,13 +94,21 @@ export function AppModal({
     <div
       aria-labelledby={labelledById}
       aria-modal="true"
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-3 py-4 sm:px-4 sm:py-6"
+      className={
+        placement === "right"
+          ? "fixed inset-0 z-50 flex justify-end bg-slate-950/30"
+          : "fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-3 py-4 sm:px-4 sm:py-6"
+      }
       data-testid="app-modal-overlay"
       ref={dialogRef}
       role="dialog"
     >
       <section
-        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl ${widthClassName}`}
+        className={`flex w-full flex-col overflow-hidden border border-slate-200 bg-white shadow-xl ${
+          placement === "right"
+            ? "h-full max-h-none rounded-none sm:rounded-l-md"
+            : "max-h-[90vh] rounded-md"
+        } ${widthClassName}`}
         data-testid="app-modal-panel"
       >
         <header
@@ -115,7 +125,7 @@ export function AppModal({
           </div>
           <button
             aria-label={`Close ${title}`}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand/30"
             onClick={onClose}
             type="button"
           >

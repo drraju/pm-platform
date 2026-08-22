@@ -341,6 +341,33 @@ export type ApiForecastOverview = {
   warnings: string[];
 };
 
+export type ApiForecastHistoryItem = {
+  snapshotId: string;
+  scheduleVersion: number;
+  calculatedAt: string | null;
+  generatedBy: ApiForecastUserSummary | null;
+  projectStartDate: string | null;
+  projectFinishDate: string | null;
+  taskCount: number;
+  milestoneCount: number;
+  criticalTaskCount: number;
+  unscheduledExecutableTaskCount: number;
+  isCurrent: boolean;
+  finishVarianceFromPreviousDays: number | null;
+  finishVarianceFromCurrentActiveBaselineDays: number | null;
+};
+
+export type ApiForecastHistoryResponse = {
+  items: ApiForecastHistoryItem[];
+  nextCursor: number | null;
+  hasMore: boolean;
+};
+
+export type ApiForecastHistoryQuery = {
+  beforeVersion?: number;
+  limit?: number;
+};
+
 export type ApiDuplicateWorkPackageInput = {
   newSummaryName: string;
   copyChildTasks?: boolean;
@@ -1248,6 +1275,23 @@ export function getPlanningWorkspace(projectId: string) {
 
 export function getProjectForecastOverview(projectId: string) {
   return apiRequest<ApiForecastOverview>(`/projects/${projectId}/forecast`);
+}
+
+export function getProjectForecastHistory(
+  projectId: string,
+  query: ApiForecastHistoryQuery = {},
+) {
+  const searchParams = new URLSearchParams();
+  if (query.limit !== undefined) {
+    searchParams.set("limit", String(query.limit));
+  }
+  if (query.beforeVersion !== undefined) {
+    searchParams.set("beforeVersion", String(query.beforeVersion));
+  }
+  const queryString = searchParams.toString();
+  return apiRequest<ApiForecastHistoryResponse>(
+    `/projects/${projectId}/forecast/history${queryString ? `?${queryString}` : ""}`,
+  );
 }
 
 export function getDocumentStorageProviders() {
