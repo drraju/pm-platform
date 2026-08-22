@@ -16,6 +16,8 @@ import { ProjectVisibilityService } from './project-visibility.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { TasksModule } from '../tasks/tasks.module';
+import { ForecastController } from './forecast.controller';
+import { ForecastQueryService } from './forecast-query.service';
 
 @Module({
   imports: [
@@ -34,11 +36,12 @@ import { TasksModule } from '../tasks/tasks.module';
       Issue,
     ]),
   ],
-  controllers: [ProjectsController],
+  controllers: [ProjectsController, ForecastController],
   providers: [
     SchedulingFoundationService,
     ProjectsService,
     ProjectVisibilityService,
+    ForecastQueryService,
   ],
   exports: [ProjectsService, ProjectVisibilityService],
 })

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { signedUtcCalendarDayDifference } from '../../common/dates/signed-utc-calendar-day-difference';
 import { MilestoneCategory } from '../../common/enums/milestone-category.enum';
 import { PlanningCalculationStatus } from '../../common/enums/planning-calculation-status.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
@@ -42,7 +43,7 @@ export class MilestoneProjectionComposer {
         schedule?.isCritical ||
         snapshot?.criticalPathTaskIds?.includes(task.id),
       ),
-      daysRemaining: this.daysBetween(today, forecastDate),
+      daysRemaining: signedUtcCalendarDayDifference(forecastDate, today),
       forecastDate,
       id: task.id,
       overdue: state === 'overdue',
@@ -58,7 +59,7 @@ export class MilestoneProjectionComposer {
       taskId: task.id,
       taskStatus: task.status,
       title: task.title,
-      varianceDays: this.daysBetween(baselineDate, forecastDate),
+      varianceDays: signedUtcCalendarDayDifference(forecastDate, baselineDate),
     };
   }
 
@@ -77,20 +78,5 @@ export class MilestoneProjectionComposer {
       return 'unscheduled';
     }
     return forecastDate < today ? 'overdue' : 'upcoming';
-  }
-
-  private daysBetween(
-    startDate?: string | null,
-    endDate?: string | null,
-  ): number | null {
-    if (!startDate || !endDate) {
-      return null;
-    }
-    const start = new Date(`${startDate}T00:00:00Z`).getTime();
-    const end = new Date(`${endDate}T00:00:00Z`).getTime();
-    if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      return null;
-    }
-    return Math.round((end - start) / 86_400_000);
   }
 }
