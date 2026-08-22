@@ -32,6 +32,7 @@ import {
   getMyTasks,
   getProjectBaseline,
   getProjectBaselines,
+  getProjectForecastOverview,
   getProject,
   getProjectAssumptions,
   getProjectDependencies,
@@ -136,6 +137,24 @@ describe("project API client", () => {
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
       }),
+    );
+  });
+
+  it("gets the canonical project Forecast overview", async () => {
+    const forecastOverview = {
+      activeBaseline: null,
+      currentForecast: null,
+      projectId: "project-1",
+    };
+    const fetchMock = mockFetch(forecastOverview);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getProjectForecastOverview("project-1")).resolves.toEqual(
+      forecastOverview,
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/forecast",
+      expect.objectContaining({ cache: "no-store" }),
     );
   });
 

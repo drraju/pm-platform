@@ -285,6 +285,62 @@ export type ApiPlanningWorkspace = {
   criticalPathTaskIds: string[];
 };
 
+export type ApiForecastUserSummary = {
+  id: string;
+  name: string;
+};
+
+export type ApiForecastBaselineSummary = {
+  id: string;
+  projectId: string;
+  versionNumber: number;
+  name: string;
+  status: string;
+  isCurrent: boolean;
+  capturedAt: string;
+  capturedBy: ApiForecastUserSummary | null;
+  projectStartDate: string | null;
+  projectFinishDate: string | null;
+  taskCount: number;
+  milestoneCount: number;
+  unscheduledExecutableTaskCount: number;
+};
+
+export type ApiForecastSummary = {
+  snapshotId: string;
+  projectId: string;
+  scheduleVersion: number;
+  calculationStatus: "pending" | "calculated" | "failed";
+  calculatedAt: string | null;
+  generatedBy: ApiForecastUserSummary | null;
+  scheduleAnchorDate: string | null;
+  projectStartDate: string | null;
+  projectFinishDate: string | null;
+  taskCount: number;
+  milestoneCount: number;
+  criticalTaskCount: number;
+  unscheduledExecutableTaskCount: number;
+  isCurrent: boolean;
+};
+
+export type ApiForecastOverview = {
+  projectId: string;
+  activeBaseline: ApiForecastBaselineSummary | null;
+  originalBaseline: ApiForecastBaselineSummary | null;
+  currentForecast: ApiForecastSummary | null;
+  previousForecast: ApiForecastSummary | null;
+  finishVarianceFromPreviousDays: number | null;
+  finishVarianceFromCurrentActiveBaselineDays: number | null;
+  availability: {
+    activeBaseline: boolean;
+    originalBaseline: boolean;
+    currentForecast: boolean;
+    previousForecast: boolean;
+  };
+  workingOutputState: "not_requested";
+  warnings: string[];
+};
+
 export type ApiDuplicateWorkPackageInput = {
   newSummaryName: string;
   copyChildTasks?: boolean;
@@ -1188,6 +1244,10 @@ export function getPlanningWorkspace(projectId: string) {
   return apiRequest<ApiPlanningWorkspace>(
     `/planning/projects/${projectId}/workspace`,
   );
+}
+
+export function getProjectForecastOverview(projectId: string) {
+  return apiRequest<ApiForecastOverview>(`/projects/${projectId}/forecast`);
 }
 
 export function getDocumentStorageProviders() {

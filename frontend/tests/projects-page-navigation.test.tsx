@@ -141,6 +141,23 @@ const planningMocks = vi.hoisted(() => ({
   createPlanningTask: vi.fn(),
   deletePlanningDependency: vi.fn(),
   duplicatePlanningWorkPackage: vi.fn(),
+  getProjectForecastOverview: vi.fn(async (projectId: string) => ({
+    activeBaseline: null,
+    availability: {
+      activeBaseline: false,
+      currentForecast: false,
+      originalBaseline: false,
+      previousForecast: false,
+    },
+    currentForecast: null,
+    finishVarianceFromCurrentActiveBaselineDays: null,
+    finishVarianceFromPreviousDays: null,
+    originalBaseline: null,
+    previousForecast: null,
+    projectId,
+    warnings: [],
+    workingOutputState: "not_requested",
+  })),
   getPlanningWorkspace: vi.fn(async (projectId: string) => ({
     criticalPathTaskIds: [],
     dependencies: [],
@@ -374,6 +391,7 @@ vi.mock("@/features/planning", () => ({
   deletePlanningDependency: planningMocks.deletePlanningDependency,
   duplicatePlanningWorkPackage: planningMocks.duplicatePlanningWorkPackage,
   getPlanningWorkspace: planningMocks.getPlanningWorkspace,
+  getProjectForecastOverview: planningMocks.getProjectForecastOverview,
   regeneratePlanningWorkspace: planningMocks.regeneratePlanningWorkspace,
   removeDuplicatedPlanningWorkPackage:
     planningMocks.removeDuplicatedPlanningWorkPackage,
@@ -444,6 +462,7 @@ describe("Projects List navigation", () => {
     projectMocks.getProjectMembers.mockImplementation(async () => []);
     projectMocks.recordProjectTaskExecutionUpdate.mockReset();
     planningMocks.getPlanningWorkspace.mockClear();
+    planningMocks.getProjectForecastOverview.mockClear();
     planningWorkspaceCapture.current = null;
     authMocks.getAuthMe.mockClear();
     authMocks.storeAuthMe.mockClear();

@@ -731,13 +731,11 @@ describe("PlanningWorkspace", () => {
   });
 
   it("keeps the toolbar sticky and the planning workspace independently scrollable", () => {
-    const onRegenerateWorkspace = vi.fn().mockResolvedValue(undefined);
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
         onCreateTask={vi.fn()}
         onDeleteDependency={vi.fn()}
-        onRegenerateWorkspace={onRegenerateWorkspace}
         onUpdateSchedule={vi.fn()}
         workspace={workspace}
       />,
@@ -772,17 +770,16 @@ describe("PlanningWorkspace", () => {
     expect(
       within(toolbar).getByRole("button", { name: "Dependencies" }),
     ).toBeInTheDocument();
-    fireEvent.click(
-      within(toolbar).getByRole("button", { name: "Regenerate Snapshot" }),
-    );
-    expect(onRegenerateWorkspace).toHaveBeenCalled();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Regenerate Snapshot" }),
+    ).not.toBeInTheDocument();
     expect(
       within(toolbar).getByRole("button", { name: "Fit to Project" }),
     ).toBeInTheDocument();
     expect(within(toolbar).getByLabelText("Time Scale")).toBeInTheDocument();
   });
 
-  it("shows create snapshot when the planning workspace has no snapshot", () => {
+  it("does not expose snapshot creation when the planning workspace has no snapshot", () => {
     render(
       <PlanningWorkspace
         onCreateDependency={vi.fn()}
@@ -799,10 +796,10 @@ describe("PlanningWorkspace", () => {
     );
 
     expect(
-      within(screen.getByLabelText("Planning toolbar")).getByRole("button", {
+      within(screen.getByLabelText("Planning toolbar")).queryByRole("button", {
         name: "Create Snapshot",
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
   });
 
   it("keeps horizontal overflow owned by the timeline pane when the timeline exceeds the viewport", () => {

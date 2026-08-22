@@ -11,6 +11,7 @@ import {
   WorkspaceLayout,
 } from "@/components/foundation";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
+import { ForecastStatus } from "@/components/planning/forecast-status";
 import {
   CompactProjectWorkspaceLayout,
   ProjectLayout,
@@ -21,7 +22,6 @@ import {
   duplicatePlanningWorkPackage,
   deletePlanningDependency,
   getPlanningWorkspace,
-  regeneratePlanningWorkspace,
   removeDuplicatedPlanningWorkPackage,
   updatePlanningTaskSchedule,
   type ApiMilestoneCategory,
@@ -225,24 +225,6 @@ function PageContent() {
     }
   }
 
-  async function handleRegenerateWorkspace() {
-    setError(null);
-    setIsLoading(true);
-    setIsSaving(true);
-    try {
-      setWorkspace(await regeneratePlanningWorkspace(projectId));
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to regenerate planning workspace",
-      );
-    } finally {
-      setIsSaving(false);
-      setIsLoading(false);
-    }
-  }
-
   async function handleDeleteTask(taskId: string) {
     setError(null);
     setIsSaving(true);
@@ -277,6 +259,13 @@ function PageContent() {
       )}
     >
       <WorkspaceContent spacing="compact">
+        <ForecastStatus
+          onWorkspaceRefresh={async () => {
+            setWorkspace(await getPlanningWorkspace(projectId));
+          }}
+          projectId={projectId}
+        />
+
         {error ? <ErrorState message={error} /> : null}
         {memberError ? <ErrorState message={memberError} /> : null}
 
@@ -291,7 +280,6 @@ function PageContent() {
             onDeleteDependency={handleDeleteDependency}
             onDuplicateWorkPackage={handleDuplicateWorkPackage}
             onRefreshWorkspace={loadWorkspace}
-            onRegenerateWorkspace={handleRegenerateWorkspace}
             onRemoveDuplicatedWorkPackage={handleRemoveDuplicatedWorkPackage}
             onUpdateSchedule={handleUpdateSchedule}
             projectMembers={members}

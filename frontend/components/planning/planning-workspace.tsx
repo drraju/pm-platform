@@ -87,7 +87,6 @@ type PlanningWorkspaceProps = {
     input: ApiDuplicateWorkPackageInput,
   ) => Promise<ApiDuplicateWorkPackageResult>;
   onRefreshWorkspace?: () => Promise<void>;
-  onRegenerateWorkspace?: () => Promise<void>;
   onRemoveDuplicatedWorkPackage?: (
     summaryTaskId: string,
   ) => Promise<ApiPlanningWorkspace>;
@@ -402,7 +401,6 @@ export function PlanningWorkspace({
   onDeleteDependency,
   onDuplicateWorkPackage,
   onRefreshWorkspace = async () => {},
-  onRegenerateWorkspace = async () => {},
   onRemoveDuplicatedWorkPackage,
   onUpdateSchedule,
   projectMembers = [],
@@ -2390,17 +2388,6 @@ export function PlanningWorkspace({
             </span>
           </ToolbarGroup>
           <ToolbarGroup label="Schedule">
-            <button
-              className={toolbarButtonClassName}
-              disabled={isSaving}
-              onClick={() => void onRegenerateWorkspace()}
-              type="button"
-            >
-              <CommandIcon name="refresh" />
-              {workspace.snapshot?.id
-                ? "Regenerate Snapshot"
-                : "Create Snapshot"}
-            </button>
             <button
               className={toolbarButtonClassName}
               onClick={scrollToDependencies}
