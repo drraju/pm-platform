@@ -10,9 +10,11 @@ import React, {
 import type {
   ApiDuplicateWorkPackageInput,
   ApiDuplicateWorkPackageResult,
+  ApiPlanningScheduleSnapshot,
   ApiPlanningTaskSchedule,
   ApiPlanningWorkspace,
   ApiMilestoneCategory,
+  ApiProjectBaseline,
   ApiProjectMember,
   ApiResourceAllocation,
   ApiTaskDependency,
@@ -34,6 +36,7 @@ import { PlanningDetailPanel } from "./planning-detail-panel";
 type ZoomMode = "day" | "week" | "month" | "quarter";
 type DragMode = "move" | "resize-end";
 type PlanningViewMode = "split" | "grid" | "timeline";
+type TrackingLayerId = "working" | "forecast" | "baseline";
 type GridColumnId =
   | "critical"
   | "durationDays"
@@ -67,6 +70,8 @@ type EditingCell = {
 };
 
 type PlanningWorkspaceProps = {
+  activeBaseline?: ApiProjectBaseline | null;
+  currentForecast?: ApiPlanningScheduleSnapshot | null;
   isSaving?: boolean;
   onCreateDependency: (input: {
     dependencyType: "FS" | "SS" | "FF";
@@ -140,6 +145,17 @@ type PlanningRowMetric = {
   centerY: number;
   height: number;
   offset: number;
+};
+
+type GanttVisualItem = {
+  readonly finishDate: string | null;
+  readonly layer: TrackingLayerId;
+  readonly milestoneCategory?: ApiMilestoneCategory | null;
+  readonly renderKey: string;
+  readonly startDate: string | null;
+  readonly taskId: string | null;
+  readonly taskKind: "standard" | "summary" | "milestone";
+  readonly title: string;
 };
 
 type DragState = {
@@ -394,6 +410,8 @@ const milestoneCategories: Array<{
 ];
 
 export function PlanningWorkspace({
+  activeBaseline = null,
+  currentForecast = null,
   isSaving = false,
   onCreateDependency,
   onCreateTask,
@@ -431,6 +449,10 @@ export function PlanningWorkspace({
   const columnsMenu = useDropdownMenu<HTMLSpanElement>();
   const viewMenu = useDropdownMenu<HTMLSpanElement>();
   const structureMenu = useDropdownMenu<HTMLSpanElement>();
+  const trackingMenu = useDropdownMenu<HTMLSpanElement>();
+  const [showWorkingSchedule, setShowWorkingSchedule] = useState(true);
+  const [showCurrentForecast, setShowCurrentForecast] = useState(true);
+  const [showActiveBaseline, setShowActiveBaseline] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
   const expansionState = usePlanningExpansionState(workspace.project.id);
@@ -554,9 +576,44 @@ export function PlanningWorkspace({
     () => rows.filter((row) => row.schedule.taskKind !== "summary"),
     [rows],
   );
+  const workingVisualItems = useMemo(
+    () => localSchedules.map(toWorkingVisualItem),
+    [localSchedules],
+  );
+  const forecastReferenceItems = useMemo(
+    () => buildForecastReferenceItems(currentForecast),
+    [currentForecast],
+  );
+  const baselineReferenceItems = useMemo(
+    () => buildBaselineReferenceItems(activeBaseline),
+    [activeBaseline],
+  );
+  const enabledTimelineItems = useMemo(
+    () => [
+      ...(showWorkingSchedule ? workingVisualItems : []),
+      ...(showCurrentForecast ? forecastReferenceItems : []),
+      ...(showActiveBaseline ? baselineReferenceItems : []),
+    ],
+    [
+      baselineReferenceItems,
+      forecastReferenceItems,
+      showActiveBaseline,
+      showCurrentForecast,
+      showWorkingSchedule,
+      workingVisualItems,
+    ],
+  );
+  const forecastItemsByTaskId = useMemo(
+    () => indexReferenceItemsByTaskId(forecastReferenceItems),
+    [forecastReferenceItems],
+  );
+  const baselineItemsByTaskId = useMemo(
+    () => indexReferenceItemsByTaskId(baselineReferenceItems),
+    [baselineReferenceItems],
+  );
   const timeline = useMemo(
-    () => buildTimeline(localSchedules, zoom, fitTimelineWidth),
-    [fitTimelineWidth, localSchedules, zoom],
+    () => buildTimeline(enabledTimelineItems, zoom, fitTimelineWidth),
+    [enabledTimelineItems, fitTimelineWidth, zoom],
   );
   const allocationsByTaskId = useMemo(
     () => groupAllocations(workspace.resourceAllocations),
@@ -1444,7 +1501,8 @@ export function PlanningWorkspace({
       [...zoomModes]
         .reverse()
         .find(
-          (mode) => buildTimeline(localSchedules, mode).width <= viewportWidth,
+          (mode) =>
+            buildTimeline(enabledTimelineItems, mode).width <= viewportWidth,
         ) ?? "quarter";
     setFitTimelineWidth(viewportWidth);
     pendingTimelineScrollRef.current = { scrollLeft: 0 };
@@ -2453,6 +2511,49 @@ export function PlanningWorkspace({
               ))}
             </select>
           </ToolbarGroup>
+          <ToolbarGroup label="Tracking">
+            <span className="relative" ref={trackingMenu.containerRef}>
+              <button
+                aria-expanded={trackingMenu.isOpen}
+                aria-haspopup="menu"
+                className={toolbarButtonClassName}
+                onClick={trackingMenu.toggle}
+                ref={trackingMenu.triggerRef}
+                type="button"
+              >
+                Tracking <span aria-hidden>▾</span>
+              </button>
+              {trackingMenu.isOpen ? (
+                <span
+                  aria-label="Tracking layers"
+                  className="absolute right-0 top-9 z-30 w-56 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg"
+                  role="menu"
+                >
+                  <TrackingMenuItem
+                    checked={showWorkingSchedule}
+                    label="Working Schedule"
+                    onChange={() =>
+                      setShowWorkingSchedule((isVisible) => !isVisible)
+                    }
+                  />
+                  <TrackingMenuItem
+                    checked={showCurrentForecast}
+                    label="Current Forecast"
+                    onChange={() =>
+                      setShowCurrentForecast((isVisible) => !isVisible)
+                    }
+                  />
+                  <TrackingMenuItem
+                    checked={showActiveBaseline}
+                    label="Active Baseline"
+                    onChange={() =>
+                      setShowActiveBaseline((isVisible) => !isVisible)
+                    }
+                  />
+                </span>
+              ) : null}
+            </span>
+          </ToolbarGroup>
           <ToolbarGroup label="View">
             <span className="relative" ref={viewMenu.containerRef}>
               <button
@@ -2567,6 +2668,14 @@ export function PlanningWorkspace({
             </span>
             <KeyboardHelp />
           </ToolbarGroup>
+        </div>
+        <div
+          aria-label="Tracking legend"
+          className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-[11px] text-slate-600"
+        >
+          <TrackingLegendItem label="Working Schedule" layer="working" />
+          <TrackingLegendItem label="Current Forecast" layer="forecast" />
+          <TrackingLegendItem label="Active Baseline" layer="baseline" />
         </div>
         {hierarchyError ? (
           <InfoCard
@@ -2823,6 +2932,25 @@ export function PlanningWorkspace({
                         />
                       ) : null}
 
+                      {showActiveBaseline ? (
+                        <ReadonlyTrackingLayer
+                          displayRows={displayRows}
+                          itemsByTaskId={baselineItemsByTaskId}
+                          layer="baseline"
+                          rowMetrics={rowMetrics.rows}
+                          timeline={timeline}
+                        />
+                      ) : null}
+                      {showCurrentForecast ? (
+                        <ReadonlyTrackingLayer
+                          displayRows={displayRows}
+                          itemsByTaskId={forecastItemsByTaskId}
+                          layer="forecast"
+                          rowMetrics={rowMetrics.rows}
+                          timeline={timeline}
+                        />
+                      ) : null}
+
                       {displayRows.map((displayRow, index) => {
                         const metric = rowMetrics.rows[index];
                         if (displayRow.kind === "draft") {
@@ -2842,13 +2970,17 @@ export function PlanningWorkspace({
                         const { schedule } = displayRow.row;
                         const title = getTaskTitle(schedule);
                         const y = metric.barY;
-                        const geometry = getBarGeometry(schedule, timeline);
+                        const geometry = getBarGeometry(
+                          toWorkingVisualItem(schedule),
+                          timeline,
+                        );
                         const isCritical = isScheduleCritical(schedule);
                         const shouldRenderScheduleBar =
-                          !showCriticalPath ||
-                          schedule.taskKind === "summary" ||
-                          (schedule.taskKind === "milestone" && isCritical) ||
-                          (schedule.taskKind === "standard" && isCritical);
+                          showWorkingSchedule &&
+                          (!showCriticalPath ||
+                            schedule.taskKind === "summary" ||
+                            (schedule.taskKind === "milestone" && isCritical) ||
+                            (schedule.taskKind === "standard" && isCritical));
                         const allocations =
                           allocationsByTaskId.get(schedule.taskId) ?? [];
                         return (
@@ -3003,24 +3135,26 @@ export function PlanningWorkspace({
                         );
                       })}
 
-                      {workspace.dependencies.map((dependency) => {
-                        const line = getDependencyLine(
-                          dependency,
-                          displayRows,
-                          rowMetrics.rows,
-                          timeline,
-                        );
-                        return line ? (
-                          <path
-                            d={line}
-                            fill="none"
-                            key={dependency.id}
-                            markerEnd="url(#arrow)"
-                            stroke="#475569"
-                            strokeWidth={1.5}
-                          />
-                        ) : null;
-                      })}
+                      {showWorkingSchedule
+                        ? workspace.dependencies.map((dependency) => {
+                            const line = getDependencyLine(
+                              dependency,
+                              displayRows,
+                              rowMetrics.rows,
+                              timeline,
+                            );
+                            return line ? (
+                              <path
+                                d={line}
+                                fill="none"
+                                key={dependency.id}
+                                markerEnd="url(#arrow)"
+                                stroke="#475569"
+                                strokeWidth={1.5}
+                              />
+                            ) : null;
+                          })
+                        : null}
                       <defs>
                         <marker
                           id="arrow"
@@ -5041,17 +5175,244 @@ function getSummaryTaskIds(schedules: ApiPlanningTaskSchedule[]) {
   return summaryTaskIds;
 }
 
+function TrackingMenuItem({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      aria-checked={checked}
+      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand/30"
+      onClick={onChange}
+      role="menuitemcheckbox"
+      type="button"
+    >
+      <span>{label}</span>
+      <span aria-hidden>{checked ? "✓" : "○"}</span>
+    </button>
+  );
+}
+
+function TrackingLegendItem({
+  label,
+  layer,
+}: {
+  label: string;
+  layer: TrackingLayerId;
+}) {
+  const sampleClassName =
+    layer === "working"
+      ? "h-2.5 w-7 rounded-sm bg-teal-700"
+      : layer === "forecast"
+        ? "h-1 w-7 rounded-sm border border-sky-700 bg-sky-100"
+        : "h-1 w-7 border border-dashed border-amber-700 bg-amber-50";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden className={sampleClassName} />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function ReadonlyTrackingLayer({
+  displayRows,
+  itemsByTaskId,
+  layer,
+  rowMetrics,
+  timeline,
+}: {
+  displayRows: PlanningDisplayRow[];
+  itemsByTaskId: Map<string, GanttVisualItem>;
+  layer: "forecast" | "baseline";
+  rowMetrics: PlanningRowMetric[];
+  timeline: ReturnType<typeof buildTimeline>;
+}) {
+  const layerLabel =
+    layer === "forecast" ? "Current Forecast" : "Active Baseline";
+  const stroke = layer === "forecast" ? "#0369a1" : "#a16207";
+  const fill = layer === "forecast" ? "#e0f2fe" : "#fffbeb";
+  const strokeDasharray = layer === "baseline" ? "4 2" : undefined;
+
+  return (
+    <g
+      aria-label={`${layerLabel} reference layer`}
+      data-testid={`${layer}-reference-layer`}
+      pointerEvents="none"
+    >
+      {displayRows.map((displayRow, index) => {
+        if (displayRow.kind !== "schedule") {
+          return null;
+        }
+        const taskId = displayRow.row.schedule.taskId;
+        const item = itemsByTaskId.get(taskId);
+        const metric = rowMetrics[index];
+        if (!item || !metric) {
+          return null;
+        }
+        const geometry = getBarGeometry(item, timeline);
+        if (!geometry) {
+          return null;
+        }
+        const centerY =
+          layer === "forecast"
+            ? metric.barY - 8
+            : metric.barY - 3;
+        const commonProps = {
+          "aria-label": `${layerLabel} reference ${item.title}`,
+          "data-finish-date": item.finishDate ?? undefined,
+          "data-milestone-category": item.milestoneCategory ?? undefined,
+          "data-start-date": item.startDate ?? undefined,
+          "data-task-id": taskId,
+          "data-task-kind": item.taskKind,
+          "data-testid": `${layer}-reference-${taskId}`,
+        };
+
+        if (item.taskKind === "milestone") {
+          const milestoneColor = getMilestoneColor(
+            item.milestoneCategory ?? "standard",
+          );
+          return (
+            <rect
+              {...commonProps}
+              fill={fill}
+              height={8}
+              key={item.renderKey}
+              stroke={milestoneColor}
+              strokeDasharray={strokeDasharray}
+              strokeWidth={2}
+              transform={`rotate(45 ${geometry.x + 8} ${centerY})`}
+              width={8}
+              x={geometry.x + 4}
+              y={centerY - 4}
+            />
+          );
+        }
+
+        return (
+          <rect
+            {...commonProps}
+            fill={fill}
+            height={item.taskKind === "summary" ? 5 : 4}
+            key={item.renderKey}
+            opacity={item.taskKind === "summary" ? 0.8 : 1}
+            rx={2}
+            stroke={stroke}
+            strokeDasharray={strokeDasharray}
+            strokeWidth={item.taskKind === "summary" ? 2 : 1}
+            width={geometry.width}
+            x={geometry.x}
+            y={centerY - 2}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+function toWorkingVisualItem(
+  schedule: ApiPlanningTaskSchedule,
+): GanttVisualItem {
+  return {
+    finishDate: schedule.plannedFinishDate ?? null,
+    layer: "working",
+    milestoneCategory: schedule.milestoneCategory ?? null,
+    renderKey: `working:${schedule.id}`,
+    startDate: schedule.plannedStartDate ?? null,
+    taskId: schedule.taskId,
+    taskKind: schedule.taskKind,
+    title: getTaskTitle(schedule),
+  };
+}
+
+function buildForecastReferenceItems(
+  snapshot: ApiPlanningScheduleSnapshot | null,
+): GanttVisualItem[] {
+  if (!snapshot || snapshot.calculationStatus !== "calculated") {
+    return [];
+  }
+  return (snapshot.taskSchedules ?? []).map((schedule) => {
+    const dates = normalizeReferenceDates(
+      schedule.scheduledStartDate ?? null,
+      schedule.scheduledEndDate ?? null,
+      schedule.taskKind,
+    );
+    return {
+      ...dates,
+      layer: "forecast",
+      milestoneCategory: schedule.milestoneCategory ?? null,
+      renderKey: `forecast:${schedule.id}`,
+      taskId: schedule.taskId,
+      taskKind: schedule.taskKind,
+      title: schedule.taskTitle,
+    };
+  });
+}
+
+function buildBaselineReferenceItems(
+  baseline: ApiProjectBaseline | null,
+): GanttVisualItem[] {
+  if (!baseline || baseline.status !== "approved" || !baseline.isCurrent) {
+    return [];
+  }
+  return (baseline.tasks ?? []).map((task) => {
+    const dates = normalizeReferenceDates(
+      task.plannedStartDate ?? null,
+      task.plannedEndDate ?? null,
+      task.taskKind,
+    );
+    return {
+      ...dates,
+      layer: "baseline",
+      milestoneCategory: task.milestoneCategory ?? null,
+      renderKey: `baseline:${task.id}`,
+      taskId: task.taskId ?? null,
+      taskKind: task.taskKind,
+      title: task.taskTitle,
+    };
+  });
+}
+
+function normalizeReferenceDates(
+  startDate: string | null,
+  finishDate: string | null,
+  taskKind: GanttVisualItem["taskKind"],
+) {
+  if (taskKind === "milestone") {
+    const milestoneDate = startDate ?? finishDate;
+    return {
+      finishDate: milestoneDate,
+      startDate: milestoneDate,
+    };
+  }
+  return { finishDate, startDate };
+}
+
+function indexReferenceItemsByTaskId(items: GanttVisualItem[]) {
+  const itemsByTaskId = new Map<string, GanttVisualItem>();
+  items.forEach((item) => {
+    if (item.taskId) {
+      itemsByTaskId.set(item.taskId, item);
+    }
+  });
+  return itemsByTaskId;
+}
+
 function buildTimeline(
-  schedules: ApiPlanningTaskSchedule[],
+  items: GanttVisualItem[],
   zoom: ZoomMode,
   fitWidth?: number | null,
 ) {
   const currentDate = today();
-  const starts = schedules
-    .map((schedule) => schedule.plannedStartDate)
+  const starts = items
+    .map((item) => item.startDate)
     .filter((value): value is string => Boolean(value));
-  const finishes = schedules
-    .map((schedule) => schedule.plannedFinishDate)
+  const finishes = items
+    .map((item) => item.finishDate)
     .filter((value): value is string => Boolean(value));
   const sortedStarts = [...starts].sort();
   const sortedFinishes = [...finishes].sort();
@@ -5110,20 +5471,20 @@ function buildTimeline(
 }
 
 function getBarGeometry(
-  schedule: ApiPlanningTaskSchedule,
+  item: GanttVisualItem,
   timeline: ReturnType<typeof buildTimeline>,
 ) {
-  if (!schedule.plannedStartDate || !schedule.plannedFinishDate) {
+  if (!item.startDate || !item.finishDate) {
     return null;
   }
-  const startOffset = diffDays(timeline.startDate, schedule.plannedStartDate);
+  const startOffset = diffDays(timeline.startDate, item.startDate);
   const duration = Math.max(
     0,
-    diffDays(schedule.plannedStartDate, schedule.plannedFinishDate),
+    diffDays(item.startDate, item.finishDate),
   );
   return {
     width: Math.max(
-      schedule.taskKind === "milestone" ? 16 : 20,
+      item.taskKind === "milestone" ? 16 : 20,
       ((duration || 1) / timeline.daysPerUnit) * timeline.unitWidth,
     ),
     x: (startOffset / timeline.daysPerUnit) * timeline.unitWidth,
@@ -5159,8 +5520,14 @@ function getDependencyLine(
   }
   const predecessor = predecessorRow.row.schedule;
   const successor = successorRow.row.schedule;
-  const predecessorGeometry = getBarGeometry(predecessor, timeline);
-  const successorGeometry = getBarGeometry(successor, timeline);
+  const predecessorGeometry = getBarGeometry(
+    toWorkingVisualItem(predecessor),
+    timeline,
+  );
+  const successorGeometry = getBarGeometry(
+    toWorkingVisualItem(successor),
+    timeline,
+  );
   if (!predecessorGeometry || !successorGeometry) {
     return null;
   }
@@ -5314,6 +5681,10 @@ function getMilestoneFill(
   if (isCritical) {
     return "#dc2626";
   }
+  return getMilestoneColor(getMilestoneCategory(schedule));
+}
+
+function getMilestoneColor(category: ApiMilestoneCategory) {
   const colors: Record<ApiMilestoneCategory, string> = {
     decision: "#7c3aed",
     drop: "#0369a1",
@@ -5321,7 +5692,7 @@ function getMilestoneFill(
     release: "#4338ca",
     standard: "#b45309",
   };
-  return colors[getMilestoneCategory(schedule)];
+  return colors[category];
 }
 
 function taskName(taskId: string, schedules: ApiPlanningTaskSchedule[]) {

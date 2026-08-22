@@ -30,6 +30,7 @@ import {
   downloadProjectExcel,
   enableUser,
   getMyTasks,
+  getLatestPlanningSchedule,
   getProjectBaseline,
   getProjectBaselines,
   getProjectForecastHistory,
@@ -155,6 +156,26 @@ describe("project API client", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/projects/project-1/forecast",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
+  it("gets the latest calculated schedule snapshot for Tracking", async () => {
+    const schedule = {
+      calculationStatus: "calculated",
+      id: "snapshot-2",
+      projectId: "project-1",
+      scheduleVersion: 2,
+      taskSchedules: [],
+    };
+    const fetchMock = mockFetch(schedule);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getLatestPlanningSchedule("project-1")).resolves.toEqual(
+      schedule,
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/planning/projects/project-1/schedule",
       expect.objectContaining({ cache: "no-store" }),
     );
   });

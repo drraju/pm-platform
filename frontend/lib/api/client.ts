@@ -285,6 +285,27 @@ export type ApiPlanningWorkspace = {
   criticalPathTaskIds: string[];
 };
 
+export type ApiPlanningSnapshotTaskSchedule = {
+  id: string;
+  snapshotId: string;
+  projectId: string;
+  taskId: string | null;
+  taskTitle: string;
+  taskKind: "standard" | "summary" | "milestone";
+  milestoneCategory?: ApiMilestoneCategory | null;
+  scheduledStartDate?: string | null;
+  scheduledEndDate?: string | null;
+  isCritical: boolean;
+};
+
+export type ApiPlanningScheduleSnapshot = {
+  id: string;
+  projectId: string;
+  scheduleVersion: number;
+  calculationStatus: "pending" | "calculated" | "failed";
+  taskSchedules?: ApiPlanningSnapshotTaskSchedule[];
+};
+
 export type ApiForecastUserSummary = {
   id: string;
   name: string;
@@ -399,6 +420,7 @@ export type ApiProjectBaselineTask = {
   parentTaskId?: string | null;
   taskTitle: string;
   taskKind: "standard" | "summary" | "milestone";
+  milestoneCategory?: ApiMilestoneCategory | null;
   sequenceNumber?: number | null;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
@@ -1270,6 +1292,12 @@ export function getProject(projectId: string) {
 export function getPlanningWorkspace(projectId: string) {
   return apiRequest<ApiPlanningWorkspace>(
     `/planning/projects/${projectId}/workspace`,
+  );
+}
+
+export function getLatestPlanningSchedule(projectId: string) {
+  return apiRequest<ApiPlanningScheduleSnapshot | null>(
+    `/planning/projects/${projectId}/schedule`,
   );
 }
 

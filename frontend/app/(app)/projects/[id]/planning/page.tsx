@@ -21,14 +21,19 @@ import {
   createPlanningTask,
   duplicatePlanningWorkPackage,
   deletePlanningDependency,
+  getLatestPlanningSchedule,
   getPlanningWorkspace,
+  getProjectBaseline,
+  getProjectForecastOverview,
   removeDuplicatedPlanningWorkPackage,
   updatePlanningTaskSchedule,
   type ApiMilestoneCategory,
   type ApiDuplicateWorkPackageInput,
   type ApiDuplicateWorkPackageResult,
   type ApiPlanningTaskSchedule,
+  type ApiPlanningScheduleSnapshot,
   type ApiPlanningWorkspace,
+  type ApiProjectBaseline,
   type ApiTaskType,
 } from "@/features/planning";
 import { deleteProjectTask } from "@/lib/api/client";
@@ -46,7 +51,12 @@ function PageContent() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
   const [workspace, setWorkspace] = useState<ApiPlanningWorkspace | null>(null);
+  const [currentForecast, setCurrentForecast] =
+    useState<ApiPlanningScheduleSnapshot | null>(null);
+  const [activeBaseline, setActiveBaseline] =
+    useState<ApiProjectBaseline | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const {
@@ -71,9 +81,81 @@ function PageContent() {
     }
   }, [projectId]);
 
+  const loadTrackingReferences = useCallback(async () => {
+    setTrackingError(null);
+    try {
+      const overview = await getProjectForecastOverview(projectId);
+      const currentForecastSummary = overview.currentForecast;
+      const activeBaselineSummary = overview.activeBaseline;
+      const [forecastResult, baselineResult] = await Promise.allSettled([
+        currentForecastSummary
+          ? getLatestPlanningSchedule(projectId).then((latestSchedule) => {
+              if (
+                !latestSchedule ||
+                latestSchedule.id !== currentForecastSummary.snapshotId
+              ) {
+                throw new Error(
+                  "Current Forecast task rows do not match the authoritative Forecast snapshot",
+                );
+              }
+              return latestSchedule;
+            })
+          : Promise.resolve(null),
+        activeBaselineSummary
+          ? getProjectBaseline(projectId, activeBaselineSummary.id).then(
+              (baseline) => {
+                if (
+                  activeBaselineSummary.status !== "approved" ||
+                  baseline.status !== "approved" ||
+                  !baseline.isCurrent
+                ) {
+                  throw new Error(
+                    "Active Baseline detail does not match the authoritative baseline state",
+                  );
+                }
+                return baseline;
+              },
+            )
+          : Promise.resolve(null),
+      ]);
+
+      setCurrentForecast(
+        forecastResult.status === "fulfilled" ? forecastResult.value : null,
+      );
+      setActiveBaseline(
+        baselineResult.status === "fulfilled" ? baselineResult.value : null,
+      );
+
+      const failures = [forecastResult, baselineResult].filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failures.length > 0) {
+        setTrackingError(
+          failures
+            .map(({ reason }) =>
+              reason instanceof Error
+                ? reason.message
+                : "Unable to load a Tracking reference",
+            )
+            .join(" "),
+        );
+      }
+    } catch (requestError) {
+      setCurrentForecast(null);
+      setActiveBaseline(null);
+      setTrackingError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to load Tracking references",
+      );
+    }
+  }, [projectId]);
+
   useEffect(() => {
     void loadWorkspace();
-  }, [loadWorkspace]);
+    void loadTrackingReferences();
+  }, [loadTrackingReferences, loadWorkspace]);
 
   async function handleUpdateSchedule(
     taskId: string,
@@ -261,18 +343,21 @@ function PageContent() {
       <WorkspaceContent spacing="compact">
         <ForecastStatus
           onWorkspaceRefresh={async () => {
-            setWorkspace(await getPlanningWorkspace(projectId));
+            await Promise.all([loadWorkspace(), loadTrackingReferences()]);
           }}
           projectId={projectId}
         />
 
         {error ? <ErrorState message={error} /> : null}
+        {trackingError ? <ErrorState message={trackingError} /> : null}
         {memberError ? <ErrorState message={memberError} /> : null}
 
         {isLoading || areMembersLoading ? <PageLoading /> : null}
 
         {!isLoading && !areMembersLoading && workspace ? (
           <PlanningWorkspace
+            activeBaseline={activeBaseline}
+            currentForecast={currentForecast}
             onDeleteTask={handleDeleteTask}
             isSaving={isSaving}
             onCreateDependency={handleCreateDependency}

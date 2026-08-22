@@ -8,7 +8,12 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
-import type { ApiPlanningWorkspace, ApiProjectMember } from "@/lib/api/client";
+import type {
+  ApiPlanningScheduleSnapshot,
+  ApiPlanningWorkspace,
+  ApiProjectBaseline,
+  ApiProjectMember,
+} from "@/lib/api/client";
 
 const workspace: ApiPlanningWorkspace = {
   criticalPathTaskIds: ["task-2"],
@@ -131,6 +136,114 @@ const workspace: ApiPlanningWorkspace = {
     projectStartDate: "2026-07-01",
     versionNumber: 1,
   },
+};
+
+const currentForecast: ApiPlanningScheduleSnapshot = {
+  calculationStatus: "calculated",
+  id: "forecast-2",
+  projectId: "project-1",
+  scheduleVersion: 2,
+  taskSchedules: [
+    {
+      id: "forecast-row-summary",
+      isCritical: false,
+      projectId: "project-1",
+      scheduledEndDate: "2026-07-14",
+      scheduledStartDate: "2026-06-29",
+      snapshotId: "forecast-2",
+      taskId: "task-1",
+      taskKind: "summary",
+      taskTitle: "Planning forecast",
+    },
+    {
+      id: "forecast-row-task",
+      isCritical: true,
+      projectId: "project-1",
+      scheduledEndDate: "2026-07-09",
+      scheduledStartDate: "2026-07-03",
+      snapshotId: "forecast-2",
+      taskId: "task-2",
+      taskKind: "standard",
+      taskTitle: "Design schedule forecast",
+    },
+    {
+      id: "forecast-row-milestone",
+      isCritical: false,
+      milestoneCategory: "release",
+      projectId: "project-1",
+      scheduledEndDate: "2026-07-12",
+      scheduledStartDate: null,
+      snapshotId: "forecast-2",
+      taskId: "task-3",
+      taskKind: "milestone",
+      taskTitle: "Gate forecast",
+    },
+    {
+      id: "forecast-row-unmatched",
+      isCritical: false,
+      projectId: "project-1",
+      scheduledEndDate: "2026-07-30",
+      scheduledStartDate: "2026-07-29",
+      snapshotId: "forecast-2",
+      taskId: "deleted-task",
+      taskKind: "standard",
+      taskTitle: "Deleted Forecast task",
+    },
+  ],
+};
+
+const activeBaseline: ApiProjectBaseline = {
+  capturedAt: "2026-06-01T09:00:00.000Z",
+  capturedById: "user-1",
+  id: "baseline-2",
+  isCurrent: true,
+  name: "Approved plan",
+  projectId: "project-1",
+  status: "approved",
+  tasks: [
+    {
+      id: "baseline-row-summary",
+      plannedEndDate: "2026-07-11",
+      plannedStartDate: "2026-06-28",
+      projectBaselineId: "baseline-2",
+      projectId: "project-1",
+      taskId: "task-1",
+      taskKind: "summary",
+      taskTitle: "Planning baseline",
+    },
+    {
+      id: "baseline-row-task",
+      plannedEndDate: "2026-07-07",
+      plannedStartDate: "2026-06-30",
+      projectBaselineId: "baseline-2",
+      projectId: "project-1",
+      taskId: "task-2",
+      taskKind: "standard",
+      taskTitle: "Design schedule baseline",
+    },
+    {
+      id: "baseline-row-milestone",
+      milestoneCategory: "decision",
+      plannedEndDate: null,
+      plannedStartDate: "2026-07-08",
+      projectBaselineId: "baseline-2",
+      projectId: "project-1",
+      taskId: "task-3",
+      taskKind: "milestone",
+      taskTitle: "Gate baseline",
+    },
+    {
+      id: "baseline-row-unmatched",
+      plannedEndDate: "2026-08-02",
+      plannedStartDate: "2026-08-01",
+      projectBaselineId: "baseline-2",
+      projectId: "project-1",
+      taskId: null,
+      taskKind: "standard",
+      taskTitle: "Removed baseline task",
+    },
+  ],
+  versionNumber: 2,
 };
 
 const projectMembers: ApiProjectMember[] = [
@@ -649,6 +762,210 @@ describe("PlanningWorkspace", () => {
     expect(
       screen.getByLabelText("Milestone Gate approved"),
     ).toBeInTheDocument();
+  });
+
+  it("renders Current Forecast snapshot dates as a read-only matched layer", () => {
+    const onUpdateSchedule = vi.fn();
+    render(
+      <PlanningWorkspace
+        currentForecast={currentForecast}
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        workspace={workspace}
+      />,
+    );
+
+    const layer = screen.getByTestId("forecast-reference-layer");
+    const reference = screen.getByTestId("forecast-reference-task-2");
+    expect(layer).toHaveAttribute("pointer-events", "none");
+    expect(reference).toHaveAttribute("data-start-date", "2026-07-03");
+    expect(reference).toHaveAttribute("data-finish-date", "2026-07-09");
+    expect(reference).toHaveAttribute("data-task-kind", "standard");
+    expect(
+      screen.getByTestId("forecast-reference-task-1"),
+    ).toHaveAttribute("data-task-kind", "summary");
+    expect(
+      screen.getByTestId("forecast-reference-task-3"),
+    ).toHaveAttribute("data-task-kind", "milestone");
+    expect(screen.getByTestId("forecast-reference-task-3")).toHaveAttribute(
+      "data-start-date",
+      "2026-07-12",
+    );
+    expect(screen.queryByTestId("forecast-reference-deleted-task")).toBeNull();
+
+    const precedingBoundary = Number(
+      screen
+        .getByTestId("timeline-row-boundary-task-1")
+        .getAttribute("y1"),
+    );
+    const matchingBoundary = Number(
+      screen
+        .getByTestId("timeline-row-boundary-task-2")
+        .getAttribute("y1"),
+    );
+    const referenceY = Number(reference.getAttribute("y"));
+    expect(referenceY).toBeGreaterThan(precedingBoundary);
+    expect(referenceY).toBeLessThan(matchingBoundary);
+
+    fireEvent.pointerDown(reference, { clientX: 100 });
+    fireEvent.pointerUp(screen.getByLabelText("Interactive Gantt timeline"), {
+      clientX: 180,
+    });
+    expect(onUpdateSchedule).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Move Design schedule")).toBeInTheDocument();
+    expect(screen.getByLabelText("Resize Design schedule")).toBeInTheDocument();
+  });
+
+  it("shows and hides independently controlled Tracking layers", () => {
+    render(
+      <PlanningWorkspace
+        activeBaseline={activeBaseline}
+        currentForecast={currentForecast}
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByLabelText("Tracking legend")).toHaveTextContent(
+      "Working Schedule",
+    );
+    expect(screen.getByTestId("forecast-reference-task-2")).toBeInTheDocument();
+    expect(screen.queryByTestId("baseline-reference-task-2")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    const menu = screen.getByRole("menu", { name: "Tracking layers" });
+    expect(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Working Schedule",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Current Forecast",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Active Baseline",
+      }),
+    ).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Active Baseline",
+      }),
+    );
+    const baselineLayer = screen.getByTestId("baseline-reference-layer");
+    expect(baselineLayer).toHaveAttribute("pointer-events", "none");
+    expect(screen.getByTestId("baseline-reference-task-2")).toHaveAttribute(
+      "data-start-date",
+      "2026-06-30",
+    );
+    expect(screen.getByTestId("baseline-reference-task-3")).toHaveAttribute(
+      "data-start-date",
+      "2026-07-08",
+    );
+    expect(screen.getByTestId("baseline-reference-task-3")).toHaveAttribute(
+      "data-finish-date",
+      "2026-07-08",
+    );
+    expect(screen.queryByText("Removed baseline task")).toBeNull();
+
+    fireEvent.click(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Current Forecast",
+      }),
+    );
+    expect(screen.queryByTestId("forecast-reference-layer")).toBeNull();
+    expect(screen.getByTestId("baseline-reference-layer")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Working Schedule",
+      }),
+    );
+    expect(screen.queryByLabelText("Move Design schedule")).toBeNull();
+    expect(screen.getByText("Design schedule")).toBeInTheDocument();
+  });
+
+  it("treats no Active Baseline as a valid Tracking state", () => {
+    render(
+      <PlanningWorkspace
+        currentForecast={currentForecast}
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Active Baseline" }),
+    );
+    expect(screen.queryByTestId("baseline-reference-layer")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("baseline-reference-layer").childElementCount,
+    ).toBe(0);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("expands the shared timeline for enabled Forecast and Baseline dates", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-05T00:00:00Z"));
+    const distantForecast: ApiPlanningScheduleSnapshot = {
+      ...currentForecast,
+      taskSchedules: currentForecast.taskSchedules?.map((schedule) =>
+        schedule.taskId === "task-2"
+          ? {
+              ...schedule,
+              scheduledEndDate: "2027-07-08",
+              scheduledStartDate: "2027-07-01",
+            }
+          : schedule,
+      ),
+    };
+    const distantBaseline: ApiProjectBaseline = {
+      ...activeBaseline,
+      tasks: activeBaseline.tasks?.map((task) =>
+        task.taskId === "task-2"
+          ? {
+              ...task,
+              plannedEndDate: "2028-07-08",
+              plannedStartDate: "2028-07-01",
+            }
+          : task,
+      ),
+    };
+    render(
+      <PlanningWorkspace
+        activeBaseline={distantBaseline}
+        currentForecast={distantForecast}
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    const timeline = screen.getByLabelText("Interactive Gantt timeline");
+    const forecastWidth = Number(timeline.getAttribute("width"));
+    expect(forecastWidth).toBeGreaterThan(900);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Active Baseline" }),
+    );
+    expect(Number(timeline.getAttribute("width"))).toBeGreaterThan(
+      forecastWidth,
+    );
   });
 
   it("renders task, summary, milestone and category affordances", () => {

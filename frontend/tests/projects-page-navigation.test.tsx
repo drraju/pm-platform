@@ -141,6 +141,8 @@ const planningMocks = vi.hoisted(() => ({
   createPlanningTask: vi.fn(),
   deletePlanningDependency: vi.fn(),
   duplicatePlanningWorkPackage: vi.fn(),
+  getLatestPlanningSchedule: vi.fn(async () => null),
+  getProjectBaseline: vi.fn(),
   getProjectForecastHistory: vi.fn(async () => ({
     hasMore: false,
     items: [],
@@ -395,7 +397,9 @@ vi.mock("@/features/planning", () => ({
   createPlanningTask: planningMocks.createPlanningTask,
   deletePlanningDependency: planningMocks.deletePlanningDependency,
   duplicatePlanningWorkPackage: planningMocks.duplicatePlanningWorkPackage,
+  getLatestPlanningSchedule: planningMocks.getLatestPlanningSchedule,
   getPlanningWorkspace: planningMocks.getPlanningWorkspace,
+  getProjectBaseline: planningMocks.getProjectBaseline,
   getProjectForecastHistory: planningMocks.getProjectForecastHistory,
   getProjectForecastOverview: planningMocks.getProjectForecastOverview,
   regeneratePlanningWorkspace: planningMocks.regeneratePlanningWorkspace,
@@ -468,8 +472,30 @@ describe("Projects List navigation", () => {
     projectMocks.getProjectMembers.mockImplementation(async () => []);
     projectMocks.recordProjectTaskExecutionUpdate.mockReset();
     planningMocks.getPlanningWorkspace.mockClear();
+    planningMocks.getLatestPlanningSchedule.mockReset();
+    planningMocks.getLatestPlanningSchedule.mockResolvedValue(null);
+    planningMocks.getProjectBaseline.mockReset();
     planningMocks.getProjectForecastHistory.mockClear();
-    planningMocks.getProjectForecastOverview.mockClear();
+    planningMocks.getProjectForecastOverview.mockReset();
+    planningMocks.getProjectForecastOverview.mockImplementation(
+      async (projectId: string) => ({
+        activeBaseline: null,
+        availability: {
+          activeBaseline: false,
+          currentForecast: false,
+          originalBaseline: false,
+          previousForecast: false,
+        },
+        currentForecast: null,
+        finishVarianceFromCurrentActiveBaselineDays: null,
+        finishVarianceFromPreviousDays: null,
+        originalBaseline: null,
+        previousForecast: null,
+        projectId,
+        warnings: [],
+        workingOutputState: "not_requested",
+      }),
+    );
     planningWorkspaceCapture.current = null;
     authMocks.getAuthMe.mockClear();
     authMocks.storeAuthMe.mockClear();
@@ -837,6 +863,97 @@ describe("Projects List navigation", () => {
         })
         .closest("header"),
     ).toHaveClass("shadow-ui-subtle");
+  });
+
+  it("loads authoritative Forecast and Active Baseline references for Planning", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+    const forecastOverview = {
+      activeBaseline: {
+        capturedAt: "2026-06-01T09:00:00.000Z",
+        capturedBy: null,
+        id: "baseline-2",
+        isCurrent: true,
+        milestoneCount: 0,
+        name: "Approved plan",
+        projectFinishDate: "2026-07-20",
+        projectId: "project-123",
+        projectStartDate: "2026-07-01",
+        status: "approved",
+        taskCount: 1,
+        unscheduledExecutableTaskCount: 0,
+        versionNumber: 2,
+      },
+      availability: {
+        activeBaseline: true,
+        currentForecast: true,
+        originalBaseline: true,
+        previousForecast: false,
+      },
+      currentForecast: {
+        calculatedAt: "2026-07-02T09:00:00.000Z",
+        calculationStatus: "calculated" as const,
+        criticalTaskCount: 0,
+        generatedBy: null,
+        isCurrent: true,
+        milestoneCount: 0,
+        projectFinishDate: "2026-07-21",
+        projectId: "project-123",
+        projectStartDate: "2026-07-01",
+        scheduleAnchorDate: "2026-07-01",
+        scheduleVersion: 2,
+        snapshotId: "forecast-2",
+        taskCount: 1,
+        unscheduledExecutableTaskCount: 0,
+      },
+      finishVarianceFromCurrentActiveBaselineDays: 1,
+      finishVarianceFromPreviousDays: null,
+      originalBaseline: null,
+      previousForecast: null,
+      projectId: "project-123",
+      warnings: [],
+      workingOutputState: "not_requested" as const,
+    };
+    const latestSchedule = {
+      calculationStatus: "calculated" as const,
+      id: "forecast-2",
+      projectId: "project-123",
+      scheduleVersion: 2,
+      taskSchedules: [],
+    };
+    const baseline = {
+      capturedAt: "2026-06-01T09:00:00.000Z",
+      capturedById: "user-1",
+      id: "baseline-2",
+      isCurrent: true,
+      name: "Approved plan",
+      projectId: "project-123",
+      status: "approved",
+      tasks: [],
+      versionNumber: 2,
+    };
+    planningMocks.getProjectForecastOverview.mockResolvedValue(
+      forecastOverview,
+    );
+    planningMocks.getLatestPlanningSchedule.mockResolvedValue(latestSchedule);
+    planningMocks.getProjectBaseline.mockResolvedValue(baseline);
+
+    render(<ProjectPlanningPage />);
+
+    await waitFor(() => {
+      expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
+        latestSchedule,
+      );
+      expect(planningWorkspaceCapture.current?.activeBaseline).toEqual(
+        baseline,
+      );
+    });
+    expect(planningMocks.getLatestPlanningSchedule).toHaveBeenCalledWith(
+      "project-123",
+    );
+    expect(planningMocks.getProjectBaseline).toHaveBeenCalledWith(
+      "project-123",
+      "baseline-2",
+    );
   });
 
   it("reloads one coherent workspace after a Planning task mutation", async () => {
