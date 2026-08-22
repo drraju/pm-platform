@@ -8,10 +8,16 @@ export class CreateProjectBaselineDto {
 
   @ApiProperty({ default: 'approved', required: false })
   @IsOptional()
-  @IsIn(['draft', 'approved', 'superseded'])
+  @IsIn(['draft', 'approved'])
   status?: string;
 
-  @ApiProperty({ default: true, required: false })
+  @ApiProperty({
+    default: false,
+    deprecated: true,
+    description:
+      'Explicitly capture and activate this baseline. Omit for normal capture; the first approved baseline is established as active automatically.',
+    required: false,
+  })
   @IsOptional()
   @IsBoolean()
   setAsCurrent?: boolean;

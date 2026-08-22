@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -40,6 +41,7 @@ import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
 import { CreateProjectBaselineDto } from './dto/create-project-baseline.dto';
+import { SetActiveProjectBaselineDto } from './dto/set-active-project-baseline.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
 import { ProjectMemberResponseDto } from './dto/project-member-response.dto';
@@ -385,6 +387,26 @@ export class ProjectsController {
     return this.projectsService.captureProjectBaseline(
       projectId,
       createProjectBaselineDto,
+      request.user,
+    );
+  }
+
+  @Put(':projectId/active-baseline')
+  @RequirePermissions(PermissionKey.ProjectUpdate)
+  @ApiOperation({ summary: 'Set the active project baseline' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiOkResponse({ type: ProjectBaseline })
+  @ApiBadRequestResponse({ description: 'Draft baseline cannot be active' })
+  @ApiForbiddenResponse({ description: 'Project manager access is required' })
+  @ApiNotFoundResponse({ description: 'Project or baseline not found' })
+  setActiveProjectBaseline(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Body() input: SetActiveProjectBaselineDto,
+  ): Promise<ProjectBaseline> {
+    return this.projectsService.setActiveProjectBaseline(
+      projectId,
+      input.baselineId,
       request.user,
     );
   }

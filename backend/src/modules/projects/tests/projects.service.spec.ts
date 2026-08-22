@@ -1,11 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
@@ -36,6 +37,13 @@ const projectId = '2bbca1cb-1be2-4a04-b857-f1f8c7a26800';
 const userId = 'f308d314-4cf3-4bc0-9607-e7ad88f264b8';
 const taskId = '32b10c65-8a4b-4e03-a58c-ffea2ec860e6';
 
+type BaselineFindOptions = {
+  where: {
+    id?: string;
+    isCurrent?: boolean;
+  };
+};
+
 describe('ProjectsService', () => {
   let service: ProjectsService;
   let projectsRepository: MockRepository<Project>;
@@ -61,6 +69,8 @@ describe('ProjectsService', () => {
     rebuildWorkspaceSnapshot: jest.Mock;
   };
   let transactionalEntityManager: {
+    find: jest.Mock;
+    findOne: jest.Mock;
     query: jest.Mock;
     save: jest.Mock;
     update: jest.Mock;
@@ -113,6 +123,10 @@ describe('ProjectsService', () => {
       softRemove: jest.fn(() => Promise.resolve()),
     };
     transactionalEntityManager = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn((entity) =>
+        Promise.resolve(entity === Project ? { id: projectId } : null),
+      ),
       query: jest.fn((sql: string) =>
         Promise.resolve(
           sql.toLowerCase().includes('select count') ? [{ count: 0 }] : [],
@@ -498,10 +512,14 @@ describe('ProjectsService', () => {
         userId: externalUserId,
       });
 
+      expect(result.health.status).toEqual(expect.any(String));
       expect(result).toEqual({
         createdAt: new Date('2026-01-01T00:00:00Z'),
         description: 'Approved project description',
-        health: { reasons: [], status: expect.any(String) },
+        health: {
+          reasons: [],
+          status: result.health.status,
+        },
         id: projectId,
         name: 'ERP Modernization',
         startDate: '2026-01-01',
@@ -1043,7 +1061,10 @@ describe('ProjectsService', () => {
 
     expect(tasksRepository.find).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ assigneeId: 'customer-1', projectId }),
+        where: expect.objectContaining({
+          assigneeId: 'customer-1',
+          projectId,
+        }) as unknown,
       }),
     );
     expect(result).toEqual(
@@ -1477,11 +1498,23 @@ describe('ProjectsService', () => {
 
   it('captures a project baseline with immutable snapshot rows', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    projectBaselinesRepository.findOne?.mockResolvedValue({
-      id: 'existing-baseline-id',
-      versionNumber: 2,
-    });
-    tasksRepository.find?.mockResolvedValue([
+    transactionalEntityManager.findOne.mockImplementation(
+      (entity: unknown, options: BaselineFindOptions) => {
+        if (entity === Project) return Promise.resolve({ id: projectId });
+        if (options.where.isCurrent) {
+          return Promise.resolve({
+            id: 'current-baseline-id',
+            isCurrent: true,
+            status: 'approved',
+          });
+        }
+        return Promise.resolve({
+          id: 'existing-baseline-id',
+          versionNumber: 2,
+        });
+      },
+    );
+    transactionalEntityManager.find.mockResolvedValue([
       {
         id: 'summary-task-id',
         projectId,
@@ -1525,9 +1558,17 @@ describe('ProjectsService', () => {
     );
 
     expect(projectsRepository.manager?.transaction).toHaveBeenCalled();
+    expect(transactionalEntityManager.findOne).toHaveBeenCalledWith(Project, {
+      lock: { mode: 'pessimistic_write' },
+      select: { id: true },
+      where: { id: projectId },
+    });
+    expect(
+      transactionalEntityManager.findOne.mock.invocationCallOrder[0],
+    ).toBeLessThan(transactionalEntityManager.find.mock.invocationCallOrder[0]);
     expect(transactionalEntityManager.update).toHaveBeenCalledWith(
       ProjectBaseline,
-      { isCurrent: true, projectId },
+      { id: 'current-baseline-id', projectId },
       {
         isCurrent: false,
         status: 'superseded',
@@ -1582,14 +1623,28 @@ describe('ProjectsService', () => {
 
   it('captures a non-current baseline without demoting the current baseline', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    projectBaselinesRepository.findOne?.mockResolvedValue(null);
-    tasksRepository.find?.mockResolvedValue([]);
+    transactionalEntityManager.findOne.mockImplementation(
+      (entity: unknown, options: BaselineFindOptions) => {
+        if (entity === Project) return Promise.resolve({ id: projectId });
+        if (options.where.isCurrent) {
+          return Promise.resolve({
+            id: 'current-baseline-id',
+            isCurrent: true,
+            status: 'approved',
+          });
+        }
+        return Promise.resolve({
+          id: 'existing-baseline-id',
+          versionNumber: 1,
+        });
+      },
+    );
+    transactionalEntityManager.find.mockResolvedValue([]);
 
     await service.captureProjectBaseline(
       projectId,
       {
-        name: 'Draft Baseline',
-        setAsCurrent: false,
+        name: 'Approved Rebaseline Candidate',
       },
       {
         email: 'manager@example.com',
@@ -1603,9 +1658,348 @@ describe('ProjectsService', () => {
       expect.objectContaining({
         isCurrent: false,
         status: 'approved',
+        versionNumber: 2,
+      }),
+    );
+  });
+
+  it('establishes the first approved baseline as active', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    transactionalEntityManager.findOne.mockImplementation((entity) =>
+      Promise.resolve(entity === Project ? { id: projectId } : null),
+    );
+
+    const result = await service.captureProjectBaseline(
+      projectId,
+      { name: 'Initial Approved Baseline' },
+      actor,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        isCurrent: true,
+        status: 'approved',
         versionNumber: 1,
       }),
     );
+    expect(transactionalEntityManager.update).not.toHaveBeenCalled();
+  });
+
+  it('allows an explicitly draft baseline only as non-current', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    transactionalEntityManager.findOne.mockImplementation((entity) =>
+      Promise.resolve(entity === Project ? { id: projectId } : null),
+    );
+
+    const result = await service.captureProjectBaseline(
+      projectId,
+      { name: 'Working Draft', status: 'draft' },
+      actor,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({ isCurrent: false, status: 'draft' }),
+    );
+  });
+
+  it('rejects creating a baseline directly as superseded', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+
+    await expect(
+      service.captureProjectBaseline(
+        projectId,
+        { name: 'Invalid Baseline', status: 'superseded' },
+        actor,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(projectsRepository.manager?.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects creating a current draft baseline', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+
+    await expect(
+      service.captureProjectBaseline(
+        projectId,
+        { name: 'Invalid Draft', setAsCurrent: true, status: 'draft' },
+        actor,
+      ),
+    ).rejects.toThrow('A draft baseline cannot be active');
+    expect(projectsRepository.manager?.transaction).not.toHaveBeenCalled();
+  });
+
+  it('sets an approved historical baseline active and supersedes the previous active baseline', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    const target = {
+      id: 'target-baseline-id',
+      isCurrent: false,
+      projectId,
+      status: 'approved',
+      tasks: [{ id: 'immutable-baseline-task-id' }],
+    };
+    transactionalEntityManager.findOne.mockImplementation(
+      (entity: unknown, options: BaselineFindOptions) => {
+        if (entity === Project) return Promise.resolve({ id: projectId });
+        if (options.where.id) return Promise.resolve(target);
+        return Promise.resolve({ id: 'current-baseline-id' });
+      },
+    );
+
+    const result = await service.setActiveProjectBaseline(
+      projectId,
+      target.id,
+      actor,
+    );
+
+    expect(transactionalEntityManager.findOne).toHaveBeenCalledWith(Project, {
+      lock: { mode: 'pessimistic_write' },
+      select: { id: true },
+      where: { id: projectId },
+    });
+    expect(transactionalEntityManager.update).toHaveBeenNthCalledWith(
+      1,
+      ProjectBaseline,
+      { id: 'current-baseline-id', projectId },
+      {
+        isCurrent: false,
+        status: 'superseded',
+        updatedById: userId,
+      },
+    );
+    expect(transactionalEntityManager.update).toHaveBeenNthCalledWith(
+      2,
+      ProjectBaseline,
+      { id: target.id, projectId },
+      {
+        isCurrent: true,
+        status: 'approved',
+        updatedById: userId,
+      },
+    );
+    expect(result).toEqual(
+      expect.objectContaining({ isCurrent: true, status: 'approved' }),
+    );
+    expect(result.tasks).toEqual([{ id: 'immutable-baseline-task-id' }]);
+    expect(transactionalEntityManager.save).not.toHaveBeenCalled();
+  });
+
+  it('reactivates a superseded baseline as approved', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    const target = {
+      id: 'superseded-baseline-id',
+      isCurrent: false,
+      projectId,
+      status: 'superseded',
+    };
+    transactionalEntityManager.findOne.mockImplementation(
+      (entity: unknown, options: BaselineFindOptions) => {
+        if (entity === Project) return Promise.resolve({ id: projectId });
+        if (options.where.id) return Promise.resolve(target);
+        return Promise.resolve(null);
+      },
+    );
+
+    await expect(
+      service.setActiveProjectBaseline(projectId, target.id, actor),
+    ).resolves.toEqual(
+      expect.objectContaining({ isCurrent: true, status: 'approved' }),
+    );
+  });
+
+  it('returns the already-active approved baseline as a no-op', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    const target = {
+      id: 'current-baseline-id',
+      isCurrent: true,
+      projectId,
+      status: 'approved',
+    };
+    transactionalEntityManager.findOne.mockImplementation((entity) =>
+      Promise.resolve(entity === Project ? { id: projectId } : target),
+    );
+
+    await expect(
+      service.setActiveProjectBaseline(projectId, target.id, actor),
+    ).resolves.toBe(target);
+    expect(transactionalEntityManager.update).not.toHaveBeenCalled();
+    expect(transactionalEntityManager.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects activating a draft baseline', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    transactionalEntityManager.findOne.mockImplementation((entity) =>
+      Promise.resolve(
+        entity === Project
+          ? { id: projectId }
+          : {
+              id: 'draft-baseline-id',
+              isCurrent: false,
+              projectId,
+              status: 'draft',
+            },
+      ),
+    );
+
+    await expect(
+      service.setActiveProjectBaseline(projectId, 'draft-baseline-id', actor),
+    ).rejects.toThrow('A draft baseline cannot be active');
+    expect(transactionalEntityManager.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', 'missing-baseline-id'],
+    ['deleted', 'deleted-baseline-id'],
+    ['wrong-project', 'other-project-baseline-id'],
+  ])('rejects a %s baseline when setting active', async (_case, baselineId) => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    transactionalEntityManager.findOne.mockImplementation((entity) =>
+      Promise.resolve(entity === Project ? { id: projectId } : null),
+    );
+
+    await expect(
+      service.setActiveProjectBaseline(projectId, baselineId, actor),
+    ).rejects.toThrow(NotFoundException);
+    expect(transactionalEntityManager.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects baseline activation without project-management authority', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+
+    await expect(
+      service.setActiveProjectBaseline(
+        projectId,
+        'approved-baseline-id',
+        actor,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(projectsRepository.manager?.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects baseline activation by an external actor', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+
+    await expect(
+      service.setActiveProjectBaseline(
+        projectId,
+        'approved-baseline-id',
+        actor,
+      ),
+    ).rejects.toThrow('External actors cannot manage project baselines');
+    expect(authorizationPolicyService.canManageProject).not.toHaveBeenCalled();
+    expect(projectsRepository.manager?.transaction).not.toHaveBeenCalled();
+  });
+
+  it('serializes concurrent captures before allocating versions and snapshot rows', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    const persistedBaselines: Array<Partial<ProjectBaseline> & { id: string }> =
+      [];
+    const persistedTaskRows: ProjectBaselineTask[] = [];
+    const capturedTasks = [
+      {
+        id: 'captured-task-1',
+        projectId,
+        title: 'Captured Task',
+        taskKind: TaskKind.Standard,
+        parentTaskId: null,
+        sequenceNumber: 1,
+        plannedStartDate: '2026-08-01',
+        plannedEndDate: '2026-08-05',
+        estimatedHours: 24,
+        percentComplete: 0,
+      } as Task,
+    ];
+    let lockTail = Promise.resolve();
+
+    const transaction = jest.fn(
+      async (callback: (manager: EntityManager) => Promise<unknown>) => {
+        const precedingLock = lockTail;
+        let releaseLock = () => undefined;
+        lockTail = new Promise<void>((resolve) => {
+          releaseLock = resolve;
+        });
+        let projectLockAcquired = false;
+        const manager = {
+          find: jest.fn((entity: unknown) => {
+            expect(projectLockAcquired).toBe(true);
+            return Promise.resolve(entity === Task ? capturedTasks : []);
+          }),
+          findOne: jest.fn(
+            async (entity: unknown, options: BaselineFindOptions) => {
+              if (entity === Project) {
+                await precedingLock;
+                projectLockAcquired = true;
+                return { id: projectId };
+              }
+              expect(projectLockAcquired).toBe(true);
+              if (options.where.isCurrent) {
+                return (
+                  persistedBaselines.find((baseline) => baseline.isCurrent) ??
+                  null
+                );
+              }
+              return (
+                [...persistedBaselines].sort(
+                  (left, right) =>
+                    Number(right.versionNumber) - Number(left.versionNumber),
+                )[0] ?? null
+              );
+            },
+          ),
+          save: jest.fn((entity: unknown, input: unknown) => {
+            expect(projectLockAcquired).toBe(true);
+            if (entity === ProjectBaseline) {
+              const baselineInput = input as Partial<ProjectBaseline>;
+              const baseline = {
+                ...baselineInput,
+                id: `baseline-${baselineInput.versionNumber}`,
+              } as ProjectBaseline & { id: string };
+              persistedBaselines.push(baseline);
+              return Promise.resolve(baseline);
+            }
+            if (entity === ProjectBaselineTask) {
+              persistedTaskRows.push(...(input as ProjectBaselineTask[]));
+            }
+            return Promise.resolve(input);
+          }),
+          update: jest.fn(() => Promise.resolve(undefined)),
+        };
+
+        try {
+          return await callback(manager as unknown as EntityManager);
+        } finally {
+          releaseLock();
+        }
+      },
+    );
+    projectsRepository.manager = {
+      transaction,
+    } as unknown as Repository<Project>['manager'];
+
+    const results = await Promise.all([
+      service.captureProjectBaseline(
+        projectId,
+        { name: 'Concurrent Baseline A' },
+        actor,
+      ),
+      service.captureProjectBaseline(
+        projectId,
+        { name: 'Concurrent Baseline B' },
+        actor,
+      ),
+    ]);
+
+    expect(results.map((baseline) => baseline.versionNumber).sort()).toEqual([
+      1, 2,
+    ]);
+    expect(
+      persistedBaselines.filter((baseline) => baseline.isCurrent),
+    ).toHaveLength(1);
+    expect(persistedTaskRows).toHaveLength(2);
+    expect(
+      persistedTaskRows.map((row) => row.projectBaselineId).sort(),
+    ).toEqual(['baseline-1', 'baseline-2']);
   });
 
   it('lists project task dependencies', async () => {

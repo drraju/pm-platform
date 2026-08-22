@@ -63,6 +63,9 @@ type AuthenticatedActor = AuthorizationActor;
 type ProjectListMode = 'active' | 'archived' | 'all';
 
 const archivedProjectStatus = 'archived';
+const approvedBaselineStatus = 'approved';
+const draftBaselineStatus = 'draft';
+const supersededBaselineStatus = 'superseded';
 const mutableProjectStatuses = new Set([
   'active',
   'at_risk',
@@ -523,32 +526,63 @@ export class ProjectsService {
     }
 
     await this.ensureProjectExists(projectId);
-    await this.ensureCanManageProject(projectId, actor);
+    await this.ensureCanGovernProjectBaselines(projectId, actor);
 
-    const projectTasks = await this.tasksRepository.find({
-      order: {
-        createdAt: 'ASC',
-      },
-      where: { projectId },
-    });
-    const latestBaseline = await this.projectBaselinesRepository.findOne({
-      order: { versionNumber: 'DESC' },
-      select: { id: true, versionNumber: true },
-      where: { projectId },
-    });
-    const versionNumber = (latestBaseline?.versionNumber ?? 0) + 1;
-    const capturedAt = new Date();
-    const setAsCurrent = createProjectBaselineDto.setAsCurrent ?? true;
+    const requestedStatus =
+      createProjectBaselineDto.status ?? approvedBaselineStatus;
+    if (requestedStatus === supersededBaselineStatus) {
+      throw new BadRequestException(
+        'A new baseline cannot be created as superseded',
+      );
+    }
+    if (
+      requestedStatus === draftBaselineStatus &&
+      createProjectBaselineDto.setAsCurrent === true
+    ) {
+      throw new BadRequestException('A draft baseline cannot be active');
+    }
 
     return this.projectsRepository.manager.transaction(
       async (transactionalEntityManager) => {
-        if (setAsCurrent) {
+        await this.lockProjectForBaselineGovernance(
+          projectId,
+          transactionalEntityManager,
+        );
+
+        const currentBaseline = await transactionalEntityManager.findOne(
+          ProjectBaseline,
+          {
+            select: { id: true, isCurrent: true, status: true },
+            where: { isCurrent: true, projectId },
+          },
+        );
+        const latestBaseline = await transactionalEntityManager.findOne(
+          ProjectBaseline,
+          {
+            order: { versionNumber: 'DESC' },
+            select: { id: true, versionNumber: true },
+            where: { projectId },
+            withDeleted: true,
+          },
+        );
+        const projectTasks = await transactionalEntityManager.find(Task, {
+          order: {
+            createdAt: 'ASC',
+          },
+          where: { projectId },
+        });
+        const versionNumber = (latestBaseline?.versionNumber ?? 0) + 1;
+        const setAsCurrent =
+          requestedStatus === approvedBaselineStatus &&
+          (!currentBaseline || createProjectBaselineDto.setAsCurrent === true);
+
+        if (setAsCurrent && currentBaseline) {
           await transactionalEntityManager.update(
             ProjectBaseline,
-            { isCurrent: true, projectId },
+            { id: currentBaseline.id, projectId },
             {
               isCurrent: false,
-              status: 'superseded',
+              status: supersededBaselineStatus,
               updatedById: actor.userId,
             },
           );
@@ -557,13 +591,13 @@ export class ProjectsService {
         const savedBaseline = await transactionalEntityManager.save(
           ProjectBaseline,
           this.projectBaselinesRepository.create({
-            capturedAt,
+            capturedAt: new Date(),
             capturedById: actor.userId,
             createdById: actor.userId,
             isCurrent: setAsCurrent,
             name: createProjectBaselineDto.name,
             projectId,
-            status: createProjectBaselineDto.status ?? 'approved',
+            status: requestedStatus,
             updatedById: actor.userId,
             versionNumber,
           }),
@@ -594,6 +628,92 @@ export class ProjectsService {
         }
 
         return savedBaseline;
+      },
+    );
+  }
+
+  async setActiveProjectBaseline(
+    projectId: string,
+    baselineId: string,
+    actor?: AuthenticatedActor,
+  ): Promise<ProjectBaseline> {
+    if (!actor?.userId) {
+      throw new ForbiddenException('Authenticated user is required');
+    }
+
+    await this.ensureProjectExists(projectId);
+    await this.ensureCanGovernProjectBaselines(projectId, actor);
+
+    return this.projectsRepository.manager.transaction(
+      async (transactionalEntityManager) => {
+        await this.lockProjectForBaselineGovernance(
+          projectId,
+          transactionalEntityManager,
+        );
+
+        const targetBaseline = await transactionalEntityManager.findOne(
+          ProjectBaseline,
+          {
+            where: { id: baselineId, projectId },
+          },
+        );
+        if (!targetBaseline) {
+          throw new NotFoundException(
+            `Project baseline ${baselineId} not found for project ${projectId}`,
+          );
+        }
+        if (targetBaseline.status === draftBaselineStatus) {
+          throw new BadRequestException('A draft baseline cannot be active');
+        }
+        if (
+          targetBaseline.status !== approvedBaselineStatus &&
+          targetBaseline.status !== supersededBaselineStatus
+        ) {
+          throw new BadRequestException(
+            `Baseline status ${targetBaseline.status} cannot be active`,
+          );
+        }
+        if (
+          targetBaseline.isCurrent &&
+          targetBaseline.status === approvedBaselineStatus
+        ) {
+          return targetBaseline;
+        }
+
+        const currentBaseline = await transactionalEntityManager.findOne(
+          ProjectBaseline,
+          {
+            select: { id: true },
+            where: { isCurrent: true, projectId },
+          },
+        );
+        if (currentBaseline && currentBaseline.id !== targetBaseline.id) {
+          await transactionalEntityManager.update(
+            ProjectBaseline,
+            { id: currentBaseline.id, projectId },
+            {
+              isCurrent: false,
+              status: supersededBaselineStatus,
+              updatedById: actor.userId,
+            },
+          );
+        }
+
+        await transactionalEntityManager.update(
+          ProjectBaseline,
+          { id: targetBaseline.id, projectId },
+          {
+            isCurrent: true,
+            status: approvedBaselineStatus,
+            updatedById: actor.userId,
+          },
+        );
+
+        return Object.assign(targetBaseline, {
+          isCurrent: true,
+          status: approvedBaselineStatus,
+          updatedById: actor.userId,
+        });
       },
     );
   }
@@ -1129,11 +1249,16 @@ export class ProjectsService {
 
     const diagnostics: Record<string, number> = {};
     for (const check of checks) {
-      const rows = await manager.query(
+      const rows: unknown = await manager.query(
         check.sql,
         check.parameters ?? [projectId],
       );
-      diagnostics[check.label] = Number(rows?.[0]?.count ?? 0);
+      const firstRow: unknown = Array.isArray(rows) ? rows[0] : undefined;
+      const count =
+        typeof firstRow === 'object' && firstRow !== null && 'count' in firstRow
+          ? firstRow.count
+          : 0;
+      diagnostics[check.label] = Number(count ?? 0);
     }
 
     const failures = Object.entries(diagnostics).filter(
@@ -1470,6 +1595,33 @@ export class ProjectsService {
     }
 
     throw new ForbiddenException('Project manager access is required');
+  }
+
+  private async ensureCanGovernProjectBaselines(
+    projectId: string,
+    actor: AuthenticatedActor,
+  ): Promise<void> {
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      throw new ForbiddenException(
+        'External actors cannot manage project baselines',
+      );
+    }
+
+    await this.ensureCanManageProject(projectId, actor);
+  }
+
+  private async lockProjectForBaselineGovernance(
+    projectId: string,
+    transactionalEntityManager: EntityManager,
+  ): Promise<void> {
+    const project = await transactionalEntityManager.findOne(Project, {
+      lock: { mode: 'pessimistic_write' },
+      select: { id: true },
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException(`Project ${projectId} not found`);
+    }
   }
 
   private async ensureCanCreateProject(actor?: AuthenticatedActor) {
