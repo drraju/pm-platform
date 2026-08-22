@@ -179,7 +179,9 @@ export class PlanningSnapshotService {
     const taskById = new Map(tasks.map((task) => [task.id, task]));
     savedSnapshot.taskSchedules = savedTaskSchedules.map((taskSchedule) =>
       Object.assign(taskSchedule, {
-        task: taskById.get(taskSchedule.taskId) ?? null,
+        task: taskSchedule.taskId
+          ? (taskById.get(taskSchedule.taskId) ?? null)
+          : null,
       }),
     );
 
@@ -264,6 +266,7 @@ export class PlanningSnapshotService {
           task,
           taskId: task.id,
           taskKind: task.taskKind,
+          taskTitle: task.title,
           totalFloatDays: node.totalFloat,
           updatedById: actor?.userId,
         };

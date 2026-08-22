@@ -52,8 +52,8 @@ export class PlanningWorkspaceScheduleDto {
   @ApiProperty()
   projectId: string;
 
-  @ApiProperty()
-  taskId: string;
+  @ApiProperty({ required: false, nullable: true })
+  taskId: string | null;
 
   @ApiProperty({ required: false, nullable: true })
   parentTaskId?: string | null;

@@ -135,7 +135,13 @@ export class PlanningService {
 
     return {
       criticalPathTaskIds: schedules
-        .filter((schedule) => schedule.isCritical)
+        .filter(
+          (
+            schedule,
+          ): schedule is PlanningWorkspaceScheduleDto & {
+            taskId: string;
+          } => schedule.isCritical && Boolean(schedule.taskId),
+        )
         .map((schedule) => schedule.taskId),
       dependencies,
       project,
@@ -206,6 +212,13 @@ export class PlanningService {
     await this.ensureCanManageProject(projectId, actor);
 
     const schedule = await this.findPlanningTaskSchedule(projectId, scheduleId);
+    const taskId = schedule.taskId;
+    const task = schedule.task;
+    if (!taskId || !task) {
+      throw new NotFoundException(
+        `Planning schedule ${scheduleId} is not linked to a live task`,
+      );
+    }
 
     const taskKind = this.schedulingFoundationService.normalizeTaskKind(
       { taskKind: schedule.taskKind ?? schedule.task?.taskKind },
@@ -217,11 +230,11 @@ export class PlanningService {
         projectId,
         input.parentTaskId,
         taskKind,
-        schedule.taskId,
+        taskId,
       );
       await this.ensureNoPlanningHierarchyCycle(
         projectId,
-        schedule.taskId,
+        taskId,
         input.parentTaskId,
       );
     }
@@ -236,7 +249,7 @@ export class PlanningService {
       this.canonicalTasksService
     ) {
       await this.canonicalTasksService.update(
-        schedule.taskId,
+        taskId,
         {
           ...(input.ownerId !== undefined ? { assigneeId: input.ownerId } : {}),
           ...(input.parentTaskId !== undefined
@@ -266,11 +279,7 @@ export class PlanningService {
         await this.planningSnapshotService.calculateOperationalForecast(
           projectId,
         );
-      return this.requireWorkspaceSchedule(
-        rebuiltSnapshot,
-        schedule.taskId,
-        projectId,
-      );
+      return this.requireWorkspaceSchedule(rebuiltSnapshot, taskId, projectId);
     }
     const normalizedSchedule =
       this.schedulingFoundationService.normalizeScheduleMutation(
@@ -342,29 +351,21 @@ export class PlanningService {
       const rebuiltSnapshot =
         await this.scheduleSnapshotsRepository.manager.transaction(
           async (manager) => {
-            await manager.getRepository(Task).save(schedule.task);
+            await manager.getRepository(Task).save(task);
             return this.planningSnapshotService.calculateOperationalForecast(
               projectId,
               manager,
             );
           },
         );
-      return this.requireWorkspaceSchedule(
-        rebuiltSnapshot,
-        schedule.taskId,
-        projectId,
-      );
+      return this.requireWorkspaceSchedule(rebuiltSnapshot, taskId, projectId);
     }
 
     const rebuiltSnapshot =
       await this.planningSnapshotService.calculateOperationalForecast(
         projectId,
       );
-    return this.requireWorkspaceSchedule(
-      rebuiltSnapshot,
-      schedule.taskId,
-      projectId,
-    );
+    return this.requireWorkspaceSchedule(rebuiltSnapshot, taskId, projectId);
   }
 
   async createPlanningTask(
@@ -925,7 +926,7 @@ export class PlanningService {
         taskSchedule.milestoneCategory ??
         taskSchedule.task?.milestoneCategory ??
         null,
-      taskTitle: taskSchedule.task?.title ?? taskSchedule.taskId,
+      taskTitle: taskSchedule.taskTitle,
       totalFloatDays: taskSchedule.totalFloatDays ?? null,
     };
   }

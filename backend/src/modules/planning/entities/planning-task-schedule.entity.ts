@@ -14,8 +14,11 @@ export class PlanningTaskSchedule extends AuditableEntity {
   @Column({ name: 'project_id', type: 'uuid' })
   projectId: string;
 
-  @Column({ name: 'task_id', type: 'uuid' })
-  taskId: string;
+  @Column({ name: 'task_id', type: 'uuid', nullable: true })
+  taskId: string | null;
+
+  @Column({ name: 'task_title' })
+  taskTitle: string;
 
   @Column({ name: 'parent_task_id', type: 'uuid', nullable: true })
   parentTaskId?: string | null;
@@ -89,7 +92,7 @@ export class PlanningTaskSchedule extends AuditableEntity {
   @JoinColumn({ name: 'project_id' })
   project: Project;
 
-  @ManyToOne(() => Task, { nullable: false })
+  @ManyToOne(() => Task, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'task_id' })
-  task: Task;
+  task?: Task | null;
 }

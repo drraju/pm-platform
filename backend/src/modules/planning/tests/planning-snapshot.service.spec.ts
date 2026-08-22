@@ -182,6 +182,7 @@ describe('PlanningSnapshotService authoritative persistence', () => {
           isCritical: true,
           scheduledStartDate: '2026-07-06',
           taskId: liveTasks[2].id,
+          taskTitle: 'Release',
           totalFloatDays: 0,
         }),
       ]),
