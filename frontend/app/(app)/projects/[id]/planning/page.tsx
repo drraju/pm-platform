@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   ErrorState,
@@ -25,11 +25,14 @@ import {
   getPlanningWorkspace,
   getProjectBaseline,
   getProjectForecastOverview,
+  getProjectForecastSnapshot,
   removeDuplicatedPlanningWorkPackage,
   updatePlanningTaskSchedule,
   type ApiMilestoneCategory,
   type ApiDuplicateWorkPackageInput,
   type ApiDuplicateWorkPackageResult,
+  type ApiForecastHistoryItem,
+  type ApiForecastSnapshotDetail,
   type ApiPlanningTaskSchedule,
   type ApiPlanningScheduleSnapshot,
   type ApiPlanningWorkspace,
@@ -55,6 +58,15 @@ function PageContent() {
     useState<ApiPlanningScheduleSnapshot | null>(null);
   const [activeBaseline, setActiveBaseline] =
     useState<ApiProjectBaseline | null>(null);
+  const [selectedHistoricalForecastSummary, setSelectedHistoricalForecastSummary] =
+    useState<ApiForecastHistoryItem | null>(null);
+  const [selectedHistoricalForecast, setSelectedHistoricalForecast] =
+    useState<ApiForecastSnapshotDetail | null>(null);
+  const [historicalForecastError, setHistoricalForecastError] =
+    useState<string | null>(null);
+  const [isHistoricalForecastLoading, setIsHistoricalForecastLoading] =
+    useState(false);
+  const historicalForecastRequestRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -156,6 +168,53 @@ function PageContent() {
     void loadWorkspace();
     void loadTrackingReferences();
   }, [loadTrackingReferences, loadWorkspace]);
+
+  useEffect(() => {
+    historicalForecastRequestRef.current += 1;
+    setSelectedHistoricalForecastSummary(null);
+    setSelectedHistoricalForecast(null);
+    setHistoricalForecastError(null);
+    setIsHistoricalForecastLoading(false);
+  }, [projectId]);
+
+  const loadHistoricalForecast = useCallback(
+    async (snapshotId: string, forecast: ApiForecastHistoryItem) => {
+      const requestVersion = historicalForecastRequestRef.current + 1;
+      historicalForecastRequestRef.current = requestVersion;
+      setSelectedHistoricalForecastSummary(forecast);
+      setSelectedHistoricalForecast(null);
+      setHistoricalForecastError(null);
+      setIsHistoricalForecastLoading(true);
+      try {
+        const snapshot = await getProjectForecastSnapshot(
+          projectId,
+          snapshotId,
+        );
+        if (historicalForecastRequestRef.current === requestVersion) {
+          setSelectedHistoricalForecast(snapshot);
+        }
+      } catch {
+        if (historicalForecastRequestRef.current === requestVersion) {
+          setHistoricalForecastError(
+            "Historical Forecast could not be loaded. Try again.",
+          );
+        }
+      } finally {
+        if (historicalForecastRequestRef.current === requestVersion) {
+          setIsHistoricalForecastLoading(false);
+        }
+      }
+    },
+    [projectId],
+  );
+
+  function clearHistoricalForecast() {
+    historicalForecastRequestRef.current += 1;
+    setSelectedHistoricalForecastSummary(null);
+    setSelectedHistoricalForecast(null);
+    setHistoricalForecastError(null);
+    setIsHistoricalForecastLoading(false);
+  }
 
   async function handleUpdateSchedule(
     taskId: string,
@@ -342,10 +401,27 @@ function PageContent() {
     >
       <WorkspaceContent spacing="compact">
         <ForecastStatus
+          historicalForecastError={historicalForecastError}
+          isHistoricalForecastLoading={isHistoricalForecastLoading}
+          onClearHistoricalForecast={clearHistoricalForecast}
+          onRetryHistoricalForecast={() => {
+            if (selectedHistoricalForecastSummary) {
+              void loadHistoricalForecast(
+                selectedHistoricalForecastSummary.snapshotId,
+                selectedHistoricalForecastSummary,
+              );
+            }
+          }}
+          onSelectHistoricalForecast={(snapshotId, forecast) =>
+            void loadHistoricalForecast(snapshotId, forecast)
+          }
           onWorkspaceRefresh={async () => {
             await Promise.all([loadWorkspace(), loadTrackingReferences()]);
           }}
           projectId={projectId}
+          selectedHistoricalForecastSummary={
+            selectedHistoricalForecastSummary
+          }
         />
 
         {error ? <ErrorState message={error} /> : null}
@@ -368,6 +444,7 @@ function PageContent() {
             onRemoveDuplicatedWorkPackage={handleRemoveDuplicatedWorkPackage}
             onUpdateSchedule={handleUpdateSchedule}
             projectMembers={members}
+            selectedHistoricalForecast={selectedHistoricalForecast}
             workspace={workspace}
           />
         ) : null}

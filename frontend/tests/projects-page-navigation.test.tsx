@@ -20,6 +20,11 @@ import ProjectGovernPage from "@/app/(app)/projects/[id]/govern/page";
 import ProjectRaidPage from "@/app/(app)/projects/[id]/raid/page";
 import ProjectTasksPage from "@/app/(app)/projects/[id]/tasks/page";
 import ProjectWorkspacePage from "@/app/(app)/projects/[id]/page";
+import type {
+  ApiForecastHistoryItem,
+  ApiForecastSnapshotDetail,
+  ApiForecastSnapshotTaskSchedule,
+} from "@/lib/api/client";
 
 const projectMocks = vi.hoisted(() => {
   function createDefaultProjectDetails(projectId: string) {
@@ -165,6 +170,7 @@ const planningMocks = vi.hoisted(() => ({
     warnings: [],
     workingOutputState: "not_requested",
   })),
+  getProjectForecastSnapshot: vi.fn(),
   getPlanningWorkspace: vi.fn(async (projectId: string) => ({
     criticalPathTaskIds: [],
     dependencies: [],
@@ -402,6 +408,7 @@ vi.mock("@/features/planning", () => ({
   getProjectBaseline: planningMocks.getProjectBaseline,
   getProjectForecastHistory: planningMocks.getProjectForecastHistory,
   getProjectForecastOverview: planningMocks.getProjectForecastOverview,
+  getProjectForecastSnapshot: planningMocks.getProjectForecastSnapshot,
   regeneratePlanningWorkspace: planningMocks.regeneratePlanningWorkspace,
   removeDuplicatedPlanningWorkPackage:
     planningMocks.removeDuplicatedPlanningWorkPackage,
@@ -475,7 +482,12 @@ describe("Projects List navigation", () => {
     planningMocks.getLatestPlanningSchedule.mockReset();
     planningMocks.getLatestPlanningSchedule.mockResolvedValue(null);
     planningMocks.getProjectBaseline.mockReset();
-    planningMocks.getProjectForecastHistory.mockClear();
+    planningMocks.getProjectForecastHistory.mockReset();
+    planningMocks.getProjectForecastHistory.mockResolvedValue({
+      hasMore: false,
+      items: [],
+      nextCursor: null,
+    });
     planningMocks.getProjectForecastOverview.mockReset();
     planningMocks.getProjectForecastOverview.mockImplementation(
       async (projectId: string) => ({
@@ -496,6 +508,7 @@ describe("Projects List navigation", () => {
         workingOutputState: "not_requested",
       }),
     );
+    planningMocks.getProjectForecastSnapshot.mockReset();
     planningWorkspaceCapture.current = null;
     authMocks.getAuthMe.mockClear();
     authMocks.storeAuthMe.mockClear();
@@ -954,6 +967,181 @@ describe("Projects List navigation", () => {
       "project-123",
       "baseline-2",
     );
+  });
+
+  it("loads one selected historical Forecast without replacing live Planning state", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+    const currentForecast = {
+      calculationStatus: "calculated" as const,
+      id: "forecast-current-3",
+      projectId: "project-123",
+      scheduleVersion: 3,
+      taskSchedules: [],
+    };
+    const currentForecastSummary = {
+      ...forecastSnapshotDetail({
+        scheduleVersion: 3,
+        snapshotId: "forecast-current-3",
+        taskSchedules: [],
+      }).snapshot,
+      isCurrent: true,
+    };
+    const historicalSummary = forecastHistoryItem({
+      scheduleVersion: 2,
+      snapshotId: "historical-snapshot-2",
+    });
+    const historicalSnapshot = forecastSnapshotDetail({
+      scheduleVersion: 2,
+      snapshotId: "historical-snapshot-2",
+      taskSchedules: [
+        {
+          durationDays: 9,
+          isCritical: true,
+          milestoneCategory: null,
+          parentTaskId: null,
+          scheduledEndDate: "2026-08-12",
+          scheduledStartDate: "2026-08-03",
+          sequenceNumber: 1,
+          taskId: null,
+          taskKind: "standard" as const,
+          taskTitle: "Captured deleted task",
+        },
+      ],
+    });
+    const deferred = createDeferred<typeof historicalSnapshot>();
+    planningMocks.getLatestPlanningSchedule.mockResolvedValue(currentForecast);
+    planningMocks.getProjectForecastOverview.mockResolvedValue({
+      activeBaseline: null,
+      availability: {
+        activeBaseline: false,
+        currentForecast: true,
+        originalBaseline: false,
+        previousForecast: false,
+      },
+      currentForecast: currentForecastSummary,
+      finishVarianceFromCurrentActiveBaselineDays: null,
+      finishVarianceFromPreviousDays: null,
+      originalBaseline: null,
+      previousForecast: null,
+      projectId: "project-123",
+      warnings: [],
+      workingOutputState: "not_requested",
+    });
+    planningMocks.getProjectForecastHistory.mockResolvedValue({
+      hasMore: false,
+      items: [historicalSummary],
+      nextCursor: null,
+    });
+    planningMocks.getProjectForecastSnapshot.mockReturnValue(deferred.promise);
+
+    render(<ProjectPlanningPage />);
+    await waitFor(() => {
+      expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
+        currentForecast,
+      );
+    });
+    const workingSchedule = planningWorkspaceCapture.current?.workspace;
+
+    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "View Schedule v2" }),
+    );
+
+    expect(planningMocks.getProjectForecastSnapshot).toHaveBeenCalledWith(
+      "project-123",
+      "historical-snapshot-2",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Loading Schedule v2 historical Forecast"),
+    ).toBeInTheDocument();
+    expect(planningWorkspaceCapture.current?.workspace).toBe(workingSchedule);
+    expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
+      currentForecast,
+    );
+    expect(
+      planningWorkspaceCapture.current?.selectedHistoricalForecast,
+    ).toBeNull();
+
+    await act(async () => deferred.resolve(historicalSnapshot));
+
+    await waitFor(() => {
+      expect(
+        planningWorkspaceCapture.current?.selectedHistoricalForecast,
+      ).toEqual(historicalSnapshot);
+    });
+    const selected = planningWorkspaceCapture.current
+      ?.selectedHistoricalForecast as typeof historicalSnapshot;
+    expect(selected.snapshot.snapshotId).toBe("historical-snapshot-2");
+    expect(selected.snapshot.scheduleVersion).toBe(2);
+    expect(selected.taskSchedules[0]?.taskId).toBeNull();
+    expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
+      currentForecast,
+    );
+    expect(planningWorkspaceCapture.current?.workspace).toBe(workingSchedule);
+    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Current Forecast" }),
+    );
+    await waitFor(() => {
+      expect(
+        planningWorkspaceCapture.current?.selectedHistoricalForecast,
+      ).toBeNull();
+    });
+  });
+
+  it("retries a failed historical Forecast load and accepts an empty snapshot", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+    const historicalSummary = forecastHistoryItem({
+      scheduleVersion: 1,
+      snapshotId: "historical-snapshot-1",
+    });
+    const emptySnapshot = forecastSnapshotDetail({
+      scheduleVersion: 1,
+      snapshotId: "historical-snapshot-1",
+      taskSchedules: [],
+    });
+    planningMocks.getProjectForecastHistory.mockResolvedValue({
+      hasMore: false,
+      items: [historicalSummary],
+      nextCursor: null,
+    });
+    planningMocks.getProjectForecastSnapshot
+      .mockRejectedValueOnce(new Error("database detail must stay hidden"))
+      .mockResolvedValueOnce(emptySnapshot);
+
+    render(<ProjectPlanningPage />);
+    await screen.findByText("Selected Project Workspace planning workspace");
+    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "View Schedule v1" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Historical Forecast could not be loaded. Try again.",
+    );
+    expect(alert).not.toHaveTextContent("database");
+    expect(
+      planningWorkspaceCapture.current?.selectedHistoricalForecast,
+    ).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry historical Forecast" }),
+    );
+    await waitFor(() => {
+      expect(
+        planningWorkspaceCapture.current?.selectedHistoricalForecast,
+      ).toEqual(emptySnapshot);
+    });
+    expect(emptySnapshot.taskSchedules).toEqual([]);
+    expect(planningMocks.getProjectForecastSnapshot).toHaveBeenNthCalledWith(
+      2,
+      "project-123",
+      "historical-snapshot-1",
+    );
+    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(1);
   });
 
   it("reloads one coherent workspace after a Planning task mutation", async () => {
@@ -1713,3 +1901,65 @@ describe("Projects List navigation", () => {
     });
   });
 });
+
+function forecastHistoryItem({
+  scheduleVersion,
+  snapshotId,
+}: {
+  scheduleVersion: number;
+  snapshotId: string;
+}): ApiForecastHistoryItem {
+  return {
+    calculatedAt: "2026-08-22T10:00:00.000Z",
+    criticalTaskCount: 1,
+    finishVarianceFromCurrentActiveBaselineDays: 2,
+    finishVarianceFromPreviousDays: 1,
+    generatedBy: { id: "user-1", name: "Ram Datla" },
+    isCurrent: false,
+    milestoneCount: 0,
+    projectFinishDate: "2026-08-12",
+    projectStartDate: "2026-08-03",
+    scheduleVersion,
+    snapshotId,
+    taskCount: 1,
+    unscheduledExecutableTaskCount: 0,
+  };
+}
+
+function forecastSnapshotDetail({
+  scheduleVersion,
+  snapshotId,
+  taskSchedules,
+}: {
+  scheduleVersion: number;
+  snapshotId: string;
+  taskSchedules: ApiForecastSnapshotTaskSchedule[];
+}): ApiForecastSnapshotDetail {
+  return {
+    snapshot: {
+      calculatedAt: "2026-08-22T10:00:00.000Z",
+      calculationStatus: "calculated",
+      criticalTaskCount: 1,
+      generatedBy: { id: "user-1", name: "Ram Datla" },
+      isCurrent: false,
+      milestoneCount: 0,
+      projectFinishDate: "2026-08-12",
+      projectId: "project-123",
+      projectStartDate: "2026-08-03",
+      scheduleAnchorDate: "2026-08-03",
+      scheduleVersion,
+      snapshotId,
+      taskCount: taskSchedules.length,
+      unscheduledExecutableTaskCount: 0,
+    },
+    taskSchedules,
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}

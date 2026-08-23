@@ -10,6 +10,7 @@ import React, {
 import type {
   ApiDuplicateWorkPackageInput,
   ApiDuplicateWorkPackageResult,
+  ApiForecastSnapshotDetail,
   ApiPlanningScheduleSnapshot,
   ApiPlanningTaskSchedule,
   ApiPlanningWorkspace,
@@ -72,6 +73,7 @@ type EditingCell = {
 type PlanningWorkspaceProps = {
   activeBaseline?: ApiProjectBaseline | null;
   currentForecast?: ApiPlanningScheduleSnapshot | null;
+  selectedHistoricalForecast?: ApiForecastSnapshotDetail | null;
   isSaving?: boolean;
   onCreateDependency: (input: {
     dependencyType: "FS" | "SS" | "FF";
@@ -422,8 +424,10 @@ export function PlanningWorkspace({
   onRemoveDuplicatedWorkPackage,
   onUpdateSchedule,
   projectMembers = [],
+  selectedHistoricalForecast = null,
   workspace,
 }: PlanningWorkspaceProps) {
+  void selectedHistoricalForecast;
   const [zoom, setZoom] = useState<ZoomMode>(() => readZoomPreference());
   const [gridWidth, setGridWidth] = useState(() =>
     readNumberPreference(preferenceKeys.splitWidth, defaultGridWidth),

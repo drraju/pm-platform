@@ -20,7 +20,10 @@ const actionButtonClassName =
 type ForecastHistoryDrawerProps = {
   onClose: () => void;
   onRegenerateForecast: () => void;
-  onSelectForecast: (forecast: ApiForecastHistoryItem) => void;
+  onSelectForecast: (
+    snapshotId: string,
+    forecast: ApiForecastHistoryItem,
+  ) => void;
   projectId: string;
 };
 
@@ -139,7 +142,7 @@ export function ForecastHistoryDrawer({
               forecast={item}
               key={item.snapshotId}
               onView={() => {
-                onSelectForecast(item);
+                onSelectForecast(item.snapshotId, item);
                 onClose();
               }}
             />

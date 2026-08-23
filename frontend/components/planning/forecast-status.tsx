@@ -16,8 +16,17 @@ import {
 } from "@/features/planning";
 
 type ForecastStatusProps = {
+  historicalForecastError?: string | null;
+  isHistoricalForecastLoading?: boolean;
+  onClearHistoricalForecast?: () => void;
+  onRetryHistoricalForecast?: () => void;
+  onSelectHistoricalForecast?: (
+    snapshotId: string,
+    forecast: ApiForecastHistoryItem,
+  ) => void;
   onWorkspaceRefresh: () => Promise<void>;
   projectId: string;
+  selectedHistoricalForecastSummary?: ApiForecastHistoryItem | null;
 };
 
 const primaryButtonClassName =
@@ -26,8 +35,14 @@ const secondaryButtonClassName =
   "inline-flex min-h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400";
 
 export function ForecastStatus({
+  historicalForecastError = null,
+  isHistoricalForecastLoading = false,
+  onClearHistoricalForecast = () => {},
+  onRetryHistoricalForecast = () => {},
+  onSelectHistoricalForecast = () => {},
   onWorkspaceRefresh,
   projectId,
+  selectedHistoricalForecastSummary = null,
 }: ForecastStatusProps) {
   const [overview, setOverview] = useState<ApiForecastOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +50,6 @@ export function ForecastStatus({
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [selectedForecast, setSelectedForecast] =
-    useState<ApiForecastHistoryItem | null>(null);
 
   const loadOverview = useCallback(async () => {
     setError(null);
@@ -92,9 +105,11 @@ export function ForecastStatus({
               className="text-sm font-semibold text-slate-950"
               id="forecast-status-heading"
             >
-              {selectedForecast ? "Historical Forecast" : "Forecast"}
+              {selectedHistoricalForecastSummary
+                ? "Historical Forecast"
+                : "Forecast"}
             </h2>
-            {selectedForecast ? (
+            {selectedHistoricalForecastSummary ? (
               <StatusBadge size="sm" tone="neutral">
                 Read only
               </StatusBadge>
@@ -105,8 +120,8 @@ export function ForecastStatus({
             ) : null}
           </div>
           <p className="mt-1 text-xs text-slate-600">
-            {selectedForecast
-              ? `Schedule v${selectedForecast.scheduleVersion} is selected for review. The Working Schedule below remains live.`
+            {selectedHistoricalForecastSummary
+              ? `Schedule v${selectedHistoricalForecastSummary.scheduleVersion} is selected for review. The Working Schedule below remains live.`
               : "Authoritative projection compared with the Active Baseline."}
           </p>
         </div>
@@ -115,10 +130,10 @@ export function ForecastStatus({
           className="flex flex-wrap items-center gap-2"
           role="group"
         >
-          {selectedForecast ? (
+          {selectedHistoricalForecastSummary ? (
             <button
               className={primaryButtonClassName}
-              onClick={() => setSelectedForecast(null)}
+              onClick={onClearHistoricalForecast}
               type="button"
             >
               Back to Current Forecast
@@ -172,8 +187,10 @@ export function ForecastStatus({
         />
       ) : null}
 
-      {selectedForecast ? (
-        <HistoricalForecastSelection forecast={selectedForecast} />
+      {selectedHistoricalForecastSummary ? (
+        <HistoricalForecastSelection
+          forecast={selectedHistoricalForecastSummary}
+        />
       ) : !isLoading && overview ? (
         <div className="mt-3 grid min-w-0 gap-3 border-t border-slate-100 pt-3 md:grid-cols-3 md:divide-x md:divide-slate-200">
           <div className="min-w-0 md:pr-4">
@@ -251,6 +268,32 @@ export function ForecastStatus({
         </div>
       ) : null}
 
+      {isHistoricalForecastLoading ? (
+        <LoadingState
+          className="mt-3 border-t border-slate-100 pt-3"
+          compact
+          label={`Loading Schedule v${selectedHistoricalForecastSummary?.scheduleVersion ?? ""} historical Forecast`}
+          rows={1}
+        />
+      ) : null}
+
+      {historicalForecastError ? (
+        <ErrorState
+          action={
+            <button
+              className={secondaryButtonClassName}
+              onClick={onRetryHistoricalForecast}
+              type="button"
+            >
+              Retry historical Forecast
+            </button>
+          }
+          className="mt-3"
+          message={historicalForecastError}
+          title="Unable to load historical Forecast"
+        />
+      ) : null}
+
       <div
         aria-live="polite"
         className={successMessage ? "mt-2 text-xs" : "sr-only"}
@@ -267,8 +310,10 @@ export function ForecastStatus({
         <ForecastHistoryDrawer
           onClose={() => setHistoryOpen(false)}
           onRegenerateForecast={() => void regenerateForecast()}
-          onSelectForecast={(forecast) =>
-            setSelectedForecast(forecast.isCurrent ? null : forecast)
+          onSelectForecast={(snapshotId, forecast) =>
+            forecast.isCurrent
+              ? onClearHistoricalForecast()
+              : onSelectHistoricalForecast(snapshotId, forecast)
           }
           projectId={projectId}
         />

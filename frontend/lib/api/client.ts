@@ -389,6 +389,24 @@ export type ApiForecastHistoryQuery = {
   limit?: number;
 };
 
+export type ApiForecastSnapshotTaskSchedule = {
+  readonly taskId: string | null;
+  readonly taskTitle: string;
+  readonly parentTaskId: string | null;
+  readonly taskKind: "standard" | "summary" | "milestone";
+  readonly milestoneCategory: ApiMilestoneCategory | null;
+  readonly scheduledStartDate: string | null;
+  readonly scheduledEndDate: string | null;
+  readonly durationDays: number | null;
+  readonly isCritical: boolean;
+  readonly sequenceNumber: number | null;
+};
+
+export type ApiForecastSnapshotDetail = {
+  readonly snapshot: Readonly<ApiForecastSummary>;
+  readonly taskSchedules: readonly ApiForecastSnapshotTaskSchedule[];
+};
+
 export type ApiDuplicateWorkPackageInput = {
   newSummaryName: string;
   copyChildTasks?: boolean;
@@ -1319,6 +1337,15 @@ export function getProjectForecastHistory(
   const queryString = searchParams.toString();
   return apiRequest<ApiForecastHistoryResponse>(
     `/projects/${projectId}/forecast/history${queryString ? `?${queryString}` : ""}`,
+  );
+}
+
+export function getProjectForecastSnapshot(
+  projectId: string,
+  snapshotId: string,
+) {
+  return apiRequest<ApiForecastSnapshotDetail>(
+    `/projects/${projectId}/forecast/history/${snapshotId}`,
   );
 }
 

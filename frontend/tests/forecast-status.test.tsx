@@ -301,6 +301,71 @@ describe("Forecast status", () => {
     expect(screen.getByText("Schedule v3")).toBeInTheDocument();
   });
 
+  it("keeps the authoritative Current Forecast when Current is selected from History", async () => {
+    const onSelectHistoricalForecast = vi.fn();
+    planningMocks.getProjectForecastHistory.mockResolvedValue({
+      hasMore: false,
+      items: [historyItem({ isCurrent: true, scheduleVersion: 3 })],
+      nextCursor: null,
+    });
+    renderStatus(vi.fn().mockResolvedValue(undefined), {
+      onSelectHistoricalForecast,
+    });
+    await screen.findByText("Schedule v3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "View Current" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Forecast" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Current")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Historical Forecast" }),
+    ).not.toBeInTheDocument();
+    expect(onSelectHistoricalForecast).not.toHaveBeenCalled();
+  });
+
+  it("announces localized historical loading without hiding current Planning state", async () => {
+    renderStatus(
+      vi.fn().mockResolvedValue(undefined),
+      {
+        isHistoricalForecastLoading: true,
+        selectedHistoricalForecastSummary: historyItem({ scheduleVersion: 2 }),
+      },
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Loading Schedule v2 historical Forecast",
+    );
+    expect(screen.getByText(/Working Schedule below remains live/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to Current Forecast" })).toBeEnabled();
+  });
+
+  it("offers an accessible retry for a historical snapshot error", async () => {
+    const onRetryHistoricalForecast = vi.fn();
+    renderStatus(
+      vi.fn().mockResolvedValue(undefined),
+      {
+        historicalForecastError:
+          "Historical Forecast could not be loaded. Try again.",
+        onRetryHistoricalForecast,
+        selectedHistoricalForecastSummary: historyItem({ scheduleVersion: 2 }),
+      },
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Historical Forecast could not be loaded. Try again.",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry historical Forecast" }),
+    );
+    expect(onRetryHistoricalForecast).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Working Schedule below remains live/)).toBeInTheDocument();
+  });
+
   it("uses responsive stacking without horizontal overflow", async () => {
     const { container } = renderStatus();
     await screen.findByText("Schedule v3");
@@ -315,12 +380,36 @@ describe("Forecast status", () => {
   });
 });
 
-function renderStatus(onWorkspaceRefresh = vi.fn().mockResolvedValue(undefined)) {
+function renderStatus(
+  onWorkspaceRefresh = vi.fn().mockResolvedValue(undefined),
+  props: Partial<React.ComponentProps<typeof ForecastStatus>> = {},
+) {
+  function ControlledForecastStatus() {
+    const [selectedForecast, setSelectedForecast] =
+      React.useState<ApiForecastHistoryItem | null>(
+        props.selectedHistoricalForecastSummary ?? null,
+      );
+
+    return (
+      <ForecastStatus
+        {...props}
+        onClearHistoricalForecast={() => {
+          setSelectedForecast(null);
+          props.onClearHistoricalForecast?.();
+        }}
+        onSelectHistoricalForecast={(snapshotId, forecast) => {
+          setSelectedForecast(forecast);
+          props.onSelectHistoricalForecast?.(snapshotId, forecast);
+        }}
+        onWorkspaceRefresh={onWorkspaceRefresh}
+        projectId="project-1"
+        selectedHistoricalForecastSummary={selectedForecast}
+      />
+    );
+  }
+
   return render(
-    <ForecastStatus
-      onWorkspaceRefresh={onWorkspaceRefresh}
-      projectId="project-1"
-    />,
+    <ControlledForecastStatus />,
   );
 }
 

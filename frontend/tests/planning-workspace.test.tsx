@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlanningWorkspace } from "@/components/planning/planning-workspace";
 import type {
+  ApiForecastSnapshotDetail,
   ApiPlanningScheduleSnapshot,
   ApiPlanningWorkspace,
   ApiProjectBaseline,
@@ -891,6 +892,64 @@ describe("PlanningWorkspace", () => {
     );
     expect(screen.queryByLabelText("Move Design schedule")).toBeNull();
     expect(screen.getByText("Design schedule")).toBeInTheDocument();
+  });
+
+  it("carries historical snapshot data without rendering a B3b-2 Gantt layer", () => {
+    const selectedHistoricalForecast: ApiForecastSnapshotDetail = {
+      snapshot: {
+        calculatedAt: "2026-06-20T09:00:00.000Z",
+        calculationStatus: "calculated",
+        criticalTaskCount: 1,
+        generatedBy: null,
+        isCurrent: false,
+        milestoneCount: 0,
+        projectFinishDate: "2026-07-08",
+        projectId: "project-1",
+        projectStartDate: "2026-07-01",
+        scheduleAnchorDate: "2026-07-01",
+        scheduleVersion: 1,
+        snapshotId: "historical-forecast-1",
+        taskCount: 1,
+        unscheduledExecutableTaskCount: 0,
+      },
+      taskSchedules: [
+        {
+          durationDays: 4,
+          isCritical: true,
+          milestoneCategory: null,
+          parentTaskId: null,
+          scheduledEndDate: "2026-07-08",
+          scheduledStartDate: "2026-07-05",
+          sequenceNumber: 1,
+          taskId: "task-2",
+          taskKind: "standard",
+          taskTitle: "Captured design schedule",
+        },
+      ],
+    };
+    render(
+      <PlanningWorkspace
+        currentForecast={currentForecast}
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        selectedHistoricalForecast={selectedHistoricalForecast}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByTestId("forecast-reference-layer")).toBeInTheDocument();
+    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    expect(
+      within(screen.getByRole("menu", { name: "Tracking layers" })).queryByText(
+        /Historical Forecast/,
+      ),
+    ).toBeNull();
+    expect(screen.getByLabelText("Tracking legend")).not.toHaveTextContent(
+      "Historical Forecast",
+    );
   });
 
   it("treats no Active Baseline as a valid Tracking state", () => {

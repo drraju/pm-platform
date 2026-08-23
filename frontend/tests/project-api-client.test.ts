@@ -35,6 +35,7 @@ import {
   getProjectBaselines,
   getProjectForecastHistory,
   getProjectForecastOverview,
+  getProjectForecastSnapshot,
   getProject,
   getProjectAssumptions,
   getProjectDependencies,
@@ -195,6 +196,52 @@ describe("project API client", () => {
       "http://localhost:3001/projects/project-1/forecast/history?limit=25&beforeVersion=26",
       expect.objectContaining({ cache: "no-store" }),
     );
+  });
+
+  it("gets one historical Forecast snapshot by its exact snapshotId", async () => {
+    const historicalSnapshot = {
+      snapshot: {
+        calculatedAt: "2026-08-22T10:00:00.000Z",
+        calculationStatus: "calculated",
+        criticalTaskCount: 1,
+        generatedBy: { id: "user-1", name: "Ram Datla" },
+        isCurrent: false,
+        milestoneCount: 0,
+        projectFinishDate: "2026-08-12",
+        projectId: "project-1",
+        projectStartDate: "2026-08-03",
+        scheduleAnchorDate: "2026-08-03",
+        scheduleVersion: 2,
+        snapshotId: "snapshot-exact-immutable-2",
+        taskCount: 1,
+        unscheduledExecutableTaskCount: 0,
+      },
+      taskSchedules: [
+        {
+          durationDays: 9,
+          isCritical: true,
+          milestoneCategory: null,
+          parentTaskId: null,
+          scheduledEndDate: "2026-08-12",
+          scheduledStartDate: "2026-08-03",
+          sequenceNumber: 1,
+          taskId: null,
+          taskKind: "standard",
+          taskTitle: "Webhook Integration",
+        },
+      ],
+    };
+    const fetchMock = mockFetch(historicalSnapshot);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getProjectForecastSnapshot("project-1", "snapshot-exact-immutable-2"),
+    ).resolves.toEqual(historicalSnapshot);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/forecast/history/snapshot-exact-immutable-2",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    expect(historicalSnapshot.taskSchedules[0]?.taskId).toBeNull();
   });
 
   it("preserves the authentication header", async () => {

@@ -205,6 +205,7 @@ describe("ForecastHistoryDrawer", () => {
     );
 
     expect(onSelectForecast).toHaveBeenCalledWith(
+      "snapshot-2",
       expect.objectContaining({ isCurrent: false, scheduleVersion: 2 }),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -219,7 +220,10 @@ function renderDrawer({
 }: {
   onClose?: () => void;
   onRegenerateForecast?: () => void;
-  onSelectForecast?: (forecast: ApiForecastHistoryItem) => void;
+  onSelectForecast?: (
+    snapshotId: string,
+    forecast: ApiForecastHistoryItem,
+  ) => void;
 } = {}) {
   return render(
     <ForecastHistoryDrawer
