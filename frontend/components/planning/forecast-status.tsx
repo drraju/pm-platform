@@ -356,8 +356,8 @@ function HistoricalForecastSelection({
           {formatGeneratedByHistory(forecast)}
         </p>
         <p className="mt-1 text-xs leading-5 text-slate-600">
-          Read-only summary. Historical Gantt rendering is reserved for the
-          comparison workspace.
+          Read-only historical snapshot. The Working Schedule below remains
+          live.
         </p>
       </div>
     </div>

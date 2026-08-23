@@ -290,7 +290,11 @@ describe("Forecast status", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Read only")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /activate/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Working Schedule below remains live/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Read-only historical snapshot. The Working Schedule below remains live.",
+      ),
+    ).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Back to Current Forecast" }),
@@ -340,7 +344,11 @@ describe("Forecast status", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Loading Schedule v2 historical Forecast",
     );
-    expect(screen.getByText(/Working Schedule below remains live/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Read-only historical snapshot. The Working Schedule below remains live.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back to Current Forecast" })).toBeEnabled();
   });
 
@@ -363,7 +371,11 @@ describe("Forecast status", () => {
       screen.getByRole("button", { name: "Retry historical Forecast" }),
     );
     expect(onRetryHistoricalForecast).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/Working Schedule below remains live/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Read-only historical snapshot. The Working Schedule below remains live.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("uses responsive stacking without horizontal overflow", async () => {
