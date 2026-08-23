@@ -1081,6 +1081,23 @@ describe("Projects List navigation", () => {
     expect(planningWorkspaceCapture.current?.workspace).toBe(workingSchedule);
     expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(1);
 
+    await waitFor(() => {
+      expect(screen.getByTestId("historical-reference-layer")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Tracking legend")).toHaveTextContent(
+      "Historical Forecast v2",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    const historicalToggle = screen.getByRole("menuitemcheckbox", {
+      name: "Historical Forecast version 2",
+    });
+    expect(historicalToggle).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(historicalToggle);
+    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+    fireEvent.click(historicalToggle);
+    expect(screen.getByTestId("historical-reference-layer")).toBeInTheDocument();
+    expect(planningMocks.getProjectForecastSnapshot).toHaveBeenCalledTimes(1);
+
     fireEvent.click(
       screen.getByRole("button", { name: "Back to Current Forecast" }),
     );
@@ -1089,6 +1106,15 @@ describe("Projects List navigation", () => {
         planningWorkspaceCapture.current?.selectedHistoricalForecast,
       ).toBeNull();
     });
+    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+    expect(screen.getByLabelText("Tracking legend")).not.toHaveTextContent(
+      "Historical Forecast",
+    );
+    expect(
+      screen.queryByRole("menuitemcheckbox", {
+        name: "Historical Forecast version 2",
+      }),
+    ).toBeNull();
   });
 
   it("retries a failed historical Forecast load and accepts an empty snapshot", async () => {

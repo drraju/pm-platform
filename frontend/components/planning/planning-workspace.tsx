@@ -37,7 +37,7 @@ import { PlanningDetailPanel } from "./planning-detail-panel";
 type ZoomMode = "day" | "week" | "month" | "quarter";
 type DragMode = "move" | "resize-end";
 type PlanningViewMode = "split" | "grid" | "timeline";
-type TrackingLayerId = "working" | "forecast" | "baseline";
+type TrackingLayerId = "working" | "forecast" | "historical" | "baseline";
 type GridColumnId =
   | "critical"
   | "durationDays"
@@ -427,7 +427,6 @@ export function PlanningWorkspace({
   selectedHistoricalForecast = null,
   workspace,
 }: PlanningWorkspaceProps) {
-  void selectedHistoricalForecast;
   const [zoom, setZoom] = useState<ZoomMode>(() => readZoomPreference());
   const [gridWidth, setGridWidth] = useState(() =>
     readNumberPreference(preferenceKeys.splitWidth, defaultGridWidth),
@@ -456,6 +455,9 @@ export function PlanningWorkspace({
   const trackingMenu = useDropdownMenu<HTMLSpanElement>();
   const [showWorkingSchedule, setShowWorkingSchedule] = useState(true);
   const [showCurrentForecast, setShowCurrentForecast] = useState(true);
+  const [showHistoricalForecast, setShowHistoricalForecast] = useState(
+    () => selectedHistoricalForecast !== null,
+  );
   const [showActiveBaseline, setShowActiveBaseline] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(workspace.schedules);
@@ -513,6 +515,10 @@ export function PlanningWorkspace({
   useEffect(() => {
     setLocalSchedules(workspace.schedules);
   }, [workspace.schedules]);
+
+  useEffect(() => {
+    setShowHistoricalForecast(selectedHistoricalForecast !== null);
+  }, [selectedHistoricalForecast]);
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") {
@@ -592,17 +598,31 @@ export function PlanningWorkspace({
     () => buildBaselineReferenceItems(activeBaseline),
     [activeBaseline],
   );
+  const historicalReferenceItems = useMemo(
+    () =>
+      buildHistoricalForecastReferenceItems(
+        selectedHistoricalForecast,
+        localSchedules,
+      ),
+    [localSchedules, selectedHistoricalForecast],
+  );
+  const historicalForecastLabel = selectedHistoricalForecast
+    ? `Historical Forecast v${selectedHistoricalForecast.snapshot.scheduleVersion}`
+    : null;
   const enabledTimelineItems = useMemo(
     () => [
       ...(showWorkingSchedule ? workingVisualItems : []),
       ...(showCurrentForecast ? forecastReferenceItems : []),
+      ...(showHistoricalForecast ? historicalReferenceItems : []),
       ...(showActiveBaseline ? baselineReferenceItems : []),
     ],
     [
       baselineReferenceItems,
       forecastReferenceItems,
+      historicalReferenceItems,
       showActiveBaseline,
       showCurrentForecast,
+      showHistoricalForecast,
       showWorkingSchedule,
       workingVisualItems,
     ],
@@ -614,6 +634,10 @@ export function PlanningWorkspace({
   const baselineItemsByTaskId = useMemo(
     () => indexReferenceItemsByTaskId(baselineReferenceItems),
     [baselineReferenceItems],
+  );
+  const historicalItemsByTaskId = useMemo(
+    () => indexReferenceItemsByTaskId(historicalReferenceItems),
+    [historicalReferenceItems],
   );
   const timeline = useMemo(
     () => buildTimeline(enabledTimelineItems, zoom, fitTimelineWidth),
@@ -2547,6 +2571,16 @@ export function PlanningWorkspace({
                       setShowCurrentForecast((isVisible) => !isVisible)
                     }
                   />
+                  {historicalForecastLabel ? (
+                    <TrackingMenuItem
+                      accessibleLabel={`Historical Forecast version ${selectedHistoricalForecast?.snapshot.scheduleVersion}`}
+                      checked={showHistoricalForecast}
+                      label={historicalForecastLabel}
+                      onChange={() =>
+                        setShowHistoricalForecast((isVisible) => !isVisible)
+                      }
+                    />
+                  ) : null}
                   <TrackingMenuItem
                     checked={showActiveBaseline}
                     label="Active Baseline"
@@ -2679,6 +2713,12 @@ export function PlanningWorkspace({
         >
           <TrackingLegendItem label="Working Schedule" layer="working" />
           <TrackingLegendItem label="Current Forecast" layer="forecast" />
+          {historicalForecastLabel ? (
+            <TrackingLegendItem
+              label={historicalForecastLabel}
+              layer="historical"
+            />
+          ) : null}
           <TrackingLegendItem label="Active Baseline" layer="baseline" />
         </div>
         {hierarchyError ? (
@@ -2950,6 +2990,16 @@ export function PlanningWorkspace({
                           displayRows={displayRows}
                           itemsByTaskId={forecastItemsByTaskId}
                           layer="forecast"
+                          rowMetrics={rowMetrics.rows}
+                          timeline={timeline}
+                        />
+                      ) : null}
+                      {showHistoricalForecast && historicalForecastLabel ? (
+                        <ReadonlyTrackingLayer
+                          displayRows={displayRows}
+                          itemsByTaskId={historicalItemsByTaskId}
+                          layer="historical"
+                          layerLabel={historicalForecastLabel}
                           rowMetrics={rowMetrics.rows}
                           timeline={timeline}
                         />
@@ -5180,16 +5230,19 @@ function getSummaryTaskIds(schedules: ApiPlanningTaskSchedule[]) {
 }
 
 function TrackingMenuItem({
+  accessibleLabel,
   checked,
   label,
   onChange,
 }: {
+  accessibleLabel?: string;
   checked: boolean;
   label: string;
   onChange: () => void;
 }) {
   return (
     <button
+      aria-label={accessibleLabel}
       aria-checked={checked}
       className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand/30"
       onClick={onChange}
@@ -5214,7 +5267,9 @@ function TrackingLegendItem({
       ? "h-2.5 w-7 rounded-sm bg-teal-700"
       : layer === "forecast"
         ? "h-1 w-7 rounded-sm border border-sky-700 bg-sky-100"
-        : "h-1 w-7 border border-dashed border-amber-700 bg-amber-50";
+        : layer === "historical"
+          ? "h-1 w-7 rounded-sm border border-dotted border-indigo-700 bg-indigo-50"
+          : "h-1 w-7 border border-dashed border-amber-700 bg-amber-50";
   return (
     <span className="inline-flex items-center gap-1.5">
       <span aria-hidden className={sampleClassName} />
@@ -5227,20 +5282,35 @@ function ReadonlyTrackingLayer({
   displayRows,
   itemsByTaskId,
   layer,
+  layerLabel: providedLayerLabel,
   rowMetrics,
   timeline,
 }: {
   displayRows: PlanningDisplayRow[];
   itemsByTaskId: Map<string, GanttVisualItem>;
-  layer: "forecast" | "baseline";
+  layer: "forecast" | "historical" | "baseline";
+  layerLabel?: string;
   rowMetrics: PlanningRowMetric[];
   timeline: ReturnType<typeof buildTimeline>;
 }) {
   const layerLabel =
-    layer === "forecast" ? "Current Forecast" : "Active Baseline";
-  const stroke = layer === "forecast" ? "#0369a1" : "#a16207";
-  const fill = layer === "forecast" ? "#e0f2fe" : "#fffbeb";
-  const strokeDasharray = layer === "baseline" ? "4 2" : undefined;
+    providedLayerLabel ??
+    (layer === "forecast" ? "Current Forecast" : "Active Baseline");
+  const stroke =
+    layer === "forecast"
+      ? "#0369a1"
+      : layer === "historical"
+        ? "#4338ca"
+        : "#a16207";
+  const fill =
+    layer === "forecast"
+      ? "#e0f2fe"
+      : layer === "historical"
+        ? "#eef2ff"
+        : "#fffbeb";
+  const strokeDasharray =
+    layer === "historical" ? "2 2" : layer === "baseline" ? "4 2" : undefined;
+  const renderedTaskIds = new Set<string>();
 
   return (
     <g
@@ -5255,9 +5325,10 @@ function ReadonlyTrackingLayer({
         const taskId = displayRow.row.schedule.taskId;
         const item = itemsByTaskId.get(taskId);
         const metric = rowMetrics[index];
-        if (!item || !metric) {
+        if (!item || !metric || renderedTaskIds.has(taskId)) {
           return null;
         }
+        renderedTaskIds.add(taskId);
         const geometry = getBarGeometry(item, timeline);
         if (!geometry) {
           return null;
@@ -5265,7 +5336,9 @@ function ReadonlyTrackingLayer({
         const centerY =
           layer === "forecast"
             ? metric.barY - 8
-            : metric.barY - 3;
+            : layer === "historical"
+              ? metric.barY + barHeight + 4
+              : metric.barY - 3;
         const commonProps = {
           "aria-label": `${layerLabel} reference ${item.title}`,
           "data-finish-date": item.finishDate ?? undefined,
@@ -5379,6 +5452,40 @@ function buildBaselineReferenceItems(
       title: task.taskTitle,
     };
   });
+}
+
+export function buildHistoricalForecastReferenceItems(
+  snapshot: ApiForecastSnapshotDetail | null,
+  currentSchedules: ApiPlanningTaskSchedule[],
+): GanttVisualItem[] {
+  if (!snapshot || snapshot.snapshot.calculationStatus !== "calculated") {
+    return [];
+  }
+
+  const currentTaskIds = new Set(
+    currentSchedules.map((schedule) => schedule.taskId),
+  );
+  const itemsByTaskId = new Map<string, GanttVisualItem>();
+  snapshot.taskSchedules.forEach((schedule, index) => {
+    if (!schedule.taskId || !currentTaskIds.has(schedule.taskId)) {
+      return;
+    }
+    const dates = normalizeReferenceDates(
+      schedule.scheduledStartDate,
+      schedule.scheduledEndDate,
+      schedule.taskKind,
+    );
+    itemsByTaskId.set(schedule.taskId, {
+      ...dates,
+      layer: "historical",
+      milestoneCategory: schedule.milestoneCategory,
+      renderKey: `historical:${snapshot.snapshot.snapshotId}:${schedule.taskId}:${index}`,
+      taskId: schedule.taskId,
+      taskKind: schedule.taskKind,
+      title: schedule.taskTitle,
+    });
+  });
+  return [...itemsByTaskId.values()];
 }
 
 function normalizeReferenceDates(

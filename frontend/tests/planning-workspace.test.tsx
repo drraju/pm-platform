@@ -7,7 +7,10 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PlanningWorkspace } from "@/components/planning/planning-workspace";
+import {
+  buildHistoricalForecastReferenceItems,
+  PlanningWorkspace,
+} from "@/components/planning/planning-workspace";
 import type {
   ApiForecastSnapshotDetail,
   ApiPlanningScheduleSnapshot,
@@ -245,6 +248,87 @@ const activeBaseline: ApiProjectBaseline = {
     },
   ],
   versionNumber: 2,
+};
+
+const historicalForecast: ApiForecastSnapshotDetail = {
+  snapshot: {
+    calculatedAt: "2026-06-20T09:00:00.000Z",
+    calculationStatus: "calculated",
+    criticalTaskCount: 1,
+    generatedBy: null,
+    isCurrent: false,
+    milestoneCount: 1,
+    projectFinishDate: "2026-06-30",
+    projectId: "project-1",
+    projectStartDate: "2026-06-01",
+    scheduleAnchorDate: "2026-06-01",
+    scheduleVersion: 7,
+    snapshotId: "historical-forecast-7",
+    taskCount: 5,
+    unscheduledExecutableTaskCount: 0,
+  },
+  taskSchedules: [
+    {
+      durationDays: 29,
+      isCritical: false,
+      milestoneCategory: null,
+      parentTaskId: "captured-parent-that-no-longer-exists",
+      scheduledEndDate: "2026-06-30",
+      scheduledStartDate: "2026-06-01",
+      sequenceNumber: 88,
+      taskId: "task-1",
+      taskKind: "summary",
+      taskTitle: "Captured summary title",
+    },
+    {
+      durationDays: 4,
+      isCritical: true,
+      milestoneCategory: null,
+      parentTaskId: "captured-parent-that-no-longer-exists",
+      scheduledEndDate: "2026-06-08",
+      scheduledStartDate: "2026-06-04",
+      sequenceNumber: 99,
+      taskId: "task-2",
+      taskKind: "standard",
+      taskTitle: "Historical title differs from today",
+    },
+    {
+      durationDays: 0,
+      isCritical: false,
+      milestoneCategory: "decision",
+      parentTaskId: null,
+      scheduledEndDate: "2026-06-15",
+      scheduledStartDate: null,
+      sequenceNumber: 3,
+      taskId: "task-3",
+      taskKind: "milestone",
+      taskTitle: "Historical decision gate",
+    },
+    {
+      durationDays: 1,
+      isCritical: false,
+      milestoneCategory: null,
+      parentTaskId: "task-1",
+      scheduledEndDate: "2026-06-11",
+      scheduledStartDate: "2026-06-10",
+      sequenceNumber: 2,
+      taskId: null,
+      taskKind: "standard",
+      taskTitle: "Design schedule",
+    },
+    {
+      durationDays: 1,
+      isCritical: false,
+      milestoneCategory: null,
+      parentTaskId: "task-1",
+      scheduledEndDate: "2026-06-13",
+      scheduledStartDate: "2026-06-12",
+      sequenceNumber: 2,
+      taskId: "deleted-task",
+      taskKind: "standard",
+      taskTitle: "Design schedule",
+    },
+  ],
 };
 
 const projectMembers: ApiProjectMember[] = [
@@ -894,38 +978,119 @@ describe("PlanningWorkspace", () => {
     expect(screen.getByText("Design schedule")).toBeInTheDocument();
   });
 
-  it("carries historical snapshot data without rendering a B3b-2 Gantt layer", () => {
-    const selectedHistoricalForecast: ApiForecastSnapshotDetail = {
+  it("renders the selected historical Forecast through strict taskId matching", () => {
+    const onUpdateSchedule = vi.fn();
+    render(
+      <PlanningWorkspace
+        activeBaseline={activeBaseline}
+        currentForecast={currentForecast}
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={onUpdateSchedule}
+        selectedHistoricalForecast={historicalForecast}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByTestId("forecast-reference-layer")).toBeInTheDocument();
+    expect(screen.queryByTestId("baseline-reference-layer")).toBeNull();
+    const layer = screen.getByTestId("historical-reference-layer");
+    expect(layer).toHaveAttribute("pointer-events", "none");
+    expect(layer.childElementCount).toBe(3);
+
+    const summary = screen.getByTestId("historical-reference-task-1");
+    expect(summary).toHaveAttribute("data-task-kind", "summary");
+    expect(summary).toHaveAttribute("data-start-date", "2026-06-01");
+    expect(summary).toHaveAttribute("data-finish-date", "2026-06-30");
+
+    const task = screen.getByTestId("historical-reference-task-2");
+    expect(task).toHaveAttribute("data-task-id", "task-2");
+    expect(task).toHaveAttribute("data-start-date", "2026-06-04");
+    expect(task).toHaveAttribute("data-finish-date", "2026-06-08");
+    expect(task).not.toHaveAttribute("tabindex");
+
+    const milestone = screen.getByTestId("historical-reference-task-3");
+    expect(milestone).toHaveAttribute("data-task-kind", "milestone");
+    expect(milestone).toHaveAttribute("data-milestone-category", "decision");
+    expect(milestone).toHaveAttribute("data-start-date", "2026-06-15");
+    expect(milestone).toHaveAttribute("data-finish-date", "2026-06-15");
+
+    expect(screen.queryByTestId("historical-reference-deleted-task")).toBeNull();
+    expect(
+      screen.queryByLabelText("Historical Forecast v7 reference Design schedule"),
+    ).toBeNull();
+    expect(screen.queryByText("captured-parent-that-no-longer-exists")).toBeNull();
+
+    fireEvent.pointerDown(task, { clientX: 100 });
+    fireEvent.pointerUp(screen.getByLabelText("Interactive Gantt timeline"), {
+      clientX: 180,
+    });
+    expect(onUpdateSchedule).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Move Design schedule")).toBeInTheDocument();
+    expect(screen.getByLabelText("Resize Design schedule")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    const menu = screen.getByRole("menu", { name: "Tracking layers" });
+    expect(
+      within(menu).getByRole("menuitemcheckbox", {
+        name: "Historical Forecast version 7",
+      }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByLabelText("Tracking legend")).toHaveTextContent(
+      "Historical Forecast v7",
+    );
+
+    fireEvent.click(
+      within(menu).getByRole("menuitemcheckbox", { name: "Active Baseline" }),
+    );
+    expect(screen.getByTestId("baseline-reference-layer")).toBeInTheDocument();
+    expect(screen.getByTestId("historical-reference-layer")).toBeInTheDocument();
+    expect(screen.getByTestId("forecast-reference-layer")).toBeInTheDocument();
+  });
+
+  it("does not offer or render Historical Forecast without a selection", () => {
+    render(
+      <PlanningWorkspace
+        currentForecast={currentForecast}
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+    expect(screen.getByLabelText("Tracking legend")).not.toHaveTextContent(
+      "Historical Forecast",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    expect(
+      within(screen.getByRole("menu", { name: "Tracking layers" })).queryByText(
+        /Historical Forecast/,
+      ),
+    ).toBeNull();
+  });
+
+  it("toggles historical dates in the shared timeline without clearing the snapshot", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-05T00:00:00Z"));
+    const distantHistoricalForecast: ApiForecastSnapshotDetail = {
+      ...historicalForecast,
       snapshot: {
-        calculatedAt: "2026-06-20T09:00:00.000Z",
-        calculationStatus: "calculated",
-        criticalTaskCount: 1,
-        generatedBy: null,
-        isCurrent: false,
-        milestoneCount: 0,
-        projectFinishDate: "2026-07-08",
-        projectId: "project-1",
-        projectStartDate: "2026-07-01",
-        scheduleAnchorDate: "2026-07-01",
-        scheduleVersion: 1,
-        snapshotId: "historical-forecast-1",
-        taskCount: 1,
-        unscheduledExecutableTaskCount: 0,
+        ...historicalForecast.snapshot,
+        projectFinishDate: "2028-07-08",
       },
-      taskSchedules: [
-        {
-          durationDays: 4,
-          isCritical: true,
-          milestoneCategory: null,
-          parentTaskId: null,
-          scheduledEndDate: "2026-07-08",
-          scheduledStartDate: "2026-07-05",
-          sequenceNumber: 1,
-          taskId: "task-2",
-          taskKind: "standard",
-          taskTitle: "Captured design schedule",
-        },
-      ],
+      taskSchedules: historicalForecast.taskSchedules.map((schedule) =>
+        schedule.taskId === "task-2"
+          ? {
+              ...schedule,
+              scheduledEndDate: "2028-07-08",
+              scheduledStartDate: "2028-07-01",
+            }
+          : schedule,
+      ),
     };
     render(
       <PlanningWorkspace
@@ -934,21 +1099,177 @@ describe("PlanningWorkspace", () => {
         onCreateTask={vi.fn()}
         onDeleteDependency={vi.fn()}
         onUpdateSchedule={vi.fn()}
-        selectedHistoricalForecast={selectedHistoricalForecast}
+        selectedHistoricalForecast={distantHistoricalForecast}
         workspace={workspace}
       />,
     );
 
-    expect(screen.getByTestId("forecast-reference-layer")).toBeInTheDocument();
-    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+    const timeline = screen.getByLabelText("Interactive Gantt timeline");
+    const historicalWidth = Number(timeline.getAttribute("width"));
+    expect(historicalWidth).toBeGreaterThan(900);
     fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
-    expect(
-      within(screen.getByRole("menu", { name: "Tracking layers" })).queryByText(
-        /Historical Forecast/,
-      ),
-    ).toBeNull();
+    const toggle = screen.getByRole("menuitemcheckbox", {
+      name: "Historical Forecast version 7",
+    });
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+    expect(Number(timeline.getAttribute("width"))).toBeLessThan(
+      historicalWidth,
+    );
+
+    fireEvent.click(toggle);
+    expect(screen.getByTestId("historical-reference-layer")).toBeInTheDocument();
+    expect(Number(timeline.getAttribute("width"))).toBe(historicalWidth);
+  });
+
+  it("automatically enables a replacement version and clears stale controls", async () => {
+    const props = {
+      currentForecast,
+      onCreateDependency: vi.fn(),
+      onCreateTask: vi.fn(),
+      onDeleteDependency: vi.fn(),
+      onUpdateSchedule: vi.fn(),
+      workspace,
+    };
+    const { rerender } = render(
+      <PlanningWorkspace
+        {...props}
+        selectedHistoricalForecast={historicalForecast}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", {
+        name: "Historical Forecast version 7",
+      }),
+    );
+    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+
+    const replacement = {
+      ...historicalForecast,
+      snapshot: {
+        ...historicalForecast.snapshot,
+        scheduleVersion: 2,
+        snapshotId: "historical-forecast-2",
+      },
+    };
+    rerender(
+      <PlanningWorkspace
+        {...props}
+        selectedHistoricalForecast={replacement}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("historical-reference-layer")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Tracking legend")).toHaveTextContent(
+      "Historical Forecast v2",
+    );
+    expect(screen.getByLabelText("Tracking legend")).not.toHaveTextContent(
+      "Historical Forecast v7",
+    );
+
+    rerender(
+      <PlanningWorkspace {...props} selectedHistoricalForecast={null} />,
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
+    });
     expect(screen.getByLabelText("Tracking legend")).not.toHaveTextContent(
       "Historical Forecast",
+    );
+    expect(
+      screen.queryByRole("menuitemcheckbox", {
+        name: "Historical Forecast version 2",
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps null historical dates safely non-renderable", () => {
+    const nullDateForecast: ApiForecastSnapshotDetail = {
+      ...historicalForecast,
+      taskSchedules: [
+        {
+          ...historicalForecast.taskSchedules[1],
+          scheduledEndDate: null,
+          scheduledStartDate: null,
+        },
+      ],
+    };
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        selectedHistoricalForecast={nullDateForecast}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByTestId("historical-reference-layer")).toBeEmptyDOMElement();
+    expect(screen.getAllByRole("row")).toHaveLength(3);
+  });
+
+  it("matches 500 historical rows through the linear presentation adapter", () => {
+    const currentSchedules = Array.from({ length: 500 }, (_, index) => ({
+      ...workspace.schedules[1],
+      id: `schedule-${index}`,
+      taskId: `task-${index}`,
+    }));
+    const largeSnapshot: ApiForecastSnapshotDetail = {
+      ...historicalForecast,
+      taskSchedules: [
+        ...Array.from({ length: 500 }, (_, index) => ({
+          ...historicalForecast.taskSchedules[1],
+          taskId: `task-${index}`,
+          taskTitle: `Captured task ${index}`,
+        })),
+        {
+          ...historicalForecast.taskSchedules[1],
+          taskId: "task-499",
+          taskTitle: "Captured task 499",
+        },
+      ],
+    };
+
+    const items = buildHistoricalForecastReferenceItems(
+      largeSnapshot,
+      currentSchedules,
+    );
+
+    expect(items).toHaveLength(500);
+    expect(items[499]).toMatchObject({
+      layer: "historical",
+      taskId: "task-499",
+      title: "Captured task 499",
+    });
+  });
+
+  it("keeps historical tracking accessible on a compact viewport", () => {
+    setViewportWidth(768);
+    render(
+      <PlanningWorkspace
+        onCreateDependency={vi.fn()}
+        onCreateTask={vi.fn()}
+        onDeleteDependency={vi.fn()}
+        onUpdateSchedule={vi.fn()}
+        selectedHistoricalForecast={historicalForecast}
+        workspace={workspace}
+      />,
+    );
+
+    const tracking = screen.getByRole("button", { name: /^Tracking/ });
+    tracking.focus();
+    fireEvent.keyDown(tracking, { key: "Enter" });
+    fireEvent.click(tracking);
+    expect(
+      screen.getByRole("menuitemcheckbox", {
+        name: "Historical Forecast version 7",
+      }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Scrollable timeline pane")).toHaveClass(
+      "overflow-x-auto",
     );
   });
 
