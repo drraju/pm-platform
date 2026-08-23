@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { And, EntityManager, LessThan, MoreThan, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import { signedUtcCalendarDayDifference } from '../../common/dates/signed-utc-calendar-day-difference';
+import { MilestoneCategory } from '../../common/enums/milestone-category.enum';
 import { PlanningCalculationStatus } from '../../common/enums/planning-calculation-status.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { PlanningScheduleSnapshot } from '../planning/entities/planning-schedule-snapshot.entity';
@@ -20,6 +21,8 @@ import {
   ForecastHistoryItemDto,
   ForecastHistoryResponseDto,
   ForecastOverviewDto,
+  ForecastSnapshotDetailDto,
+  ForecastSnapshotTaskScheduleDto,
   ForecastSummaryDto,
   WorkingOutputState,
 } from './dto/forecast-read.dto';
@@ -69,6 +72,23 @@ type ForecastSummaryRow = {
   snapshot_id: string;
   task_count: number | string;
   unscheduled_executable_task_count: number | string;
+};
+
+type ForecastSnapshotSummaryRow = ForecastSummaryRow & {
+  is_current: boolean | string;
+};
+
+type ForecastSnapshotTaskScheduleRow = {
+  duration_days: number | string | null;
+  is_critical: boolean;
+  milestone_category: MilestoneCategory | null;
+  parent_task_id: string | null;
+  scheduled_end_date: Date | string | null;
+  scheduled_start_date: Date | string | null;
+  sequence_number: number | string | null;
+  task_id: string | null;
+  task_kind: TaskKind;
+  task_title: string;
 };
 
 @Injectable()
@@ -264,6 +284,79 @@ export class ForecastQueryService {
             hasMore && items.length > 0
               ? items[items.length - 1].scheduleVersion
               : null,
+        };
+      },
+    );
+  }
+
+  async getSnapshotDetail(
+    projectId: string,
+    snapshotId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<ForecastSnapshotDetailDto> {
+    await this.ensureForecastVisible(projectId, actor);
+
+    return this.projectsRepository.manager.transaction(
+      'REPEATABLE READ',
+      async (manager) => {
+        await manager.query('SET TRANSACTION READ ONLY');
+
+        const summaryRow = await this.createForecastSummaryQuery(manager)
+          .addSelect(
+            `NOT EXISTS (
+              SELECT 1
+              FROM planning_schedule_snapshots AS newer_snapshot
+              WHERE newer_snapshot.project_id = "snapshot"."project_id"
+                AND newer_snapshot.calculation_status = :calculatedStatus
+                AND newer_snapshot.deleted_at IS NULL
+                AND newer_snapshot.schedule_version > "snapshot"."schedule_version"
+            )`,
+            'is_current',
+          )
+          .andWhere('snapshot.id = :snapshotId', { snapshotId })
+          .andWhere('snapshot.projectId = :projectId', { projectId })
+          .andWhere('snapshot.calculationStatus = :calculatedStatus', {
+            calculatedStatus: PlanningCalculationStatus.Calculated,
+          })
+          .andWhere('snapshot.scheduleVersion > 0')
+          .getRawOne<ForecastSnapshotSummaryRow>();
+
+        if (!summaryRow) {
+          throw new NotFoundException(
+            `Forecast snapshot ${snapshotId} not found for project ${projectId}`,
+          );
+        }
+
+        const taskRows = await manager
+          .getRepository(PlanningTaskSchedule)
+          .createQueryBuilder('schedule')
+          .select('schedule.taskId', 'task_id')
+          .addSelect('schedule.taskTitle', 'task_title')
+          .addSelect('schedule.parentTaskId', 'parent_task_id')
+          .addSelect('schedule.taskKind', 'task_kind')
+          .addSelect('schedule.milestoneCategory', 'milestone_category')
+          .addSelect('schedule.scheduledStartDate', 'scheduled_start_date')
+          .addSelect('schedule.scheduledEndDate', 'scheduled_end_date')
+          .addSelect('schedule.durationDays', 'duration_days')
+          .addSelect('schedule.isCritical', 'is_critical')
+          .addSelect('schedule.sequenceNumber', 'sequence_number')
+          .where('schedule.snapshotId = :snapshotId', { snapshotId })
+          .andWhere('schedule.deletedAt IS NULL')
+          .orderBy('schedule.sequenceNumber', 'ASC', 'NULLS LAST')
+          .addOrderBy('schedule.createdAt', 'ASC')
+          .addOrderBy('schedule.id', 'ASC')
+          .getRawMany<ForecastSnapshotTaskScheduleRow>();
+
+        return {
+          snapshot: this.mapForecastSummary(
+            summaryRow,
+            this.toBoolean(summaryRow.is_current)
+              ? summaryRow.snapshot_id
+              : null,
+          ),
+          taskSchedules: taskRows.map((row) =>
+            this.mapForecastSnapshotTaskSchedule(row),
+          ),
         };
       },
     );
@@ -508,6 +601,29 @@ export class ForecastQueryService {
         row.unscheduled_executable_task_count,
       ),
     };
+  }
+
+  private mapForecastSnapshotTaskSchedule(
+    row: ForecastSnapshotTaskScheduleRow,
+  ): ForecastSnapshotTaskScheduleDto {
+    return {
+      durationDays:
+        row.duration_days === null ? null : Number(row.duration_days),
+      isCritical: row.is_critical,
+      milestoneCategory: row.milestone_category,
+      parentTaskId: row.parent_task_id,
+      scheduledEndDate: this.toDateString(row.scheduled_end_date),
+      scheduledStartDate: this.toDateString(row.scheduled_start_date),
+      sequenceNumber:
+        row.sequence_number === null ? null : Number(row.sequence_number),
+      taskId: row.task_id,
+      taskKind: row.task_kind,
+      taskTitle: row.task_title,
+    };
+  }
+
+  private toBoolean(value: boolean | string): boolean {
+    return value === true || value === 'true';
   }
 
   private toIsoString(value: Date | string | null): string | null {

@@ -485,6 +485,242 @@ describe('Forecast Overview and official History read APIs', () => {
     expect(result.items[0].taskCount).toBe(1);
   });
 
+  it('returns the complete persisted task-level contract without reading current Task values', async () => {
+    const projectId = await insertProject('Historical snapshot detail project');
+    const summaryTaskId = await insertTask(projectId, {
+      kind: 'summary',
+      title: 'Current summary title',
+    });
+    const standardTaskId = await insertTask(projectId, {
+      parentTaskId: summaryTaskId,
+      title: 'Original live title',
+    });
+    const milestoneTaskId = await insertTask(projectId, {
+      kind: 'milestone',
+      milestoneCategory: 'release',
+      parentTaskId: summaryTaskId,
+      title: 'Current milestone title',
+    });
+    const historicalId = await insertSnapshot(projectId, {
+      finish: '2026-10-16',
+      start: '2026-08-03',
+      status: 'calculated',
+      version: 2,
+    });
+    await insertSchedule(projectId, historicalId, {
+      duration: 74,
+      kind: 'summary',
+      scheduledEnd: '2026-10-16',
+      scheduledStart: '2026-08-03',
+      sequence: 1,
+      taskId: summaryTaskId,
+      title: 'Captured summary title',
+    });
+    await insertSchedule(projectId, historicalId, {
+      critical: true,
+      duration: 9,
+      kind: 'standard',
+      parentTaskId: summaryTaskId,
+      scheduledEnd: '2026-09-10',
+      scheduledStart: '2026-09-01',
+      sequence: 2,
+      taskId: standardTaskId,
+      title: 'Original live title',
+    });
+    await insertSchedule(projectId, historicalId, {
+      critical: true,
+      duration: 0,
+      kind: 'milestone',
+      milestoneCategory: 'release',
+      parentTaskId: summaryTaskId,
+      scheduledEnd: '2026-10-16',
+      scheduledStart: '2026-10-16',
+      sequence: 3,
+      taskId: milestoneTaskId,
+      title: 'Captured release gate',
+    });
+    await insertSchedule(projectId, historicalId, {
+      duration: null,
+      kind: 'standard',
+      parentTaskId: null,
+      scheduledEnd: null,
+      scheduledStart: null,
+      sequence: null,
+      taskId: null,
+      title: 'Hard-deleted captured task',
+    });
+    await testDataSource.query('UPDATE tasks SET title = $1 WHERE id = $2', [
+      'Renamed current Task',
+      standardTaskId,
+    ]);
+    await insertSnapshot(projectId, {
+      finish: '2026-10-20',
+      start: '2026-08-03',
+      status: 'calculated',
+      version: 3,
+    });
+
+    const result = await service.getSnapshotDetail(
+      projectId,
+      historicalId,
+      actor,
+    );
+
+    expect(result.snapshot).toEqual({
+      calculatedAt: '2026-08-02T10:00:00.000Z',
+      calculationStatus: 'calculated',
+      criticalTaskCount: 2,
+      generatedBy: { id: userId, name: 'Ada Lovelace' },
+      isCurrent: false,
+      milestoneCount: 1,
+      projectFinishDate: '2026-10-16',
+      projectId,
+      projectStartDate: '2026-08-03',
+      scheduleAnchorDate: '2026-08-01',
+      scheduleVersion: 2,
+      snapshotId: historicalId,
+      taskCount: 4,
+      unscheduledExecutableTaskCount: 1,
+    });
+    expect(result.taskSchedules).toEqual([
+      {
+        durationDays: 74,
+        isCritical: false,
+        milestoneCategory: null,
+        parentTaskId: null,
+        scheduledEndDate: '2026-10-16',
+        scheduledStartDate: '2026-08-03',
+        sequenceNumber: 1,
+        taskId: summaryTaskId,
+        taskKind: 'summary',
+        taskTitle: 'Captured summary title',
+      },
+      {
+        durationDays: 9,
+        isCritical: true,
+        milestoneCategory: null,
+        parentTaskId: summaryTaskId,
+        scheduledEndDate: '2026-09-10',
+        scheduledStartDate: '2026-09-01',
+        sequenceNumber: 2,
+        taskId: standardTaskId,
+        taskKind: 'standard',
+        taskTitle: 'Original live title',
+      },
+      {
+        durationDays: 0,
+        isCritical: true,
+        milestoneCategory: 'release',
+        parentTaskId: summaryTaskId,
+        scheduledEndDate: '2026-10-16',
+        scheduledStartDate: '2026-10-16',
+        sequenceNumber: 3,
+        taskId: milestoneTaskId,
+        taskKind: 'milestone',
+        taskTitle: 'Captured release gate',
+      },
+      {
+        durationDays: null,
+        isCritical: false,
+        milestoneCategory: null,
+        parentTaskId: null,
+        scheduledEndDate: null,
+        scheduledStartDate: null,
+        sequenceNumber: null,
+        taskId: null,
+        taskKind: 'standard',
+        taskTitle: 'Hard-deleted captured task',
+      },
+    ]);
+  });
+
+  it('returns the current calculated snapshot through the same read-only resource', async () => {
+    const projectId = await insertProject('Current snapshot detail project');
+    const snapshotId = await insertSnapshot(projectId, {
+      status: 'calculated',
+      version: 7,
+    });
+
+    const result = await service.getSnapshotDetail(
+      projectId,
+      snapshotId,
+      actor,
+    );
+
+    expect(result.snapshot).toEqual(
+      expect.objectContaining({
+        isCurrent: true,
+        scheduleVersion: 7,
+        snapshotId,
+      }),
+    );
+    expect(result.taskSchedules).toEqual([]);
+  });
+
+  it('rejects snapshots that are deleted, non-calculated, operational, absent, or owned by another project', async () => {
+    const projectId = await insertProject('Snapshot eligibility project');
+    const otherProjectId = await insertProject('Other snapshot project');
+    const ineligibleIds = [
+      await insertSnapshot(projectId, { status: 'pending', version: 1 }),
+      await insertSnapshot(projectId, { status: 'failed', version: 2 }),
+      await insertSnapshot(projectId, { status: 'calculated', version: 0 }),
+      await insertSnapshot(projectId, {
+        deleted: true,
+        status: 'calculated',
+        version: 3,
+      }),
+      await insertSnapshot(otherProjectId, {
+        status: 'calculated',
+        version: 1,
+      }),
+      randomUUID(),
+    ];
+
+    for (const snapshotId of ineligibleIds) {
+      await expect(
+        service.getSnapshotDetail(projectId, snapshotId, actor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    }
+  });
+
+  it('returns a complete large snapshot in deterministic order with a constant query count', async () => {
+    const projectId = await insertProject('Large historical snapshot project');
+    const snapshotId = await insertSnapshot(projectId, {
+      status: 'calculated',
+      version: 1,
+    });
+    await testDataSource.query(
+      `INSERT INTO planning_task_schedules (
+         id, snapshot_id, project_id, task_id, task_title, task_kind,
+         scheduled_start_date, scheduled_end_date, duration_days,
+         is_critical, sequence_number
+       )
+       SELECT
+         gen_random_uuid(), $1, $2, NULL, 'Captured task ' || item,
+         'standard', '2026-08-01', '2026-08-02', 1, false, item
+       FROM generate_series(1, 125) AS item`,
+      [snapshotId, projectId],
+    );
+    const querySpy = jest.spyOn(testDataSource.logger, 'logQuery');
+
+    const result = await service.getSnapshotDetail(
+      projectId,
+      snapshotId,
+      actor,
+    );
+    const selectQueries = querySpy.mock.calls
+      .map(([query]) => query)
+      .filter((query) => /^SELECT\b/i.test(query.trim()));
+    querySpy.mockRestore();
+
+    expect(result.taskSchedules).toHaveLength(125);
+    expect(
+      result.taskSchedules.map(({ sequenceNumber }) => sequenceNumber),
+    ).toEqual(Array.from({ length: 125 }, (_, index) => index + 1));
+    expect(selectQueries).toHaveLength(3);
+    expect(selectQueries.join('\n')).not.toMatch(/\bJOIN\s+"?tasks"?\b/i);
+  });
+
   it('returns empty official history for no tasks and no calculated snapshots', async () => {
     const projectId = await insertProject('No official history project');
     await insertSnapshot(projectId, { status: 'pending', version: 1 });
@@ -507,6 +743,9 @@ describe('Forecast Overview and official History read APIs', () => {
     await expect(
       service.getHistory(projectId, {}, actor),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.getSnapshotDetail(projectId, randomUUID(), actor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('uses a non-disclosing response for external actors', async () => {
@@ -519,11 +758,19 @@ describe('Forecast Overview and official History read APIs', () => {
     await expect(
       service.getHistory(projectId, {}, actor),
     ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.getSnapshotDetail(projectId, randomUUID(), actor),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('returns not found for a project that does not exist', async () => {
     await expect(
       service.getOverview(randomUUID(), actor),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(canViewProject).not.toHaveBeenCalled();
+
+    await expect(
+      service.getSnapshotDetail(randomUUID(), randomUUID(), actor),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(canViewProject).not.toHaveBeenCalled();
   });
@@ -563,6 +810,41 @@ describe('Forecast Overview and official History read APIs', () => {
         userId,
         input.current ?? false,
         input.deleted ? new Date('2026-08-02T00:00:00Z') : null,
+      ],
+    );
+    return id;
+  }
+
+  async function insertTask(
+    projectId: string,
+    input: {
+      kind?: 'milestone' | 'standard' | 'summary';
+      milestoneCategory?:
+        | 'decision'
+        | 'drop'
+        | 'go_live'
+        | 'release'
+        | 'standard';
+      parentTaskId?: string | null;
+      title: string;
+    },
+  ): Promise<string> {
+    const id = randomUUID();
+    const kind = input.kind ?? 'standard';
+    await testDataSource.query(
+      `INSERT INTO tasks (
+         id, project_id, parent_task_id, title, task_kind,
+         milestone_category, duration_days, created_by_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        id,
+        projectId,
+        input.parentTaskId ?? null,
+        input.title,
+        kind,
+        input.milestoneCategory ?? null,
+        kind === 'milestone' ? 0 : null,
+        userId,
       ],
     );
     return id;
@@ -624,7 +906,9 @@ describe('Forecast Overview and official History read APIs', () => {
         input.status,
         input.status === 'calculated'
           ? new Date(
-              `2026-08-${String(Math.min(input.version, 28)).padStart(2, '0')}T10:00:00Z`,
+              `2026-08-${String(
+                Math.max(1, Math.min(input.version, 28)),
+              ).padStart(2, '0')}T10:00:00Z`,
             )
           : null,
         input.start ?? null,
@@ -641,28 +925,45 @@ describe('Forecast Overview and official History read APIs', () => {
     snapshotId: string,
     input: {
       critical?: boolean;
+      duration?: number | null;
       kind: 'milestone' | 'standard' | 'summary';
+      milestoneCategory?:
+        | 'decision'
+        | 'drop'
+        | 'go_live'
+        | 'release'
+        | 'standard';
+      parentTaskId?: string | null;
       scheduledEnd?: string;
       scheduledStart?: string;
+      sequence?: number | null;
+      taskId?: string | null;
       title: string;
     },
   ): Promise<void> {
     await testDataSource.query(
       `INSERT INTO planning_task_schedules (
-         id, snapshot_id, project_id, task_id, task_title, task_kind,
+         id, snapshot_id, project_id, task_id, task_title, parent_task_id, task_kind,
          milestone_category, scheduled_start_date, scheduled_end_date,
-         is_critical, created_by_id
-       ) VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9, $10)`,
+         duration_days, is_critical, sequence_number, created_by_id
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+       )`,
       [
         randomUUID(),
         snapshotId,
         projectId,
+        input.taskId ?? null,
         input.title,
+        input.parentTaskId ?? null,
         input.kind,
-        input.kind === 'milestone' ? 'standard' : null,
+        input.milestoneCategory ??
+          (input.kind === 'milestone' ? 'standard' : null),
         input.scheduledStart ?? null,
         input.scheduledEnd ?? null,
+        input.duration ?? null,
         input.critical ?? false,
+        input.sequence ?? null,
         userId,
       ],
     );

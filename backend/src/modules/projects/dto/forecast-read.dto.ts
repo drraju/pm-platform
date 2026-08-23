@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { PlanningCalculationStatus } from '../../../common/enums/planning-calculation-status.enum';
+import { TaskKind } from '../../../common/enums/task-kind.enum';
 
 export enum WorkingOutputState {
   NotRequested = 'not_requested',
@@ -194,4 +196,44 @@ export class ForecastHistoryResponseDto {
 
   @ApiProperty()
   hasMore: boolean;
+}
+
+export class ForecastSnapshotTaskScheduleDto {
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  taskId: string | null;
+
+  @ApiProperty()
+  taskTitle: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  parentTaskId: string | null;
+
+  @ApiProperty({ enum: TaskKind })
+  taskKind: TaskKind;
+
+  @ApiPropertyOptional({ enum: MilestoneCategory, nullable: true })
+  milestoneCategory: MilestoneCategory | null;
+
+  @ApiPropertyOptional({ format: 'date', nullable: true })
+  scheduledStartDate: string | null;
+
+  @ApiPropertyOptional({ format: 'date', nullable: true })
+  scheduledEndDate: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  durationDays: number | null;
+
+  @ApiProperty()
+  isCritical: boolean;
+
+  @ApiPropertyOptional({ nullable: true })
+  sequenceNumber: number | null;
+}
+
+export class ForecastSnapshotDetailDto {
+  @ApiProperty({ type: ForecastSummaryDto })
+  snapshot: ForecastSummaryDto;
+
+  @ApiProperty({ type: ForecastSnapshotTaskScheduleDto, isArray: true })
+  taskSchedules: ForecastSnapshotTaskScheduleDto[];
 }

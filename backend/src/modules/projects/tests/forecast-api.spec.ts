@@ -23,6 +23,7 @@ describe('Forecast REST API', () => {
   let httpServer: Server;
   const getOverview = jest.fn();
   const getHistory = jest.fn();
+  const getSnapshotDetail = jest.fn();
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -30,7 +31,7 @@ describe('Forecast REST API', () => {
       providers: [
         {
           provide: ForecastQueryService,
-          useValue: { getHistory, getOverview },
+          useValue: { getHistory, getOverview, getSnapshotDetail },
         },
       ],
     })
@@ -103,6 +104,59 @@ describe('Forecast REST API', () => {
     );
   });
 
+  it('exposes one historical Forecast snapshot by its canonical UUID', async () => {
+    getSnapshotDetail.mockResolvedValue({
+      snapshot: {
+        calculatedAt: '2026-08-02T10:00:00.000Z',
+        calculationStatus: 'calculated',
+        criticalTaskCount: 1,
+        generatedBy: { id: actor.userId, name: 'Forecast Manager' },
+        isCurrent: false,
+        milestoneCount: 0,
+        projectFinishDate: '2026-08-05',
+        projectId,
+        projectStartDate: '2026-08-01',
+        scheduleAnchorDate: '2026-08-01',
+        scheduleVersion: 2,
+        snapshotId,
+        taskCount: 1,
+        unscheduledExecutableTaskCount: 0,
+      },
+      taskSchedules: [
+        {
+          durationDays: 4,
+          isCritical: true,
+          milestoneCategory: null,
+          parentTaskId: null,
+          scheduledEndDate: '2026-08-05',
+          scheduledStartDate: '2026-08-01',
+          sequenceNumber: 1,
+          taskId: null,
+          taskKind: 'standard',
+          taskTitle: 'Captured task',
+        },
+      ],
+    });
+
+    const response = await request(httpServer)
+      .get(`/projects/${projectId}/forecast/history/${snapshotId}`)
+      .expect(200);
+    const body = response.body as {
+      snapshot: { snapshotId: string };
+      taskSchedules: Array<{ taskId: string | null; taskTitle: string }>;
+    };
+
+    expect(body.snapshot.snapshotId).toBe(snapshotId);
+    expect(body.taskSchedules).toHaveLength(1);
+    expect(body.taskSchedules[0]?.taskId).toBeNull();
+    expect(body.taskSchedules[0]?.taskTitle).toBe('Captured task');
+    expect(getSnapshotDetail).toHaveBeenCalledWith(
+      projectId,
+      snapshotId,
+      actor,
+    );
+  });
+
   it.each([
     'limit=0',
     'limit=101',
@@ -124,17 +178,26 @@ describe('Forecast REST API', () => {
     expect(document.paths).toHaveProperty(
       '/projects/{projectId}/forecast/history',
     );
+    expect(document.paths).toHaveProperty(
+      '/projects/{projectId}/forecast/history/{snapshotId}',
+    );
     expect(document.paths).not.toHaveProperty('/planning/{projectId}/forecast');
     expect(document.components?.schemas).toHaveProperty('ForecastOverviewDto');
     expect(document.components?.schemas).toHaveProperty(
       'ForecastHistoryResponseDto',
+    );
+    expect(document.components?.schemas).toHaveProperty(
+      'ForecastSnapshotDetailDto',
+    );
+    expect(document.components?.schemas).toHaveProperty(
+      'ForecastSnapshotTaskScheduleDto',
     );
     expect(JSON.stringify(document.paths)).not.toContain(
       'PlanningScheduleSnapshot',
     );
   });
 
-  it('requires project.read on both endpoints', () => {
+  it('requires project.read on every Forecast endpoint', () => {
     const controller = app.get(ForecastController);
     expect(
       // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -144,10 +207,15 @@ describe('Forecast REST API', () => {
       // eslint-disable-next-line @typescript-eslint/unbound-method
       Reflect.getMetadata(PERMISSIONS_KEY, controller.getHistory),
     ).toEqual([PermissionKey.ProjectRead]);
+    expect(
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      Reflect.getMetadata(PERMISSIONS_KEY, controller.getSnapshotDetail),
+    ).toEqual([PermissionKey.ProjectRead]);
   });
 });
 
 const projectId = '11111111-1111-4111-8111-111111111111';
+const snapshotId = '33333333-3333-4333-8333-333333333333';
 const actor = {
   email: 'manager@example.com',
   roleId: 'manager-role',

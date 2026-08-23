@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -18,6 +26,7 @@ import { ForecastHistoryQueryDto } from './dto/forecast-history-query.dto';
 import {
   ForecastHistoryResponseDto,
   ForecastOverviewDto,
+  ForecastSnapshotDetailDto,
 } from './dto/forecast-read.dto';
 import { ForecastQueryService } from './forecast-query.service';
 
@@ -64,5 +73,25 @@ export class ForecastController {
     @Query() query: ForecastHistoryQueryDto,
   ): Promise<ForecastHistoryResponseDto> {
     return this.forecastQueryService.getHistory(projectId, query, request.user);
+  }
+
+  @Get(':projectId/forecast/history/:snapshotId')
+  @RequirePermissions(PermissionKey.ProjectRead)
+  @ApiOperation({ summary: 'Get one official project Forecast snapshot' })
+  @ApiParam({ name: 'projectId', format: 'uuid' })
+  @ApiParam({ name: 'snapshotId', format: 'uuid' })
+  @ApiOkResponse({ type: ForecastSnapshotDetailDto })
+  @ApiForbiddenResponse({ description: 'Project access is required' })
+  @ApiNotFoundResponse({ description: 'Project or Forecast not found' })
+  getSnapshotDetail(
+    @Req() request: AuthenticatedRequest,
+    @Param('projectId') projectId: string,
+    @Param('snapshotId', new ParseUUIDPipe()) snapshotId: string,
+  ): Promise<ForecastSnapshotDetailDto> {
+    return this.forecastQueryService.getSnapshotDetail(
+      projectId,
+      snapshotId,
+      request.user,
+    );
   }
 }
