@@ -67,6 +67,7 @@ function PageContent() {
   const [isHistoricalForecastLoading, setIsHistoricalForecastLoading] =
     useState(false);
   const historicalForecastRequestRef = useRef(0);
+  const workspaceRequestRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,19 +78,32 @@ function PageContent() {
     members,
   } = useProjectMembers(projectId, workspace?.project.members ?? []);
 
-  const loadWorkspace = useCallback(async () => {
+  const loadWorkspace = useCallback(async (
+    { blocking = true }: { blocking?: boolean } = {},
+  ) => {
+    const requestVersion = workspaceRequestRef.current + 1;
+    workspaceRequestRef.current = requestVersion;
     setError(null);
-    setIsLoading(true);
+    if (blocking) {
+      setIsLoading(true);
+    }
     try {
-      setWorkspace(await getPlanningWorkspace(projectId));
+      const nextWorkspace = await getPlanningWorkspace(projectId);
+      if (workspaceRequestRef.current === requestVersion) {
+        setWorkspace(nextWorkspace);
+      }
     } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to load planning workspace",
-      );
+      if (workspaceRequestRef.current === requestVersion) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load planning workspace",
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (blocking && workspaceRequestRef.current === requestVersion) {
+        setIsLoading(false);
+      }
     }
   }, [projectId]);
 
@@ -239,7 +253,7 @@ function PageContent() {
         taskId,
         input,
       );
-      await loadWorkspace();
+      await loadWorkspace({ blocking: false });
       return schedule;
     } catch (requestError) {
       setError(

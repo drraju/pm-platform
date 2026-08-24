@@ -1170,7 +1170,7 @@ describe("Projects List navigation", () => {
     expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(1);
   });
 
-  it("reloads one coherent workspace after a Planning task mutation", async () => {
+  it("keeps Planning mounted while applying one coherent background workspace refresh", async () => {
     window.history.pushState({}, "", "/projects/project-123/planning");
     const initialWorkspace = await planningMocks.getPlanningWorkspace(
       "project-123",
@@ -1209,9 +1209,76 @@ describe("Projects List navigation", () => {
         versionNumber: 0,
       },
     };
+    const refresh = createDeferred<typeof coherentWorkspace>();
     planningMocks.getPlanningWorkspace
       .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(coherentWorkspace);
+      .mockReturnValueOnce(refresh.promise);
+    planningMocks.updatePlanningTaskSchedule.mockReset();
+    planningMocks.updatePlanningTaskSchedule.mockResolvedValue({
+      id: "task-1",
+      snapshotId: "discarded-mutation-result",
+      taskId: "task-1",
+    });
+
+    render(<ProjectPlanningPage />);
+    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
+    const gantt = screen.getByLabelText("Interactive Gantt timeline");
+    const update = planningWorkspaceCapture.current?.onUpdateSchedule as (
+      taskId: string,
+      input: Record<string, unknown>,
+    ) => Promise<unknown>;
+    let updatePromise!: Promise<unknown>;
+    await act(async () => {
+      updatePromise = update("task-1", { durationDays: 3 });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText("Loading planning workspace")).toBeNull();
+    expect(screen.getByLabelText("Interactive Gantt timeline")).toBe(gantt);
+    expect(gantt).toBeInTheDocument();
+
+    await act(async () => {
+      refresh.resolve(coherentWorkspace);
+      await updatePromise;
+    });
+
+    const workspace = planningWorkspaceCapture.current?.workspace as {
+      schedules: Array<{ snapshotId: string }>;
+      snapshot: { id: string };
+    };
+    expect(workspace.snapshot.id).toBe("working-2");
+    expect(new Set(workspace.schedules.map((row) => row.snapshotId))).toEqual(
+      new Set(["working-2"]),
+    );
+    expect(screen.getByText("Task one")).toBeInTheDocument();
+    expect(screen.getByLabelText("Interactive Gantt timeline")).toBe(gantt);
+    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores an older Planning workspace refresh that resolves last", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+    const initialWorkspace = await planningMocks.getPlanningWorkspace(
+      "project-123",
+    );
+    planningMocks.getPlanningWorkspace.mockReset();
+    const workspaceA = {
+      ...initialWorkspace,
+      snapshot: { ...initialWorkspace.snapshot, id: "working-a" },
+    };
+    const workspaceB = {
+      ...initialWorkspace,
+      snapshot: { ...initialWorkspace.snapshot, id: "working-b" },
+    };
+    const refreshA = createDeferred<typeof workspaceA>();
+    const refreshB = createDeferred<typeof workspaceB>();
+    planningMocks.getPlanningWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockReturnValueOnce(refreshA.promise)
+      .mockReturnValueOnce(refreshB.promise);
+    planningMocks.updatePlanningTaskSchedule.mockReset();
     planningMocks.updatePlanningTaskSchedule.mockResolvedValue({
       id: "task-1",
       snapshotId: "discarded-mutation-result",
@@ -1224,21 +1291,75 @@ describe("Projects List navigation", () => {
       taskId: string,
       input: Record<string, unknown>,
     ) => Promise<unknown>;
+    let updateAPromise!: Promise<unknown>;
+    let updateBPromise!: Promise<unknown>;
+
     await act(async () => {
-      await update("task-1", { durationDays: 3 });
+      updateAPromise = update("task-1", { ownerId: "user-a" });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
+    });
+    await act(async () => {
+      updateBPromise = update("task-1", { ownerId: "user-b" });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(3);
     });
 
-    await waitFor(() => {
-      const workspace = planningWorkspaceCapture.current?.workspace as {
-        schedules: Array<{ snapshotId: string }>;
-        snapshot: { id: string };
-      };
-      expect(workspace.snapshot.id).toBe("working-2");
-      expect(new Set(workspace.schedules.map((row) => row.snapshotId))).toEqual(
-        new Set(["working-2"]),
-      );
+    await act(async () => {
+      refreshB.resolve(workspaceB);
+      await updateBPromise;
     });
-    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
+    expect(
+      (planningWorkspaceCapture.current?.workspace as typeof workspaceB).snapshot.id,
+    ).toBe("working-b");
+
+    await act(async () => {
+      refreshA.resolve(workspaceA);
+      await updateAPromise;
+    });
+    expect(
+      (planningWorkspaceCapture.current?.workspace as typeof workspaceB).snapshot.id,
+    ).toBe("working-b");
+  });
+
+  it("retains the last good Planning workspace when a background refresh fails", async () => {
+    window.history.pushState({}, "", "/projects/project-123/planning");
+    const initialWorkspace = await planningMocks.getPlanningWorkspace(
+      "project-123",
+    );
+    planningMocks.getPlanningWorkspace.mockReset();
+    planningMocks.getPlanningWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockRejectedValueOnce(new Error("Unable to refresh planning workspace"));
+    planningMocks.updatePlanningTaskSchedule.mockReset();
+    planningMocks.updatePlanningTaskSchedule.mockResolvedValue({
+      id: "task-1",
+      snapshotId: "discarded-mutation-result",
+      taskId: "task-1",
+    });
+
+    render(<ProjectPlanningPage />);
+    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
+    const gantt = screen.getByLabelText("Interactive Gantt timeline");
+    const update = planningWorkspaceCapture.current?.onUpdateSchedule as (
+      taskId: string,
+      input: Record<string, unknown>,
+    ) => Promise<unknown>;
+
+    await act(async () => {
+      await update("task-1", { plannedStartDate: "2026-07-01" });
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to refresh planning workspace",
+    );
+    expect(planningWorkspaceCapture.current?.workspace).toBe(initialWorkspace);
+    expect(screen.queryByText("Loading planning workspace")).toBeNull();
+    expect(screen.getByLabelText("Interactive Gantt timeline")).toBe(gantt);
   });
 
   it("reloads complete workspaces after task creation and dependency mutation", async () => {
