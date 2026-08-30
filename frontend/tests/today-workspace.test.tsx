@@ -340,6 +340,73 @@ describe("TodayWorkspace", () => {
     });
   });
 
+  it("saves a terminal Done update without a Next Step", async () => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue({
+      id: "task-1",
+      latestExecutionUpdate: {
+        id: "update-1",
+        nextStep: null,
+        percentComplete: 100,
+        priority: "medium",
+        projectId: "project-1",
+        status: "done",
+        taskId: "task-1",
+      },
+      percentComplete: 100,
+      status: "done",
+    });
+    const project = createProject([
+      {
+        assigneeId: "user-1",
+        id: "task-1",
+        latestExecutionUpdate: {
+          id: "update-0",
+          // Semantically blank execution text is normalized to null in the payload.
+          nextStep: "   ",
+          percentComplete: 40,
+          priority: "medium",
+          projectId: "project-1",
+          status: "in_progress",
+          taskId: "task-1",
+        },
+        parentTaskId: null,
+        percentComplete: 40,
+        priority: "medium",
+        projectId: "project-1",
+        sequenceNumber: 1,
+        status: "in_progress",
+        taskKind: "standard",
+        title: "Complete release evidence",
+      },
+    ]);
+
+    renderToday(project, { onRecordExecutionUpdate });
+
+    fireEvent.change(
+      screen.getByLabelText("Status for Complete release evidence"),
+      { target: { value: "done" } },
+    );
+
+    await waitFor(() => {
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
+        "task-1",
+        expect.objectContaining({
+          nextStep: null,
+          percentComplete: 100,
+          status: "done",
+        }),
+      );
+    });
+    expect(
+      screen.queryByText("Add a Next Step when status or progress changes."),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    await waitFor(
+      () => expect(screen.queryByText("Saved")).not.toBeInTheDocument(),
+      { timeout: 2000 },
+    );
+  });
+
   it("cancels an in-progress text edit with Escape", async () => {
     const onRecordExecutionUpdate = vi.fn().mockResolvedValue({
       id: "task-1",

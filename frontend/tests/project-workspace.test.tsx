@@ -1292,7 +1292,64 @@ describe("Project workspace components", () => {
     expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
   });
 
-  it("allows Done execution updates to rely on backend completion defaults", async () => {
+  it.each(
+    [
+      ["status", /status/i, "done"],
+      ["progress", /progress value/i, "50"],
+      ["priority", /priority/i, "high"],
+    ] as const,
+  )(
+    "requires a Next Step when incomplete task %s changes",
+    async (_field, fieldLabel, value) => {
+      const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <ProjectWorkspaceTasks
+          canEditTasks
+          mode="execution"
+          onRecordExecutionUpdate={onRecordExecutionUpdate}
+          tasks={[
+            {
+              id: "task-1",
+              percentComplete: 40,
+              priority: "medium",
+              projectId: "project-1",
+              status: "in_progress",
+              taskKind: "standard",
+              title: "Prepare release plan",
+            },
+          ]}
+        />,
+      );
+
+      fireEvent.click(
+        within(
+          screen.getByText("Prepare release plan").closest("tr") as HTMLElement,
+        ).getByRole("button", { name: "Update" }),
+      );
+      const drawer = screen.getByRole("dialog", {
+        name: /task execution update/i,
+      });
+
+      fireEvent.change(within(drawer).getByLabelText(fieldLabel), {
+        target: { value },
+      });
+      fireEvent.click(
+        within(drawer).getByRole("button", {
+          name: /save (update|& next|& finish)/i,
+        }),
+      );
+
+      expect(
+        await within(drawer).findByText(
+          "Add a Next Step when status, progress, or priority changes.",
+        ),
+      ).toBeInTheDocument();
+      expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows a terminal Done execution update without a Next Step", async () => {
     const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -1329,8 +1386,18 @@ describe("Project workspace components", () => {
     fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
       target: { value: "80" },
     });
-    fireEvent.change(within(drawer).getByLabelText(/next step/i), {
-      target: { value: "Confirm completion" },
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
+    );
+    expect(
+      await within(drawer).findByText(
+        "Add a Next Step when status, progress, or priority changes.",
+      ),
+    ).toBeInTheDocument();
+    expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+
+    fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
+      target: { value: "100" },
     });
     fireEvent.click(
       within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
@@ -1340,14 +1407,19 @@ describe("Project workspace components", () => {
       expect(onRecordExecutionUpdate).toHaveBeenCalledWith("task-1", {
         assigneeId: null,
         nextActionOwnerId: null,
-        nextStep: "Confirm completion",
-        percentComplete: 80,
+        nextStep: null,
+        percentComplete: 100,
         priority: "medium",
         status: "done",
         targetCompletionDate: null,
         updateNotes: null,
       });
     });
+    expect(
+      screen.queryByText(
+        "Add a Next Step when status, progress, or priority changes.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the execution Kanban board from existing task data and excludes backlog", () => {

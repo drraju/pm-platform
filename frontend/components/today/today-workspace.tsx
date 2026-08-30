@@ -1576,8 +1576,14 @@ function validateTodayUpdate(
   const executionStateChanged =
     payload.status !== task.status ||
     payload.percentComplete !== getDisplayedPercentComplete(task);
+  const isCompletedTerminalState =
+    payload.status === "done" && payload.percentComplete === 100;
 
-  if (executionStateChanged && !payload.nextStep?.trim()) {
+  if (
+    executionStateChanged &&
+    !isCompletedTerminalState &&
+    !payload.nextStep?.trim()
+  ) {
     return "Add a Next Step when status or progress changes.";
   }
 

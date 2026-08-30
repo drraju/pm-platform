@@ -2577,7 +2577,13 @@ function validateExecutionUpdateForm(
     nextStatus !== task.status ||
     percentComplete !== getDisplayedPercentComplete(task) ||
     form.priority !== task.priority;
-  if (executionStateChanged && !form.nextStep.trim()) {
+  const isCompletedTerminalState =
+    nextStatus === "done" && percentComplete === 100;
+  if (
+    executionStateChanged &&
+    !isCompletedTerminalState &&
+    !form.nextStep.trim()
+  ) {
     return "Add a Next Step when status, progress, or priority changes.";
   }
 
