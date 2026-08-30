@@ -5,6 +5,7 @@ import { ProjectMember } from '../projects/entities/project-member.entity';
 import { ProjectsModule } from '../projects/projects.module';
 import { PlanningSnapshotModule } from '../planning/planning-snapshot.module';
 import { ProjectBaseline } from '../projects/entities/project-baseline.entity';
+import { User } from '../users/entities/user.entity';
 import { TaskDependency } from './entities/task-dependency.entity';
 import { TaskExecutionUpdate } from './entities/task-execution-update.entity';
 import { Task } from './entities/task.entity';
@@ -23,6 +24,8 @@ import {
   ProjectDependenciesController,
 } from './dependencies.controller';
 import { DependencyResponseMapper } from './dependency-response.mapper';
+import { TaskAssignmentController } from './task-assignment.controller';
+import { TaskAssignmentService } from './task-assignment.service';
 
 @Module({
   imports: [
@@ -34,11 +37,13 @@ import { DependencyResponseMapper } from './dependency-response.mapper';
       TaskExecutionUpdate,
       ProjectMember,
       ProjectBaseline,
+      User,
     ]),
   ],
   controllers: [
     DependenciesController,
     ProjectDependenciesController,
+    TaskAssignmentController,
     TasksController,
   ],
   providers: [
@@ -49,6 +54,7 @@ import { DependencyResponseMapper } from './dependency-response.mapper';
     DependencyQueryService,
     DependencyResponseMapper,
     SchedulingFoundationService,
+    TaskAssignmentService,
     MilestoneProjectionComposer,
     MilestoneQueryService,
     MilestoneResponseMapper,
@@ -61,6 +67,7 @@ import { DependencyResponseMapper } from './dependency-response.mapper';
     MilestoneProjectionComposer,
     MilestoneQueryService,
     MilestoneResponseMapper,
+    TaskAssignmentService,
     TasksService,
   ],
 })

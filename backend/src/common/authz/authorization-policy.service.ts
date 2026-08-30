@@ -294,11 +294,17 @@ export class AuthorizationPolicyService {
     );
   }
 
-  private async isPlatformAdministrator(
-    actor: AuthorizationActor,
-  ): Promise<boolean> {
+  async isPlatformAdministrator(actor: AuthorizationActor): Promise<boolean> {
     const roleName = await this.getActorRoleName(actor);
     return roleName === UserRole.PlatformAdmin;
+  }
+
+  async getProjectMembershipRole(
+    projectId: string,
+    userId: string,
+  ): Promise<ProjectRole | null> {
+    const membership = await this.findMembership(projectId, userId);
+    return membership?.role ?? null;
   }
 
   private hasAnyGrantedPermission(

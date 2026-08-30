@@ -19,6 +19,7 @@ export const CANONICAL_CAPABILITIES = [
   'task.complete',
   'task.move',
   'task.delete',
+  'forecast.read',
   'document.view',
   'document.create',
   'document.edit',
@@ -39,6 +40,8 @@ export type CanonicalCapability = (typeof CANONICAL_CAPABILITIES)[number];
 export type CapabilityReasonCode =
   | 'GRANTED'
   | 'MISSING_PERMISSION'
+  | 'PROJECT_MEMBERSHIP_REQUIRED'
+  | 'TARGET_NOT_PROJECT_MEMBER'
   | 'OUTSIDE_PROJECT_SCOPE'
   | 'EXTERNAL_RESTRICTED'
   | 'ASSIGNMENT_REQUIRED'
@@ -64,8 +67,15 @@ export type CapabilityResource =
       type: 'task';
       projectId: string;
       assigneeId?: string | null;
+      deletedAt?: Date | string | null;
+      projectStatus?: string | null;
       status?: string | null;
       taskKind?: string | null;
+    }
+  | {
+      type: 'forecast';
+      projectId: string;
+      projectStatus?: string | null;
     }
   | {
       type: 'document';
@@ -86,6 +96,25 @@ export type CapabilityResolverInput = {
   resource: CapabilityResource;
   changedFields?: readonly string[];
   destinationProjectId?: string | null;
+  requestedAssigneeId?: string | null;
+};
+
+export type TaskCapabilityResource = Extract<
+  CapabilityResource,
+  { type: 'task' }
+>;
+
+export type TaskAssignmentOperation = 'assign' | 'reassign' | 'none';
+
+export type TaskAssignmentResolverInput = {
+  actor: AuthorizationActor;
+  resource: TaskCapabilityResource;
+  requestedAssigneeId: string | null;
+};
+
+export type TaskAssignmentDecision = CapabilityDecision & {
+  capability: 'task.assign' | 'task.reassign' | null;
+  operation: TaskAssignmentOperation;
 };
 
 export type CapabilityScopeDecision = {
