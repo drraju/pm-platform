@@ -14,6 +14,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly jwtConfiguration: JwtConfiguration,
   ) {
     super({
+      algorithms: [jwtConfiguration.algorithm],
       audience: jwtConfiguration.accessAudience,
       issuer: jwtConfiguration.issuer,
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

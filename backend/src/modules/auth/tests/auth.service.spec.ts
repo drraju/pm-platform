@@ -13,6 +13,7 @@ import { JwtStrategy } from '../strategies/jwt.strategy';
 import { JwtConfiguration, JWT_CONFIGURATION } from '../jwt-configuration';
 
 const jwtConfiguration: JwtConfiguration = {
+  algorithm: 'HS256',
   accessAudience: 'pm-platform-api',
   accessExpiresIn: '15m',
   accessSecret: 'test-access-secret',
@@ -195,12 +196,18 @@ describe('AuthService', () => {
     expect(jwtService.sign).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ tokenType: 'access' }),
-      expect.objectContaining({ secret: 'test-access-secret' }),
+      expect.objectContaining({
+        algorithm: 'HS256',
+        secret: 'test-access-secret',
+      }),
     );
     expect(jwtService.sign).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ tokenType: 'refresh' }),
-      expect.objectContaining({ secret: 'test-refresh-secret' }),
+      expect.objectContaining({
+        algorithm: 'HS256',
+        secret: 'test-refresh-secret',
+      }),
     );
   });
 
@@ -217,6 +224,10 @@ describe('AuthService', () => {
       UnauthorizedException,
     );
     expect(usersService.findTokenValidationUser).not.toHaveBeenCalled();
+    expect(jwtService.verifyAsync).toHaveBeenCalledWith(
+      'access-token',
+      expect.objectContaining({ algorithms: ['HS256'] }),
+    );
   });
 
   it('rejects a refresh token after the user role changes', async () => {

@@ -61,6 +61,7 @@ export class AuthService {
     let payload: JwtPayload;
     try {
       payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        algorithms: [this.jwtConfiguration.algorithm],
         audience: this.jwtConfiguration.refreshAudience,
         issuer: this.jwtConfiguration.issuer,
         secret: this.jwtConfiguration.refreshSecret,
@@ -156,6 +157,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(
       { sub: userId, email, roleId, tokenType: 'access' },
       {
+        algorithm: this.jwtConfiguration.algorithm,
         audience: this.jwtConfiguration.accessAudience,
         expiresIn: this.jwtConfiguration.accessExpiresIn,
         issuer: this.jwtConfiguration.issuer,
@@ -165,6 +167,7 @@ export class AuthService {
     const refreshToken = this.jwtService.sign(
       { sub: userId, email, roleId, tokenType: 'refresh' },
       {
+        algorithm: this.jwtConfiguration.algorithm,
         audience: this.jwtConfiguration.refreshAudience,
         expiresIn: this.jwtConfiguration.refreshExpiresIn,
         issuer: this.jwtConfiguration.issuer,

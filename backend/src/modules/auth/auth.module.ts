@@ -21,6 +21,7 @@ import { getJwtConfiguration, JWT_CONFIGURATION } from './jwt-configuration';
         return {
           secret: configuration.accessSecret,
           signOptions: {
+            algorithm: configuration.algorithm,
             audience: configuration.accessAudience,
             expiresIn: configuration.accessExpiresIn,
             issuer: configuration.issuer,

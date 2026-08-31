@@ -1,14 +1,24 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 import { UserRole } from '../src/common/enums/user-role.enum';
 import { ProjectRole } from '../src/common/enums/project-role.enum';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
 import {
+  assertSeedEnvironment,
   developmentSeedData,
+  getSeedSuperAdminUser,
+  getSeedUserStatus,
   seedUuid,
   verifyRequiredEntities,
 } from '../scripts/seed';
 
 describe('Seed data verification', () => {
+  const seedSource = readFileSync(
+    join(__dirname, '..', 'scripts', 'seed.ts'),
+    'utf8',
+  );
+
   it('defines the expected enterprise seed volumes', () => {
     expect(developmentSeedData.users).toHaveLength(6);
     expect(developmentSeedData.projects).toHaveLength(3);
@@ -102,6 +112,47 @@ describe('Seed data verification', () => {
 
     expect(() => verifyRequiredEntities(dataSource)).toThrow(
       /Seed DataSource missing entity metadata/,
+    );
+  });
+
+  it('rejects production seed execution without an override', () => {
+    expect(() => assertSeedEnvironment({ NODE_ENV: 'production' })).toThrow(
+      'Production seed execution is disabled',
+    );
+    expect(() =>
+      getSeedSuperAdminUser({
+        NODE_ENV: 'production',
+        SEED_SUPER_ADMIN_EMAIL: 'configured@example.com',
+        SEED_SUPER_ADMIN_PASSWORD: 'ConfiguredPassword1!',
+      }),
+    ).toThrow('Production seed execution is disabled');
+  });
+
+  it('keeps development and test seed configuration usable', () => {
+    expect(() =>
+      assertSeedEnvironment({ NODE_ENV: 'development' }),
+    ).not.toThrow();
+    expect(() => assertSeedEnvironment({ NODE_ENV: 'test' })).not.toThrow();
+    expect(getSeedSuperAdminUser({ NODE_ENV: 'development' })).toEqual(
+      expect.objectContaining({
+        email: 'admin@example.com',
+        password: 'admin',
+      }),
+    );
+  });
+
+  it('preserves disabled existing users and activates only new seed users', () => {
+    expect(getSeedUserStatus({ status: 'disabled' })).toBe('disabled');
+    expect(getSeedUserStatus({ status: 'first_login_pending' })).toBe(
+      'first_login_pending',
+    );
+    expect(getSeedUserStatus(null)).toBe('active');
+  });
+
+  it('does not log plaintext development passwords', () => {
+    expect(seedSource).not.toContain('Default development password:');
+    expect(seedSource).not.toMatch(
+      /console\.(?:log|error)\([^\n]*(?:password|hash|token)/i,
     );
   });
 });

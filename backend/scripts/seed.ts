@@ -92,16 +92,36 @@ const users = [
   },
 ];
 
-const superAdminUser = {
-  id: seedUuid('user-super-admin'),
-  email: process.env.SEED_SUPER_ADMIN_EMAIL ?? 'admin@example.com',
-  firstName: 'Super',
-  lastName: 'Admin',
-  password: process.env.SEED_SUPER_ADMIN_PASSWORD ?? 'admin',
-  roleName: UserRole.PlatformAdmin,
-};
+export function assertSeedEnvironment(
+  environment: NodeJS.ProcessEnv = process.env,
+): void {
+  if (environment.NODE_ENV === 'production') {
+    throw new Error(
+      'Production seed execution is disabled. Create and manage production users through approved administration workflows.',
+    );
+  }
+}
 
-const allSeedUsers = [superAdminUser, ...users];
+export function getSeedSuperAdminUser(
+  environment: NodeJS.ProcessEnv = process.env,
+) {
+  assertSeedEnvironment(environment);
+
+  return {
+    id: seedUuid('user-super-admin'),
+    email: environment.SEED_SUPER_ADMIN_EMAIL ?? 'admin@example.com',
+    firstName: 'Super',
+    lastName: 'Admin',
+    password: environment.SEED_SUPER_ADMIN_PASSWORD ?? 'admin',
+    roleName: UserRole.PlatformAdmin,
+  };
+}
+
+export function getSeedUserStatus(
+  existingUser?: Pick<User, 'status'> | null,
+): string {
+  return existingUser?.status ?? 'active';
+}
 
 const permissions = [
   {
@@ -673,6 +693,8 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
   const rolePermissionRepository = manager.getRepository(RolePermission);
   const userRepository = manager.getRepository(User);
   const passwordService = new PasswordService();
+  const superAdminUser = getSeedSuperAdminUser();
+  const allSeedUsers = [superAdminUser, ...users];
   const passwordHash = await passwordService.hashPassword(defaultPassword);
   const superAdminPasswordHash = await passwordService.hashPassword(
     superAdminUser.password,
@@ -760,7 +782,7 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
           firstName: user.firstName,
           lastName: user.lastName,
           roleId: rolesByName.get(user.roleName)?.id,
-          status: 'active',
+          status: getSeedUserStatus(existingUser),
         }),
       ),
     );
@@ -981,6 +1003,7 @@ async function seedRaid(manager: EntityManager, context: SeedContext) {
 }
 
 async function main() {
+  assertSeedEnvironment();
   const shouldReset = process.argv.includes('--reset');
   await appDataSource.initialize();
   verifyRequiredEntities(appDataSource);
@@ -1008,7 +1031,6 @@ async function main() {
     console.log('- 5 issues');
     console.log('- 5 assumptions');
     console.log('- 5 dependencies');
-    console.log(`Default development password: ${defaultPassword}`);
   } finally {
     await appDataSource.destroy();
   }
