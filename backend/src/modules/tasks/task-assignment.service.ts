@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { AuthorizationActor } from '../../common/authz/authorization-policy.service';
 import { CanonicalCapabilityResolverService } from '../../common/authz/canonical-capability-resolver.service';
 import { UserRole } from '../../common/enums/user-role.enum';
@@ -35,12 +35,23 @@ export class TaskAssignmentService {
     taskId: string,
     requestedAssigneeId: string | null,
     actor: AuthorizationActor,
+    entityManager?: EntityManager,
   ): Promise<Task> {
     if (!actor?.userId) {
       throw new ForbiddenException('Authenticated user is required');
     }
 
-    const task = await this.tasksRepository.findOne({
+    const tasksRepository = entityManager
+      ? entityManager.getRepository(Task)
+      : this.tasksRepository;
+    const projectMembersRepository = entityManager
+      ? entityManager.getRepository(ProjectMember)
+      : this.projectMembersRepository;
+    const usersRepository = entityManager
+      ? entityManager.getRepository(User)
+      : this.usersRepository;
+
+    const task = await tasksRepository.findOne({
       relations: { assignee: true, project: true },
       where: { id: taskId },
       withDeleted: true,
@@ -75,15 +86,20 @@ export class TaskAssignmentService {
     }
 
     if (requestedAssigneeId) {
-      await this.validateTargetAssignee(projectId, requestedAssigneeId);
+      await this.validateTargetAssignee(
+        projectId,
+        requestedAssigneeId,
+        projectMembersRepository,
+        usersRepository,
+      );
     }
 
     task.assigneeId = requestedAssigneeId;
     task.assignee = requestedAssigneeId ? undefined : null;
     task.updatedById = actor.userId;
-    await this.tasksRepository.save(task);
+    await tasksRepository.save(task);
 
-    const updatedTask = await this.tasksRepository.findOne({
+    const updatedTask = await tasksRepository.findOne({
       relations: { assignee: true, project: true },
       where: { id: taskId, projectId },
     });
@@ -96,8 +112,10 @@ export class TaskAssignmentService {
   private async validateTargetAssignee(
     projectId: string,
     assigneeId: string,
+    projectMembersRepository = this.projectMembersRepository,
+    usersRepository = this.usersRepository,
   ): Promise<void> {
-    const user = await this.usersRepository.findOne({
+    const user = await usersRepository.findOne({
       relations: { role: true },
       where: { id: assigneeId },
     });
@@ -113,7 +131,7 @@ export class TaskAssignmentService {
       );
     }
 
-    const membership = await this.projectMembersRepository.findOne({
+    const membership = await projectMembersRepository.findOne({
       select: { id: true },
       where: { projectId, userId: assigneeId },
     });

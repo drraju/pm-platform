@@ -28,6 +28,7 @@ import { Project } from '../entities/project.entity';
 import { ProjectVisibilityService } from '../project-visibility.service';
 import { ProjectsService } from '../projects.service';
 import { PlanningSnapshotService } from '../../planning/planning-snapshot.service';
+import { TaskAssignmentService } from '../../tasks/task-assignment.service';
 
 type MockRepository<T extends object = object> = Partial<
   Record<keyof Repository<T>, jest.Mock>
@@ -68,9 +69,11 @@ describe('ProjectsService', () => {
   let planningSnapshotService: {
     rebuildWorkspaceSnapshot: jest.Mock;
   };
+  let taskAssignmentService: { changeTaskAssignment: jest.Mock };
   let transactionalEntityManager: {
     find: jest.Mock;
     findOne: jest.Mock;
+    getRepository: jest.Mock;
     query: jest.Mock;
     save: jest.Mock;
     update: jest.Mock;
@@ -127,6 +130,10 @@ describe('ProjectsService', () => {
       findOne: jest.fn((entity) =>
         Promise.resolve(entity === Project ? { id: projectId } : null),
       ),
+      getRepository: jest.fn((entity) => {
+        if (entity === Task) return tasksRepository;
+        throw new Error(`Unexpected repository ${String(entity)}`);
+      }),
       query: jest.fn((sql: string) =>
         Promise.resolve(
           sql.toLowerCase().includes('select count') ? [{ count: 0 }] : [],
@@ -189,6 +196,17 @@ describe('ProjectsService', () => {
     planningSnapshotService = {
       rebuildWorkspaceSnapshot: jest.fn().mockResolvedValue(undefined),
     };
+    taskAssignmentService = {
+      changeTaskAssignment: jest.fn(
+        (...args: [string, string, string | null]) =>
+          Promise.resolve({
+            assigneeId: args[2],
+            id: args[1],
+            projectId,
+            title: 'Complete steering committee readout',
+          }),
+      ),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -238,6 +256,10 @@ describe('ProjectsService', () => {
         {
           provide: PlanningSnapshotService,
           useValue: planningSnapshotService,
+        },
+        {
+          provide: TaskAssignmentService,
+          useValue: taskAssignmentService,
         },
       ],
     }).compile();
@@ -1095,13 +1117,19 @@ describe('ProjectsService', () => {
 
     expect(tasksRepository.create).toHaveBeenCalledWith({
       projectId,
-      assigneeId: userId,
       priority: 'high',
       sequenceNumber: 20,
       status: TaskStatus.Todo,
       taskKind: TaskKind.Standard,
       title: 'Complete steering committee readout',
     });
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      userId,
+      undefined,
+      transactionalEntityManager,
+    );
     expect(result).toEqual(
       expect.objectContaining({
         id: taskId,
@@ -1248,6 +1276,9 @@ describe('ProjectsService', () => {
 
   it('rejects assigning a summary task to a project member', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    taskAssignmentService.changeTaskAssignment.mockRejectedValueOnce(
+      new BadRequestException('Summary tasks cannot be assigned to a user'),
+    );
 
     await expect(
       service.createProjectTask(projectId, {
@@ -1260,7 +1291,9 @@ describe('ProjectsService', () => {
 
   it('rejects project task creation when the assignee does not exist', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    usersRepository.findOne?.mockResolvedValue(null);
+    taskAssignmentService.changeTaskAssignment.mockRejectedValueOnce(
+      new NotFoundException(`Assignee ${userId} not found`),
+    );
 
     await expect(
       service.createProjectTask(projectId, {
@@ -1272,8 +1305,9 @@ describe('ProjectsService', () => {
 
   it('rejects project task creation when the assignee is not a project member', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    usersRepository.findOne?.mockResolvedValue({ id: userId });
-    projectMembersRepository.findOne?.mockResolvedValue(null);
+    taskAssignmentService.changeTaskAssignment.mockRejectedValueOnce(
+      new ConflictException('Assignee must be an active project member'),
+    );
 
     await expect(
       service.createProjectTask(projectId, {
@@ -1319,11 +1353,17 @@ describe('ProjectsService', () => {
         projectId,
         title: 'Updated task',
         status: TaskStatus.Done,
-        assigneeId: userId,
         percentComplete: 100,
         sequenceNumber: 30,
         taskKind: TaskKind.Standard,
       }),
+    );
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      userId,
+      actor,
+      transactionalEntityManager,
     );
   });
 

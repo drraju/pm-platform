@@ -30,6 +30,7 @@ import { CreateTaskDependencyDto } from '../tasks/dto/create-task-dependency.dto
 import { UpdateTaskDependencyDto } from '../tasks/dto/update-task-dependency.dto';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { TaskAssignmentService } from '../tasks/task-assignment.service';
 import { TasksService } from '../tasks/tasks.service';
 import { User } from '../users/entities/user.entity';
 import { CriticalPathDto } from './dto/critical-path.dto';
@@ -92,6 +93,7 @@ export class PlanningService {
     private readonly schedulingFoundationService: SchedulingFoundationService,
     private readonly planningSnapshotService: PlanningSnapshotService,
     private readonly workPackageDuplicationService: PlanningWorkPackageDuplicationService,
+    private readonly taskAssignmentService: TaskAssignmentService,
     @Optional()
     private readonly canonicalTasksService?: TasksService,
   ) {}
@@ -239,10 +241,6 @@ export class PlanningService {
       );
     }
 
-    if (input.ownerId !== undefined && input.ownerId !== null) {
-      await this.ensureUserExists(input.ownerId);
-    }
-
     if (
       taskKind === TaskKind.Milestone &&
       schedule.task &&
@@ -310,9 +308,6 @@ export class PlanningService {
         },
         schedule.task,
       );
-      if (input.ownerId !== undefined) {
-        schedule.task.assigneeId = input.ownerId;
-      }
       if (input.parentTaskId !== undefined) {
         schedule.task.parentTaskId = input.parentTaskId;
       }
@@ -352,6 +347,15 @@ export class PlanningService {
         await this.scheduleSnapshotsRepository.manager.transaction(
           async (manager) => {
             await manager.getRepository(Task).save(task);
+            if (input.ownerId !== undefined) {
+              await this.taskAssignmentService.changeTaskAssignment(
+                projectId,
+                taskId,
+                input.ownerId ?? null,
+                actor!,
+                manager,
+              );
+            }
             return this.planningSnapshotService.calculateOperationalForecast(
               projectId,
               manager,
@@ -398,9 +402,6 @@ export class PlanningService {
         input.parentTaskId,
         requestedTaskKind,
       );
-    }
-    if (input.ownerId !== undefined && input.ownerId !== null) {
-      await this.ensureUserExists(input.ownerId);
     }
     if (
       requestedTaskKind === TaskKind.Milestone &&
@@ -493,13 +494,13 @@ export class PlanningService {
           status: TaskStatus.Todo,
         });
 
-        const task = await tasksRepository.save(
+        let task = await tasksRepository.save(
           tasksRepository.create({
             createdById: actor?.userId,
             dueDate: plannedEndDate,
             durationDays,
             milestoneCategory: normalizedTaskInput.milestoneCategory,
-            assigneeId: input.ownerId ?? null,
+            assigneeId: null,
             parentTaskId,
             ...lifecycleInput,
             plannedEndDate,
@@ -513,6 +514,15 @@ export class PlanningService {
             updatedById: actor?.userId,
           }),
         );
+        if (input.ownerId) {
+          task = await this.taskAssignmentService.changeTaskAssignment(
+            projectId,
+            task.id,
+            input.ownerId,
+            actor!,
+            manager,
+          );
+        }
 
         const rebuiltSnapshot =
           await this.planningSnapshotService.calculateOperationalForecast(

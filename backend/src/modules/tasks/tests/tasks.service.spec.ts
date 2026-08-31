@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,6 +11,7 @@ import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { TaskExecutionUpdate } from '../entities/task-execution-update.entity';
 import { Task } from '../entities/task.entity';
+import { TaskAssignmentService } from '../task-assignment.service';
 import { TasksService } from '../tasks.service';
 
 type MockRepository<T extends object = object> = Partial<
@@ -42,6 +43,7 @@ describe('TasksService', () => {
   };
   let taskTransactionManager: {
     create: jest.Mock;
+    getRepository: jest.Mock;
     save: jest.Mock;
   };
   let taskQueryBuilder: {
@@ -64,6 +66,7 @@ describe('TasksService', () => {
     canViewProject: jest.Mock;
     getVisibleProjectIds: jest.Mock;
   };
+  let taskAssignmentService: { changeTaskAssignment: jest.Mock };
 
   beforeEach(async () => {
     taskQueryBuilder = {
@@ -89,6 +92,10 @@ describe('TasksService', () => {
     };
     taskTransactionManager = {
       create: jest.fn((_entity, input) => input),
+      getRepository: jest.fn((entity) => {
+        if (entity === Task) return tasksRepository;
+        throw new Error(`Unexpected repository ${String(entity)}`);
+      }),
       save: jest.fn((_entity, input) =>
         Promise.resolve({ id: 'execution-update-id', ...input }),
       ),
@@ -117,6 +124,21 @@ describe('TasksService', () => {
       canViewProject: jest.fn().mockResolvedValue(true),
       getVisibleProjectIds: jest.fn().mockResolvedValue('all'),
     };
+    taskAssignmentService = {
+      changeTaskAssignment: jest.fn(
+        (...args: [string, string, string | null]) =>
+          Promise.resolve({
+            assigneeId: args[2],
+            id: args[1],
+            percentComplete: 20,
+            priority: 'medium',
+            projectId,
+            status: TaskStatus.Todo,
+            taskKind: TaskKind.Standard,
+            title: 'Task',
+          }),
+      ),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -141,6 +163,10 @@ describe('TasksService', () => {
         {
           provide: ProjectVisibilityService,
           useValue: projectVisibilityService,
+        },
+        {
+          provide: TaskAssignmentService,
+          useValue: taskAssignmentService,
         },
       ],
     }).compile();
@@ -174,6 +200,33 @@ describe('TasksService', () => {
         projectId,
         title: 'Prepare steering committee readout',
       }),
+    );
+  });
+
+  it('creates assigned tasks unassigned before invoking the canonical command', async () => {
+    await service.create(
+      {
+        assigneeId: userId,
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare steering committee readout',
+      },
+      managerActor,
+    );
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      createdById: managerActor.userId,
+      projectId,
+      taskKind: TaskKind.Standard,
+      title: 'Prepare steering committee readout',
+      updatedById: managerActor.userId,
+    });
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      userId,
+      managerActor,
+      taskTransactionManager,
     );
   });
 
@@ -213,6 +266,18 @@ describe('TasksService', () => {
         }),
         percentComplete: 50,
         status: TaskStatus.InProgress,
+      }),
+    );
+    expect(taskAssignmentService.changeTaskAssignment).not.toHaveBeenCalled();
+    expect(taskTransactionManager.create).toHaveBeenCalledWith(
+      TaskExecutionUpdate,
+      expect.objectContaining({
+        changes: expect.objectContaining({
+          assigneeId: {
+            nextValue: userId,
+            previousValue: userId,
+          },
+        }),
       }),
     );
   });
@@ -306,6 +371,13 @@ describe('TasksService', () => {
         priority: 'critical',
         updateNotes: 'Customer review moved the API task up.',
       }),
+    );
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      userId,
+      { email: 'pm@example.com', roleId: 'role-1', userId },
+      taskTransactionManager,
     );
   });
 
@@ -822,6 +894,10 @@ describe('TasksService', () => {
   });
 
   it('rejects assigning a summary task to a user', async () => {
+    taskAssignmentService.changeTaskAssignment.mockRejectedValueOnce(
+      new BadRequestException('Summary tasks cannot be assigned to a user'),
+    );
+
     await expect(
       service.create({
         assigneeId: userId,
@@ -988,6 +1064,40 @@ describe('TasksService', () => {
     expect(tasksRepository.save).toHaveBeenCalled();
   });
 
+  it('revalidates a preserved assignee when moving a task between projects', async () => {
+    const targetProjectId = 'f7287215-927c-47ca-b7c2-47ce47119899';
+    const task = {
+      assigneeId: userId,
+      id: taskId,
+      projectId,
+      status: TaskStatus.Todo,
+      taskKind: TaskKind.Standard,
+      title: 'Original',
+    };
+    tasksRepository.findOne
+      ?.mockResolvedValueOnce(task)
+      .mockResolvedValueOnce({ ...task, projectId: targetProjectId });
+
+    await service.update(taskId, { projectId: targetProjectId }, managerActor);
+
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenNthCalledWith(
+      1,
+      projectId,
+      taskId,
+      null,
+      managerActor,
+      taskTransactionManager,
+    );
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenNthCalledWith(
+      2,
+      targetProjectId,
+      taskId,
+      userId,
+      managerActor,
+      taskTransactionManager,
+    );
+  });
+
   it('fails closed when task update is called without an actor', async () => {
     tasksRepository.findOne?.mockResolvedValue({
       id: taskId,
@@ -1042,8 +1152,15 @@ describe('TasksService', () => {
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         id: taskId,
-        assigneeId: nextAssigneeId,
+        assigneeId: previousAssigneeId,
       }),
+    );
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      nextAssigneeId,
+      managerActor,
+      taskTransactionManager,
     );
     expect(tasksRepository.findOne).toHaveBeenNthCalledWith(2, {
       where: { id: taskId },
@@ -1079,12 +1196,18 @@ describe('TasksService', () => {
       managerActor,
     );
 
-    expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         id: taskId,
-        assigneeId: null,
+        assigneeId: userId,
       }),
+    );
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      null,
+      managerActor,
+      taskTransactionManager,
     );
     expect(result.assigneeId).toBeNull();
     expect(result.assignee).toBeNull();

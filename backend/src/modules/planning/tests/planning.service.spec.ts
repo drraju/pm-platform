@@ -16,6 +16,7 @@ import { ProjectVisibilityService } from '../../projects/project-visibility.serv
 import { ProjectsService } from '../../projects/projects.service';
 import { TaskDependency } from '../../tasks/entities/task-dependency.entity';
 import { Task } from '../../tasks/entities/task.entity';
+import { TaskAssignmentService } from '../../tasks/task-assignment.service';
 import { User } from '../../users/entities/user.entity';
 import { PlanningScheduleSnapshot } from '../entities/planning-schedule-snapshot.entity';
 import { PlanningTaskSchedule } from '../entities/planning-task-schedule.entity';
@@ -73,6 +74,7 @@ describe('PlanningService', () => {
     removeProjectTaskDependency: jest.Mock;
     updateProjectTaskDependency: jest.Mock;
   };
+  let taskAssignmentService: { changeTaskAssignment: jest.Mock };
 
   beforeEach(async () => {
     scheduleSnapshotsRepository = {
@@ -191,6 +193,16 @@ describe('PlanningService', () => {
       removeProjectTaskDependency: jest.fn(),
       updateProjectTaskDependency: jest.fn(),
     };
+    taskAssignmentService = {
+      changeTaskAssignment: jest.fn(
+        (...args: [string, string, string | null]) =>
+          Promise.resolve({
+            assigneeId: args[2],
+            id: args[1],
+            projectId,
+          }),
+      ),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -258,6 +270,10 @@ describe('PlanningService', () => {
         {
           provide: ProjectsService,
           useValue: projectsService,
+        },
+        {
+          provide: TaskAssignmentService,
+          useValue: taskAssignmentService,
         },
       ],
     }).compile();
@@ -1078,17 +1094,20 @@ describe('PlanningService', () => {
       select: { id: true, parentTaskId: true, projectId: true, taskKind: true },
       where: { id: 'parent-task-id', projectId },
     });
-    expect(usersRepository.findOne).toHaveBeenCalledWith({
-      select: { id: true },
-      where: { id: 'new-owner-id' },
-    });
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        assigneeId: 'new-owner-id',
+        assigneeId: userId,
         parentTaskId: 'parent-task-id',
         sequenceNumber: 3,
         updatedById: actor.userId,
       }),
+    );
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      'new-owner-id',
+      actor,
+      transactionManager,
     );
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
     expect(scheduleSnapshotsRepository.save).not.toHaveBeenCalled();
@@ -1523,17 +1542,20 @@ describe('PlanningService', () => {
       actor,
     );
 
-    expect(usersRepository.findOne).toHaveBeenCalledWith({
-      select: { id: true },
-      where: { id: userId },
-    });
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        assigneeId: userId,
+        assigneeId: null,
         parentTaskId: null,
         taskKind: TaskKind.Standard,
         title: 'Owner assigned task',
       }),
+    );
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      projectId,
+      taskId,
+      userId,
+      actor,
+      transactionManager,
     );
     expect(schedule).toEqual(
       expect.objectContaining({

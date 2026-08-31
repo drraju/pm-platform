@@ -148,6 +148,33 @@ describe('TaskAssignmentService', () => {
     ).resolves.toMatchObject({ assigneeId: targetAssigneeId });
   });
 
+  it('uses caller-provided transactional repositories for canonical persistence', async () => {
+    grantMembership(actorId, ProjectRole.Manager);
+    const entityManager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === Task) return tasksRepository;
+        if (entity === ProjectMember) return projectMembersRepository;
+        if (entity === User) return usersRepository;
+        throw new Error(`Unexpected repository ${String(entity)}`);
+      }),
+    };
+
+    await service.changeTaskAssignment(
+      projectId,
+      taskId,
+      targetAssigneeId,
+      actor(UserRole.TeamMember),
+      entityManager as never,
+    );
+
+    expect(entityManager.getRepository).toHaveBeenCalledWith(Task);
+    expect(entityManager.getRepository).toHaveBeenCalledWith(ProjectMember);
+    expect(entityManager.getRepository).toHaveBeenCalledWith(User);
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ assigneeId: targetAssigneeId }),
+    );
+  });
+
   it('allows a manager to unassign an assigned task', async () => {
     persistedTask.assigneeId = currentAssigneeId;
     grantMembership(actorId, ProjectRole.Manager);

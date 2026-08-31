@@ -57,6 +57,7 @@ import {
   ProjectVisibilityService,
 } from './project-visibility.service';
 import { TasksService } from '../tasks/tasks.service';
+import { TaskAssignmentService } from '../tasks/task-assignment.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
 type AuthenticatedActor = AuthorizationActor;
@@ -109,6 +110,7 @@ export class ProjectsService {
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
+    private readonly taskAssignmentService: TaskAssignmentService,
     @Inject(forwardRef(() => TasksService))
     @Optional()
     private readonly canonicalTasksService?: TasksService,
@@ -413,25 +415,38 @@ export class ProjectsService {
         actor,
       );
     }
-    const normalizedInput =
+    const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
         applyTaskCompletionTransition(createProjectTaskDto),
       );
+    const requestedAssigneeId = normalizedMutation.assigneeId;
+    const normalizedInput = { ...normalizedMutation };
+    delete normalizedInput.assigneeId;
     await this.validateTaskPlanningFields(projectId, normalizedInput);
-    await this.validateAssigneeMembership(
-      projectId,
-      normalizedInput.assigneeId,
+    const savedTask = await this.projectsRepository.manager.transaction(
+      async (entityManager) => {
+        const tasksRepository = entityManager.getRepository(Task);
+        const task = await tasksRepository.save(
+          tasksRepository.create({
+            ...normalizedInput,
+            projectId,
+            ...(actor?.userId
+              ? { createdById: actor.userId, updatedById: actor.userId }
+              : {}),
+          }),
+        );
+        if (!requestedAssigneeId) {
+          return task;
+        }
+        return this.taskAssignmentService.changeTaskAssignment(
+          projectId,
+          task.id,
+          requestedAssigneeId,
+          actor!,
+          entityManager,
+        );
+      },
     );
-
-    const task = this.tasksRepository.create({
-      ...normalizedInput,
-      projectId,
-      ...(actor?.userId
-        ? { createdById: actor.userId, updatedById: actor.userId }
-        : {}),
-    });
-
-    const savedTask = await this.tasksRepository.save(task);
     return this.projectTaskForActor(this.decorateTask(savedTask), actor);
   }
 
@@ -459,22 +474,36 @@ export class ProjectsService {
         actor,
       );
     }
-    const normalizedInput =
+    const assignmentRequested = updateProjectTaskDto.assigneeId !== undefined;
+    const requestedAssigneeId = updateProjectTaskDto.assigneeId ?? null;
+    const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
         applyTaskCompletionTransition(updateProjectTaskDto, task),
         task,
       );
+    const normalizedInput = { ...normalizedMutation };
+    delete normalizedInput.assigneeId;
     await this.validateTaskPlanningFields(projectId, normalizedInput, task);
-    await this.validateAssigneeMembership(
-      projectId,
-      normalizedInput.assigneeId,
+    const savedTask = await this.projectsRepository.manager.transaction(
+      async (entityManager) => {
+        const tasksRepository = entityManager.getRepository(Task);
+        Object.assign(task, normalizedInput, {
+          projectId,
+          ...(actor?.userId ? { updatedById: actor.userId } : {}),
+        });
+        const updatedTask = await tasksRepository.save(task);
+        if (!assignmentRequested) {
+          return updatedTask;
+        }
+        return this.taskAssignmentService.changeTaskAssignment(
+          projectId,
+          task.id,
+          requestedAssigneeId,
+          actor!,
+          entityManager,
+        );
+      },
     );
-    Object.assign(task, normalizedInput, {
-      projectId,
-      ...(actor?.userId ? { updatedById: actor.userId } : {}),
-    });
-
-    const savedTask = await this.tasksRepository.save(task);
     return this.projectTaskForActor(this.decorateTask(savedTask), actor);
   }
 
@@ -1379,25 +1408,6 @@ export class ProjectsService {
     }
 
     return dependency;
-  }
-
-  private async validateAssigneeMembership(
-    projectId: string,
-    assigneeId?: string | null,
-  ): Promise<void> {
-    if (!assigneeId) {
-      return;
-    }
-
-    await this.ensureUserExists(assigneeId);
-
-    const membership = await this.projectMembersRepository.findOne({
-      select: { id: true },
-      where: { projectId, userId: assigneeId },
-    });
-    if (!membership) {
-      throw new ConflictException('Assignee must be a project member');
-    }
   }
 
   private async validateTaskPlanningFields(

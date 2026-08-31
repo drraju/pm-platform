@@ -102,20 +102,31 @@ describe('PlanningWorkPackageDuplicationService', () => {
         transaction: jest.fn(async (operation) => operation(manager)),
       },
     };
+    const taskAssignmentService = {
+      changeTaskAssignment: jest.fn(
+        (...args: [string, string, string]) =>
+          Promise.resolve({
+            ...savedCopies.at(-1),
+            assigneeId: args[2],
+          }),
+      ),
+    };
     const service = new PlanningWorkPackageDuplicationService(
       tasksRepository as never,
       {
         calculateDurationDays: jest.fn().mockReturnValue(null),
       } as never,
+      taskAssignmentService as never,
     );
 
     const result = await service.duplicate(
       'project-1',
       sourceSummary.id,
       {
+        copyResourceAssignments: true,
         newSummaryName: 'Dynatrace Integration - Wave 2',
       },
-      { userId: 'manager-1' },
+      { roleId: 'project-manager', userId: 'manager-1' },
     );
 
     expect(result).toEqual({
@@ -148,6 +159,13 @@ describe('PlanningWorkPackageDuplicationService', () => {
         successorTaskId: 'copy-3',
       }),
     ]);
+    expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
+      'project-1',
+      'copy-2',
+      'user-1',
+      { roleId: 'project-manager', userId: 'manager-1' },
+      manager,
+    );
   });
 
   it('rejects a standard task as a work package source', async () => {
@@ -163,6 +181,7 @@ describe('PlanningWorkPackageDuplicationService', () => {
         },
       } as never,
       {} as never,
+      { changeTaskAssignment: jest.fn() } as never,
     );
 
     await expect(
@@ -237,6 +256,7 @@ describe('PlanningWorkPackageDuplicationService', () => {
       {
         calculateDurationDays: jest.fn().mockReturnValue(null),
       } as never,
+      { changeTaskAssignment: jest.fn() } as never,
     );
 
     await service.duplicate(
@@ -246,7 +266,7 @@ describe('PlanningWorkPackageDuplicationService', () => {
         copyActualDates: true,
         newSummaryName: 'Fresh package',
       },
-      { userId: 'manager-1' },
+      { roleId: 'project-manager', userId: 'manager-1' },
     );
 
     expect(savedCopies[1]).toMatchObject({

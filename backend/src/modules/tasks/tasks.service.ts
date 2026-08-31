@@ -12,7 +12,6 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from '../../common/authz/authorization-policy.service';
-import { PermissionKey } from '../../common/authz/permissions';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
@@ -32,6 +31,7 @@ import {
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskExecutionUpdate } from './entities/task-execution-update.entity';
 import { Task } from './entities/task.entity';
+import { TaskAssignmentService } from './task-assignment.service';
 import { decoratePlanningTasks, getOperationalTasks } from './planning-rollup';
 import {
   MilestoneQuery,
@@ -83,6 +83,7 @@ export class TasksService {
     private readonly authorizationPolicyService: AuthorizationPolicyService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
+    private readonly taskAssignmentService: TaskAssignmentService,
     @Optional()
     private readonly milestoneQueryService?: MilestoneQueryService,
   ) {}
@@ -146,22 +147,36 @@ export class TasksService {
     actor?: AuthenticatedActor,
   ): Promise<Task> {
     await this.ensureCanManageProject(createTaskDto.projectId, actor);
-    const normalizedInput =
+    const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
         applyTaskCompletionTransition(createTaskDto),
       );
+    const requestedAssigneeId = normalizedMutation.assigneeId;
+    const normalizedInput = { ...normalizedMutation };
+    delete normalizedInput.assigneeId;
     await this.validatePlanningFields(createTaskDto.projectId, normalizedInput);
-    await this.validateAssigneeMembership(
-      createTaskDto.projectId,
-      normalizedInput.assigneeId,
-    );
-    const task = await this.tasksRepository.save(
-      this.tasksRepository.create({
-        ...normalizedInput,
-        ...(actor?.userId
-          ? { createdById: actor.userId, updatedById: actor.userId }
-          : {}),
-      }),
+    const task = await this.tasksRepository.manager.transaction(
+      async (entityManager) => {
+        const tasksRepository = entityManager.getRepository(Task);
+        const createdTask = await tasksRepository.save(
+          tasksRepository.create({
+            ...normalizedInput,
+            ...(actor?.userId
+              ? { createdById: actor.userId, updatedById: actor.userId }
+              : {}),
+          }),
+        );
+        if (!requestedAssigneeId) {
+          return createdTask;
+        }
+        return this.taskAssignmentService.changeTaskAssignment(
+          createTaskDto.projectId,
+          createdTask.id,
+          requestedAssigneeId,
+          actor!,
+          entityManager,
+        );
+      },
     );
     return this.decorateTask(task);
   }
@@ -303,28 +318,59 @@ export class TasksService {
   ): Promise<Task> {
     const task = await this.findTaskForMutation(id, actor);
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
+    const assignmentRequested = updateTaskDto.assigneeId !== undefined;
+    const requestedAssigneeId = updateTaskDto.assigneeId ?? null;
     if (updateTaskDto.projectId && updateTaskDto.projectId !== task.projectId) {
       await this.ensureCanManageTaskProject(updateTaskDto.projectId, actor);
     }
-    const normalizedInput =
+    const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
         applyTaskCompletionTransition(updateTaskDto, task),
         task,
       );
+    const normalizedInput = { ...normalizedMutation };
+    delete normalizedInput.assigneeId;
     await this.validatePlanningFields(
       normalizedInput.projectId ?? task.projectId,
       normalizedInput,
       task,
     );
-    await this.validateAssigneeMembership(
-      normalizedInput.projectId ?? task.projectId,
-      normalizedInput.assigneeId,
-    );
-    Object.assign(task, normalizedInput);
-    if (actor?.userId) {
-      task.updatedById = actor.userId;
-    }
-    await this.tasksRepository.save(task);
+    const sourceProjectId = task.projectId;
+    const originalAssigneeId = task.assigneeId ?? null;
+    const targetProjectId = normalizedInput.projectId ?? task.projectId;
+    const projectChanged = targetProjectId !== sourceProjectId;
+    await this.tasksRepository.manager.transaction(async (entityManager) => {
+      const tasksRepository = entityManager.getRepository(Task);
+      const taskToSave =
+        projectChanged && originalAssigneeId
+          ? await this.taskAssignmentService.changeTaskAssignment(
+              sourceProjectId,
+              task.id,
+              null,
+              actor!,
+              entityManager,
+            )
+          : task;
+      Object.assign(taskToSave, normalizedInput);
+      if (actor?.userId) {
+        taskToSave.updatedById = actor.userId;
+      }
+      await tasksRepository.save(taskToSave);
+      const destinationAssigneeId = assignmentRequested
+        ? requestedAssigneeId
+        : projectChanged
+          ? originalAssigneeId
+          : undefined;
+      if (destinationAssigneeId !== undefined) {
+        await this.taskAssignmentService.changeTaskAssignment(
+          targetProjectId,
+          taskToSave.id,
+          destinationAssigneeId,
+          actor!,
+          entityManager,
+        );
+      }
+    });
     return this.findOne(id, actor);
   }
 
@@ -341,7 +387,6 @@ export class TasksService {
     }
     await this.ensureCanRecordExecutionUpdate(task, input, actor);
     this.validateTaskPriority(input.priority);
-    await this.validateAssigneeMembership(task.projectId, input.assigneeId);
     await this.validateAssigneeMembership(
       task.projectId,
       input.nextActionOwnerId,
@@ -351,7 +396,6 @@ export class TasksService {
       async (transactionalEntityManager) => {
         const normalizedInput = applyTaskCompletionTransition(
           {
-            assigneeId: input.assigneeId ?? null,
             dueDate: input.targetCompletionDate ?? null,
             percentComplete: input.percentComplete,
             priority: input.priority,
@@ -367,11 +411,25 @@ export class TasksService {
           status: normalizedInput.status ?? input.status,
         });
 
-        Object.assign(task, normalizedInput, {
+        const taskToSave =
+          input.assigneeId === undefined
+            ? task
+            : await this.taskAssignmentService.changeTaskAssignment(
+                task.projectId,
+                task.id,
+                input.assigneeId ?? null,
+                actor!,
+                transactionalEntityManager,
+              );
+
+        Object.assign(taskToSave, normalizedInput, {
           updatedById: actor?.userId,
         });
 
-        const savedTask = await transactionalEntityManager.save(Task, task);
+        const savedTask = await transactionalEntityManager.save(
+          Task,
+          taskToSave,
+        );
         const executionUpdate = transactionalEntityManager.create(
           TaskExecutionUpdate,
           {
@@ -646,19 +704,6 @@ export class TasksService {
       );
     }
 
-    if (
-      input.assigneeId !== undefined &&
-      input.assigneeId !== task.assigneeId &&
-      !(await this.authorizationPolicyService.hasPermission(
-        actor,
-        PermissionKey.TaskReassign,
-      ))
-    ) {
-      throw new ForbiddenException(
-        'Task reassignment requires task.reassign permission',
-      );
-    }
-
     if (input.priority !== undefined && input.priority !== task.priority) {
       throw new ForbiddenException(
         'Only project managers can change task priority',
@@ -899,7 +944,10 @@ export class TasksService {
     input: CreateTaskExecutionUpdateDto,
   ): TaskExecutionUpdate['changes'] {
     return {
-      assigneeId: this.toChangeValue(task.assigneeId, input.assigneeId ?? null),
+      assigneeId: this.toChangeValue(
+        task.assigneeId,
+        input.assigneeId === undefined ? task.assigneeId : input.assigneeId,
+      ),
       dueDate: this.toChangeValue(
         task.dueDate,
         input.targetCompletionDate ?? null,

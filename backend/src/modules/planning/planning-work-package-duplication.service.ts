@@ -5,16 +5,18 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { AuthorizationActor } from '../../common/authz/authorization-policy.service';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { TaskAssignmentService } from '../tasks/task-assignment.service';
 import { DuplicateWorkPackageDto } from './dto/duplicate-work-package.dto';
 import { ResourceAllocation } from './entities/resource-allocation.entity';
 
-type DuplicationActor = { userId?: string | null };
+type DuplicationActor = AuthorizationActor;
 
 export type DuplicateWorkPackagePersistenceResult = {
   copiedTaskIds: string[];
@@ -27,6 +29,7 @@ export class PlanningWorkPackageDuplicationService {
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
     private readonly schedulingFoundationService: SchedulingFoundationService,
+    private readonly taskAssignmentService: TaskAssignmentService,
   ) {}
 
   duplicate(
@@ -118,14 +121,15 @@ export class PlanningWorkPackageDuplicationService {
           input.copyPlannedDates === true
             ? (sourceTask.plannedEndDate ?? sourceTask.dueDate ?? null)
             : null;
-        const copy = await tasksRepository.save(
+        const requestedAssigneeId =
+          input.copyResourceAssignments === true
+            ? (sourceTask.assigneeId ?? null)
+            : null;
+        let copy = await tasksRepository.save(
           tasksRepository.create({
             actualEndDate: null,
             actualStartDate: null,
-            assigneeId:
-              input.copyResourceAssignments === true
-                ? (sourceTask.assigneeId ?? null)
-                : null,
+            assigneeId: null,
             createdById: actor?.userId,
             description:
               input.preserveNotes !== false
@@ -173,6 +177,15 @@ export class PlanningWorkPackageDuplicationService {
             updatedById: actor?.userId,
           }),
         );
+        if (requestedAssigneeId) {
+          copy = await this.taskAssignmentService.changeTaskAssignment(
+            projectId,
+            copy.id,
+            requestedAssigneeId,
+            actor!,
+            manager,
+          );
+        }
         idMap.set(sourceTask.id, copy.id);
         copiedTasks.push(copy);
       }
