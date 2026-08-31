@@ -254,7 +254,10 @@ export class CanonicalCapabilityResolverService {
     }
 
     if (await this.authorizationPolicyService.isPlatformAdministrator(actor)) {
-      return this.grant(audience);
+      return (
+        this.getDestinationObjectStateRestriction(input, audience) ??
+        this.grant(audience)
+      );
     }
 
     const projectRole =
@@ -337,6 +340,14 @@ export class CanonicalCapabilityResolverService {
       return this.grant(audience);
     }
 
+    const objectStateRestriction = this.getDestinationObjectStateRestriction(
+      input,
+      audience,
+    );
+    if (objectStateRestriction) {
+      return objectStateRestriction;
+    }
+
     const destinationRole =
       await this.authorizationPolicyService.getProjectMembershipRole(
         input.destinationProjectId,
@@ -364,6 +375,30 @@ export class CanonicalCapabilityResolverService {
       scopeDecisions: [
         { allowed: true, reasonCode: 'GRANTED', scope: 'source' },
         { allowed: true, reasonCode: 'GRANTED', scope: 'destination' },
+      ],
+    };
+  }
+
+  private getDestinationObjectStateRestriction(
+    input: CapabilityResolverInput,
+    audience: CapabilityAudience,
+  ): CapabilityDecision | null {
+    if (
+      input.capability !== 'task.move' ||
+      input.destinationProjectStatus !== 'archived'
+    ) {
+      return null;
+    }
+
+    return {
+      ...this.deny(audience, 'OBJECT_STATE_RESTRICTED'),
+      scopeDecisions: [
+        { allowed: true, reasonCode: 'GRANTED', scope: 'source' },
+        {
+          allowed: false,
+          reasonCode: 'OBJECT_STATE_RESTRICTED',
+          scope: 'destination',
+        },
       ],
     };
   }

@@ -79,7 +79,6 @@ export class PlanningController {
   }
 
   @Post('projects/:projectId/workspace/regenerate')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({
     summary: 'Regenerate the project planning workspace snapshot',
   })
@@ -102,7 +101,6 @@ export class PlanningController {
   }
 
   @Post('projects/:projectId/schedule/recalculate')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Request a project schedule recalculation' })
   @ApiCreatedResponse({ type: PlanningScheduleSnapshot })
   requestScheduleRecalculation(
@@ -116,7 +114,6 @@ export class PlanningController {
   }
 
   @Patch('projects/:projectId/task-schedules/:scheduleId')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Update a planning task schedule row' })
   @ApiOkResponse({ type: PlanningWorkspaceScheduleDto })
   updatePlanningTaskSchedule(
@@ -134,7 +131,6 @@ export class PlanningController {
   }
 
   @Post('projects/:projectId/tasks')
-  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiOperation({ summary: 'Create a task from the planning workspace' })
   @ApiCreatedResponse({ type: PlanningWorkspaceScheduleDto })
   createPlanningTask(
@@ -150,7 +146,6 @@ export class PlanningController {
   }
 
   @Post('projects/:projectId/tasks/:taskId/duplicate-work-package')
-  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiOperation({ summary: 'Duplicate a Summary Task work package' })
   @ApiCreatedResponse({ type: DuplicateWorkPackageResultDto })
   duplicateWorkPackage(
@@ -168,7 +163,6 @@ export class PlanningController {
   }
 
   @Delete('projects/:projectId/work-packages/:summaryTaskId')
-  @RequirePermissions(PermissionKey.TaskDelete)
   @ApiOperation({ summary: 'Remove a duplicated work package for undo' })
   @ApiOkResponse({ type: PlanningWorkspaceDto })
   removeDuplicatedWorkPackage(
@@ -216,7 +210,6 @@ export class PlanningController {
   }
 
   @Post('projects/:projectId/dependencies')
-  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiOperation({ summary: 'Create a planning task dependency' })
   @ApiCreatedResponse({ type: TaskDependency })
   createTaskDependency(
@@ -242,7 +235,6 @@ export class PlanningController {
   }
 
   @Patch('projects/:projectId/dependencies/:dependencyId')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Update a planning task dependency' })
   @ApiOkResponse({ type: TaskDependency })
   updateTaskDependency(
@@ -260,7 +252,6 @@ export class PlanningController {
   }
 
   @Delete('projects/:projectId/dependencies/:dependencyId')
-  @RequirePermissions(PermissionKey.TaskDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a planning task dependency' })
   @ApiNoContentResponse({ description: 'Planning task dependency deleted' })

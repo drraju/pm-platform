@@ -21,9 +21,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Request } from 'express';
-import { PermissionKey } from '../../common/authz/permissions';
 import { PermissionsGuard } from '../../common/authz/permissions.guard';
-import { RequirePermissions } from '../../common/authz/require-permissions.decorator';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -50,7 +48,6 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
-  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiCreatedResponse({ type: Task })
   create(
     @Req() request: AuthenticatedRequest,
@@ -113,7 +110,6 @@ export class TasksController {
   }
 
   @Patch(':id')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOkResponse({ type: Task })
   update(
     @Req() request: AuthenticatedRequest,
@@ -124,7 +120,6 @@ export class TasksController {
   }
 
   @Delete(':id')
-  @RequirePermissions(PermissionKey.TaskDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOkResponse()
   remove(

@@ -96,6 +96,7 @@ export type CapabilityResolverInput = {
   resource: CapabilityResource;
   changedFields?: readonly string[];
   destinationProjectId?: string | null;
+  destinationProjectStatus?: string | null;
   requestedAssigneeId?: string | null;
 };
 

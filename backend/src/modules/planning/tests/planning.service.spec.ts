@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
+import { CanonicalCapabilityResolverService } from '../../../common/authz/canonical-capability-resolver.service';
 import { PlanningCalculationStatus } from '../../../common/enums/planning-calculation-status.enum';
 import { ResourceAllocationUnit } from '../../../common/enums/resource-allocation-unit.enum';
 import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
@@ -75,6 +76,7 @@ describe('PlanningService', () => {
     updateProjectTaskDependency: jest.Mock;
   };
   let taskAssignmentService: { changeTaskAssignment: jest.Mock };
+  let canonicalCapabilityResolver: { resolve: jest.Mock };
 
   beforeEach(async () => {
     scheduleSnapshotsRepository = {
@@ -203,6 +205,13 @@ describe('PlanningService', () => {
           }),
       ),
     };
+    canonicalCapabilityResolver = {
+      resolve: jest.fn().mockResolvedValue({
+        allowed: true,
+        audience: 'internal',
+        reasonCode: 'GRANTED',
+      }),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -262,6 +271,10 @@ describe('PlanningService', () => {
         {
           provide: AuthorizationPolicyService,
           useValue: authorizationPolicyService,
+        },
+        {
+          provide: CanonicalCapabilityResolverService,
+          useValue: canonicalCapabilityResolver,
         },
         {
           provide: ProjectVisibilityService,
@@ -449,9 +462,12 @@ describe('PlanningService', () => {
 
     const workspace = await service.regenerateWorkspace(projectId, actor);
 
-    expect(authorizationPolicyService.canManageProject).toHaveBeenCalledWith(
-      projectId,
-      actor,
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor,
+        capability: 'task.edit_plan',
+        resource: expect.objectContaining({ projectId, type: 'task' }),
+      }),
     );
     expect(rebuildSpy).toHaveBeenCalledWith(projectId, actor);
     expect(workspace).toEqual(
@@ -478,7 +494,11 @@ describe('PlanningService', () => {
       planningSnapshotService,
       'regenerateOfficialSnapshot',
     );
-    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'MISSING_PERMISSION',
+    });
 
     await expect(service.regenerateWorkspace(projectId, actor)).rejects.toThrow(
       ForbiddenException,
@@ -1724,7 +1744,11 @@ describe('PlanningService', () => {
   });
 
   it('rejects planning task creation without project manager access', async () => {
-    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'MISSING_PERMISSION',
+    });
 
     await expect(
       service.createPlanningTask(projectId, {}, actor),
@@ -1775,7 +1799,11 @@ describe('PlanningService', () => {
   });
 
   it('rejects schedule recalculation without project manager access', async () => {
-    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'MISSING_PERMISSION',
+    });
 
     await expect(
       service.requestScheduleRecalculation(projectId, actor),

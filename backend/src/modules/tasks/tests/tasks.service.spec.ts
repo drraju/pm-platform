@@ -3,11 +3,13 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
+import { CanonicalCapabilityResolverService } from '../../../common/authz/canonical-capability-resolver.service';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
+import { Project } from '../../projects/entities/project.entity';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { TaskExecutionUpdate } from '../entities/task-execution-update.entity';
 import { Task } from '../entities/task.entity';
@@ -67,6 +69,7 @@ describe('TasksService', () => {
     getVisibleProjectIds: jest.Mock;
   };
   let taskAssignmentService: { changeTaskAssignment: jest.Mock };
+  let canonicalCapabilityResolver: { resolve: jest.Mock };
 
   beforeEach(async () => {
     taskQueryBuilder = {
@@ -84,6 +87,17 @@ describe('TasksService', () => {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       manager: {
+        getRepository: jest.fn((entity) => {
+          if (entity === Project) {
+            return {
+              findOne: jest.fn().mockResolvedValue({
+                id: projectId,
+                status: 'active',
+              }),
+            };
+          }
+          throw new Error(`Unexpected repository ${String(entity)}`);
+        }),
         transaction: jest.fn((callback) => callback(taskTransactionManager)),
       } as never,
       remove: jest.fn(() => Promise.resolve()),
@@ -139,6 +153,13 @@ describe('TasksService', () => {
           }),
       ),
     };
+    canonicalCapabilityResolver = {
+      resolve: jest.fn().mockResolvedValue({
+        allowed: true,
+        audience: 'internal',
+        reasonCode: 'GRANTED',
+      }),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -161,6 +182,10 @@ describe('TasksService', () => {
           useValue: authorizationPolicyService,
         },
         {
+          provide: CanonicalCapabilityResolverService,
+          useValue: canonicalCapabilityResolver,
+        },
+        {
           provide: ProjectVisibilityService,
           useValue: projectVisibilityService,
         },
@@ -179,21 +204,26 @@ describe('TasksService', () => {
   });
 
   it('creates a task from the existing DTO shape', async () => {
-    const result = await service.create({
-      projectId,
-      sequenceNumber: 10,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare steering committee readout',
-      status: TaskStatus.Todo,
-    });
+    const result = await service.create(
+      {
+        projectId,
+        sequenceNumber: 10,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare steering committee readout',
+        status: TaskStatus.Todo,
+      },
+      managerActor,
+    );
 
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      projectId,
-      sequenceNumber: 10,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare steering committee readout',
-      status: TaskStatus.Todo,
-    });
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId,
+        sequenceNumber: 10,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare steering committee readout',
+        status: TaskStatus.Todo,
+      }),
+    );
     expect(result).toEqual(
       expect.objectContaining({
         id: taskId,
@@ -214,13 +244,15 @@ describe('TasksService', () => {
       managerActor,
     );
 
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      createdById: managerActor.userId,
-      projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare steering committee readout',
-      updatedById: managerActor.userId,
-    });
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        createdById: managerActor.userId,
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare steering committee readout',
+        updatedById: managerActor.userId,
+      }),
+    );
     expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
       projectId,
       taskId,
@@ -282,7 +314,7 @@ describe('TasksService', () => {
     );
   });
 
-  it('prevents assigned team members from changing task priority', async () => {
+  it('allows assigned contributors to change canonical execution-update fields', async () => {
     const task = {
       assigneeId: userId,
       id: taskId,
@@ -294,7 +326,7 @@ describe('TasksService', () => {
       title: 'Prepare release plan',
     };
     tasksRepository.findOne?.mockResolvedValue(task);
-    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
+    projectMembersRepository.findOne?.mockResolvedValue({ id: 'membership' });
 
     await expect(
       service.recordExecutionUpdate(
@@ -309,7 +341,10 @@ describe('TasksService', () => {
         },
         { email: 'member@example.com', roleId: 'role-tm', userId },
       ),
-    ).rejects.toThrow('Only project managers can change task priority');
+    ).resolves.toEqual(expect.objectContaining({ priority: 'high' }));
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ capability: 'task.record_update' }),
+    );
   });
 
   it('records an execution update with priority and timeline details', async () => {
@@ -457,7 +492,9 @@ describe('TasksService', () => {
       },
     ]);
 
-    await expect(service.findExecutionUpdates(taskId)).resolves.toEqual([
+    await expect(
+      service.findExecutionUpdates(taskId, managerActor),
+    ).resolves.toEqual([
       expect.objectContaining({
         changes: {
           priority: { previousValue: 'medium', nextValue: 'high' },
@@ -493,33 +530,43 @@ describe('TasksService', () => {
       taskKind: TaskKind.Summary,
     });
 
-    await service.create({
-      parentTaskId: 'parent-task-id',
-      projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
+    await service.create(
+      {
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      },
+      managerActor,
+    );
 
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      parentTaskId: 'parent-task-id',
-      projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      }),
+    );
   });
 
   it('creates a task from the new taskType DTO shape while storing the compatible taskKind', async () => {
-    const result = await service.create({
-      projectId,
-      taskType: TaskType.Task,
-      title: 'Build data migration plan',
-    });
+    const result = await service.create(
+      {
+        projectId,
+        taskType: TaskType.Task,
+        title: 'Build data migration plan',
+      },
+      managerActor,
+    );
 
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Build data migration plan',
-    });
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Build data migration plan',
+      }),
+    );
     expect(result).toEqual(
       expect.objectContaining({
         id: taskId,
@@ -536,19 +583,24 @@ describe('TasksService', () => {
       taskKind: TaskKind.Standard,
     });
 
-    await service.create({
-      parentTaskId: 'parent-task-id',
-      projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
+    await service.create(
+      {
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      },
+      managerActor,
+    );
 
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      parentTaskId: 'parent-task-id',
-      projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      }),
+    );
   });
 
   it('rejects child task creation under a subtask', async () => {
@@ -567,36 +619,45 @@ describe('TasksService', () => {
       });
 
     await expect(
-      service.create({
-        parentTaskId: 'subtask-id',
-        projectId,
-        taskKind: TaskKind.Standard,
-        title: 'Nested child',
-      }),
+      service.create(
+        {
+          parentTaskId: 'subtask-id',
+          projectId,
+          taskKind: TaskKind.Standard,
+          title: 'Nested child',
+        },
+        managerActor,
+      ),
     ).rejects.toThrow('Subtasks cannot contain child tasks');
   });
 
   it('rejects milestone creation when planned dates are explicitly conflicting', async () => {
     await expect(
-      service.create({
-        plannedEndDate: '2026-07-03',
-        plannedStartDate: '2026-07-01',
-        projectId,
-        taskKind: TaskKind.Milestone,
-        title: 'Go-live',
-      }),
+      service.create(
+        {
+          plannedEndDate: '2026-07-03',
+          plannedStartDate: '2026-07-01',
+          projectId,
+          taskKind: TaskKind.Milestone,
+          title: 'Go-live',
+        },
+        managerActor,
+      ),
     ).rejects.toThrow(
       'Milestones must have matching planned start and end dates',
     );
   });
 
   it('normalizes milestone creation when only the planned start date is supplied', async () => {
-    await service.create({
-      plannedStartDate: '2026-07-01',
-      projectId,
-      taskType: TaskType.Milestone,
-      title: 'Go-live',
-    });
+    await service.create(
+      {
+        plannedStartDate: '2026-07-01',
+        projectId,
+        taskType: TaskType.Milestone,
+        title: 'Go-live',
+      },
+      managerActor,
+    );
 
     expect(tasksRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -899,12 +960,15 @@ describe('TasksService', () => {
     );
 
     await expect(
-      service.create({
-        assigneeId: userId,
-        projectId,
-        taskKind: TaskKind.Summary,
-        title: 'Planning Phase',
-      }),
+      service.create(
+        {
+          assigneeId: userId,
+          projectId,
+          taskKind: TaskKind.Summary,
+          title: 'Planning Phase',
+        },
+        managerActor,
+      ),
     ).rejects.toThrow('Summary tasks cannot be assigned to a user');
   });
 
@@ -930,7 +994,7 @@ describe('TasksService', () => {
   it('gets one task with project and assignee relations', async () => {
     tasksRepository.findOne?.mockResolvedValue({ id: taskId });
 
-    await expect(service.findOne(taskId)).resolves.toEqual(
+    await expect(service.findOne(taskId, managerActor)).resolves.toEqual(
       expect.objectContaining({ id: taskId }),
     );
     expect(tasksRepository.findOne).toHaveBeenCalledWith({
@@ -975,23 +1039,22 @@ describe('TasksService', () => {
       taskKind: TaskKind.Standard,
       title: 'Original',
     });
-    authorizationPolicyService.canManageTask
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false);
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'DESTINATION_SCOPE_DENIED',
+    });
 
     await expect(
       service.update(taskId, { projectId: targetProjectId }, managerActor),
-    ).rejects.toThrow('Task movement requires authority in both projects');
+    ).rejects.toThrow('DESTINATION_SCOPE_DENIED');
 
-    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
-      1,
-      projectId,
-      managerActor,
-    );
-    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
-      2,
-      targetProjectId,
-      managerActor,
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capability: 'task.move',
+        destinationProjectId: targetProjectId,
+        resource: expect.objectContaining({ projectId }),
+      }),
     );
     expect(tasksRepository.save).not.toHaveBeenCalled();
   });
@@ -1005,13 +1068,17 @@ describe('TasksService', () => {
       taskKind: TaskKind.Standard,
       title: 'Original',
     });
-    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'MISSING_PERMISSION',
+    });
 
     await expect(
       service.update(taskId, { projectId: targetProjectId }, managerActor),
-    ).rejects.toThrow('Only assigned team members can update this task');
+    ).rejects.toThrow('MISSING_PERMISSION');
 
-    expect(authorizationPolicyService.canManageTask).toHaveBeenCalledTimes(1);
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledTimes(1);
     expect(tasksRepository.save).not.toHaveBeenCalled();
   });
 
@@ -1033,15 +1100,11 @@ describe('TasksService', () => {
 
     await service.update(taskId, { projectId: targetProjectId }, managerActor);
 
-    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
-      1,
-      projectId,
-      managerActor,
-    );
-    expect(authorizationPolicyService.canManageTask).toHaveBeenNthCalledWith(
-      2,
-      targetProjectId,
-      managerActor,
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capability: 'task.move',
+        destinationProjectId: targetProjectId,
+      }),
     );
     expect(tasksRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: targetProjectId }),
@@ -1060,7 +1123,9 @@ describe('TasksService', () => {
 
     await service.update(taskId, { projectId }, managerActor);
 
-    expect(authorizationPolicyService.canManageTask).toHaveBeenCalledTimes(1);
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ capability: 'task.view' }),
+    );
     expect(tasksRepository.save).toHaveBeenCalled();
   });
 
@@ -1147,6 +1212,7 @@ describe('TasksService', () => {
     );
 
     expect(tasksRepository.findOne).toHaveBeenNthCalledWith(1, {
+      relations: { project: true },
       where: { id: taskId },
     });
     expect(tasksRepository.save).toHaveBeenCalledWith(
@@ -1404,8 +1470,6 @@ describe('TasksService', () => {
     projectMembersRepository.findOne?.mockResolvedValueOnce({
       id: 'assignee-member-id',
     });
-    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
-
     await service.update(
       taskId,
       {
@@ -1443,15 +1507,15 @@ describe('TasksService', () => {
       taskKind: TaskKind.Standard,
       title: 'Delegated child',
     });
-    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'ASSIGNMENT_REQUIRED',
+    });
 
     await expect(
-      service.update(
-        'child-task-id',
-        { status: TaskStatus.InProgress },
-        actor,
-      ),
-    ).rejects.toThrow('Only assigned team members can update this task');
+      service.update('child-task-id', { status: TaskStatus.InProgress }, actor),
+    ).rejects.toThrow('ASSIGNMENT_REQUIRED');
 
     expect(tasksRepository.save).not.toHaveBeenCalled();
   });
@@ -1468,18 +1532,22 @@ describe('TasksService', () => {
       projectId,
       title: 'Original',
     });
-    authorizationPolicyService.canManageTask.mockResolvedValueOnce(false);
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'MISSING_PERMISSION',
+    });
 
     await expect(
       service.update(taskId, { title: 'Manager-only edit' }, actor),
-    ).rejects.toThrow('Team members can only update status');
+    ).rejects.toThrow('MISSING_PERMISSION');
   });
 
   it('removes an existing task with soft delete', async () => {
     const task = { id: taskId, title: 'Task to remove' };
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.remove(taskId);
+    await service.remove(taskId, managerActor);
 
     expect(tasksRepository.softRemove).toHaveBeenCalledWith(
       expect.objectContaining(task),

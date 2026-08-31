@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
+import { CanonicalCapabilityResolverService } from '../../../common/authz/canonical-capability-resolver.service';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
@@ -70,6 +71,7 @@ describe('ProjectsService', () => {
     rebuildWorkspaceSnapshot: jest.Mock;
   };
   let taskAssignmentService: { changeTaskAssignment: jest.Mock };
+  let canonicalCapabilityResolver: { resolve: jest.Mock };
   let transactionalEntityManager: {
     find: jest.Mock;
     findOne: jest.Mock;
@@ -207,6 +209,13 @@ describe('ProjectsService', () => {
           }),
       ),
     };
+    canonicalCapabilityResolver = {
+      resolve: jest.fn().mockResolvedValue({
+        allowed: true,
+        audience: 'internal',
+        reasonCode: 'GRANTED',
+      }),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -248,6 +257,10 @@ describe('ProjectsService', () => {
         {
           provide: AuthorizationPolicyService,
           useValue: authorizationPolicyService,
+        },
+        {
+          provide: CanonicalCapabilityResolverService,
+          useValue: canonicalCapabilityResolver,
         },
         {
           provide: ProjectVisibilityService,
@@ -1033,11 +1046,15 @@ describe('ProjectsService', () => {
     ]);
 
     await expect(
-      service.findProjectTasks(projectId, {
-        assigneeId: userId,
-        priority: 'high',
-        status: TaskStatus.InProgress,
-      }),
+      service.findProjectTasks(
+        projectId,
+        {
+          assigneeId: userId,
+          priority: 'high',
+          status: TaskStatus.InProgress,
+        },
+        actor,
+      ),
     ).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'phase-1', childTaskCount: 0 }),
@@ -1106,28 +1123,34 @@ describe('ProjectsService', () => {
     usersRepository.findOne?.mockResolvedValue({ id: userId });
     projectMembersRepository.findOne?.mockResolvedValue({ id: 'member-id' });
 
-    const result = await service.createProjectTask(projectId, {
-      assigneeId: userId,
-      priority: 'high',
-      sequenceNumber: 20,
-      status: TaskStatus.Todo,
-      taskKind: TaskKind.Standard,
-      title: 'Complete steering committee readout',
-    });
-
-    expect(tasksRepository.create).toHaveBeenCalledWith({
+    const result = await service.createProjectTask(
       projectId,
-      priority: 'high',
-      sequenceNumber: 20,
-      status: TaskStatus.Todo,
-      taskKind: TaskKind.Standard,
-      title: 'Complete steering committee readout',
-    });
+      {
+        assigneeId: userId,
+        priority: 'high',
+        sequenceNumber: 20,
+        status: TaskStatus.Todo,
+        taskKind: TaskKind.Standard,
+        title: 'Complete steering committee readout',
+      },
+      actor,
+    );
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId,
+        priority: 'high',
+        sequenceNumber: 20,
+        status: TaskStatus.Todo,
+        taskKind: TaskKind.Standard,
+        title: 'Complete steering committee readout',
+      }),
+    );
     expect(taskAssignmentService.changeTaskAssignment).toHaveBeenCalledWith(
       projectId,
       taskId,
       userId,
-      undefined,
+      actor,
       transactionalEntityManager,
     );
     expect(result).toEqual(
@@ -1149,18 +1172,24 @@ describe('ProjectsService', () => {
       taskKind: TaskKind.Summary,
     });
 
-    await service.createProjectTask(projectId, {
-      parentTaskId: 'parent-task-id',
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
-
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      parentTaskId: 'parent-task-id',
+    await service.createProjectTask(
       projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
+      {
+        parentTaskId: 'parent-task-id',
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      },
+      actor,
+    );
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      }),
+    );
   });
 
   it('creates a child project task under a standard task parent', async () => {
@@ -1172,18 +1201,24 @@ describe('ProjectsService', () => {
       taskKind: TaskKind.Standard,
     });
 
-    await service.createProjectTask(projectId, {
-      parentTaskId: 'parent-task-id',
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
-
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      parentTaskId: 'parent-task-id',
+    await service.createProjectTask(
       projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
+      {
+        parentTaskId: 'parent-task-id',
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      },
+      actor,
+    );
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: 'parent-task-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      }),
+    );
   });
 
   it('rejects child project task creation under a subtask', async () => {
@@ -1203,11 +1238,15 @@ describe('ProjectsService', () => {
       });
 
     await expect(
-      service.createProjectTask(projectId, {
-        parentTaskId: 'subtask-id',
-        taskKind: TaskKind.Standard,
-        title: 'Nested child',
-      }),
+      service.createProjectTask(
+        projectId,
+        {
+          parentTaskId: 'subtask-id',
+          taskKind: TaskKind.Standard,
+          title: 'Nested child',
+        },
+        actor,
+      ),
     ).rejects.toThrow('Subtasks cannot contain child tasks');
   });
 
@@ -1215,12 +1254,16 @@ describe('ProjectsService', () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
 
     await expect(
-      service.createProjectTask(projectId, {
-        plannedEndDate: '2026-07-03',
-        plannedStartDate: '2026-07-01',
-        taskKind: TaskKind.Milestone,
-        title: 'Go-live',
-      }),
+      service.createProjectTask(
+        projectId,
+        {
+          plannedEndDate: '2026-07-03',
+          plannedStartDate: '2026-07-01',
+          taskKind: TaskKind.Milestone,
+          title: 'Go-live',
+        },
+        actor,
+      ),
     ).rejects.toThrow(
       'Milestones must have matching planned start and end dates',
     );
@@ -1229,41 +1272,57 @@ describe('ProjectsService', () => {
   it('creates an unassigned project task without assignee validation', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
 
-    await service.createProjectTask(projectId, {
-      title: 'Prepare cutover checklist',
-    });
+    await service.createProjectTask(
+      projectId,
+      {
+        title: 'Prepare cutover checklist',
+      },
+      actor,
+    );
 
     expect(usersRepository.findOne).not.toHaveBeenCalled();
     expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
-    expect(tasksRepository.create).toHaveBeenCalledWith({
-      projectId,
-      title: 'Prepare cutover checklist',
-    });
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId,
+        title: 'Prepare cutover checklist',
+      }),
+    );
   });
 
   it('creates a project task from taskType while storing the compatible taskKind', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
 
-    await service.createProjectTask(projectId, {
-      taskType: TaskType.Task,
-      title: 'Prepare cutover checklist',
-    });
-
-    expect(tasksRepository.create).toHaveBeenCalledWith({
+    await service.createProjectTask(
       projectId,
-      taskKind: TaskKind.Standard,
-      title: 'Prepare cutover checklist',
-    });
+      {
+        taskType: TaskType.Task,
+        title: 'Prepare cutover checklist',
+      },
+      actor,
+    );
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Prepare cutover checklist',
+      }),
+    );
   });
 
   it('normalizes project milestone dates when only start is supplied', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
 
-    await service.createProjectTask(projectId, {
-      plannedStartDate: '2026-07-01',
-      taskType: TaskType.Milestone,
-      title: 'Go-live',
-    });
+    await service.createProjectTask(
+      projectId,
+      {
+        plannedStartDate: '2026-07-01',
+        taskType: TaskType.Milestone,
+        title: 'Go-live',
+      },
+      actor,
+    );
 
     expect(tasksRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1281,11 +1340,15 @@ describe('ProjectsService', () => {
     );
 
     await expect(
-      service.createProjectTask(projectId, {
-        assigneeId: userId,
-        taskKind: TaskKind.Summary,
-        title: 'Planning Phase',
-      }),
+      service.createProjectTask(
+        projectId,
+        {
+          assigneeId: userId,
+          taskKind: TaskKind.Summary,
+          title: 'Planning Phase',
+        },
+        actor,
+      ),
     ).rejects.toThrow('Summary tasks cannot be assigned to a user');
   });
 
@@ -1296,10 +1359,14 @@ describe('ProjectsService', () => {
     );
 
     await expect(
-      service.createProjectTask(projectId, {
-        assigneeId: userId,
-        title: 'Prepare test evidence',
-      }),
+      service.createProjectTask(
+        projectId,
+        {
+          assigneeId: userId,
+          title: 'Prepare test evidence',
+        },
+        actor,
+      ),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -1310,10 +1377,14 @@ describe('ProjectsService', () => {
     );
 
     await expect(
-      service.createProjectTask(projectId, {
-        assigneeId: userId,
-        title: 'Prepare test evidence',
-      }),
+      service.createProjectTask(
+        projectId,
+        {
+          assigneeId: userId,
+          title: 'Prepare test evidence',
+        },
+        actor,
+      ),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -1528,7 +1599,7 @@ describe('ProjectsService', () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne?.mockResolvedValue(task);
 
-    await service.removeProjectTask(projectId, taskId);
+    await service.removeProjectTask(projectId, taskId, actor);
 
     expect(tasksRepository.softRemove).toHaveBeenCalledWith(task);
     expect(
@@ -2175,11 +2246,15 @@ describe('ProjectsService', () => {
           taskKind: TaskKind.Standard,
         });
 
-      await service.createProjectTaskDependency(projectId, {
-        predecessorTaskId: 'pred-task-id',
-        successorTaskId: 'succ-task-id',
-        dependencyType,
-      });
+      await service.createProjectTaskDependency(
+        projectId,
+        {
+          predecessorTaskId: 'pred-task-id',
+          successorTaskId: 'succ-task-id',
+          dependencyType,
+        },
+        actor,
+      );
 
       expect(taskDependenciesRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({ dependencyType }),
@@ -2203,19 +2278,23 @@ describe('ProjectsService', () => {
         taskKind: TaskKind.Standard,
       });
 
-    await service.createProjectTaskDependency(projectId, {
-      predecessorTaskId: 'pred-milestone-id',
-      successorTaskId: 'succ-task-id',
-      dependencyType: TaskDependencyType.FinishToFinish,
-    });
+    await service.createProjectTaskDependency(
+      projectId,
+      {
+        predecessorTaskId: 'pred-milestone-id',
+        successorTaskId: 'succ-task-id',
+        dependencyType: TaskDependencyType.FinishToFinish,
+      },
+      actor,
+    );
 
     expect(taskDependenciesRepository.create).toHaveBeenCalledWith({
       predecessorTaskId: 'pred-milestone-id',
       successorTaskId: 'succ-task-id',
       dependencyType: TaskDependencyType.FinishToFinish,
       lagDays: 0,
-      createdById: undefined,
-      updatedById: undefined,
+      createdById: actor.userId,
+      updatedById: actor.userId,
     });
   });
 
@@ -2235,19 +2314,23 @@ describe('ProjectsService', () => {
         taskKind: TaskKind.Milestone,
       });
 
-    await service.createProjectTaskDependency(projectId, {
-      predecessorTaskId: 'pred-task-id',
-      successorTaskId: 'succ-milestone-id',
-      dependencyType: TaskDependencyType.StartToStart,
-    });
+    await service.createProjectTaskDependency(
+      projectId,
+      {
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-milestone-id',
+        dependencyType: TaskDependencyType.StartToStart,
+      },
+      actor,
+    );
 
     expect(taskDependenciesRepository.create).toHaveBeenCalledWith({
       predecessorTaskId: 'pred-task-id',
       successorTaskId: 'succ-milestone-id',
       dependencyType: TaskDependencyType.StartToStart,
       lagDays: 0,
-      createdById: undefined,
-      updatedById: undefined,
+      createdById: actor.userId,
+      updatedById: actor.userId,
     });
   });
 
@@ -2255,11 +2338,15 @@ describe('ProjectsService', () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
 
     await expect(
-      service.createProjectTaskDependency(projectId, {
-        predecessorTaskId: taskId,
-        successorTaskId: taskId,
-        dependencyType: TaskDependencyType.FinishToStart,
-      }),
+      service.createProjectTaskDependency(
+        projectId,
+        {
+          predecessorTaskId: taskId,
+          successorTaskId: taskId,
+          dependencyType: TaskDependencyType.FinishToStart,
+        },
+        actor,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -2280,11 +2367,15 @@ describe('ProjectsService', () => {
       });
 
     await expect(
-      service.createProjectTaskDependency(projectId, {
-        predecessorTaskId: 'pred-task-id',
-        successorTaskId: 'succ-task-id',
-        dependencyType: TaskDependencyType.FinishToStart,
-      }),
+      service.createProjectTaskDependency(
+        projectId,
+        {
+          predecessorTaskId: 'pred-task-id',
+          successorTaskId: 'succ-task-id',
+          dependencyType: TaskDependencyType.FinishToStart,
+        },
+        actor,
+      ),
     ).rejects.toThrow(
       'Summary tasks cannot be dependency predecessor endpoints',
     );
@@ -2306,11 +2397,15 @@ describe('ProjectsService', () => {
         taskKind: TaskKind.Standard,
       });
 
-    await service.createProjectTaskDependency(projectId, {
-      predecessorTaskId: 'pred-task-id',
-      successorTaskId: 'succ-task-id',
-      dependencyType: TaskDependencyType.StartToStart,
-    });
+    await service.createProjectTaskDependency(
+      projectId,
+      {
+        predecessorTaskId: 'pred-task-id',
+        successorTaskId: 'succ-task-id',
+        dependencyType: TaskDependencyType.StartToStart,
+      },
+      actor,
+    );
 
     expect(taskDependenciesRepository.create).toHaveBeenCalled();
   });
@@ -2332,11 +2427,15 @@ describe('ProjectsService', () => {
       });
 
     await expect(
-      service.createProjectTaskDependency(projectId, {
-        predecessorTaskId: 'parent-task-id',
-        successorTaskId: 'subtask-id',
-        dependencyType: TaskDependencyType.StartToStart,
-      }),
+      service.createProjectTaskDependency(
+        projectId,
+        {
+          predecessorTaskId: 'parent-task-id',
+          successorTaskId: 'subtask-id',
+          dependencyType: TaskDependencyType.StartToStart,
+        },
+        actor,
+      ),
     ).rejects.toThrow(
       'Parent tasks and their subtasks cannot depend on each other',
     );
@@ -2366,11 +2465,15 @@ describe('ProjectsService', () => {
     ]);
 
     await expect(
-      service.createProjectTaskDependency(projectId, {
-        predecessorTaskId: 'pred-task-id',
-        successorTaskId: 'succ-task-id',
-        dependencyType: TaskDependencyType.FinishToStart,
-      }),
+      service.createProjectTaskDependency(
+        projectId,
+        {
+          predecessorTaskId: 'pred-task-id',
+          successorTaskId: 'succ-task-id',
+          dependencyType: TaskDependencyType.FinishToStart,
+        },
+        actor,
+      ),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -2403,11 +2506,15 @@ describe('ProjectsService', () => {
     ]);
 
     await expect(
-      service.createProjectTaskDependency(projectId, {
-        predecessorTaskId: 'task-c',
-        successorTaskId: 'task-a',
-        dependencyType: TaskDependencyType.FinishToStart,
-      }),
+      service.createProjectTaskDependency(
+        projectId,
+        {
+          predecessorTaskId: 'task-c',
+          successorTaskId: 'task-a',
+          dependencyType: TaskDependencyType.FinishToStart,
+        },
+        actor,
+      ),
     ).rejects.toThrow(
       'Task dependencies cannot contain circular relationships',
     );

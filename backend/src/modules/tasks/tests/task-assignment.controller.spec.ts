@@ -167,6 +167,18 @@ describe('TaskAssignmentController integration', () => {
     expect(tasksRepository.save).not.toHaveBeenCalled();
   });
 
+  it('denies assignment mutations in archived projects', async () => {
+    persistedTask.project.status = 'archived';
+
+    await request(app.getHttpServer())
+      .post(`/projects/${projectId}/tasks/${taskId}/assign`)
+      .set('Authorization', 'Bearer test')
+      .send({ assigneeId: targetAssigneeId })
+      .expect(403);
+
+    expect(tasksRepository.save).not.toHaveBeenCalled();
+  });
+
   it('allows the Technical Manager scenario through the HTTP command', async () => {
     await request(app.getHttpServer())
       .post(`/projects/${projectId}/tasks/${taskId}/assign`)
@@ -193,6 +205,23 @@ describe('TaskAssignmentController integration', () => {
       .expect(403);
 
     expect(tasksRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('allows a global project manager with contributor membership to reassign their own task', async () => {
+    persistedTask.assigneeId = actorId;
+    memberships.set(membershipKey(actorId), ProjectRole.Contributor);
+
+    await request(app.getHttpServer())
+      .post(`/projects/${projectId}/tasks/${taskId}/reassign`)
+      .set('Authorization', 'Bearer test')
+      .set('x-global-role', UserRole.ProjectManager)
+      .send({ assigneeId: targetAssigneeId })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.assigneeId).toBe(targetAssigneeId);
+      });
+
+    expect(tasksRepository.save).toHaveBeenCalledTimes(1);
   });
 
   it('does not let the reassign route classify an unassigned task as task.reassign', async () => {

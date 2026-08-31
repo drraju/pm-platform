@@ -255,7 +255,6 @@ export class ProjectsController {
   }
 
   @Post(':projectId/tasks')
-  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiOperation({ summary: 'Create a project task' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
   @ApiCreatedResponse({ type: Task })
@@ -274,7 +273,6 @@ export class ProjectsController {
   }
 
   @Patch(':projectId/tasks/:taskId')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Update a project task' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
   @ApiParam({ name: 'taskId', format: 'uuid' })
@@ -296,7 +294,6 @@ export class ProjectsController {
   }
 
   @Post(':projectId/tasks/:taskId/execution-updates')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Record a project task execution update' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
   @ApiParam({ name: 'taskId', format: 'uuid' })
@@ -318,7 +315,6 @@ export class ProjectsController {
   }
 
   @Delete(':projectId/tasks/:taskId')
-  @RequirePermissions(PermissionKey.TaskDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a project task' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
@@ -475,7 +471,6 @@ export class ProjectsController {
   }
 
   @Post(':projectId/task-dependencies')
-  @RequirePermissions(PermissionKey.TaskCreate)
   @ApiOperation({ summary: 'Create a project task dependency' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
   @ApiCreatedResponse({ type: TaskDependency })
@@ -494,7 +489,6 @@ export class ProjectsController {
   }
 
   @Patch(':projectId/task-dependencies/:dependencyId')
-  @RequirePermissions(PermissionKey.TaskUpdate)
   @ApiOperation({ summary: 'Update a project task dependency' })
   @ApiParam({ name: 'projectId', format: 'uuid' })
   @ApiParam({ name: 'dependencyId', format: 'uuid' })
@@ -516,7 +510,6 @@ export class ProjectsController {
   }
 
   @Delete(':projectId/task-dependencies/:dependencyId')
-  @RequirePermissions(PermissionKey.TaskDelete)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a project task dependency' })
   @ApiParam({ name: 'projectId', format: 'uuid' })

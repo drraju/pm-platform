@@ -479,6 +479,59 @@ describe('CanonicalCapabilityResolverService', () => {
     ).resolves.toEqual(deniedDecision('OBJECT_STATE_RESTRICTED'));
   });
 
+  it.each([
+    'task.create',
+    'task.edit_plan',
+    'task.edit_execution',
+    'task.record_update',
+    'task.complete',
+    'task.assign',
+    'task.reassign',
+    'task.move',
+    'task.delete',
+  ] as const)(
+    'denies %s mutations in archived projects',
+    async (capability) => {
+      const actor = createActor('PLATFORM_ADMIN');
+
+      await expect(
+        service.resolve({
+          actor,
+          capability,
+          destinationProjectId:
+            capability === 'task.move' ? destinationProjectId : undefined,
+          requestedAssigneeId:
+            capability === 'task.assign' || capability === 'task.reassign'
+              ? targetUserId
+              : undefined,
+          resource: taskResource({ projectStatus: 'archived' }),
+        }),
+      ).resolves.toEqual(deniedDecision('OBJECT_STATE_RESTRICTED'));
+    },
+  );
+
+  it('denies movement into an archived destination before the platform-admin override', async () => {
+    const actor = createActor('PLATFORM_ADMIN');
+
+    await expect(
+      service.resolve({
+        actor,
+        capability: 'task.move',
+        destinationProjectId,
+        destinationProjectStatus: 'archived',
+        resource: taskResource(),
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        allowed: false,
+        reasonCode: 'OBJECT_STATE_RESTRICTED',
+        scopeDecisions: expect.arrayContaining([
+          expect.objectContaining({ allowed: false, scope: 'destination' }),
+        ]),
+      }),
+    );
+  });
+
   it('requires task.move authority in both projects', async () => {
     const actor = createActor('TEAM_MEMBER');
     setMembership(actor.userId, ProjectRole.Manager);

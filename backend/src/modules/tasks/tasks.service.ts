@@ -12,11 +12,17 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from '../../common/authz/authorization-policy.service';
+import { CanonicalCapabilityResolverService } from '../../common/authz/canonical-capability-resolver.service';
+import {
+  CanonicalCapability,
+  TaskCapabilityResource,
+} from '../../common/authz/canonical-capability.types';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
+import { Project } from '../projects/entities/project.entity';
 import {
   ProjectVisibilityActor,
   ProjectVisibilityService,
@@ -40,27 +46,13 @@ import {
 import { MilestoneProjectionPage } from './milestone-projection';
 
 type AuthenticatedActor = AuthorizationActor;
-const teamMemberEditableTaskFields = new Set([
-  'assigneeId',
-  'remarks',
-  'percentComplete',
-  'status',
-]);
+const taskPriorities = new Set(['low', 'medium', 'high', 'critical']);
+const taskExecutionFields = new Set(['percentComplete', 'remarks', 'status']);
+const taskNonCapabilityFields = new Set(['assigneeId']);
 const externalEditableTaskFields = new Set([
   'remarks',
   'percentComplete',
   'status',
-]);
-/** Assigned contributors may post stand-up execution fields only. */
-const assigneeExecutionUpdateFields = new Set([
-  'assigneeId',
-  'nextActionOwnerId',
-  'nextStep',
-  'percentComplete',
-  'priority',
-  'status',
-  'targetCompletionDate',
-  'updateNotes',
 ]);
 const externalExecutionUpdateFields = new Set([
   'nextStep',
@@ -69,7 +61,6 @@ const externalExecutionUpdateFields = new Set([
   'targetCompletionDate',
   'updateNotes',
 ]);
-const taskPriorities = new Set(['low', 'medium', 'high', 'critical']);
 
 @Injectable()
 export class TasksService {
@@ -81,6 +72,7 @@ export class TasksService {
     @InjectRepository(ProjectMember)
     private readonly projectMembersRepository: Repository<ProjectMember>,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
+    private readonly canonicalCapabilityResolver: CanonicalCapabilityResolverService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
     private readonly taskAssignmentService: TaskAssignmentService,
@@ -146,7 +138,11 @@ export class TasksService {
     createTaskDto: CreateTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<Task> {
-    await this.ensureCanManageProject(createTaskDto.projectId, actor);
+    await this.ensureTaskCapabilityForProject(
+      createTaskDto.projectId,
+      'task.create',
+      actor,
+    );
     const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
         applyTaskCompletionTransition(createTaskDto),
@@ -289,14 +285,7 @@ export class TasksService {
       throw new NotFoundException(`Task ${id} not found`);
     }
 
-    if (
-      !(await this.projectVisibilityService.canViewProject(
-        task.projectId,
-        actor,
-      ))
-    ) {
-      throw new NotFoundException(`Task ${id} not found`);
-    }
+    await this.ensureTaskCapability('task.view', task, actor);
 
     if (
       (await this.authorizationPolicyService.isExternalActor(actor)) &&
@@ -316,12 +305,22 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<Task> {
-    const task = await this.findTaskForMutation(id, actor);
+    const task = await this.findTaskForMutation(id);
     await this.ensureCanUpdateTask(task, updateTaskDto, actor);
     const assignmentRequested = updateTaskDto.assigneeId !== undefined;
     const requestedAssigneeId = updateTaskDto.assigneeId ?? null;
     if (updateTaskDto.projectId && updateTaskDto.projectId !== task.projectId) {
-      await this.ensureCanManageTaskProject(updateTaskDto.projectId, actor);
+      const destinationProject = await this.findProjectForTaskCapability(
+        updateTaskDto.projectId,
+      );
+      await this.ensureTaskCapability(
+        'task.move',
+        task,
+        actor,
+        undefined,
+        updateTaskDto.projectId,
+        destinationProject.status,
+      );
     }
     const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
@@ -371,7 +370,14 @@ export class TasksService {
         );
       }
     });
-    return this.findOne(id, actor);
+    const savedTask = await this.tasksRepository.findOne({
+      relations: { assignee: true, project: true },
+      where: { id },
+    });
+    if (!savedTask) {
+      throw new NotFoundException(`Task ${id} not found`);
+    }
+    return this.decorateTaskWithLatest(savedTask);
   }
 
   async recordExecutionUpdate(
@@ -379,7 +385,7 @@ export class TasksService {
     input: CreateTaskExecutionUpdateDto,
     actor?: AuthenticatedActor,
   ): Promise<Task> {
-    const task = await this.findOne(id, actor);
+    const task = await this.findTaskForMutation(id);
     if (task.taskKind === TaskKind.Summary) {
       throw new BadRequestException(
         'Summary tasks cannot receive execution updates',
@@ -509,8 +515,8 @@ export class TasksService {
   }
 
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
-    const task = await this.findOne(id, actor);
-    await this.ensureCanManageProject(task.projectId, actor);
+    const task = await this.findTaskForMutation(id);
+    await this.ensureTaskCapability('task.delete', task, actor);
     if (actor?.userId) {
       task.deletedById = actor.userId;
       task.updatedById = actor.userId;
@@ -603,40 +609,16 @@ export class TasksService {
     return orderedTasks;
   }
 
-  private async findTaskForMutation(
-    id: string,
-    actor?: ProjectVisibilityActor,
-  ): Promise<Task> {
+  private async findTaskForMutation(id: string): Promise<Task> {
     const task = await this.tasksRepository.findOne({
+      relations: { project: true },
       where: { id },
     });
     if (!task) {
       throw new NotFoundException(`Task ${id} not found`);
     }
 
-    if (
-      !(await this.projectVisibilityService.canViewProject(
-        task.projectId,
-        actor,
-      ))
-    ) {
-      throw new NotFoundException(`Task ${id} not found`);
-    }
-
     return task;
-  }
-
-  private async ensureCanManageProject(
-    projectId: string,
-    actor?: AuthenticatedActor,
-  ): Promise<void> {
-    if (
-      await this.authorizationPolicyService.canManageProject(projectId, actor)
-    ) {
-      return;
-    }
-
-    throw new ForbiddenException('Project manager access is required');
   }
 
   private async ensureCanUpdateTask(
@@ -644,31 +626,56 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<void> {
-    if (!actor) {
-      throw new ForbiddenException('Authenticated user is required');
-    }
-
-    if (await this.canManageTask(task.projectId, actor)) {
-      return;
-    }
-
-    if (task.assigneeId !== actor.userId) {
-      throw new ForbiddenException(
-        'Only assigned team members can update this task',
-      );
-    }
-
-    const editableFields =
-      (await this.authorizationPolicyService.isExternalActor(actor))
-        ? externalEditableTaskFields
-        : teamMemberEditableTaskFields;
-    const disallowedFields = Object.keys(updateTaskDto).filter(
-      (field) => !editableFields.has(field),
+    const changedFields = Object.keys(updateTaskDto);
+    const executionFields = changedFields.filter((field) =>
+      taskExecutionFields.has(field),
     );
-    if (disallowedFields.length > 0) {
-      throw new ForbiddenException(
-        'Team members can only update status, remarks, percent complete, or assignee',
+    const planFields = changedFields.filter(
+      (field) =>
+        field !== 'projectId' &&
+        !taskExecutionFields.has(field) &&
+        !taskNonCapabilityFields.has(field),
+    );
+
+    if (planFields.length > 0) {
+      await this.ensureTaskCapability(
+        'task.edit_plan',
+        task,
+        actor,
+        planFields,
       );
+    }
+    if (executionFields.length > 0) {
+      await this.ensureTaskCapability(
+        'task.edit_execution',
+        task,
+        actor,
+        executionFields,
+      );
+    }
+    if (
+      planFields.length === 0 &&
+      executionFields.length === 0 &&
+      !changedFields.includes('assigneeId') &&
+      (!updateTaskDto.projectId || updateTaskDto.projectId === task.projectId)
+    ) {
+      await this.ensureTaskCapability('task.view', task, actor);
+    }
+    if (
+      updateTaskDto.status === TaskStatus.Done ||
+      updateTaskDto.percentComplete === 100
+    ) {
+      await this.ensureTaskCapability('task.complete', task, actor);
+    }
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      const disallowedFields = changedFields.filter(
+        (field) => !externalEditableTaskFields.has(field),
+      );
+      if (disallowedFields.length > 0) {
+        throw new ForbiddenException(
+          'Team members can only update status, remarks, percent complete, or assignee',
+        );
+      }
     }
   }
 
@@ -677,60 +684,100 @@ export class TasksService {
     input: CreateTaskExecutionUpdateDto,
     actor?: AuthenticatedActor,
   ): Promise<void> {
+    const changedFields = Object.keys(input).filter(
+      (field) => field !== 'assigneeId',
+    );
+    await this.ensureTaskCapability(
+      'task.record_update',
+      task,
+      actor,
+      changedFields,
+    );
+    if (input.status === TaskStatus.Done || input.percentComplete === 100) {
+      await this.ensureTaskCapability('task.complete', task, actor);
+    }
+    if (await this.authorizationPolicyService.isExternalActor(actor)) {
+      const disallowedFields = Object.keys(input).filter(
+        (field) => !externalExecutionUpdateFields.has(field),
+      );
+      if (disallowedFields.length > 0) {
+        throw new ForbiddenException(
+          'Assigned team members can only record execution fields on their tasks',
+        );
+      }
+    }
+  }
+
+  private async ensureTaskCapabilityForProject(
+    projectId: string,
+    capability: CanonicalCapability,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
+    const project = await this.findProjectForTaskCapability(projectId);
+    await this.ensureTaskCapability(
+      capability,
+      {
+        assigneeId: null,
+        projectId,
+        projectStatus: project.status,
+        taskKind: TaskKind.Standard,
+        type: 'task',
+      },
+      actor,
+    );
+  }
+
+  private async ensureTaskCapability(
+    capability: CanonicalCapability,
+    task: Task | TaskCapabilityResource,
+    actor?: AuthenticatedActor,
+    changedFields?: readonly string[],
+    destinationProjectId?: string,
+    destinationProjectStatus?: string | null,
+  ): Promise<void> {
     if (!actor) {
       throw new ForbiddenException('Authenticated user is required');
     }
-
-    if (await this.canManageTask(task.projectId, actor)) {
-      return;
-    }
-
-    if (task.assigneeId !== actor.userId) {
+    const resource: TaskCapabilityResource =
+      'type' in task
+        ? task
+        : {
+            assigneeId: task.assigneeId ?? null,
+            deletedAt: task.deletedAt ?? null,
+            projectId: task.projectId,
+            projectStatus: task.project?.status ?? null,
+            status: task.status,
+            taskKind: task.taskKind,
+            type: 'task',
+          };
+    const decision = await this.canonicalCapabilityResolver.resolve({
+      actor,
+      capability,
+      changedFields,
+      destinationProjectId,
+      destinationProjectStatus,
+      resource,
+    });
+    if (!decision.allowed) {
       throw new ForbiddenException(
-        'Only assigned team members can update this task',
-      );
-    }
-
-    const editableFields =
-      (await this.authorizationPolicyService.isExternalActor(actor))
-        ? externalExecutionUpdateFields
-        : assigneeExecutionUpdateFields;
-    const disallowedFields = Object.keys(input).filter(
-      (field) => !editableFields.has(field),
-    );
-    if (disallowedFields.length > 0) {
-      throw new ForbiddenException(
-        'Assigned team members can only record execution fields on their tasks',
-      );
-    }
-
-    if (input.priority !== undefined && input.priority !== task.priority) {
-      throw new ForbiddenException(
-        'Only project managers can change task priority',
+        `Task capability ${capability} denied: ${decision.reasonCode}`,
       );
     }
   }
 
-  private async canManageTask(
+  private async findProjectForTaskCapability(
     projectId: string,
-    actor: AuthenticatedActor,
-  ): Promise<boolean> {
-    return this.authorizationPolicyService.canManageTask(projectId, actor);
-  }
-
-  private async ensureCanManageTaskProject(
-    projectId: string,
-    actor?: AuthenticatedActor,
-  ): Promise<void> {
-    if (
-      actor &&
-      (await this.authorizationPolicyService.canManageTask(projectId, actor))
-    ) {
-      return;
+  ): Promise<Pick<Project, 'id' | 'status'>> {
+    const project = await this.tasksRepository.manager
+      .getRepository(Project)
+      .findOne({
+        select: { id: true, status: true },
+        where: { id: projectId },
+      });
+    if (!project) {
+      throw new NotFoundException(`Project ${projectId} not found`);
     }
-    throw new ForbiddenException(
-      'Task movement requires authority in both projects',
-    );
+    return project;
   }
 
   async projectTaskForActor(

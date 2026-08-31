@@ -11,6 +11,11 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from '../../common/authz/authorization-policy.service';
+import { CanonicalCapabilityResolverService } from '../../common/authz/canonical-capability-resolver.service';
+import {
+  CanonicalCapability,
+  TaskCapabilityResource,
+} from '../../common/authz/canonical-capability.types';
 import { PlanningCalculationStatus } from '../../common/enums/planning-calculation-status.enum';
 import { ResourceAllocationUnit } from '../../common/enums/resource-allocation-unit.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
@@ -88,6 +93,7 @@ export class PlanningService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
+    private readonly canonicalCapabilityResolver: CanonicalCapabilityResolverService,
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly projectsService: ProjectsService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
@@ -157,7 +163,11 @@ export class PlanningService {
     projectId: string,
     actor?: AuthenticatedActor,
   ): Promise<PlanningWorkspaceDto> {
-    await this.ensureCanManageProject(projectId, actor);
+    await this.ensureTaskCapabilityForProject(
+      projectId,
+      'task.edit_plan',
+      actor,
+    );
     const officialSnapshot =
       await this.planningSnapshotService.regenerateOfficialSnapshot(
         projectId,
@@ -182,7 +192,11 @@ export class PlanningService {
     projectId: string,
     actor?: AuthenticatedActor,
   ): Promise<PlanningScheduleSnapshot> {
-    await this.ensureCanManageProject(projectId, actor);
+    await this.ensureTaskCapabilityForProject(
+      projectId,
+      'task.edit_plan',
+      actor,
+    );
     return this.planningSnapshotService.regenerateOfficialSnapshot(
       projectId,
       actor,
@@ -211,8 +225,6 @@ export class PlanningService {
     input: UpdatePlanningTaskScheduleDto,
     actor?: AuthenticatedActor,
   ): Promise<PlanningWorkspaceScheduleDto> {
-    await this.ensureCanManageProject(projectId, actor);
-
     const schedule = await this.findPlanningTaskSchedule(projectId, scheduleId);
     const taskId = schedule.taskId;
     const task = schedule.task;
@@ -221,6 +233,12 @@ export class PlanningService {
         `Planning schedule ${scheduleId} is not linked to a live task`,
       );
     }
+    await this.ensureTaskCapability(
+      'task.edit_plan',
+      task,
+      actor,
+      Object.keys(input),
+    );
 
     const taskKind = this.schedulingFoundationService.normalizeTaskKind(
       { taskKind: schedule.taskKind ?? schedule.task?.taskKind },
@@ -377,7 +395,7 @@ export class PlanningService {
     input: CreatePlanningTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<PlanningWorkspaceScheduleDto> {
-    await this.ensureCanManageProject(projectId, actor);
+    await this.ensureTaskCapabilityForProject(projectId, 'task.create', actor);
 
     const latestSchedule =
       await this.planningSnapshotService.calculateOperationalForecast(
@@ -545,7 +563,7 @@ export class PlanningService {
     input: DuplicateWorkPackageDto,
     actor?: AuthenticatedActor,
   ): Promise<DuplicateWorkPackageResultDto> {
-    await this.ensureCanManageProject(projectId, actor);
+    await this.ensureTaskCapabilityForProject(projectId, 'task.create', actor);
     const result = await this.workPackageDuplicationService.duplicate(
       projectId,
       sourceSummaryTaskId,
@@ -563,7 +581,15 @@ export class PlanningService {
     summaryTaskId: string,
     actor?: AuthenticatedActor,
   ): Promise<PlanningWorkspaceDto> {
-    await this.ensureCanManageProject(projectId, actor);
+    const summaryTask = await this.tasksRepository.findOne({
+      where: { id: summaryTaskId, projectId },
+    });
+    if (!summaryTask) {
+      throw new NotFoundException(
+        `Task ${summaryTaskId} not found for project ${projectId}`,
+      );
+    }
+    await this.ensureTaskCapability('task.delete', summaryTask, actor);
     await this.workPackageDuplicationService.removeDuplicatedWorkPackage(
       projectId,
       summaryTaskId,
@@ -986,6 +1012,75 @@ export class PlanningService {
     }
 
     throw new ForbiddenException('Project manager access is required');
+  }
+
+  private async ensureTaskCapabilityForProject(
+    projectId: string,
+    capability: CanonicalCapability,
+    actor?: AuthenticatedActor,
+  ): Promise<void> {
+    const project = await this.projectsRepository.findOne({
+      select: { id: true, status: true },
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException(`Project ${projectId} not found`);
+    }
+    await this.ensureTaskCapability(
+      capability,
+      {
+        assigneeId: null,
+        projectId,
+        projectStatus: project.status,
+        taskKind: TaskKind.Standard,
+        type: 'task',
+      },
+      actor,
+    );
+  }
+
+  private async ensureTaskCapability(
+    capability: CanonicalCapability,
+    task: Task | TaskCapabilityResource,
+    actor?: AuthenticatedActor,
+    changedFields?: readonly string[],
+  ): Promise<void> {
+    if (!actor) {
+      throw new ForbiddenException('Authenticated user is required');
+    }
+    let resource: TaskCapabilityResource;
+    if ('type' in task) {
+      resource = task;
+    } else {
+      const projectStatus =
+        task.project?.status ??
+        (
+          await this.projectsRepository.findOne({
+            select: { id: true, status: true },
+            where: { id: task.projectId },
+          })
+        )?.status;
+      resource = {
+        assigneeId: task.assigneeId ?? null,
+        deletedAt: task.deletedAt ?? null,
+        projectId: task.projectId,
+        projectStatus: projectStatus ?? null,
+        status: task.status,
+        taskKind: task.taskKind,
+        type: 'task',
+      };
+    }
+    const decision = await this.canonicalCapabilityResolver.resolve({
+      actor,
+      capability,
+      changedFields,
+      resource,
+    });
+    if (!decision.allowed) {
+      throw new ForbiddenException(
+        `Task capability ${capability} denied: ${decision.reasonCode}`,
+      );
+    }
   }
 
   private async ensureProjectExists(projectId: string): Promise<void> {
