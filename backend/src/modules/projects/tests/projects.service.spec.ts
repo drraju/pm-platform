@@ -9,6 +9,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { CanonicalCapabilityResolverService } from '../../../common/authz/canonical-capability-resolver.service';
+import { INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE } from '../../../common/authz/project-role-eligibility';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
@@ -176,7 +177,10 @@ describe('ProjectsService', () => {
       softRemove: jest.fn(() => Promise.resolve()),
     };
     usersRepository = {
-      findOne: jest.fn().mockResolvedValue({ id: userId }),
+      findOne: jest.fn().mockResolvedValue({
+        id: userId,
+        role: { name: UserRole.ProjectManager },
+      }),
     };
     rolesRepository = {
       findOne: jest.fn().mockResolvedValue({
@@ -366,6 +370,25 @@ describe('ProjectsService', () => {
       }),
     ).rejects.toThrow('Authenticated user is required');
   });
+
+  it.each([UserRole.Customer, UserRole.Partner])(
+    'does not create an Owner membership for a %s creator even if project-create permission is granted',
+    async (globalRole) => {
+      usersRepository.findOne?.mockResolvedValue({
+        id: userId,
+        role: { name: globalRole },
+      });
+
+      await expect(
+        service.create({ name: 'External-owned project' }, actor),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          reasonCode: INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE,
+        }),
+      });
+      expect(projectsRepository.manager.transaction).not.toHaveBeenCalled();
+    },
+  );
 
   it('rolls back project creation when owner membership creation fails', async () => {
     const failure = new Error('membership insert failed');
@@ -752,7 +775,10 @@ describe('ProjectsService', () => {
 
   it('adds a project member when the project and user exist', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    usersRepository.findOne?.mockResolvedValue({ id: userId });
+    usersRepository.findOne?.mockResolvedValue({
+      id: userId,
+      role: { name: UserRole.ProjectManager },
+    });
     projectMembersRepository.findOne
       ?.mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
@@ -772,7 +798,7 @@ describe('ProjectsService', () => {
       where: { id: projectId },
     });
     expect(usersRepository.findOne).toHaveBeenCalledWith({
-      select: { id: true },
+      relations: { role: true },
       where: { id: userId },
     });
     expect(projectMembersRepository.create).toHaveBeenCalledWith({
@@ -792,7 +818,10 @@ describe('ProjectsService', () => {
 
   it('restores a soft-deleted project member when re-adding the same user', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    usersRepository.findOne?.mockResolvedValue({ id: userId });
+    usersRepository.findOne?.mockResolvedValue({
+      id: userId,
+      role: { name: UserRole.ProjectManager },
+    });
     projectMembersRepository.findOne
       ?.mockResolvedValueOnce({
         id: 'member-id',
@@ -844,7 +873,10 @@ describe('ProjectsService', () => {
 
   it('defaults new project members to contributor', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    usersRepository.findOne?.mockResolvedValue({ id: userId });
+    usersRepository.findOne?.mockResolvedValue({
+      id: userId,
+      role: { name: UserRole.ProjectManager },
+    });
     projectMembersRepository.findOne
       ?.mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
@@ -865,7 +897,10 @@ describe('ProjectsService', () => {
 
   it('rejects duplicate project membership', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    usersRepository.findOne?.mockResolvedValue({ id: userId });
+    usersRepository.findOne?.mockResolvedValue({
+      id: userId,
+      role: { name: UserRole.ProjectManager },
+    });
     projectMembersRepository.findOne?.mockResolvedValue({
       id: 'existing-member-id',
       projectId,
@@ -894,6 +929,83 @@ describe('ProjectsService', () => {
     await expect(service.addMember(projectId, { userId })).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  it.each([
+    [UserRole.Customer, ProjectRole.Owner],
+    [UserRole.Customer, ProjectRole.Manager],
+    [UserRole.Partner, ProjectRole.Owner],
+    [UserRole.Partner, ProjectRole.Manager],
+  ])(
+    'rejects membership creation for %s as %s',
+    async (globalRole, projectRole) => {
+      projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+      usersRepository.findOne?.mockResolvedValue({
+        id: userId,
+        role: { name: globalRole },
+      });
+
+      await expect(
+        service.addMember(projectId, { userId, role: projectRole }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          reasonCode: INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE,
+        }),
+      });
+      expect(projectMembersRepository.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [UserRole.Customer, ProjectRole.Contributor],
+    [UserRole.Customer, ProjectRole.Viewer],
+    [UserRole.Partner, ProjectRole.Contributor],
+    [UserRole.Partner, ProjectRole.Viewer],
+  ])(
+    'allows membership creation for %s as %s',
+    async (globalRole, projectRole) => {
+      projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+      usersRepository.findOne?.mockResolvedValue({
+        id: userId,
+        role: { name: globalRole },
+      });
+      projectMembersRepository.findOne
+        ?.mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'member-id',
+          projectId,
+          role: projectRole,
+          userId,
+        });
+
+      await expect(
+        service.addMember(projectId, { userId, role: projectRole }),
+      ).resolves.toEqual(expect.objectContaining({ role: projectRole }));
+    },
+  );
+
+  it('rejects restoration of an external member into a management role', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    usersRepository.findOne?.mockResolvedValue({
+      id: userId,
+      role: { name: UserRole.Customer },
+    });
+    projectMembersRepository.findOne?.mockResolvedValue({
+      deletedAt: new Date('2026-06-19T09:00:00Z'),
+      id: 'member-id',
+      projectId,
+      role: ProjectRole.Viewer,
+      userId,
+    });
+
+    await expect(
+      service.addMember(projectId, { userId, role: ProjectRole.Manager }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        reasonCode: INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE,
+      }),
+    });
+    expect(projectMembersRepository.save).not.toHaveBeenCalled();
   });
 
   it('lists project members after validating the project exists', async () => {
@@ -977,6 +1089,7 @@ describe('ProjectsService', () => {
       projectId,
       userId,
       role: ProjectRole.Viewer,
+      user: { role: { name: UserRole.ProjectManager } },
     };
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     usersRepository.findOne?.mockResolvedValue({ id: userId });
@@ -993,7 +1106,33 @@ describe('ProjectsService', () => {
       projectId,
       userId,
       role: ProjectRole.Owner,
+      user: { role: { name: UserRole.ProjectManager } },
     });
+  });
+
+  it.each([
+    [UserRole.Customer, ProjectRole.Owner],
+    [UserRole.Customer, ProjectRole.Manager],
+    [UserRole.Partner, ProjectRole.Owner],
+    [UserRole.Partner, ProjectRole.Manager],
+  ])('rejects promotion of %s to %s', async (globalRole, projectRole) => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    projectMembersRepository.findOne?.mockResolvedValue({
+      id: 'member-id',
+      projectId,
+      role: ProjectRole.Viewer,
+      user: { role: { name: globalRole } },
+      userId,
+    });
+
+    await expect(
+      service.updateMember(projectId, 'member-id', { role: projectRole }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        reasonCode: INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE,
+      }),
+    });
+    expect(projectMembersRepository.save).not.toHaveBeenCalled();
   });
 
   it('throws when updating a missing project member', async () => {

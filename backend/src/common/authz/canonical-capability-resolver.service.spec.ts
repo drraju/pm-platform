@@ -137,6 +137,44 @@ describe('CanonicalCapabilityResolverService', () => {
     }
   });
 
+  it.each([
+    ['CUSTOMER', ProjectRole.Owner],
+    ['CUSTOMER', ProjectRole.Manager],
+    ['PARTNER', ProjectRole.Owner],
+    ['PARTNER', ProjectRole.Manager],
+  ])(
+    'defensively denies management capabilities to an invalid %s/%s membership',
+    async (globalRole, projectRole) => {
+      const actor = createActor(globalRole);
+      policy.isExternalActor.mockResolvedValue(true);
+      setMembership(actor.userId, projectRole);
+
+      for (const capability of [
+        'task.create',
+        'task.edit_plan',
+        'task.edit_execution',
+        'task.record_update',
+        'task.assign',
+        'task.reassign',
+        'task.complete',
+        'task.move',
+        'task.delete',
+      ] as const) {
+        await expect(
+          service.resolve({
+            actor,
+            capability,
+            resource: taskResource({ assigneeId: actor.userId }),
+          }),
+        ).resolves.toEqual({
+          allowed: false,
+          audience: 'external',
+          reasonCode: 'INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE',
+        });
+      }
+    },
+  );
+
   it('allows a contributor to update permitted execution fields on an assigned task', async () => {
     const actor = createActor('TEAM_MEMBER');
     setMembership(actor.userId, ProjectRole.Contributor);

@@ -21,6 +21,10 @@ import {
   CONTRIBUTOR_TASK_EXECUTION_FIELDS,
   projectRoleGrantsCapability,
 } from './project-role-capabilities';
+import {
+  INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE,
+  isExternalProjectRoleEligible,
+} from './project-role-eligibility';
 
 const contributorContextualCapabilities = new Set([
   'task.edit_execution',
@@ -267,6 +271,13 @@ export class CanonicalCapabilityResolverService {
       );
     if (!projectRole) {
       return this.deny(audience, 'PROJECT_MEMBERSHIP_REQUIRED');
+    }
+
+    if (
+      audience === 'external' &&
+      !isExternalProjectRoleEligible(projectRole)
+    ) {
+      return this.deny(audience, INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE);
     }
 
     if (projectRoleGrantsCapability(projectRole, capability)) {

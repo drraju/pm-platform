@@ -21,6 +21,10 @@ import {
   TaskCapabilityResource,
 } from '../../common/authz/canonical-capability.types';
 import { PermissionKey } from '../../common/authz/permissions';
+import {
+  INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE,
+  isProjectRoleEligible,
+} from '../../common/authz/project-role-eligibility';
 import { ProjectRole } from '../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
@@ -132,6 +136,8 @@ export class ProjectsService {
       ...createProjectDto,
       ownerId: actor.userId,
     };
+    const creator = await this.findUserForProjectMembership(actor.userId);
+    this.ensureProjectRoleEligible(creator, ProjectRole.Owner);
     this.validateMutableProjectStatus(normalizedInput.status);
     await this.validateGovernanceUsers(normalizedInput);
 
@@ -278,7 +284,10 @@ export class ProjectsService {
   ): Promise<ProjectMemberResponseDto> {
     await this.ensureProjectExists(projectId);
     await this.ensureCanManageProject(projectId, actor);
-    await this.ensureUserExists(createProjectMemberDto.userId);
+    const user = await this.findUserForProjectMembership(
+      createProjectMemberDto.userId,
+    );
+    const projectRole = createProjectMemberDto.role ?? ProjectRole.Contributor;
 
     const existingMember = await this.projectMembersRepository.findOne({
       withDeleted: true,
@@ -292,8 +301,8 @@ export class ProjectsService {
         throw new ConflictException('User is already a project member');
       }
 
-      existingMember.role =
-        createProjectMemberDto.role ?? ProjectRole.Contributor;
+      this.ensureProjectRoleEligible(user, projectRole);
+      existingMember.role = projectRole;
       existingMember.deletedAt = null;
       existingMember.deletedById = null;
       existingMember.updatedById = actor?.userId;
@@ -305,11 +314,12 @@ export class ProjectsService {
       );
     }
 
+    this.ensureProjectRoleEligible(user, projectRole);
     const member = this.projectMembersRepository.create({
       createdById: actor?.userId,
       projectId,
       userId: createProjectMemberDto.userId,
-      role: createProjectMemberDto.role ?? ProjectRole.Contributor,
+      role: projectRole,
       updatedById: actor?.userId,
     });
 
@@ -349,6 +359,7 @@ export class ProjectsService {
     await this.ensureCanManageProject(projectId, actor);
 
     const member = await this.findMember(projectId, memberId);
+    this.ensureProjectRoleEligible(member.user, updateProjectMemberDto.role);
     member.role = updateProjectMemberDto.role;
 
     const savedMember = await this.projectMembersRepository.save(member);
@@ -1326,6 +1337,32 @@ export class ProjectsService {
     if (!user) {
       throw new NotFoundException(`User ${userId} not found`);
     }
+  }
+
+  private async findUserForProjectMembership(userId: string): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      relations: { role: true },
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    return user;
+  }
+
+  private ensureProjectRoleEligible(
+    user: Pick<User, 'role'>,
+    projectRole: ProjectRole,
+  ): void {
+    if (isProjectRoleEligible(user.role?.name, projectRole)) {
+      return;
+    }
+
+    throw new BadRequestException({
+      message: 'Project role is not valid for the user role',
+      reasonCode: INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE,
+    });
   }
 
   private async validateGovernanceUsers(
