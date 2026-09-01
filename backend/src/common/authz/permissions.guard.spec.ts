@@ -17,10 +17,10 @@ describe('PermissionsGuard', () => {
   let reflector: ReflectorMock;
   let authorizationPolicyService: Pick<
     AuthorizationPolicyService,
-    'canManageRolePermissions' | 'getGrantedPermissionKeys'
+    'getGrantedPermissionKeys' | 'isPlatformAdministrator'
   > & {
-    canManageRolePermissions: jest.Mock;
     getGrantedPermissionKeys: jest.Mock;
+    isPlatformAdministrator: jest.Mock;
   };
   let guard: PermissionsGuard;
 
@@ -29,8 +29,8 @@ describe('PermissionsGuard', () => {
       getAllAndOverride: jest.fn(),
     };
     authorizationPolicyService = {
-      canManageRolePermissions: jest.fn(),
       getGrantedPermissionKeys: jest.fn(),
+      isPlatformAdministrator: jest.fn(),
     };
     guard = new PermissionsGuard(
       reflector as unknown as Reflector,
@@ -103,11 +103,11 @@ describe('PermissionsGuard', () => {
     authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
       new Set([PermissionKey.PermissionManage]),
     );
-    authorizationPolicyService.canManageRolePermissions.mockResolvedValue(true);
+    authorizationPolicyService.isPlatformAdministrator.mockResolvedValue(true);
 
     await expect(guard.canActivate(createContext())).resolves.toBe(true);
     expect(
-      authorizationPolicyService.canManageRolePermissions,
+      authorizationPolicyService.isPlatformAdministrator,
     ).toHaveBeenCalledWith({
       email: 'user@example.com',
       roleId: 'role-1',
@@ -123,9 +123,7 @@ describe('PermissionsGuard', () => {
     authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
       new Set([PermissionKey.PermissionManage]),
     );
-    authorizationPolicyService.canManageRolePermissions.mockResolvedValue(
-      false,
-    );
+    authorizationPolicyService.isPlatformAdministrator.mockResolvedValue(false);
 
     await expect(guard.canActivate(createContext())).rejects.toThrow(
       'Insufficient permissions',

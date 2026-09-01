@@ -258,7 +258,14 @@ export class UsersService {
     );
   }
 
-  async createRole(createRoleDto: CreateRoleDto): Promise<RoleResponseDto> {
+  async createRole(
+    createRoleDto: CreateRoleDto,
+    actor: UserAdministrationActor,
+  ): Promise<RoleResponseDto> {
+    if (!(await this.authorizationPolicyService.canManageRoles(actor))) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
     const role = await this.rolesRepository.save(
       this.rolesRepository.create(createRoleDto),
     );

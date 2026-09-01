@@ -74,7 +74,7 @@ export class PermissionsGuard implements CanActivate {
 
     if (
       platformAdminRequired &&
-      !(await this.authorizationPolicyService.canManageRolePermissions({
+      !(await this.authorizationPolicyService.isPlatformAdministrator({
         email: request.user?.email,
         roleId,
         userId,

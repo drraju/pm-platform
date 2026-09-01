@@ -87,9 +87,13 @@ export class UsersController {
 
   @Post('roles')
   @RequirePermissions(PermissionKey.RoleManage)
+  @RequirePlatformAdmin()
   @ApiCreatedResponse({ type: RoleResponseDto })
-  createRole(@Body() createRoleDto: CreateRoleDto): Promise<RoleResponseDto> {
-    return this.usersService.createRole(createRoleDto);
+  createRole(
+    @Req() request: AuthenticatedRequest,
+    @Body() createRoleDto: CreateRoleDto,
+  ): Promise<RoleResponseDto> {
+    return this.usersService.createRole(createRoleDto, request.user);
   }
 
   @Get('permissions')

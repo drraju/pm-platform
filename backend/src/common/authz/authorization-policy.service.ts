@@ -192,6 +192,12 @@ export class AuthorizationPolicyService {
     return actor ? this.isPlatformAdministrator(actor) : false;
   }
 
+  async canManageRoles(
+    actor: AuthorizationActor | undefined,
+  ): Promise<boolean> {
+    return actor ? this.isPlatformAdministrator(actor) : false;
+  }
+
   async hasPermission(
     actor: AuthorizationActor | undefined,
     permissionKey: PermissionKey,

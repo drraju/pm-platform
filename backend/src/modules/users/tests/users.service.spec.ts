@@ -22,6 +22,7 @@ describe('UsersService', () => {
   let projectMembersRepository: MockRepository<ProjectMember>;
   let authorizationPolicyService: {
     canManageRolePermissions: jest.Mock;
+    canManageRoles: jest.Mock;
     canManageProject: jest.Mock;
     canViewProject: jest.Mock;
     hasAnyPermission: jest.Mock;
@@ -48,6 +49,7 @@ describe('UsersService', () => {
     };
 
     rolesRepository = {
+      create: jest.fn((input: Partial<Role>) => input),
       findOne: jest.fn().mockResolvedValue({
         id: 'role-1',
         name: UserRole.TeamMember,
@@ -62,6 +64,7 @@ describe('UsersService', () => {
     };
     authorizationPolicyService = {
       canManageRolePermissions: jest.fn().mockResolvedValue(false),
+      canManageRoles: jest.fn().mockResolvedValue(false),
       canManageProject: jest.fn().mockResolvedValue(true),
       canViewProject: jest.fn().mockResolvedValue(true),
       hasAnyPermission: jest.fn().mockResolvedValue(true),
@@ -343,6 +346,62 @@ describe('UsersService', () => {
       },
     );
   });
+
+  it('allows a Platform Admin to create a global role', async () => {
+    const platformAdmin = {
+      roleId: 'role-platform-admin',
+      userId: 'admin-1',
+    };
+    const input = {
+      description: 'Analytics metadata role',
+      name: 'ANALYTICS_METADATA',
+    };
+    authorizationPolicyService.canManageRoles.mockResolvedValueOnce(true);
+
+    await expect(service.createRole(input, platformAdmin)).resolves.toEqual({
+      description: input.description,
+      id: undefined,
+      name: input.name,
+      permissions: [],
+    });
+    expect(authorizationPolicyService.canManageRoles).toHaveBeenCalledWith(
+      platformAdmin,
+    );
+    expect(rolesRepository.create).toHaveBeenCalledWith(input);
+    expect(rolesRepository.save).toHaveBeenCalledWith(input);
+  });
+
+  it.each([
+    UserRole.Executive,
+    UserRole.PortfolioManager,
+    UserRole.ProjectManager,
+    UserRole.TeamMember,
+    UserRole.Customer,
+    UserRole.Partner,
+  ])(
+    'denies %s creation of a privileged global role before persistence',
+    async (roleName) => {
+      const nonAdmin = {
+        roleId: `role-${roleName}`,
+        userId: 'non-admin-1',
+      };
+
+      await expect(
+        service.createRole(
+          {
+            description: 'Attempted privileged role',
+            name: UserRole.PlatformAdmin,
+          },
+          nonAdmin,
+        ),
+      ).rejects.toThrow('Insufficient permissions');
+      expect(authorizationPolicyService.canManageRoles).toHaveBeenCalledWith(
+        nonAdmin,
+      );
+      expect(rolesRepository.create).not.toHaveBeenCalled();
+      expect(rolesRepository.save).not.toHaveBeenCalled();
+    },
+  );
 
   it('allows a Platform Admin to update role permissions', async () => {
     const platformAdmin = {

@@ -18,15 +18,15 @@ import { UsersService } from '../users.service';
 
 type Actor = { email: string; roleId: string; userId: string };
 
-describe('Permission administration HTTP authorization', () => {
+describe('Global role administration HTTP authorization', () => {
   let app: INestApplication;
-  let updateRolePermissions: jest.Mock;
+  let createRole: jest.Mock;
 
   beforeEach(async () => {
-    updateRolePermissions = jest.fn().mockResolvedValue({
-      description: null,
-      id: 'role-target',
-      name: UserRole.TeamMember,
+    createRole = jest.fn().mockResolvedValue({
+      description: 'Analytics metadata role',
+      id: 'role-created',
+      name: 'ANALYTICS_METADATA',
       permissions: [],
     });
     const policy = {
@@ -35,7 +35,7 @@ describe('Permission administration HTTP authorization', () => {
       ),
       getGrantedPermissionKeys: jest
         .fn()
-        .mockResolvedValue(new Set([PermissionKey.PermissionManage])),
+        .mockResolvedValue(new Set([PermissionKey.RoleManage])),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -43,10 +43,7 @@ describe('Permission administration HTTP authorization', () => {
       providers: [
         PermissionsGuard,
         { provide: AuthorizationPolicyService, useValue: policy },
-        {
-          provide: UsersService,
-          useValue: { updateRolePermissions },
-        },
+        { provide: UsersService, useValue: { createRole } },
         { provide: PasswordUpdateService, useValue: {} },
       ],
     })
@@ -83,22 +80,23 @@ describe('Permission administration HTTP authorization', () => {
 
   afterEach(async () => app.close());
 
-  it('allows a Platform Admin with permission.manage', async () => {
-    await request(app.getHttpServer())
-      .patch('/users/roles/role-target/permissions')
-      .set(asActor(UserRole.PlatformAdmin, 'admin-1'))
-      .send({ permissionKeys: [PermissionKey.ProjectRead] })
-      .expect(200);
+  it('allows a Platform Admin with role.manage to create a global role', async () => {
+    const input = {
+      description: 'Analytics metadata role',
+      name: 'ANALYTICS_METADATA',
+    };
 
-    expect(updateRolePermissions).toHaveBeenCalledWith(
-      'role-target',
-      { permissionKeys: [PermissionKey.ProjectRead] },
-      {
-        email: 'actor@example.com',
-        roleId: UserRole.PlatformAdmin,
-        userId: 'admin-1',
-      },
-    );
+    await request(app.getHttpServer())
+      .post('/users/roles')
+      .set(asActor(UserRole.PlatformAdmin, 'admin-1'))
+      .send(input)
+      .expect(201);
+
+    expect(createRole).toHaveBeenCalledWith(input, {
+      email: 'actor@example.com',
+      roleId: UserRole.PlatformAdmin,
+      userId: 'admin-1',
+    });
   });
 
   it.each([
@@ -108,34 +106,30 @@ describe('Permission administration HTTP authorization', () => {
     UserRole.TeamMember,
     UserRole.Customer,
     UserRole.Partner,
-  ])('denies %s even when permission.manage is granted', async (roleName) => {
+  ])('denies %s even when role.manage is granted', async (roleName) => {
     await request(app.getHttpServer())
-      .patch('/users/roles/role-target/permissions')
+      .post('/users/roles')
       .set(asActor(roleName, 'non-admin-1'))
-      .send({ permissionKeys: [PermissionKey.ProjectRead] })
+      .send({
+        description: 'Attempted privileged role',
+        name: UserRole.PlatformAdmin,
+      })
       .expect(403);
 
-    expect(updateRolePermissions).not.toHaveBeenCalled();
+    expect(createRole).not.toHaveBeenCalled();
   });
 
-  it('denies Executive self-escalation before invoking the service', async () => {
+  it('denies Executive creation of a privileged role before invoking the service', async () => {
     await request(app.getHttpServer())
-      .patch(`/users/roles/${UserRole.Executive}/permissions`)
+      .post('/users/roles')
       .set(asActor(UserRole.Executive, 'executive-1'))
-      .send({ permissionKeys: Object.values(PermissionKey) })
+      .send({
+        description: 'Attempted Platform Admin replacement',
+        name: UserRole.PlatformAdmin,
+      })
       .expect(403);
 
-    expect(updateRolePermissions).not.toHaveBeenCalled();
-  });
-
-  it('denies a non-admin attempt to change another role', async () => {
-    await request(app.getHttpServer())
-      .patch(`/users/roles/${UserRole.PlatformAdmin}/permissions`)
-      .set(asActor(UserRole.ProjectManager, 'project-manager-1'))
-      .send({ permissionKeys: [PermissionKey.PermissionManage] })
-      .expect(403);
-
-    expect(updateRolePermissions).not.toHaveBeenCalled();
+    expect(createRole).not.toHaveBeenCalled();
   });
 });
 
