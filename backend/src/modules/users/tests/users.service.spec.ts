@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Permission } from '../entities/permission.entity';
@@ -116,6 +117,9 @@ describe('UsersService', () => {
       status: 'first_login_pending',
     });
     expect(JSON.stringify(result)).not.toContain('passwordHash');
+    expect(usersRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ identityType: UserIdentityType.Human }),
+    );
   });
 
   it('does not return passwordHash when listing users', async () => {
@@ -327,6 +331,28 @@ describe('UsersService', () => {
       service.update('user-1', { roleId: 'role-custom' }),
     ).rejects.toThrow('Role is not supported for user administration');
     expect(usersRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('does not mass-assign identityType through the normal update service', async () => {
+    const existingUser = {
+      id: 'user-1',
+      email: 'ava@example.com',
+      firstName: 'Ava',
+      lastName: 'Patel',
+      identityType: UserIdentityType.Human,
+      roleId: 'role-team-member',
+      status: 'active',
+      accountHistory: [],
+    } as User;
+    usersRepository.findOne?.mockResolvedValue(existingUser);
+
+    await service.update('user-1', {
+      identityType: UserIdentityType.Service,
+    } as never);
+
+    expect(usersRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ identityType: UserIdentityType.Human }),
+    );
   });
 
   it('updates password hash and passwordChangedAt together', async () => {

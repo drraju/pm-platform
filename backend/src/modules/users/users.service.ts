@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import { PermissionKey } from '../../common/authz/permissions';
+import { UserIdentityType } from '../../common/enums/user-identity-type.enum';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import {
   canonicalUserRoles,
@@ -78,6 +79,7 @@ export class UsersService {
       firstName: createUserDto.firstName,
       lastName: createUserDto.lastName,
       passwordHash: createUserDto.passwordHash,
+      identityType: UserIdentityType.Human,
       roleId: createUserDto.roleId,
       status: createUserDto.status ?? 'first_login_pending',
       accountHistory: actor
@@ -330,7 +332,21 @@ export class UsersService {
     if (updateUserDto.roleId) {
       updatedRole = await this.ensureCanonicalRole(updateUserDto.roleId);
     }
-    Object.assign(user, updateUserDto);
+    if (updateUserDto.email !== undefined) {
+      user.email = updateUserDto.email;
+    }
+    if (updateUserDto.firstName !== undefined) {
+      user.firstName = updateUserDto.firstName;
+    }
+    if (updateUserDto.lastName !== undefined) {
+      user.lastName = updateUserDto.lastName;
+    }
+    if (updateUserDto.roleId !== undefined) {
+      user.roleId = updateUserDto.roleId;
+    }
+    if (updateUserDto.status !== undefined) {
+      user.status = updateUserDto.status;
+    }
     if (updatedRole) {
       user.role = updatedRole;
     }

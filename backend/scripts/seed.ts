@@ -13,6 +13,7 @@ import {
   UserRole,
   userRoleDescriptions,
 } from '../src/common/enums/user-role.enum';
+import { UserIdentityType } from '../src/common/enums/user-identity-type.enum';
 import { ProjectRole } from '../src/common/enums/project-role.enum';
 import { RaidType } from '../src/common/enums/raid-type.enum';
 import { TaskStatus } from '../src/common/enums/task-status.enum';
@@ -776,6 +777,7 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
         userRepository.create({
           ...(existingUser ?? {
             id: user.id,
+            identityType: UserIdentityType.Human,
             passwordHash: passwordForNewUser,
           }),
           email: user.email,

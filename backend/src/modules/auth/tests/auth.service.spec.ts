@@ -1,6 +1,7 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { User } from '../../users/entities/user.entity';
 import { UsersService } from '../../users/users.service';
@@ -41,8 +42,10 @@ describe('AuthService', () => {
     updatePassword: jest.Mock;
   };
   let jwtService: { sign: jest.Mock; verifyAsync: jest.Mock };
+  let signedPayloads: Array<Record<string, unknown>>;
 
   beforeEach(async () => {
+    signedPayloads = [];
     usersService = {
       create: jest.fn(),
       findAuthenticationUserById: jest.fn(),
@@ -53,9 +56,10 @@ describe('AuthService', () => {
       updatePassword: jest.fn(),
     };
     jwtService = {
-      sign: jest.fn(
-        (payload: { tokenType: string }) => `${payload.tokenType}-token`,
-      ),
+      sign: jest.fn((payload: { tokenType: string }) => {
+        signedPayloads.push(payload);
+        return `${payload.tokenType}-token`;
+      }),
       verifyAsync: jest.fn(),
     };
     passwordResetTokenService = {
@@ -176,10 +180,11 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('marks first-login-pending sessions for forced password change', async () => {
+  it('preserves first-login behaviour for HUMAN sessions', async () => {
     usersService.findByEmail.mockResolvedValue({
       email: 'new.user@example.com',
       id: 'user-new',
+      identityType: UserIdentityType.Human,
       passwordHash: await passwordService.hashPassword('TempPass1!'),
       roleId: 'role-team-member',
       status: 'first_login_pending',
@@ -209,6 +214,8 @@ describe('AuthService', () => {
         secret: 'test-refresh-secret',
       }),
     );
+    expect(signedPayloads[0]).not.toHaveProperty('identityType');
+    expect(signedPayloads[1]).not.toHaveProperty('identityType');
   });
 
   it('rejects an access token at the refresh boundary', async () => {

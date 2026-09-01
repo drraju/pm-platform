@@ -1,5 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { TimestampedEntity } from '../../../common/entities/timestamped.entity';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Role } from './role.entity';
@@ -23,6 +24,15 @@ export class User extends TimestampedEntity {
 
   @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
   lastLoginAt?: Date | null;
+
+  @Column({
+    default: UserIdentityType.Human,
+    enum: UserIdentityType,
+    enumName: 'user_identity_type',
+    name: 'identity_type',
+    type: 'enum',
+  })
+  identityType: UserIdentityType;
 
   @Column({ name: 'role_id', type: 'uuid' })
   roleId: string;
