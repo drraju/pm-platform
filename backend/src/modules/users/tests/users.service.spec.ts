@@ -17,9 +17,11 @@ type MockRepository<T extends object = object> = Partial<
 describe('UsersService', () => {
   let service: UsersService;
   let rolesRepository: MockRepository<Role>;
+  let permissionsRepository: MockRepository<Permission>;
   let usersRepository: MockRepository<User>;
   let projectMembersRepository: MockRepository<ProjectMember>;
   let authorizationPolicyService: {
+    canManageRolePermissions: jest.Mock;
     canManageProject: jest.Mock;
     canViewProject: jest.Mock;
     hasAnyPermission: jest.Mock;
@@ -50,11 +52,16 @@ describe('UsersService', () => {
         id: 'role-1',
         name: UserRole.TeamMember,
       }),
+      save: jest.fn((input: Role) => Promise.resolve(input)),
+    };
+    permissionsRepository = {
+      find: jest.fn().mockResolvedValue([]),
     };
     projectMembersRepository = {
       find: jest.fn().mockResolvedValue([]),
     };
     authorizationPolicyService = {
+      canManageRolePermissions: jest.fn().mockResolvedValue(false),
       canManageProject: jest.fn().mockResolvedValue(true),
       canViewProject: jest.fn().mockResolvedValue(true),
       hasAnyPermission: jest.fn().mockResolvedValue(true),
@@ -66,7 +73,10 @@ describe('UsersService', () => {
         UsersService,
         { provide: getRepositoryToken(User), useValue: usersRepository },
         { provide: getRepositoryToken(Role), useValue: rolesRepository },
-        { provide: getRepositoryToken(Permission), useValue: {} },
+        {
+          provide: getRepositoryToken(Permission),
+          useValue: permissionsRepository,
+        },
         {
           provide: getRepositoryToken(ProjectMember),
           useValue: projectMembersRepository,
@@ -333,4 +343,85 @@ describe('UsersService', () => {
       },
     );
   });
+
+  it('allows a Platform Admin to update role permissions', async () => {
+    const platformAdmin = {
+      roleId: 'role-platform-admin',
+      userId: 'admin-1',
+    };
+    const targetRole = {
+      description: 'Executive role',
+      id: 'role-executive',
+      name: UserRole.Executive,
+      permissions: [],
+    } as Role;
+    const permission = {
+      description: 'Manage role permissions',
+      id: 'permission-manage',
+      key: 'permission.manage',
+    } as Permission;
+    authorizationPolicyService.canManageRolePermissions.mockResolvedValueOnce(
+      true,
+    );
+    rolesRepository.findOne?.mockResolvedValueOnce(targetRole);
+    permissionsRepository.find?.mockResolvedValueOnce([permission]);
+
+    await expect(
+      service.updateRolePermissions(
+        targetRole.id,
+        { permissionKeys: [permission.key] },
+        platformAdmin,
+      ),
+    ).resolves.toEqual({
+      description: targetRole.description,
+      id: targetRole.id,
+      name: targetRole.name,
+      permissions: [
+        {
+          description: permission.description,
+          id: permission.id,
+          key: permission.key,
+        },
+      ],
+    });
+    expect(
+      authorizationPolicyService.canManageRolePermissions,
+    ).toHaveBeenCalledWith(platformAdmin);
+    expect(rolesRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ permissions: [permission] }),
+    );
+  });
+
+  it.each([
+    [UserRole.Executive, 'role-executive', 'role-executive'],
+    [UserRole.PortfolioManager, 'role-portfolio-manager', 'role-other'],
+    [UserRole.ProjectManager, 'role-project-manager', 'role-platform-admin'],
+    [UserRole.TeamMember, 'role-team-member', 'role-other'],
+    [UserRole.Customer, 'role-customer', 'role-other'],
+    [UserRole.Partner, 'role-partner', 'role-other'],
+  ])(
+    'denies %s role-permission changes before persistence',
+    async (_roleName, actorRoleId, targetRoleId) => {
+      const nonAdmin = {
+        roleId: actorRoleId,
+        userId: 'non-admin-1',
+      };
+
+      await expect(
+        service.updateRolePermissions(
+          targetRoleId,
+          {
+            permissionKeys: ['permission.manage', 'role.manage', 'user.manage'],
+          },
+          nonAdmin,
+        ),
+      ).rejects.toThrow('Insufficient permissions');
+      expect(
+        authorizationPolicyService.canManageRolePermissions,
+      ).toHaveBeenCalledWith(nonAdmin);
+      expect(rolesRepository.findOne).not.toHaveBeenCalled();
+      expect(permissionsRepository.find).not.toHaveBeenCalled();
+      expect(rolesRepository.save).not.toHaveBeenCalled();
+    },
+  );
 });

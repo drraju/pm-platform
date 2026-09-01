@@ -21,6 +21,7 @@ import { PermissionsGuard } from '../../common/authz/permissions.guard';
 import {
   RequireAnyPermissions,
   RequirePermissions,
+  RequirePlatformAdmin,
 } from '../../common/authz/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PasswordUpdateService } from '../auth/password-update.service';
@@ -100,14 +101,17 @@ export class UsersController {
 
   @Patch('roles/:id/permissions')
   @RequirePermissions(PermissionKey.PermissionManage)
+  @RequirePlatformAdmin()
   @ApiOkResponse({ type: RoleResponseDto })
   updateRolePermissions(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() updateRolePermissionsDto: UpdateRolePermissionsDto,
   ): Promise<RoleResponseDto> {
     return this.usersService.updateRolePermissions(
       id,
       updateRolePermissionsDto,
+      request.user,
     );
   }
 

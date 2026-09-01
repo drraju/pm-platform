@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import {
   ANY_PERMISSIONS_KEY,
   PERMISSIONS_KEY,
+  PLATFORM_ADMIN_REQUIRED_KEY,
   PermissionKey,
 } from './permissions';
 import { AuthorizationPolicyService } from './authorization-policy.service';
@@ -16,8 +17,9 @@ describe('PermissionsGuard', () => {
   let reflector: ReflectorMock;
   let authorizationPolicyService: Pick<
     AuthorizationPolicyService,
-    'getGrantedPermissionKeys'
+    'canManageRolePermissions' | 'getGrantedPermissionKeys'
   > & {
+    canManageRolePermissions: jest.Mock;
     getGrantedPermissionKeys: jest.Mock;
   };
   let guard: PermissionsGuard;
@@ -27,6 +29,7 @@ describe('PermissionsGuard', () => {
       getAllAndOverride: jest.fn(),
     };
     authorizationPolicyService = {
+      canManageRolePermissions: jest.fn(),
       getGrantedPermissionKeys: jest.fn(),
     };
     guard = new PermissionsGuard(
@@ -92,9 +95,47 @@ describe('PermissionsGuard', () => {
     });
   });
 
+  it('allows a permissioned Platform Admin through the administration boundary', async () => {
+    mockMetadata({
+      all: [PermissionKey.PermissionManage],
+      platformAdminRequired: true,
+    });
+    authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
+      new Set([PermissionKey.PermissionManage]),
+    );
+    authorizationPolicyService.canManageRolePermissions.mockResolvedValue(true);
+
+    await expect(guard.canActivate(createContext())).resolves.toBe(true);
+    expect(
+      authorizationPolicyService.canManageRolePermissions,
+    ).toHaveBeenCalledWith({
+      email: 'user@example.com',
+      roleId: 'role-1',
+      userId: 'user-1',
+    });
+  });
+
+  it('denies a non-admin even when permission.manage is granted', async () => {
+    mockMetadata({
+      all: [PermissionKey.PermissionManage],
+      platformAdminRequired: true,
+    });
+    authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
+      new Set([PermissionKey.PermissionManage]),
+    );
+    authorizationPolicyService.canManageRolePermissions.mockResolvedValue(
+      false,
+    );
+
+    await expect(guard.canActivate(createContext())).rejects.toThrow(
+      'Insufficient permissions',
+    );
+  });
+
   function mockMetadata(input: {
     all?: PermissionKey[];
     any?: PermissionKey[];
+    platformAdminRequired?: boolean;
   }) {
     reflector.getAllAndOverride.mockImplementation((metadataKey: string) => {
       if (metadataKey === PERMISSIONS_KEY) {
@@ -102,6 +143,9 @@ describe('PermissionsGuard', () => {
       }
       if (metadataKey === ANY_PERMISSIONS_KEY) {
         return input.any;
+      }
+      if (metadataKey === PLATFORM_ADMIN_REQUIRED_KEY) {
+        return input.platformAdminRequired;
       }
       return undefined;
     });

@@ -1,5 +1,6 @@
 export const PERMISSIONS_KEY = 'permissions';
 export const ANY_PERMISSIONS_KEY = 'anyPermissions';
+export const PLATFORM_ADMIN_REQUIRED_KEY = 'platformAdminRequired';
 
 export const PermissionKey = {
   DashboardView: 'dashboard.view',

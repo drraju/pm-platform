@@ -186,6 +186,12 @@ export class AuthorizationPolicyService {
     return this.hasPermission(actor, PermissionKey.ExecutiveView);
   }
 
+  async canManageRolePermissions(
+    actor: AuthorizationActor | undefined,
+  ): Promise<boolean> {
+    return actor ? this.isPlatformAdministrator(actor) : false;
+  }
+
   async hasPermission(
     actor: AuthorizationActor | undefined,
     permissionKey: PermissionKey,

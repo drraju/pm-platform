@@ -208,6 +208,50 @@ describe('AuthorizationPolicyService', () => {
   });
 
   it.each([
+    [UserRole.PlatformAdmin, true],
+    [UserRole.Executive, false],
+    [UserRole.PortfolioManager, false],
+    [UserRole.ProjectManager, false],
+    [UserRole.TeamMember, false],
+    [UserRole.Customer, false],
+    [UserRole.Partner, false],
+  ])(
+    'allows role-permission administration only for %s',
+    async (roleName, expected) => {
+      permissionOverridesByRoleName.set(roleName, Object.values(PermissionKey));
+
+      await expect(
+        service.canManageRolePermissions(actor(roleName)),
+      ).resolves.toBe(expected);
+    },
+  );
+
+  it.each([ProjectRole.Owner, ProjectRole.Manager])(
+    'ignores hostile %s and governance authority when evaluating role-permission administration',
+    async (projectRole) => {
+      const executiveActor = actor(UserRole.Executive, 'user-exec');
+      permissionOverridesByRoleName.set(
+        UserRole.Executive,
+        Object.values(PermissionKey),
+      );
+      membershipsByKey.set(`${projectId}:user-exec`, projectRole);
+      projectGovernorAssignments.add(`${projectId}:ownerId:user-exec`);
+      projectGovernorAssignments.add(`${projectId}:businessOwnerId:user-exec`);
+      projectGovernorAssignments.add(`${projectId}:deliveryLeadId:user-exec`);
+      projectGovernorAssignments.add(
+        `${projectId}:executiveSponsorId:user-exec`,
+      );
+
+      await expect(
+        service.canManageRolePermissions(executiveActor),
+      ).resolves.toBe(false);
+      expect(projectsRepository.findOne).not.toHaveBeenCalled();
+      expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
+      expect(tasksRepository.findOne).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     UserRole.PlatformAdmin,
     UserRole.PortfolioManager,
     UserRole.Executive,

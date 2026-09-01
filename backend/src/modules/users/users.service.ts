@@ -268,7 +268,14 @@ export class UsersService {
   async updateRolePermissions(
     roleId: string,
     updateRolePermissionsDto: UpdateRolePermissionsDto,
+    actor: UserAdministrationActor,
   ): Promise<RoleResponseDto> {
+    if (
+      !(await this.authorizationPolicyService.canManageRolePermissions(actor))
+    ) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
     const role = await this.rolesRepository.findOne({
       where: { id: roleId },
       relations: { permissions: true },

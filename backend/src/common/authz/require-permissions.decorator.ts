@@ -2,6 +2,7 @@ import { SetMetadata } from '@nestjs/common';
 import {
   ANY_PERMISSIONS_KEY,
   PERMISSIONS_KEY,
+  PLATFORM_ADMIN_REQUIRED_KEY,
   PermissionKey,
 } from './permissions';
 
@@ -10,3 +11,6 @@ export const RequirePermissions = (...permissions: PermissionKey[]) =>
 
 export const RequireAnyPermissions = (...permissions: PermissionKey[]) =>
   SetMetadata(ANY_PERMISSIONS_KEY, permissions);
+
+export const RequirePlatformAdmin = () =>
+  SetMetadata(PLATFORM_ADMIN_REQUIRED_KEY, true);

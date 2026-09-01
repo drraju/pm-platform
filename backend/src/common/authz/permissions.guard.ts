@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import {
   ANY_PERMISSIONS_KEY,
   PERMISSIONS_KEY,
+  PLATFORM_ADMIN_REQUIRED_KEY,
   PermissionKey,
 } from './permissions';
 import { AuthorizationPolicyService } from './authorization-policy.service';
@@ -27,8 +28,16 @@ export class PermissionsGuard implements CanActivate {
       ANY_PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const platformAdminRequired = this.reflector.getAllAndOverride<boolean>(
+      PLATFORM_ADMIN_REQUIRED_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
-    if (!requiredPermissions?.length && !anyPermissions?.length) {
+    if (
+      !requiredPermissions?.length &&
+      !anyPermissions?.length &&
+      !platformAdminRequired
+    ) {
       return true;
     }
 
@@ -60,6 +69,17 @@ export class PermissionsGuard implements CanActivate {
       !anyPermissions?.length ||
       anyPermissions.some((permission) => grantedPermissions.has(permission));
     if (!hasAnyPermission) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    if (
+      platformAdminRequired &&
+      !(await this.authorizationPolicyService.canManageRolePermissions({
+        email: request.user?.email,
+        roleId,
+        userId,
+      }))
+    ) {
       throw new ForbiddenException('Insufficient permissions');
     }
 
