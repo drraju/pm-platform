@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -161,5 +161,40 @@ describe('RisksService', () => {
       'project-1',
       executiveActor,
     );
+  });
+
+  it('denies Executive risk create, update, and delete after deliberate permission grants are filtered', async () => {
+    const executiveActor = {
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-1',
+    };
+    authorizationPolicyService.canContributeRaid.mockResolvedValue(false);
+    authorizationPolicyService.canManageRaid.mockResolvedValue(false);
+    authorizationPolicyService.hasPermission.mockResolvedValue(false);
+    risksRepository.findOne?.mockResolvedValue({
+      id: 'risk-1',
+      ownerId: executiveActor.userId,
+      projectId: 'project-1',
+    });
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
+
+    const mutations = [
+      () =>
+        service.create(
+          { projectId: 'project-1', title: 'Forbidden risk' },
+          executiveActor,
+        ),
+      () => service.update('risk-1', { status: 'mitigating' }, executiveActor),
+      () => service.remove('risk-1', executiveActor),
+    ];
+
+    for (const mutate of mutations) {
+      await expect(mutate()).rejects.toBeInstanceOf(ForbiddenException);
+    }
+
+    expect(risksRepository.save).not.toHaveBeenCalled();
+    expect(risksRepository.remove).not.toHaveBeenCalled();
   });
 });

@@ -97,11 +97,13 @@ describe('AuthorizationPolicyService', () => {
   let projectGovernorAssignments: Set<string>;
   let membershipsByKey: Map<string, ProjectRole>;
   let assignedTaskKeys: Set<string>;
+  let permissionOverridesByRoleName: Map<string, PermissionKey[]>;
 
   beforeEach(async () => {
     projectGovernorAssignments = new Set();
     membershipsByKey = new Map();
     assignedTaskKeys = new Set();
+    permissionOverridesByRoleName = new Map();
 
     projectsRepository = {
       findOne: jest.fn(({ where }) => {
@@ -149,7 +151,10 @@ describe('AuthorizationPolicyService', () => {
     rolesRepository = {
       findOne: jest.fn(({ where }) => {
         const roleName = String(where.id).replace('role-', '');
-        const permissionKeys = permissionsByRoleName[roleName] ?? [];
+        const permissionKeys =
+          permissionOverridesByRoleName.get(roleName) ??
+          permissionsByRoleName[roleName] ??
+          [];
         return Promise.resolve({
           id: where.id,
           name: roleName,
@@ -214,6 +219,107 @@ describe('AuthorizationPolicyService', () => {
       ).resolves.toBe(true);
     },
   );
+
+  it('denies deliberately permissioned Executive project mutations before membership or governance authority', async () => {
+    permissionOverridesByRoleName.set(
+      UserRole.Executive,
+      Object.values(PermissionKey),
+    );
+    const executiveActor = actor(UserRole.Executive, 'user-exec');
+    projectGovernorAssignments.add(`${projectId}:ownerId:user-exec`);
+    projectGovernorAssignments.add(`${projectId}:businessOwnerId:user-exec`);
+    projectGovernorAssignments.add(`${projectId}:deliveryLeadId:user-exec`);
+    projectGovernorAssignments.add(`${projectId}:executiveSponsorId:user-exec`);
+
+    for (const projectRole of [
+      ProjectRole.Owner,
+      ProjectRole.Manager,
+      ProjectRole.Contributor,
+    ]) {
+      membershipsByKey.set(`${projectId}:user-exec`, projectRole);
+
+      await expect(
+        service.canManageProject(projectId, executiveActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canDeleteProject(projectId, executiveActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canManageTask(projectId, executiveActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canManageRaid(projectId, executiveActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canContributeRaid(projectId, executiveActor),
+      ).resolves.toBe(false);
+    }
+
+    await expect(service.canMutateProjectDomain(executiveActor)).resolves.toBe(
+      false,
+    );
+    await expect(
+      service.canViewProject(projectId, executiveActor),
+    ).resolves.toBe(true);
+    await expect(
+      service.hasPermission(executiveActor, PermissionKey.ProjectRead),
+    ).resolves.toBe(true);
+    await expect(
+      service.hasPermission(executiveActor, PermissionKey.RaidRead),
+    ).resolves.toBe(true);
+
+    const effectivePermissions =
+      await service.getGrantedPermissionKeys(executiveActor);
+    for (const mutationPermission of [
+      PermissionKey.ProjectCreate,
+      PermissionKey.ProjectDelete,
+      PermissionKey.ProjectTeamManage,
+      PermissionKey.ProjectUpdate,
+      PermissionKey.RaidCreate,
+      PermissionKey.RaidDelete,
+      PermissionKey.RaidUpdate,
+      PermissionKey.ResourceAssignmentArchive,
+      PermissionKey.ResourceAssignmentCreate,
+      PermissionKey.ResourceAssignmentUpdate,
+      PermissionKey.TaskComment,
+      PermissionKey.TaskCreate,
+      PermissionKey.TaskDelete,
+      PermissionKey.TaskReassign,
+      PermissionKey.TaskUpdate,
+    ]) {
+      expect(effectivePermissions.has(mutationPermission)).toBe(false);
+      await expect(
+        service.hasPermission(executiveActor, mutationPermission),
+      ).resolves.toBe(false);
+    }
+    expect(effectivePermissions.has(PermissionKey.ProjectRead)).toBe(true);
+    expect(effectivePermissions.has(PermissionKey.RaidRead)).toBe(true);
+    expect(effectivePermissions.has(PermissionKey.ResourceAssignmentRead)).toBe(
+      true,
+    );
+    expect(projectsRepository.findOne).not.toHaveBeenCalled();
+    expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('preserves the Platform Admin project mutation override', async () => {
+    const platformActor = actor(UserRole.PlatformAdmin, 'user-admin');
+
+    await expect(service.canMutateProjectDomain(platformActor)).resolves.toBe(
+      true,
+    );
+    await expect(
+      service.canManageProject(projectId, platformActor),
+    ).resolves.toBe(true);
+    await expect(
+      service.canDeleteProject(projectId, platformActor),
+    ).resolves.toBe(true);
+    await expect(service.canManageRaid(projectId, platformActor)).resolves.toBe(
+      true,
+    );
+    await expect(
+      service.canContributeRaid(projectId, platformActor),
+    ).resolves.toBe(true);
+  });
 
   it('fails closed when project visibility is evaluated without an actor', async () => {
     await expect(service.canViewProject(projectId)).resolves.toBe(false);

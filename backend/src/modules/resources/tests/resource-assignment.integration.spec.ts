@@ -188,6 +188,7 @@ describe('ResourceAssignment API integration', () => {
         {
           provide: AuthorizationPolicyService,
           useValue: {
+            canMutateProjectDomain: jest.fn().mockResolvedValue(true),
             getGrantedPermissionKeys: jest.fn().mockResolvedValue(new Set()),
           },
         },

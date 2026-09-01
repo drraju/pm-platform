@@ -20,6 +20,24 @@ const projectManagerMembershipRoles = new Set([
   ProjectRole.Manager,
 ]);
 
+const executiveDeniedLegacyProjectMutationPermissions = new Set<string>([
+  PermissionKey.ProjectCreate,
+  PermissionKey.ProjectDelete,
+  PermissionKey.ProjectTeamManage,
+  PermissionKey.ProjectUpdate,
+  PermissionKey.RaidCreate,
+  PermissionKey.RaidDelete,
+  PermissionKey.RaidUpdate,
+  PermissionKey.ResourceAssignmentArchive,
+  PermissionKey.ResourceAssignmentCreate,
+  PermissionKey.ResourceAssignmentUpdate,
+  PermissionKey.TaskComment,
+  PermissionKey.TaskCreate,
+  PermissionKey.TaskDelete,
+  PermissionKey.TaskReassign,
+  PermissionKey.TaskUpdate,
+]);
+
 @Injectable()
 export class AuthorizationPolicyService {
   constructor(
@@ -222,6 +240,16 @@ export class AuthorizationPolicyService {
     return roleName === UserRole.Customer || roleName === UserRole.Partner;
   }
 
+  async canMutateProjectDomain(
+    actor: AuthorizationActor | undefined,
+  ): Promise<boolean> {
+    if (!actor) {
+      return false;
+    }
+
+    return (await this.getActorRoleName(actor)) !== UserRole.Executive;
+  }
+
   private async canManageProjectWithPermissions(
     projectId: string,
     actor: AuthorizationActor,
@@ -322,8 +350,17 @@ export class AuthorizationPolicyService {
       where: { id: actor.roleId },
     });
 
+    const permissionKeys =
+      role?.permissions?.map((permission) => permission.key) ?? [];
+    if (role?.name !== UserRole.Executive) {
+      return new Set(permissionKeys);
+    }
+
     return new Set(
-      role?.permissions?.map((permission) => permission.key) ?? [],
+      permissionKeys.filter(
+        (permissionKey) =>
+          !executiveDeniedLegacyProjectMutationPermissions.has(permissionKey),
+      ),
     );
   }
 }

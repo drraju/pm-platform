@@ -1,4 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { Repository } from 'typeorm';
 import {
   CreateResourceAssignmentCommand,
@@ -33,6 +34,9 @@ describe('ResourceAssignmentService', () => {
     ensureProjectExists: jest.Mock;
     ensureResourceExists: jest.Mock;
     validateResolvedAssignment: jest.Mock;
+  };
+  let authorizationPolicyService: {
+    canMutateProjectDomain: jest.Mock;
   };
 
   const existingAssignment = Object.assign(new ResourceAssignment(), {
@@ -69,12 +73,58 @@ describe('ResourceAssignmentService', () => {
       ensureResourceExists: jest.fn(),
       validateResolvedAssignment: jest.fn(),
     };
+    authorizationPolicyService = {
+      canMutateProjectDomain: jest.fn().mockResolvedValue(true),
+    };
 
     service = new ResourceAssignmentService(
       assignmentsRepository as Repository<ResourceAssignment>,
       validationService as never,
+      authorizationPolicyService as unknown as AuthorizationPolicyService,
     );
   });
+
+  it.each(['create', 'update', 'remove'] as const)(
+    'denies Executive %s even when the route permission was deliberately granted',
+    async (operation) => {
+      const executiveActor = {
+        email: 'executive@example.com',
+        roleId: 'role-EXECUTIVE',
+        userId: 'executive-id',
+      };
+      authorizationPolicyService.canMutateProjectDomain.mockResolvedValue(
+        false,
+      );
+      const createInput: CreateResourceAssignmentCommand = {
+        allocationPercent: 50,
+        endDate: '2026-07-18',
+        projectId: 'project-id',
+        resourceId: 'resource-id',
+        startDate: '2026-07-11',
+        status: ResourceAssignmentStatus.Active,
+        taskId: 'task-id',
+      };
+
+      const mutation =
+        operation === 'create'
+          ? service.createAssignment(createInput, executiveActor)
+          : operation === 'update'
+            ? service.updateAssignment(
+                existingAssignment.id,
+                { plannedMinutesPerDay: 240 },
+                executiveActor,
+              )
+            : service.removeAssignment(existingAssignment.id, executiveActor);
+
+      await expect(mutation).rejects.toMatchObject({
+        response: expect.objectContaining({
+          reasonCode: 'MISSING_PERMISSION',
+        }),
+      });
+      await expect(mutation).rejects.toBeInstanceOf(ForbiddenException);
+      expect(assignmentsRepository.manager.transaction).not.toHaveBeenCalled();
+    },
+  );
 
   it('creates an assignment in a transaction with audit metadata', async () => {
     const input: CreateResourceAssignmentCommand = {

@@ -1,8 +1,10 @@
+import { ForbiddenException } from '@nestjs/common';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
+import { RaidType } from '../../../common/enums/raid-type.enum';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { Assumption } from '../entities/assumption.entity';
 import { Dependency } from '../entities/dependency.entity';
@@ -207,6 +209,57 @@ describe('RaidService', () => {
     ).resolves.toEqual([]);
     expect(risksRepository.find).not.toHaveBeenCalled();
     expect(issuesRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('denies Executive RAID create, update, comment, and delete after deliberate permission grants are filtered', async () => {
+    const executiveActor = {
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-1',
+    };
+    authorizationPolicyService.canContributeRaid.mockResolvedValue(false);
+    authorizationPolicyService.canManageRaid.mockResolvedValue(false);
+    authorizationPolicyService.hasPermission.mockResolvedValue(false);
+    risksRepository.findOne?.mockResolvedValue({
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      id: 'risk-1',
+      ownerId: executiveActor.userId,
+      projectId: 'project-1',
+      status: 'open',
+      title: 'Executive-owned risk',
+      type: RaidType.Risk,
+    });
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
+
+    const mutations = [
+      () =>
+        service.create(
+          {
+            projectId: 'project-1',
+            title: 'Forbidden risk',
+            type: RaidType.Risk,
+          },
+          executiveActor,
+        ),
+      () => service.update('risk-1', { status: 'mitigating' }, executiveActor),
+      () =>
+        service.addComment(
+          'risk-1',
+          { body: 'Forbidden comment' },
+          executiveActor,
+        ),
+      () => service.remove('risk-1', executiveActor),
+    ];
+
+    for (const mutate of mutations) {
+      await expect(mutate()).rejects.toBeInstanceOf(ForbiddenException);
+    }
+
+    expect(risksRepository.save).not.toHaveBeenCalled();
+    expect(risksRepository.softRemove).not.toHaveBeenCalled();
+    expect(raidCommentsRepository.save).not.toHaveBeenCalled();
+    expect(raidHistoryRepository.save).not.toHaveBeenCalled();
   });
 
   it('updates an owned RAID item when the actor has item-level update permission', async () => {

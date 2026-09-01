@@ -1,6 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { AuthorizationActor } from '../../common/authz/authorization-policy.service';
+import {
+  AuthorizationActor,
+  AuthorizationPolicyService,
+} from '../../common/authz/authorization-policy.service';
 import { Repository } from 'typeorm';
 import {
   CreateResourceAssignmentCommand,
@@ -16,12 +23,14 @@ export class ResourceAssignmentService {
     @InjectRepository(ResourceAssignment)
     private readonly assignmentsRepository: Repository<ResourceAssignment>,
     private readonly assignmentValidationService: ResourceAssignmentValidationService,
+    private readonly authorizationPolicyService: AuthorizationPolicyService,
   ) {}
 
   async createAssignment(
     input: CreateResourceAssignmentCommand,
     actor?: AuthorizationActor,
   ): Promise<ResourceAssignment> {
+    await this.ensureProjectMutationAllowed(actor);
     return this.assignmentsRepository.manager.transaction(async (manager) => {
       await this.assignmentValidationService.validateResolvedAssignment(
         input,
@@ -46,6 +55,7 @@ export class ResourceAssignmentService {
     input: UpdateResourceAssignmentCommand,
     actor?: AuthorizationActor,
   ): Promise<ResourceAssignment> {
+    await this.ensureProjectMutationAllowed(actor);
     return this.assignmentsRepository.manager.transaction(async (manager) => {
       const assignment = await this.findAssignmentOrThrow(
         assignmentId,
@@ -75,6 +85,7 @@ export class ResourceAssignmentService {
     assignmentId: string,
     actor?: AuthorizationActor,
   ): Promise<void> {
+    await this.ensureProjectMutationAllowed(actor);
     await this.assignmentsRepository.manager.transaction(async (manager) => {
       const assignment = await this.findAssignmentOrThrow(
         assignmentId,
@@ -129,5 +140,21 @@ export class ResourceAssignmentService {
     }
 
     return assignment;
+  }
+
+  private async ensureProjectMutationAllowed(
+    actor?: AuthorizationActor,
+  ): Promise<void> {
+    if (
+      !actor ||
+      (await this.authorizationPolicyService.canMutateProjectDomain(actor))
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException({
+      message: 'Project mutation is not permitted',
+      reasonCode: 'MISSING_PERMISSION',
+    });
   }
 }

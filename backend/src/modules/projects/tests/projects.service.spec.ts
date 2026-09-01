@@ -650,6 +650,53 @@ describe('ProjectsService', () => {
     });
   });
 
+  it('denies Executive legacy project and membership mutations before persistence', async () => {
+    const executiveActor = {
+      email: 'executive@example.com',
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-id',
+    };
+    authorizationPolicyService.hasPermission.mockResolvedValue(false);
+    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+    authorizationPolicyService.canDeleteProject.mockResolvedValue(false);
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      status: 'active',
+    });
+
+    const mutations = [
+      () => service.create({ name: 'Forbidden project' }, executiveActor),
+      () =>
+        service.update(projectId, { name: 'Forbidden update' }, executiveActor),
+      () => service.archive(projectId, executiveActor),
+      () => service.remove(projectId, executiveActor),
+      () => service.restore(projectId, executiveActor),
+      () =>
+        service.addMember(
+          projectId,
+          { role: ProjectRole.Owner, userId },
+          executiveActor,
+        ),
+      () =>
+        service.updateMember(
+          projectId,
+          'member-id',
+          { role: ProjectRole.Owner },
+          executiveActor,
+        ),
+      () => service.removeMember(projectId, 'member-id', executiveActor),
+    ];
+
+    for (const mutate of mutations) {
+      await expect(mutate()).rejects.toBeInstanceOf(ForbiddenException);
+    }
+
+    expect(projectsRepository.save).not.toHaveBeenCalled();
+    expect(projectMembersRepository.save).not.toHaveBeenCalled();
+    expect(projectMembersRepository.softRemove).not.toHaveBeenCalled();
+    expect(projectsRepository.manager.transaction).not.toHaveBeenCalled();
+  });
+
   it('rejects direct archived status during project updates', async () => {
     await expect(
       service.update(projectId, { status: 'archived' }, actor),

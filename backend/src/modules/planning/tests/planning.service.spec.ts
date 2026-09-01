@@ -6,6 +6,7 @@ import { AuthorizationPolicyService } from '../../../common/authz/authorization-
 import { CanonicalCapabilityResolverService } from '../../../common/authz/canonical-capability-resolver.service';
 import { PlanningCalculationStatus } from '../../../common/enums/planning-calculation-status.enum';
 import { ResourceAllocationUnit } from '../../../common/enums/resource-allocation-unit.enum';
+import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
 import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
@@ -1859,6 +1860,86 @@ describe('PlanningService', () => {
         userId,
       }),
     );
+  });
+
+  it('denies Executive project capacity, allocation, and portfolio dependency mutations', async () => {
+    const executiveActor = {
+      email: 'executive@example.com',
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-id',
+    };
+    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+
+    const mutations = [
+      () =>
+        service.createResourceCapacity(
+          projectId,
+          {
+            capacityDate: '2026-07-01',
+            capacityMinutes: 420,
+            resourceUnit: ResourceAllocationUnit.User,
+            userId,
+          },
+          executiveActor,
+        ),
+      () =>
+        service.updateResourceCapacity(
+          projectId,
+          'capacity-id',
+          { capacityMinutes: 360 },
+          executiveActor,
+        ),
+      () =>
+        service.removeResourceCapacity(
+          projectId,
+          'capacity-id',
+          executiveActor,
+        ),
+      () =>
+        service.createResourceAllocation(
+          projectId,
+          {
+            allocationPercent: 50,
+            endDate: '2026-07-05',
+            resourceUnit: ResourceAllocationUnit.User,
+            startDate: '2026-07-01',
+            userId,
+          },
+          executiveActor,
+        ),
+      () =>
+        service.updateResourceAllocation(
+          projectId,
+          'allocation-id',
+          { allocationPercent: 40 },
+          executiveActor,
+        ),
+      () =>
+        service.removeResourceAllocation(
+          projectId,
+          'allocation-id',
+          executiveActor,
+        ),
+      () =>
+        service.createPortfolioDependency(
+          {
+            dependencyType: TaskDependencyType.FinishToStart,
+            predecessorProjectId: projectId,
+            successorProjectId: 'successor-project-id',
+          },
+          executiveActor,
+        ),
+    ];
+
+    for (const mutate of mutations) {
+      await expect(mutate()).rejects.toBeInstanceOf(ForbiddenException);
+    }
+
+    expect(resourceCapacitiesRepository.save).not.toHaveBeenCalled();
+    expect(resourceCapacitiesRepository.softRemove).not.toHaveBeenCalled();
+    expect(resourceAllocationsRepository.save).not.toHaveBeenCalled();
+    expect(resourceAllocationsRepository.softRemove).not.toHaveBeenCalled();
+    expect(portfolioDependenciesRepository.save).not.toHaveBeenCalled();
   });
 
   it('rejects ambiguous resource targets', async () => {
