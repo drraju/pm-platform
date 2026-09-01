@@ -9,6 +9,7 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from '../../common/authz/authorization-policy.service';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { Project } from '../projects/entities/project.entity';
 import { User } from '../users/entities/user.entity';
 import {
@@ -175,6 +176,7 @@ export class DocumentsService {
     actor?: AuthorizationActor,
   ): Promise<ProjectDocumentResponse> {
     await this.ensureProjectExists(input.projectId);
+    await this.ensureDocumentMutationAllowed(actor);
     await this.ensureCanContributeDocument(input.projectId, actor);
     const canManage = await this.authorizationPolicyService.canManageProject(
       input.projectId,
@@ -287,6 +289,7 @@ export class DocumentsService {
     actor?: AuthorizationActor,
   ): Promise<ProjectDocumentResponse> {
     const document = await this.findEntity(documentId);
+    await this.ensureDocumentMutationAllowed(actor);
     const canManage = await this.authorizationPolicyService.canManageProject(
       document.projectId,
       actor,
@@ -367,6 +370,7 @@ export class DocumentsService {
 
   async remove(documentId: string, actor?: AuthorizationActor): Promise<void> {
     const document = await this.findEntity(documentId);
+    await this.ensureDocumentMutationAllowed(actor);
     if (
       !(await this.authorizationPolicyService.canManageProject(
         document.projectId,
@@ -380,6 +384,16 @@ export class DocumentsService {
     document.deletedById = actor?.userId ?? document.deletedById;
     await this.documentRepository.save(document);
     await this.documentRepository.softRemove(document);
+  }
+
+  private async ensureDocumentMutationAllowed(
+    actor?: AuthorizationActor,
+  ): Promise<void> {
+    const roleName =
+      await this.authorizationPolicyService.getActorRoleName(actor);
+    if (roleName === UserRole.Executive) {
+      throw new ForbiddenException('Document mutation is not permitted');
+    }
   }
 
   private async ensureCanContributeDocument(
@@ -408,8 +422,7 @@ export class DocumentsService {
       return false;
     }
     return (
-      document.ownerId === actor.userId ||
-      document.createdById === actor.userId
+      document.ownerId === actor.userId || document.createdById === actor.userId
     );
   }
 

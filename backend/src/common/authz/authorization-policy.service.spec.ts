@@ -329,16 +329,33 @@ describe('AuthorizationPolicyService', () => {
     ).resolves.toBe(true);
   });
 
-  it('requires project management permissions even for formal governance assignments', async () => {
-    projectGovernorAssignments.add(`${projectId}:executiveSponsorId:user-exec`);
+  it.each([
+    'ownerId',
+    'businessOwnerId',
+    'deliveryLeadId',
+    'executiveSponsorId',
+  ])(
+    'keeps Executive mutation denied for %s governance',
+    async (governanceField) => {
+      projectGovernorAssignments.add(
+        `${projectId}:${governanceField}:user-exec`,
+      );
 
-    await expect(
-      service.canManageProject(
-        projectId,
-        actor(UserRole.Executive, 'user-exec'),
-      ),
-    ).resolves.toBe(false);
-  });
+      const executiveActor = actor(UserRole.Executive, 'user-exec');
+      await expect(
+        service.canManageProject(projectId, executiveActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canDeleteProject(projectId, executiveActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canManageTask(projectId, executiveActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canManageRaid(projectId, executiveActor),
+      ).resolves.toBe(false);
+    },
+  );
 
   it('restricts project deletion to roles that have explicit delete permission', async () => {
     membershipsByKey.set(`${projectId}:user-pm`, ProjectRole.Manager);

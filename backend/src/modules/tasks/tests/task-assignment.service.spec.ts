@@ -37,6 +37,7 @@ describe('TaskAssignmentService', () => {
   let projectMembersRepository: { findOne: jest.Mock };
   let usersRepository: { findOne: jest.Mock };
   let policy: {
+    getActorRoleName: jest.Mock;
     getProjectMembershipRole: jest.Mock;
     isExternalActor: jest.Mock;
     isPlatformAdministrator: jest.Mock;
@@ -82,6 +83,9 @@ describe('TaskAssignmentService', () => {
       findOne: jest.fn(async ({ where }) => users.get(where.id) ?? null),
     };
     policy = {
+      getActorRoleName: jest.fn(
+        async (resolvedActor: AuthorizationActor) => resolvedActor.roleId,
+      ),
       getProjectMembershipRole: jest.fn(
         async (resolvedProjectId: string, userId: string) =>
           memberships.get(membershipKey(resolvedProjectId, userId)) ?? null,
@@ -137,6 +141,35 @@ describe('TaskAssignmentService', () => {
   it('allows a manager to reassign user A to user B', async () => {
     persistedTask.assigneeId = currentAssigneeId;
     grantMembership(actorId, ProjectRole.Manager);
+
+    await expect(
+      service.changeTaskAssignment(
+        projectId,
+        taskId,
+        targetAssigneeId,
+        actor(UserRole.ProjectManager),
+      ),
+    ).resolves.toMatchObject({ assigneeId: targetAssigneeId });
+  });
+
+  it('denies an assigned Executive from reassigning a task despite manager membership', async () => {
+    persistedTask.assigneeId = actorId;
+    grantMembership(actorId, ProjectRole.Manager);
+
+    await expect(
+      service.changeTaskAssignment(
+        projectId,
+        taskId,
+        targetAssigneeId,
+        actor(UserRole.Executive),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tasksRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves Executive assignment as contextual data', async () => {
+    grantMembership(actorId, ProjectRole.Manager);
+    addUser(targetAssigneeId, 'active', UserRole.Executive);
 
     await expect(
       service.changeTaskAssignment(

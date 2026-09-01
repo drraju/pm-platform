@@ -13,6 +13,7 @@ import { PermissionKey } from './permissions';
 type MockAuthorizationPolicy = {
   canManageProject: jest.Mock;
   canViewProject: jest.Mock;
+  getActorRoleName: jest.Mock;
   getProjectMembershipRole: jest.Mock;
   hasPermission: jest.Mock;
   isExternalActor: jest.Mock;
@@ -34,6 +35,9 @@ describe('CanonicalCapabilityResolverService', () => {
     policy = {
       canManageProject: jest.fn().mockResolvedValue(true),
       canViewProject: jest.fn().mockResolvedValue(true),
+      getActorRoleName: jest.fn(async (resolvedActor: AuthorizationActor) =>
+        resolvedActor.roleId.replace(/^role-/, ''),
+      ),
       getProjectMembershipRole: jest.fn(
         async (resolvedProjectId: string, userId: string) =>
           memberships.get(`${resolvedProjectId}:${userId}`) ?? null,
@@ -76,7 +80,7 @@ describe('CanonicalCapabilityResolverService', () => {
     );
   });
 
-  it.each(['PROJECT_MANAGER', 'TEAM_MEMBER'])(
+  it.each(['PORTFOLIO_MANAGER', 'PROJECT_MANAGER', 'TEAM_MEMBER'])(
     'grants manager task authority independently of global %s role',
     async (globalRole) => {
       const actor = createActor(globalRole);
@@ -100,6 +104,79 @@ describe('CanonicalCapabilityResolverService', () => {
       }
     },
   );
+
+  it.each([
+    ProjectRole.Owner,
+    ProjectRole.Manager,
+    ProjectRole.Contributor,
+    ProjectRole.Viewer,
+  ])(
+    'keeps Executive task reads but denies every mutation for %s membership',
+    async (projectRole) => {
+      const actor = createActor('EXECUTIVE');
+      setMembership(actor.userId, projectRole);
+      setMembership(targetUserId, ProjectRole.Contributor);
+
+      await expect(
+        service.resolve({
+          actor,
+          capability: 'task.view',
+          resource: taskResource({ assigneeId: actor.userId }),
+        }),
+      ).resolves.toEqual(grantedDecision());
+
+      for (const assigneeId of [actor.userId, null]) {
+        for (const capability of [
+          'task.create',
+          'task.edit_plan',
+          'task.edit_execution',
+          'task.record_update',
+          'task.assign',
+          'task.reassign',
+          'task.complete',
+          'task.move',
+          'task.delete',
+        ] as const) {
+          await expect(
+            service.resolve({
+              actor,
+              capability,
+              destinationProjectId:
+                capability === 'task.move' ? destinationProjectId : undefined,
+              requestedAssigneeId:
+                capability === 'task.assign' || capability === 'task.reassign'
+                  ? targetUserId
+                  : undefined,
+              resource: taskResource({ assigneeId }),
+            }),
+          ).resolves.toEqual(deniedDecision('MISSING_PERMISSION'));
+        }
+      }
+    },
+  );
+
+  it('denies Executive project mutations even when project management policy would allow them', async () => {
+    const actor = createActor('EXECUTIVE');
+
+    for (const capability of [
+      'project.create',
+      'project.edit_metadata',
+      'project.manage_team',
+      'project.archive',
+      'project.restore',
+      'project.purge',
+    ] as const) {
+      await expect(
+        service.resolve({
+          actor,
+          capability,
+          resource: { projectId, type: 'project' },
+        }),
+      ).resolves.toEqual(deniedDecision('MISSING_PERMISSION'));
+    }
+
+    expect(policy.canManageProject).not.toHaveBeenCalled();
+  });
 
   it('grants owner and manager the complete project task capability set', async () => {
     for (const projectRole of [ProjectRole.Owner, ProjectRole.Manager]) {

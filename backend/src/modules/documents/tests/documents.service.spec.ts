@@ -1,4 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { UserRole } from '../../../common/enums/user-role.enum';
 import { DocumentsService } from '../documents.service';
 import {
   DocumentApprovalStatus,
@@ -10,11 +11,14 @@ import {
   ProjectDocument,
 } from '../entities';
 
-function authorizationPolicy(overrides: {
-  canManageProject?: boolean;
-  canViewProject?: boolean;
-  isExternalActor?: boolean;
-} = {}) {
+function authorizationPolicy(
+  overrides: {
+    canManageProject?: boolean;
+    canViewProject?: boolean;
+    globalRole?: UserRole;
+    isExternalActor?: boolean;
+  } = {},
+) {
   return {
     canManageProject: jest
       .fn()
@@ -22,6 +26,9 @@ function authorizationPolicy(overrides: {
     canViewProject: jest
       .fn()
       .mockResolvedValue(overrides.canViewProject ?? true),
+    getActorRoleName: jest
+      .fn()
+      .mockResolvedValue(overrides.globalRole ?? UserRole.ProjectManager),
     isExternalActor: jest
       .fn()
       .mockResolvedValue(overrides.isExternalActor ?? false),
@@ -138,7 +145,13 @@ describe('DocumentsService', () => {
     userId: 'pm-1',
   };
 
-  it('creates provider-independent external document links with references and audit fields', async () => {
+  const executiveActor = {
+    email: 'executive@example.com',
+    roleId: 'role-executive',
+    userId: 'executive-1',
+  };
+
+  it('preserves Portfolio Manager document creation with references and audit fields', async () => {
     const documentRepository = repository<ProjectDocument>();
     documentRepository.createQueryBuilder.mockReturnValue(
       queryBuilder(storedDocument),
@@ -159,6 +172,7 @@ describe('DocumentsService', () => {
       documentTypeRepository,
       categoryRepository,
       userRepository,
+      authorizationPolicy({ globalRole: UserRole.PortfolioManager }),
     );
 
     const created = await service.create(
@@ -174,7 +188,11 @@ describe('DocumentsService', () => {
         title: 'ADR-015',
         version: '1.0',
       },
-      { email: 'creator@example.com', roleId: 'role-1', userId: 'creator-1' },
+      {
+        email: 'creator@example.com',
+        roleId: 'role-portfolio-manager',
+        userId: 'creator-1',
+      },
     );
 
     expect(documentRepository.save).toHaveBeenCalledWith(
@@ -227,6 +245,96 @@ describe('DocumentsService', () => {
         title: 'Plan',
       }),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('denies Executive document creation in a visible project', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    const projectRepository = repository<{ id: string }>();
+    projectRepository.findOne.mockResolvedValue({
+      id: storedDocument.projectId,
+    });
+    const { service } = createService(
+      documentRepository,
+      projectRepository,
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      authorizationPolicy({
+        canViewProject: true,
+        globalRole: UserRole.Executive,
+      }),
+    );
+
+    await expect(
+      service.create(
+        {
+          documentType: 'Test Plan',
+          externalUrl: 'https://example.com/plan',
+          projectId: storedDocument.projectId,
+          storageProvider: DocumentStorageProvider.OTHER,
+          title: 'Plan',
+        },
+        executiveActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(documentRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('denies Executive updates to an owned document in a visible project', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    documentRepository.createQueryBuilder.mockReturnValue(
+      queryBuilder({
+        ...storedDocument,
+        createdById: executiveActor.userId,
+        ownerId: executiveActor.userId,
+      } as ProjectDocument),
+    );
+    const { service } = createService(
+      documentRepository,
+      repository<{ id: string }>(),
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      authorizationPolicy({
+        canManageProject: true,
+        canViewProject: true,
+        globalRole: UserRole.Executive,
+      }),
+    );
+
+    await expect(
+      service.update(
+        storedDocument.id,
+        { title: 'Executive edit' },
+        executiveActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(documentRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('denies Executive deletion of a document in a visible project', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    documentRepository.createQueryBuilder.mockReturnValue(
+      queryBuilder(storedDocument),
+    );
+    const { service } = createService(
+      documentRepository,
+      repository<{ id: string }>(),
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      authorizationPolicy({
+        canManageProject: true,
+        canViewProject: true,
+        globalRole: UserRole.Executive,
+      }),
+    );
+
+    await expect(
+      service.remove(storedDocument.id, executiveActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(documentRepository.save).not.toHaveBeenCalled();
+    expect(documentRepository.softRemove).not.toHaveBeenCalled();
   });
 
   it('allows contributors to update their own document metadata but not approve', async () => {
