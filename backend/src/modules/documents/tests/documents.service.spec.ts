@@ -337,6 +337,49 @@ describe('DocumentsService', () => {
     expect(documentRepository.softRemove).not.toHaveBeenCalled();
   });
 
+  it('allows Executive document-list reads for a visible project without membership checks', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    documentRepository.createQueryBuilder.mockReturnValue(
+      queryBuilder(storedDocument),
+    );
+    const projectRepository = repository<{ id: string }>();
+    projectRepository.findOne.mockResolvedValue({
+      id: storedDocument.projectId,
+    });
+    const auth = authorizationPolicy({
+      canViewProject: true,
+      globalRole: UserRole.Executive,
+    });
+    const { service } = createService(
+      documentRepository,
+      projectRepository,
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      auth,
+    );
+
+    await expect(
+      service.findProjectDocuments(
+        storedDocument.projectId,
+        {},
+        executiveActor,
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        externalUrl: storedDocument.externalUrl,
+        id: storedDocument.id,
+        projectId: storedDocument.projectId,
+      }),
+    ]);
+
+    expect(auth.canViewProject).toHaveBeenCalledWith(
+      storedDocument.projectId,
+      executiveActor,
+    );
+    expect(auth.canManageProject).not.toHaveBeenCalled();
+  });
+
   it('allows contributors to update their own document metadata but not approve', async () => {
     const documentRepository = repository<ProjectDocument>();
     const ownedDocument = {

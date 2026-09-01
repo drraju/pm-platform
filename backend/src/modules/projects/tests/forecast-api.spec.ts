@@ -14,7 +14,9 @@ import {
 } from '../../../common/authz/permissions';
 import { PermissionsGuard } from '../../../common/authz/permissions.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PlanningScheduleSnapshot } from '../../planning/entities/planning-schedule-snapshot.entity';
 import { WorkingOutputState } from '../dto/forecast-read.dto';
+import { ProjectBaseline } from '../entities/project-baseline.entity';
 import { ForecastController } from '../forecast.controller';
 import { ForecastQueryService } from '../forecast-query.service';
 
@@ -228,3 +230,62 @@ class AuthenticatedGuard implements CanActivate {
     return true;
   }
 }
+
+describe('ForecastQueryService authorization', () => {
+  it('returns forecast overview for a visible Executive without membership checks', async () => {
+    const executiveActor = {
+      email: 'executive@example.com',
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-1',
+    };
+    const baselineRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    const snapshotRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    const manager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === ProjectBaseline) return baselineRepository;
+        if (entity === PlanningScheduleSnapshot) return snapshotRepository;
+        throw new Error(`Unexpected repository ${String(entity)}`);
+      }),
+      transaction: jest.fn(
+        async (_isolation: string, callback: (value: unknown) => unknown) =>
+          callback(manager),
+      ),
+    };
+    const projectsRepository = {
+      existsBy: jest.fn().mockResolvedValue(true),
+      manager,
+    };
+    const projectVisibilityService = {
+      canViewProject: jest.fn().mockResolvedValue(true),
+    };
+    const authorizationPolicyService = {
+      isExternalActor: jest.fn().mockResolvedValue(false),
+    };
+    const service = new ForecastQueryService(
+      projectsRepository as never,
+      projectVisibilityService as never,
+      authorizationPolicyService as never,
+    );
+
+    await expect(
+      service.getOverview(projectId, executiveActor),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        currentForecast: null,
+        projectId,
+      }),
+    );
+
+    expect(projectVisibilityService.canViewProject).toHaveBeenCalledWith(
+      projectId,
+      executiveActor,
+    );
+    expect(authorizationPolicyService.isExternalActor).toHaveBeenCalledWith(
+      executiveActor,
+    );
+  });
+});

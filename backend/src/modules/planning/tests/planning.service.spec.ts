@@ -1005,6 +1005,31 @@ describe('PlanningService', () => {
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
 
+  it('reads the latest planning schedule for a visible Executive without membership checks', async () => {
+    const executiveActor = {
+      email: 'executive@example.com',
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-1',
+    };
+    scheduleSnapshotsRepository.findOne?.mockResolvedValue({
+      id: 'snapshot-id',
+      projectId,
+      scheduleVersion: 1,
+    });
+
+    await expect(
+      service.getLatestSchedule(projectId, executiveActor),
+    ).resolves.toEqual(
+      expect.objectContaining({ id: 'snapshot-id', projectId }),
+    );
+
+    expect(projectVisibilityService.canViewProject).toHaveBeenCalledWith(
+      projectId,
+      executiveActor,
+    );
+    expect(canonicalCapabilityResolver.resolve).not.toHaveBeenCalled();
+  });
+
   it('updates a planning task schedule using the task id expected by the frontend', async () => {
     const schedule = {
       durationDays: 4,

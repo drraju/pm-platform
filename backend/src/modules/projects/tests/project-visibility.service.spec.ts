@@ -111,6 +111,25 @@ describe('ProjectVisibilityService', () => {
     ).resolves.toBe('all');
   });
 
+  it('loads the global visible-project list for an Executive without memberships', async () => {
+    const executiveActor = {
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-1',
+    };
+    authorizationPolicyService.canViewExecutive.mockResolvedValue(true);
+    projectsRepository.find?.mockResolvedValue([{ id: 'project-1' }]);
+
+    await expect(service.getVisibleProjects(executiveActor)).resolves.toEqual([
+      { id: 'project-1' },
+    ]);
+
+    expect(projectsRepository.find).toHaveBeenCalledWith({
+      order: { createdAt: 'DESC' },
+      relations: { issues: true, owner: true, risks: true, tasks: true },
+    });
+    expect(projectMembersRepository.find).not.toHaveBeenCalled();
+  });
+
   it('returns owned, member, and task-assigned projects when task visibility expansion is allowed', async () => {
     projectsRepository.find?.mockResolvedValue([{ id: 'owned-project' }]);
     projectMembersRepository.find?.mockResolvedValue([

@@ -146,7 +146,10 @@ describe('RaidService', () => {
     ]);
 
     await expect(
-      service.findAll({ roleId: 'role-1', userId: 'executive-1' }),
+      service.findAll({
+        roleId: 'role-EXECUTIVE',
+        userId: 'executive-1',
+      }),
     ).resolves.toEqual([
       expect.objectContaining({ id: 'risk-1' }),
       expect.objectContaining({ id: 'issue-1' }),

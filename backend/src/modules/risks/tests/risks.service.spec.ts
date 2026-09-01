@@ -127,4 +127,39 @@ describe('RisksService', () => {
       service.findOne('risk-1', { roleId: 'role-1', userId: 'customer-1' }),
     ).resolves.toEqual(expect.objectContaining({ id: 'risk-1' }));
   });
+
+  it('returns Executive risk list and detail from visible projects without membership checks', async () => {
+    const executiveActor = {
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-1',
+    };
+    jest
+      .spyOn(projectVisibilityService, 'getVisibleProjectIds')
+      .mockResolvedValue('all');
+    jest
+      .spyOn(projectVisibilityService, 'canViewProject')
+      .mockResolvedValue(true);
+    risksRepository.find?.mockResolvedValue([
+      { id: 'risk-1', projectId: 'project-1' },
+    ]);
+    risksRepository.findOne?.mockResolvedValue({
+      id: 'risk-1',
+      projectId: 'project-1',
+    });
+
+    await expect(service.findAll(executiveActor)).resolves.toEqual([
+      expect.objectContaining({ id: 'risk-1' }),
+    ]);
+    await expect(service.findOne('risk-1', executiveActor)).resolves.toEqual(
+      expect.objectContaining({ id: 'risk-1' }),
+    );
+
+    expect(risksRepository.find).toHaveBeenCalledWith({
+      relations: { project: true, owner: true },
+    });
+    expect(projectVisibilityService.canViewProject).toHaveBeenCalledWith(
+      'project-1',
+      executiveActor,
+    );
+  });
 });

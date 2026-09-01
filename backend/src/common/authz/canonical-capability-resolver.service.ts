@@ -302,6 +302,17 @@ export class CanonicalCapabilityResolverService {
       );
     }
 
+    if (capability === 'task.view') {
+      const executiveDecision = await this.resolveExecutiveProjectReadScope(
+        actor,
+        resource.projectId,
+        audience,
+      );
+      if (executiveDecision) {
+        return executiveDecision;
+      }
+    }
+
     const projectRole =
       await this.authorizationPolicyService.getProjectMembershipRole(
         resource.projectId,
@@ -370,6 +381,15 @@ export class CanonicalCapabilityResolverService {
       return this.grant(audience);
     }
 
+    const executiveDecision = await this.resolveExecutiveProjectReadScope(
+      input.actor,
+      input.resource.projectId,
+      audience,
+    );
+    if (executiveDecision) {
+      return executiveDecision;
+    }
+
     const projectRole =
       await this.authorizationPolicyService.getProjectMembershipRole(
         input.resource.projectId,
@@ -379,6 +399,26 @@ export class CanonicalCapabilityResolverService {
       projectRoleGrantsCapability(projectRole, 'forecast.read')
       ? this.grant(audience)
       : this.deny(audience, 'PROJECT_MEMBERSHIP_REQUIRED');
+  }
+
+  private async resolveExecutiveProjectReadScope(
+    actor: AuthorizationActor,
+    projectId: string,
+    audience: CapabilityAudience,
+  ): Promise<CapabilityDecision | null> {
+    if (
+      (await this.authorizationPolicyService.getActorRoleName(actor)) !==
+      UserRole.Executive
+    ) {
+      return null;
+    }
+
+    return (await this.authorizationPolicyService.canViewProject(
+      projectId,
+      actor,
+    ))
+      ? this.grant(audience)
+      : this.deny(audience, 'OUTSIDE_PROJECT_SCOPE');
   }
 
   private async resolveDestinationScope(

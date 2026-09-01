@@ -155,6 +155,51 @@ describe('CanonicalCapabilityResolverService', () => {
     },
   );
 
+  it('grants Executive task and forecast reads for a visible project without membership', async () => {
+    const actor = createActor('EXECUTIVE');
+
+    await expect(
+      service.resolve({
+        actor,
+        capability: 'task.view',
+        resource: taskResource(),
+      }),
+    ).resolves.toEqual(grantedDecision());
+    await expect(
+      service.resolve({
+        actor,
+        capability: 'forecast.read',
+        resource: { projectId, type: 'forecast' },
+      }),
+    ).resolves.toEqual(grantedDecision());
+
+    expect(policy.canViewProject).toHaveBeenCalledTimes(2);
+    expect(policy.canViewProject).toHaveBeenNthCalledWith(1, projectId, actor);
+    expect(policy.canViewProject).toHaveBeenNthCalledWith(2, projectId, actor);
+    expect(policy.getProjectMembershipRole).not.toHaveBeenCalled();
+  });
+
+  it('denies Executive task and forecast reads outside project visibility', async () => {
+    const actor = createActor('EXECUTIVE');
+    setMembership(actor.userId, ProjectRole.Owner);
+    policy.canViewProject.mockResolvedValue(false);
+
+    await expect(
+      service.resolve({
+        actor,
+        capability: 'task.view',
+        resource: taskResource(),
+      }),
+    ).resolves.toEqual(deniedDecision('OUTSIDE_PROJECT_SCOPE'));
+    await expect(
+      service.resolve({
+        actor,
+        capability: 'forecast.read',
+        resource: { projectId, type: 'forecast' },
+      }),
+    ).resolves.toEqual(deniedDecision('OUTSIDE_PROJECT_SCOPE'));
+  });
+
   it('denies Executive project mutations even when project management policy would allow them', async () => {
     const actor = createActor('EXECUTIVE');
 

@@ -697,6 +697,24 @@ describe('TasksService', () => {
     );
   });
 
+  it('lists tasks across all visible projects for an Executive without membership filtering', async () => {
+    const executiveActor = {
+      email: 'executive@example.com',
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-user-id',
+    };
+    taskQueryBuilder.getMany.mockResolvedValue([{ id: taskId, projectId }]);
+
+    await expect(service.findAll(executiveActor)).resolves.toEqual([
+      expect.objectContaining({ id: taskId, projectId }),
+    ]);
+
+    expect(projectVisibilityService.getVisibleProjectIds).toHaveBeenCalledWith(
+      executiveActor,
+    );
+    expect(taskQueryBuilder.where).not.toHaveBeenCalled();
+  });
+
   it('lists authenticated user tasks with filters and required sorting', async () => {
     taskQueryBuilder.getMany.mockResolvedValue([
       { id: taskId, assigneeId: userId },
@@ -1001,6 +1019,27 @@ describe('TasksService', () => {
       where: { id: taskId },
       relations: { project: true, assignee: true },
     });
+  });
+
+  it('resolves Executive task detail through canonical task.view without a service-level membership check', async () => {
+    const executiveActor = {
+      email: 'executive@example.com',
+      roleId: 'role-EXECUTIVE',
+      userId: 'executive-user-id',
+    };
+    tasksRepository.findOne?.mockResolvedValue({ id: taskId, projectId });
+
+    await expect(service.findOne(taskId, executiveActor)).resolves.toEqual(
+      expect.objectContaining({ id: taskId, projectId }),
+    );
+
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: executiveActor,
+        capability: 'task.view',
+      }),
+    );
+    expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
   });
 
   it('throws when a task is missing', async () => {

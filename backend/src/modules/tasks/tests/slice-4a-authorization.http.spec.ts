@@ -61,6 +61,7 @@ describe('Slice 4A project-scoped HTTP authorization', () => {
     );
 
     const policy = {
+      canViewProject: jest.fn().mockResolvedValue(true),
       getActorRoleName: jest.fn(async (actor: Actor) => actor.roleId),
       getGrantedPermissionKeys: jest.fn().mockResolvedValue(new Set()),
       getProjectMembershipRole: jest.fn(
@@ -119,7 +120,7 @@ describe('Slice 4A project-scoped HTTP authorization', () => {
         );
         return { id: ownTaskId, ...input };
       }),
-      findAll: jest.fn().mockResolvedValue([]),
+      findAll: jest.fn().mockResolvedValue([{ id: otherTaskId, projectId }]),
       findMyTasks: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(async (taskId: string, actor: Actor) => {
         await authorize(actor, 'task.view', taskResource(taskId));
@@ -186,6 +187,18 @@ describe('Slice 4A project-scoped HTTP authorization', () => {
         );
         return { id: ownTaskId, projectId: resolvedProjectId, ...input };
       }),
+      findAll: jest.fn().mockResolvedValue([{ id: projectId }]),
+      findOne: jest.fn().mockResolvedValue({ id: projectId }),
+      findProjectTasks: jest.fn(
+        async (resolvedProjectId, _query, actor: Actor) => {
+          await authorize(
+            actor,
+            'task.view',
+            taskResource(otherTaskId, resolvedProjectId),
+          );
+          return [{ id: otherTaskId, projectId: resolvedProjectId }];
+        },
+      ),
       recordProjectTaskExecutionUpdate: jest.fn(
         async (resolvedProjectId, taskId, input, actor) => {
           const resource = taskResource(taskId, resolvedProjectId);
@@ -382,6 +395,40 @@ describe('Slice 4A project-scoped HTTP authorization', () => {
       .post('/tasks')
       .set(asActor(missingMemberId, UserRole.ProjectManager))
       .send({ projectId, title: 'No membership' })
+      .expect(403);
+  });
+
+  it('allows Executive project and task reads without membership while preserving task mutation denial', async () => {
+    const auth = asActor(missingMemberId, UserRole.Executive);
+
+    await request(app.getHttpServer()).get('/projects').set(auth).expect(200);
+    await request(app.getHttpServer())
+      .get(`/projects/${projectId}`)
+      .set(auth)
+      .expect(200);
+    await request(app.getHttpServer()).get('/tasks').set(auth).expect(200);
+    await request(app.getHttpServer())
+      .get(`/tasks/${otherTaskId}`)
+      .set(auth)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/projects/${projectId}/tasks`)
+      .set(auth)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/tasks')
+      .set(auth)
+      .send({ projectId, title: 'Forbidden Executive create' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/tasks/${otherTaskId}`)
+      .set(auth)
+      .send({ title: 'Forbidden Executive edit' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete(`/tasks/${otherTaskId}`)
+      .set(auth)
       .expect(403);
   });
 
