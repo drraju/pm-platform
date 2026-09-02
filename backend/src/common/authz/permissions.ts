@@ -5,6 +5,10 @@ export const PLATFORM_ADMIN_REQUIRED_KEY = 'platformAdminRequired';
 export const PermissionKey = {
   DashboardView: 'dashboard.view',
   ExecutiveView: 'executive.view',
+  ExternalApiAccess: 'external.api.access',
+  ExternalProjectRead: 'external.project.read',
+  ExternalTaskRead: 'external.task.read',
+  ExternalRaidRead: 'external.raid.read',
   IntegrationManage: 'integration.manage',
   NotificationManage: 'notification.manage',
   NotificationRead: 'notification.read',
@@ -53,3 +57,10 @@ export const PermissionKey = {
 } as const;
 
 export type PermissionKey = (typeof PermissionKey)[keyof typeof PermissionKey];
+
+export const serviceUserPermissionKeys = Object.freeze([
+  PermissionKey.ExternalApiAccess,
+  PermissionKey.ExternalProjectRead,
+  PermissionKey.ExternalTaskRead,
+  PermissionKey.ExternalRaidRead,
+] satisfies PermissionKey[]);

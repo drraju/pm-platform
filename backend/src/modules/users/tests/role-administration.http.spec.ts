@@ -106,6 +106,7 @@ describe('Global role administration HTTP authorization', () => {
     UserRole.TeamMember,
     UserRole.Customer,
     UserRole.Partner,
+    UserRole.ServiceUser,
   ])('denies %s even when role.manage is granted', async (roleName) => {
     await request(app.getHttpServer())
       .post('/users/roles')

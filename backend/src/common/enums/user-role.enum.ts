@@ -6,6 +6,7 @@ export enum UserRole {
   Executive = 'EXECUTIVE',
   Customer = 'CUSTOMER',
   Partner = 'PARTNER',
+  ServiceUser = 'SERVICE_USER',
 }
 
 export const canonicalUserRoles = Object.freeze(Object.values(UserRole));
@@ -19,4 +20,5 @@ export const userRoleDescriptions = Object.freeze({
   [UserRole.Executive]: 'Read-only dashboards and portfolio reporting',
   [UserRole.Customer]: 'Read-only assigned project visibility',
   [UserRole.Partner]: 'Restricted assigned project collaboration',
+  [UserRole.ServiceUser]: 'External API service identity',
 } satisfies Record<UserRole, string>);

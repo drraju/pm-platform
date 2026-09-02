@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../common/authz/authorization-policy.service';
 import { PermissionKey } from '../../common/authz/permissions';
+import { isUserIdentityRoleAssignmentAllowed } from '../../common/authz/user-identity-role-policy';
 import { UserIdentityType } from '../../common/enums/user-identity-type.enum';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import {
@@ -72,7 +73,8 @@ export class UsersService {
     if (!createUserDto.passwordHash) {
       throw new BadRequestException('Password is required');
     }
-    await this.ensureCanonicalRole(createUserDto.roleId);
+    const role = await this.ensureCanonicalRole(createUserDto.roleId);
+    this.ensureIdentityRoleAssignment(UserIdentityType.Human, role);
 
     const user = this.usersRepository.create({
       email: createUserDto.email,
@@ -331,6 +333,7 @@ export class UsersService {
     let updatedRole: Role | undefined;
     if (updateUserDto.roleId) {
       updatedRole = await this.ensureCanonicalRole(updateUserDto.roleId);
+      this.ensureIdentityRoleAssignment(user.identityType, updatedRole);
     }
     if (updateUserDto.email !== undefined) {
       user.email = updateUserDto.email;
@@ -521,6 +524,19 @@ export class UsersService {
       );
     }
     return role;
+  }
+
+  private ensureIdentityRoleAssignment(
+    identityType: UserIdentityType,
+    role: Role,
+  ): void {
+    if (
+      !isUserIdentityRoleAssignmentAllowed(identityType, role.name as UserRole)
+    ) {
+      throw new BadRequestException(
+        'User identity type is incompatible with the selected role',
+      );
+    }
   }
 
   async ensurePlatformAdmin(actor: UserAdministrationActor): Promise<void> {

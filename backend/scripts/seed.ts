@@ -28,7 +28,10 @@ import { Permission } from '../src/modules/users/entities/permission.entity';
 import { Role } from '../src/modules/users/entities/role.entity';
 import { RolePermission } from '../src/modules/users/entities/role-permission.entity';
 import { User } from '../src/modules/users/entities/user.entity';
-import { PermissionKey } from '../src/common/authz/permissions';
+import {
+  PermissionKey,
+  serviceUserPermissionKeys,
+} from '../src/common/authz/permissions';
 import { PasswordService } from '../src/modules/auth/password.service';
 
 const seedNamespace = 'pm-platform-dev-seed-v2';
@@ -132,6 +135,22 @@ const permissions = [
   {
     key: PermissionKey.ExecutiveView,
     description: 'View executive dashboard and reports',
+  },
+  {
+    key: PermissionKey.ExternalApiAccess,
+    description: 'Access the external API',
+  },
+  {
+    key: PermissionKey.ExternalProjectRead,
+    description: 'Read projects through the external API',
+  },
+  {
+    key: PermissionKey.ExternalRaidRead,
+    description: 'Read risks and issues through the external API',
+  },
+  {
+    key: PermissionKey.ExternalTaskRead,
+    description: 'Read tasks through the external API',
   },
   {
     key: PermissionKey.IntegrationManage,
@@ -299,8 +318,14 @@ const permissions = [
   },
 ] as const;
 
+const serviceUserPermissionKeySet = new Set<PermissionKey>(
+  serviceUserPermissionKeys,
+);
+
 const permissionsByRoleName: Record<UserRole, PermissionKey[]> = {
-  [UserRole.PlatformAdmin]: permissions.map((permission) => permission.key),
+  [UserRole.PlatformAdmin]: permissions
+    .map((permission) => permission.key)
+    .filter((permissionKey) => !serviceUserPermissionKeySet.has(permissionKey)),
   [UserRole.PortfolioManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
@@ -417,6 +442,7 @@ const permissionsByRoleName: Record<UserRole, PermissionKey[]> = {
     PermissionKey.TaskUpdate,
     PermissionKey.NotificationRead,
   ],
+  [UserRole.ServiceUser]: [...serviceUserPermissionKeys],
 };
 
 const projects = [
@@ -768,6 +794,9 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
     const existingUser = await userRepository.findOne({
       where: [{ id: user.id }, { email: user.email }],
     });
+    if (existingUser && existingUser.identityType !== UserIdentityType.Human) {
+      throw new Error(`Seed-managed user ${user.email} must remain HUMAN`);
+    }
     const passwordForNewUser =
       user.email === superAdminUser.email
         ? superAdminPasswordHash

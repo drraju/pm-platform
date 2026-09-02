@@ -272,6 +272,7 @@ describe('UsersService', () => {
         id: 'user-1',
         email: 'ava@example.com',
         firstName: 'Ava',
+        identityType: UserIdentityType.Human,
         lastName: 'Patel',
         role: { id: fromRoleId, name: fromName },
         roleId: fromRoleId,
@@ -330,6 +331,82 @@ describe('UsersService', () => {
     await expect(
       service.update('user-1', { roleId: 'role-custom' }),
     ).rejects.toThrow('Role is not supported for user administration');
+    expect(usersRepository.save).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    UserRole.PlatformAdmin,
+    UserRole.Executive,
+    UserRole.PortfolioManager,
+  ])('rejects assigning a SERVICE identity to %s', async (roleName) => {
+    usersRepository.findOne?.mockResolvedValue({
+      id: 'service-1',
+      email: 'automation@example.com',
+      firstName: 'Release',
+      identityType: UserIdentityType.Service,
+      lastName: 'Automation',
+      roleId: 'role-service-user',
+      status: 'active',
+      accountHistory: [],
+    });
+    rolesRepository.findOne?.mockResolvedValueOnce({
+      id: `role-${roleName}`,
+      name: roleName,
+    });
+
+    await expect(
+      service.update('service-1', { roleId: `role-${roleName}` }),
+    ).rejects.toThrow(
+      'User identity type is incompatible with the selected role',
+    );
+    expect(usersRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('allows a SERVICE identity to retain SERVICE_USER', async () => {
+    const serviceUser = {
+      id: 'service-1',
+      email: 'automation@example.com',
+      firstName: 'Release',
+      identityType: UserIdentityType.Service,
+      lastName: 'Automation',
+      roleId: 'role-service-user',
+      status: 'active',
+      accountHistory: [],
+    } as User;
+    usersRepository.findOne?.mockResolvedValue(serviceUser);
+    rolesRepository.findOne?.mockResolvedValueOnce({
+      id: 'role-service-user',
+      name: UserRole.ServiceUser,
+    });
+
+    await service.update('service-1', { roleId: 'role-service-user' });
+
+    expect(usersRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identityType: UserIdentityType.Service,
+        roleId: 'role-service-user',
+      }),
+    );
+  });
+
+  it('rejects assigning SERVICE_USER through human user creation', async () => {
+    rolesRepository.findOne?.mockResolvedValueOnce({
+      id: 'role-service-user',
+      name: UserRole.ServiceUser,
+    });
+
+    await expect(
+      service.create({
+        email: 'human@example.com',
+        firstName: 'Human',
+        lastName: 'User',
+        passwordHash: 'hashed-password',
+        roleId: 'role-service-user',
+      }),
+    ).rejects.toThrow(
+      'User identity type is incompatible with the selected role',
+    );
+    expect(usersRepository.create).not.toHaveBeenCalled();
     expect(usersRepository.save).not.toHaveBeenCalled();
   });
 
@@ -404,6 +481,7 @@ describe('UsersService', () => {
     UserRole.TeamMember,
     UserRole.Customer,
     UserRole.Partner,
+    UserRole.ServiceUser,
   ])(
     'denies %s creation of a privileged global role before persistence',
     async (roleName) => {
@@ -484,6 +562,7 @@ describe('UsersService', () => {
     [UserRole.TeamMember, 'role-team-member', 'role-other'],
     [UserRole.Customer, 'role-customer', 'role-other'],
     [UserRole.Partner, 'role-partner', 'role-other'],
+    [UserRole.ServiceUser, 'role-service-user', 'role-other'],
   ])(
     'denies %s role-permission changes before persistence',
     async (_roleName, actorRoleId, targetRoleId) => {
