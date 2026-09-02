@@ -24,6 +24,7 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { UsersModule } from './modules/users/users.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { ProjectExportModule } from './modules/project-export/project-export.module';
+import { ExternalModule } from './modules/external/external.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { ProjectExportModule } from './modules/project-export/project-export.mod
     HealthModule,
     NotificationsModule,
     SlackModule,
+    ExternalModule,
   ],
   controllers: [AppController],
   providers: [
