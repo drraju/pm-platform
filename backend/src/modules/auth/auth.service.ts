@@ -1,6 +1,10 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { userIdentityTypes } from '../../common/enums/user-identity-type.enum';
+import {
+  UserIdentityType,
+  userIdentityTypes,
+} from '../../common/enums/user-identity-type.enum';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
@@ -49,6 +53,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    this.validateServiceAuthenticationInvariant(user, 'Invalid credentials');
+
     await this.usersService.recordLogin(user.id);
     return this.issueSession(user, {
       requiresPasswordChange: user.status === 'first_login_pending',
@@ -90,6 +96,7 @@ export class AuthService {
     ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+    this.validateServiceAuthenticationInvariant(user, 'Invalid refresh token');
     if (
       user.passwordChangedAt &&
       payload.iat * 1000 < user.passwordChangedAt.getTime()
@@ -202,5 +209,17 @@ export class AuthService {
         ? { requiresPasswordChange: true }
         : {}),
     };
+  }
+
+  private validateServiceAuthenticationInvariant(
+    user: User,
+    failureMessage: string,
+  ): void {
+    if (
+      user.identityType === UserIdentityType.Service &&
+      user.role?.name !== String(UserRole.ServiceUser)
+    ) {
+      throw new UnauthorizedException(failureMessage);
+    }
   }
 }

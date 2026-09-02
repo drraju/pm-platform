@@ -244,6 +244,7 @@ describe('AuthService', () => {
       email: 'user@example.com',
       identityType: UserIdentityType.Service,
       password: 'ValidPass1!',
+      roleId: 'role-service-user',
     } as never);
 
     expect(signedPayloads).toHaveLength(2);
@@ -253,25 +254,144 @@ describe('AuthService', () => {
     ]);
   });
 
-  it('can structurally issue SERVICE identity claims from a database user', async () => {
+  it('authenticates a valid SERVICE_USER without project grants and ignores injected identity and role values', async () => {
     usersService.findByEmail.mockResolvedValue({
       email: 'automation@example.com',
       id: 'service-1',
       identityType: UserIdentityType.Service,
       passwordHash: await passwordService.hashPassword('ValidPass1!'),
+      role: { name: UserRole.ServiceUser },
       roleId: 'role-service-user',
       status: 'active',
     });
 
-    await service.login({
-      email: 'automation@example.com',
-      password: 'ValidPass1!',
+    await expect(
+      service.login({
+        email: 'automation@example.com',
+        identityType: UserIdentityType.Human,
+        password: 'ValidPass1!',
+        roleId: 'role-platform-admin',
+      } as never),
+    ).resolves.toEqual({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
     });
 
     expect(signedPayloads).toEqual([
-      expect.objectContaining({ identityType: UserIdentityType.Service }),
-      expect.objectContaining({ identityType: UserIdentityType.Service }),
+      expect.objectContaining({
+        email: 'automation@example.com',
+        identityType: UserIdentityType.Service,
+        roleId: 'role-service-user',
+        sub: 'service-1',
+        tokenType: 'access',
+      }),
+      expect.objectContaining({
+        email: 'automation@example.com',
+        identityType: UserIdentityType.Service,
+        roleId: 'role-service-user',
+        sub: 'service-1',
+        tokenType: 'refresh',
+      }),
     ]);
+    expect(usersService.recordLogin).toHaveBeenCalledWith('service-1');
+  });
+
+  it('rejects a SERVICE user with an incorrect password', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordHash: await passwordService.hashPassword('ValidPass1!'),
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'active',
+    });
+
+    await expect(
+      service.login({
+        email: 'automation@example.com',
+        password: 'WrongPass1!',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(usersService.recordLogin).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('rejects an inactive SERVICE user through the existing account policy', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordHash: await passwordService.hashPassword('ValidPass1!'),
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'disabled',
+    });
+
+    await expect(
+      service.login({
+        email: 'automation@example.com',
+        password: 'ValidPass1!',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it.each([UserRole.PlatformAdmin, UserRole.ProjectManager, 'ANOMALOUS_ROLE'])(
+    'rejects a SERVICE user with global role %s',
+    async (roleName) => {
+      usersService.findByEmail.mockResolvedValue({
+        email: 'automation@example.com',
+        id: 'service-1',
+        identityType: UserIdentityType.Service,
+        passwordHash: await passwordService.hashPassword('ValidPass1!'),
+        role: { name: roleName },
+        roleId: `role-${roleName}`,
+        status: 'active',
+      });
+
+      await expect(
+        service.login({
+          email: 'automation@example.com',
+          password: 'ValidPass1!',
+        }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(usersService.recordLogin).not.toHaveBeenCalled();
+      expect(jwtService.sign).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a SERVICE user whose global role is missing', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordHash: await passwordService.hashPassword('ValidPass1!'),
+      role: null,
+      roleId: 'missing-role',
+      status: 'active',
+    });
+
+    await expect(
+      service.login({
+        email: 'automation@example.com',
+        password: 'ValidPass1!',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(usersService.recordLogin).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('preserves generic rejection for an unknown login identity', async () => {
+    usersService.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      service.login({
+        email: 'missing@example.com',
+        password: 'ValidPass1!',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(jwtService.sign).not.toHaveBeenCalled();
   });
 
   it('rejects an access token at the refresh boundary', async () => {
@@ -404,6 +524,96 @@ describe('AuthService', () => {
       expect.objectContaining({ identityType: UserIdentityType.Human }),
     ]);
   });
+
+  it('refreshes a valid SERVICE_USER session with SERVICE identity claims', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'automation@example.com',
+      identityType: UserIdentityType.Service,
+      iat: 1,
+      roleId: 'role-service-user',
+      sub: 'service-1',
+      tokenType: 'refresh',
+    });
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordChangedAt: null,
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'active',
+    });
+
+    await expect(service.refresh('refresh-token')).resolves.toEqual({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    });
+    expect(signedPayloads).toEqual([
+      expect.objectContaining({
+        identityType: UserIdentityType.Service,
+        roleId: 'role-service-user',
+        tokenType: 'access',
+      }),
+      expect.objectContaining({
+        identityType: UserIdentityType.Service,
+        roleId: 'role-service-user',
+        tokenType: 'refresh',
+      }),
+    ]);
+  });
+
+  it('rejects SERVICE refresh after the database role changes away from SERVICE_USER', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'automation@example.com',
+      identityType: UserIdentityType.Service,
+      iat: 1,
+      roleId: 'role-service-user',
+      sub: 'service-1',
+      tokenType: 'refresh',
+    });
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordChangedAt: null,
+      role: { name: UserRole.TeamMember },
+      roleId: 'role-team-member',
+      status: 'active',
+    });
+
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it.each([UserRole.TeamMember, 'ANOMALOUS_ROLE', null])(
+    'rejects SERVICE refresh when the database role is %s',
+    async (roleName) => {
+      jwtService.verifyAsync.mockResolvedValue({
+        email: 'automation@example.com',
+        identityType: UserIdentityType.Service,
+        iat: 1,
+        roleId: 'current-role',
+        sub: 'service-1',
+        tokenType: 'refresh',
+      });
+      usersService.findTokenValidationUser.mockResolvedValue({
+        email: 'automation@example.com',
+        id: 'service-1',
+        identityType: UserIdentityType.Service,
+        passwordChangedAt: null,
+        role: roleName ? { name: roleName } : null,
+        roleId: 'current-role',
+        status: 'active',
+      });
+
+      await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(jwtService.sign).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects disabled users during authentication', async () => {
     usersService.findByEmail.mockResolvedValue({

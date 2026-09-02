@@ -91,6 +91,72 @@ describe('JWT security policy', () => {
     expect(tokenLifetime(refresh?.payload)).toBe(7 * 24 * 60 * 60);
   });
 
+  it('authenticates and refreshes SERVICE_USER tokens with SERVICE request context', async () => {
+    const databaseUser = {
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordChangedAt: null,
+      role: { name: UserRole.ServiceUser },
+      roleId: UserRole.ServiceUser,
+      status: 'active',
+    };
+    usersService.findByEmail.mockResolvedValue({
+      ...databaseUser,
+      passwordHash: await passwordService.hashPassword('ValidPass1!'),
+    });
+    usersService.findTokenValidationUser.mockResolvedValue(databaseUser);
+
+    const session = await authService.login({
+      email: 'automation@example.com',
+      password: 'ValidPass1!',
+    });
+    const access = jwtService.decode(session.accessToken);
+    const refresh = jwtService.decode(session.refreshToken);
+
+    expect(access).toEqual(
+      expect.objectContaining({
+        identityType: UserIdentityType.Service,
+        roleId: UserRole.ServiceUser,
+        tokenType: 'access',
+      }),
+    );
+    expect(refresh).toEqual(
+      expect.objectContaining({
+        identityType: UserIdentityType.Service,
+        roleId: UserRole.ServiceUser,
+        tokenType: 'refresh',
+      }),
+    );
+
+    const strategy = new JwtStrategy(
+      usersService as unknown as UsersService,
+      jwtConfiguration,
+    );
+    await expect(authenticate(strategy, session.accessToken)).resolves.toEqual({
+      email: 'automation@example.com',
+      identityType: UserIdentityType.Service,
+      roleId: UserRole.ServiceUser,
+      userId: 'service-1',
+    });
+
+    const refreshedSession = await authService.refresh(session.refreshToken);
+    expect(jwtService.decode(refreshedSession.accessToken)).toEqual(
+      expect.objectContaining({
+        identityType: UserIdentityType.Service,
+        roleId: UserRole.ServiceUser,
+        tokenType: 'access',
+      }),
+    );
+    expect(jwtService.decode(refreshedSession.refreshToken)).toEqual(
+      expect.objectContaining({
+        identityType: UserIdentityType.Service,
+        roleId: UserRole.ServiceUser,
+        tokenType: 'refresh',
+      }),
+    );
+  });
+
   it('rejects a non-HS256 refresh token through the actual refresh verifier', async () => {
     const token = jwtService.sign(
       {

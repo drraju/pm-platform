@@ -208,9 +208,11 @@ export class UsersService {
         id: true,
         identityType: true,
         passwordChangedAt: true,
+        role: { name: true },
         roleId: true,
         status: true,
       },
+      relations: { role: true },
       where: { id: userId },
     });
   }
