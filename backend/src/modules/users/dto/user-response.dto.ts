@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { RoleResponseDto } from './role-response.dto';
 
 export class UserResponseDto {
@@ -13,6 +14,9 @@ export class UserResponseDto {
 
   @ApiProperty()
   lastName: string;
+
+  @ApiPropertyOptional({ enum: UserIdentityType })
+  identityType?: UserIdentityType;
 
   @ApiProperty({ format: 'uuid' })
   roleId: string;

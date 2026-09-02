@@ -4,7 +4,10 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { UserIdentityType } from '../../common/enums/user-identity-type.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import { UsersService } from '../users/users.service';
+import type { UserAdministrationActor } from '../users/users.service';
 import { User } from '../users/entities/user.entity';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
@@ -44,6 +47,9 @@ export class PasswordUpdateService {
 
     const user = await this.usersService.findAuthenticationUserById(userId);
     if (!user) {
+      throw new UnauthorizedException('Unable to change password');
+    }
+    if (user.identityType === UserIdentityType.Service) {
       throw new UnauthorizedException('Unable to change password');
     }
 
@@ -110,6 +116,9 @@ export class PasswordUpdateService {
     if (!user) {
       throw new UnauthorizedException('Unable to reset password');
     }
+    if (user.identityType === UserIdentityType.Service) {
+      throw new UnauthorizedException('Unable to reset password');
+    }
 
     const newPasswordMatchesCurrent = await this.passwordService.verifyPassword(
       resetPasswordInput.newPassword,
@@ -149,6 +158,11 @@ export class PasswordUpdateService {
   ): Promise<void> {
     this.validateNewPassword(temporaryPassword);
 
+    const user = await this.usersService.findAuthenticationUserById(userId);
+    if (!user || user.identityType === UserIdentityType.Service) {
+      throw new UnauthorizedException('Unable to reset password');
+    }
+
     const passwordHash =
       await this.passwordService.hashPassword(temporaryPassword);
     await this.usersService.updatePassword(
@@ -166,6 +180,40 @@ export class PasswordUpdateService {
   async hashTemporaryPassword(temporaryPassword: string): Promise<string> {
     this.validateNewPassword(temporaryPassword);
     return this.passwordService.hashPassword(temporaryPassword);
+  }
+
+  async rotateServiceAccountCredentials(
+    userId: string,
+    newPassword: string,
+    actor: UserAdministrationActor,
+    auditContext: PasswordChangeAuditContext = {},
+  ): Promise<UserResponseDto> {
+    this.validateNewPassword(newPassword);
+    const user = await this.usersService.findServiceAccountAuthenticationUser(
+      userId,
+      actor,
+    );
+    if (
+      await this.passwordService.verifyPassword(newPassword, user.passwordHash)
+    ) {
+      throw new BadRequestException(
+        'New password must differ from current password',
+      );
+    }
+
+    const passwordHash = await this.passwordService.hashPassword(newPassword);
+    const response =
+      await this.usersService.persistServiceAccountCredentialRotation(
+        userId,
+        passwordHash,
+        new Date(),
+        actor,
+      );
+    this.recordPasswordChangeAudit(userId, {
+      ...auditContext,
+      event: 'ServiceAccountCredentialsRotated',
+    });
+    return response;
   }
 
   private validateNewPassword(password: string): void {

@@ -1,10 +1,13 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
+  isUserAuthenticationStatusAllowed,
+  isUserIdentityRoleAssignmentAllowed,
+} from '../../common/authz/user-identity-role-policy';
+import {
   UserIdentityType,
   userIdentityTypes,
 } from '../../common/enums/user-identity-type.enum';
-import { UserRole } from '../../common/enums/user-role.enum';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
@@ -22,6 +25,7 @@ import {
 import { PasswordService } from './password.service';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { JWT_CONFIGURATION } from './jwt-configuration';
+import { isTokenCurrentForPasswordState } from './token-password-state';
 import type { JwtConfiguration } from './jwt-configuration';
 
 @Injectable()
@@ -41,7 +45,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    if (!['active', 'first_login_pending'].includes(user.status)) {
+    if (!isUserAuthenticationStatusAllowed(user.identityType, user.status)) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -53,7 +57,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    this.validateServiceAuthenticationInvariant(user, 'Invalid credentials');
+    this.validateAuthenticationInvariant(user, 'Invalid credentials');
 
     await this.usersService.recordLogin(user.id);
     return this.issueSession(user, {
@@ -86,7 +90,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
     const user = await this.usersService.findTokenValidationUser(payload.sub);
-    if (!user || !['active', 'first_login_pending'].includes(user.status)) {
+    if (
+      !user ||
+      !isUserAuthenticationStatusAllowed(user.identityType, user.status)
+    ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
     if (
@@ -96,10 +103,13 @@ export class AuthService {
     ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    this.validateServiceAuthenticationInvariant(user, 'Invalid refresh token');
+    this.validateAuthenticationInvariant(user, 'Invalid refresh token');
     if (
-      user.passwordChangedAt &&
-      payload.iat * 1000 < user.passwordChangedAt.getTime()
+      !isTokenCurrentForPasswordState(
+        payload,
+        user.passwordChangedAt,
+        user.identityType === UserIdentityType.Service,
+      )
     ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -126,7 +136,10 @@ export class AuthService {
     auditContext: PasswordChangeAuditContext = {},
   ): Promise<PasswordResetResponseDto> {
     const user = await this.usersService.findByEmail(forgotPasswordDto.email);
-    if (user && ['active', 'first_login_pending'].includes(user.status)) {
+    if (
+      user?.identityType === UserIdentityType.Human &&
+      isUserAuthenticationStatusAllowed(user.identityType, user.status)
+    ) {
       await this.passwordResetTokenService.issueToken(
         user.id,
         auditContext.ipAddress,
@@ -166,7 +179,10 @@ export class AuthService {
   }
 
   private issueSession(
-    user: Pick<User, 'email' | 'id' | 'identityType' | 'roleId'>,
+    user: Pick<
+      User,
+      'email' | 'id' | 'identityType' | 'passwordChangedAt' | 'roleId'
+    >,
     options: { requiresPasswordChange?: boolean } = {},
   ): SessionDto {
     const accessToken = this.jwtService.sign(
@@ -174,6 +190,7 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         identityType: user.identityType,
+        passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
         roleId: user.roleId,
         tokenType: 'access',
       },
@@ -190,6 +207,7 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         identityType: user.identityType,
+        passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
         roleId: user.roleId,
         tokenType: 'refresh',
       },
@@ -211,13 +229,12 @@ export class AuthService {
     };
   }
 
-  private validateServiceAuthenticationInvariant(
+  private validateAuthenticationInvariant(
     user: User,
     failureMessage: string,
   ): void {
     if (
-      user.identityType === UserIdentityType.Service &&
-      user.role?.name !== String(UserRole.ServiceUser)
+      !isUserIdentityRoleAssignmentAllowed(user.identityType, user.role?.name)
     ) {
       throw new UnauthorizedException(failureMessage);
     }

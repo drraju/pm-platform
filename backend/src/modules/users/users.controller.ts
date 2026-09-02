@@ -172,6 +172,10 @@ export class UsersController {
     if (request.user.userId === id) {
       return this.usersService.recordAdminPasswordReset(id, request.user);
     }
+    await this.usersService.ensureHumanUserAdministrationTarget(
+      id,
+      request.user,
+    );
     await this.passwordUpdateService.adminResetPassword(
       id,
       adminResetPasswordDto.temporaryPassword,

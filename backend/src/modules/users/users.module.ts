@@ -9,6 +9,8 @@ import { User } from './entities/user.entity';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
+import { ServiceAccountAdministrationService } from './service-account-administration.service';
+import { ServiceAccountsController } from './service-accounts.controller';
 
 @Module({
   imports: [
@@ -21,8 +23,12 @@ import { ProjectMember } from '../projects/entities/project-member.entity';
     ]),
     PasswordModule,
   ],
-  controllers: [UsersController],
-  providers: [UsersService, PasswordUpdateService],
+  controllers: [ServiceAccountsController, UsersController],
+  providers: [
+    UsersService,
+    PasswordUpdateService,
+    ServiceAccountAdministrationService,
+  ],
   exports: [UsersService],
 })
 export class UsersModule {}

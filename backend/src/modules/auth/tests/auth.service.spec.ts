@@ -337,6 +337,26 @@ describe('AuthService', () => {
     expect(jwtService.sign).not.toHaveBeenCalled();
   });
 
+  it('rejects first-login-pending for a SERVICE user', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordHash: await passwordService.hashPassword('ValidPass1!'),
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'first_login_pending',
+    });
+
+    await expect(
+      service.login({
+        email: 'automation@example.com',
+        password: 'ValidPass1!',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
   it.each([UserRole.PlatformAdmin, UserRole.ProjectManager, 'ANOMALOUS_ROLE'])(
     'rejects a SERVICE user with global role %s',
     async (roleName) => {
@@ -379,6 +399,26 @@ describe('AuthService', () => {
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(usersService.recordLogin).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('rejects a HUMAN user assigned to SERVICE_USER', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'invalid-human@example.com',
+      id: 'human-1',
+      identityType: UserIdentityType.Human,
+      passwordHash: await passwordService.hashPassword('ValidPass1!'),
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'active',
+    });
+
+    await expect(
+      service.login({
+        email: 'invalid-human@example.com',
+        password: 'ValidPass1!',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(jwtService.sign).not.toHaveBeenCalled();
   });
 
@@ -530,6 +570,7 @@ describe('AuthService', () => {
       email: 'automation@example.com',
       identityType: UserIdentityType.Service,
       iat: 1,
+      passwordChangedAt: null,
       roleId: 'role-service-user',
       sub: 'service-1',
       tokenType: 'refresh',
@@ -579,6 +620,56 @@ describe('AuthService', () => {
       role: { name: UserRole.TeamMember },
       roleId: 'role-team-member',
       status: 'active',
+    });
+
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('rejects HUMAN refresh when the database role is SERVICE_USER', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'invalid-human@example.com',
+      identityType: UserIdentityType.Human,
+      iat: 1,
+      roleId: 'role-service-user',
+      sub: 'human-1',
+      tokenType: 'refresh',
+    });
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'invalid-human@example.com',
+      id: 'human-1',
+      identityType: UserIdentityType.Human,
+      passwordChangedAt: null,
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'active',
+    });
+
+    await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('rejects SERVICE refresh while first-login-pending', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'automation@example.com',
+      identityType: UserIdentityType.Service,
+      iat: 1,
+      roleId: 'role-service-user',
+      sub: 'service-1',
+      tokenType: 'refresh',
+    });
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      passwordChangedAt: null,
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'first_login_pending',
     });
 
     await expect(service.refresh('refresh-token')).rejects.toBeInstanceOf(
@@ -646,6 +737,7 @@ describe('AuthService', () => {
     usersService.findByEmail.mockResolvedValue({
       email: 'active@example.com',
       id: 'user-active',
+      identityType: UserIdentityType.Human,
       passwordHash: await passwordService.hashPassword('OldPass1!'),
       roleId: 'role-team-member',
       status: 'active',
@@ -675,6 +767,7 @@ describe('AuthService', () => {
     usersService.findByEmail.mockResolvedValue({
       email: 'disabled@example.com',
       id: 'user-disabled',
+      identityType: UserIdentityType.Human,
       passwordHash: await passwordService.hashPassword('OldPass1!'),
       roleId: 'role-team-member',
       status: 'disabled',
@@ -682,6 +775,26 @@ describe('AuthService', () => {
 
     await expect(
       service.forgotPassword({ email: 'disabled@example.com' }),
+    ).resolves.toEqual({
+      message:
+        'If an account exists for that email, password reset instructions will be sent.',
+      success: true,
+    });
+    expect(passwordResetTokenService.issueToken).not.toHaveBeenCalled();
+  });
+
+  it('does not issue human password-reset tokens for SERVICE accounts', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      email: 'automation@example.com',
+      id: 'service-1',
+      identityType: UserIdentityType.Service,
+      role: { name: UserRole.ServiceUser },
+      roleId: 'role-service-user',
+      status: 'active',
+    });
+
+    await expect(
+      service.forgotPassword({ email: 'automation@example.com' }),
     ).resolves.toEqual({
       message:
         'If an account exists for that email, password reset instructions will be sent.',
@@ -853,6 +966,62 @@ describe('JwtStrategy', () => {
       roleId: UserRole.TeamMember,
       userId: 'user-1',
     });
+  });
+
+  it('rejects SERVICE access tokens while first-login-pending', async () => {
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn().mockResolvedValue({
+          email: 'automation@example.com',
+          id: 'service-1',
+          identityType: UserIdentityType.Service,
+          passwordChangedAt: null,
+          role: { name: UserRole.ServiceUser },
+          roleId: UserRole.ServiceUser,
+          status: 'first_login_pending',
+        }),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(
+      strategy.validate({
+        email: 'automation@example.com',
+        identityType: UserIdentityType.Service,
+        iat: 1,
+        roleId: UserRole.ServiceUser,
+        sub: 'service-1',
+        tokenType: 'access',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects HUMAN access tokens when the database role is SERVICE_USER', async () => {
+    const strategy = new JwtStrategy(
+      {
+        findTokenValidationUser: jest.fn().mockResolvedValue({
+          email: 'invalid-human@example.com',
+          id: 'human-1',
+          identityType: UserIdentityType.Human,
+          passwordChangedAt: null,
+          role: { name: UserRole.ServiceUser },
+          roleId: UserRole.ServiceUser,
+          status: 'active',
+        }),
+      } as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(
+      strategy.validate({
+        email: 'invalid-human@example.com',
+        identityType: UserIdentityType.Human,
+        iat: 1,
+        roleId: UserRole.ServiceUser,
+        sub: 'human-1',
+        tokenType: 'access',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects refresh tokens presented as bearer access tokens', async () => {

@@ -1,6 +1,9 @@
 import { UserIdentityType } from '../enums/user-identity-type.enum';
 import { UserRole } from '../enums/user-role.enum';
-import { isUserIdentityRoleAssignmentAllowed } from './user-identity-role-policy';
+import {
+  isUserAuthenticationStatusAllowed,
+  isUserIdentityRoleAssignmentAllowed,
+} from './user-identity-role-policy';
 
 const humanRoles = [
   UserRole.PlatformAdmin,
@@ -43,4 +46,31 @@ describe('user identity role policy', () => {
       ),
     ).toBe(false);
   });
+
+  it('allows first-login-pending only for HUMAN identities', () => {
+    expect(
+      isUserAuthenticationStatusAllowed(
+        UserIdentityType.Human,
+        'first_login_pending',
+      ),
+    ).toBe(true);
+    expect(
+      isUserAuthenticationStatusAllowed(
+        UserIdentityType.Service,
+        'first_login_pending',
+      ),
+    ).toBe(false);
+  });
+
+  it.each([UserIdentityType.Human, UserIdentityType.Service])(
+    'allows active and rejects disabled authentication for %s',
+    (identityType) => {
+      expect(isUserAuthenticationStatusAllowed(identityType, 'active')).toBe(
+        true,
+      );
+      expect(isUserAuthenticationStatusAllowed(identityType, 'disabled')).toBe(
+        false,
+      );
+    },
+  );
 });

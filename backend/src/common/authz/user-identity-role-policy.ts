@@ -3,11 +3,30 @@ import { UserRole } from '../enums/user-role.enum';
 
 export function isUserIdentityRoleAssignmentAllowed(
   identityType: UserIdentityType,
-  roleName: UserRole,
+  roleName: UserRole | string | null | undefined,
 ): boolean {
   if (identityType === UserIdentityType.Service) {
-    return roleName === UserRole.ServiceUser;
+    return (
+      Boolean(roleName) && String(roleName) === String(UserRole.ServiceUser)
+    );
   }
 
-  return roleName !== UserRole.ServiceUser;
+  return (
+    identityType === UserIdentityType.Human &&
+    String(roleName) !== String(UserRole.ServiceUser)
+  );
+}
+
+export function isUserAuthenticationStatusAllowed(
+  identityType: UserIdentityType,
+  status: string,
+): boolean {
+  if (identityType === UserIdentityType.Service) {
+    return status === 'active';
+  }
+
+  return (
+    identityType === UserIdentityType.Human &&
+    ['active', 'first_login_pending'].includes(status)
+  );
 }

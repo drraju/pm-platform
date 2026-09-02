@@ -42,6 +42,19 @@ export type CreateUserPersistenceInput = {
   status?: string;
 };
 
+export type CreateServiceAccountPersistenceInput = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  passwordHash: string;
+};
+
+export type UpdateServiceAccountMetadataInput = {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+};
+
 const externalUserRoleNames = new Set<string>([
   UserRole.Customer,
   UserRole.Partner,
@@ -91,6 +104,157 @@ export class UsersService {
     const savedUser = await this.usersRepository.save(user);
     this.recordUserAdministrationAudit('UserCreated', savedUser.id, actor);
     return this.toUserResponse(savedUser);
+  }
+
+  async createServiceAccount(
+    input: CreateServiceAccountPersistenceInput,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    if (!input.passwordHash) {
+      throw new BadRequestException('Password is required');
+    }
+
+    const role = await this.findCanonicalRoleByName(UserRole.ServiceUser);
+    this.ensureIdentityRoleAssignment(UserIdentityType.Service, role);
+    const user = this.usersRepository.create({
+      accountHistory: [
+        this.createHistoryEntry('ServiceAccountCreated', actor.userId),
+      ],
+      email: input.email,
+      firstName: input.firstName,
+      identityType: UserIdentityType.Service,
+      lastName: input.lastName,
+      passwordChangedAt: new Date(),
+      passwordHash: input.passwordHash,
+      role,
+      roleId: role.id,
+      status: 'disabled',
+    });
+    const savedUser = await this.usersRepository.save(user);
+    this.recordServiceAccountAdministrationAudit(
+      'ServiceAccountCreated',
+      savedUser.id,
+      actor,
+    );
+    return this.toUserResponse(savedUser);
+  }
+
+  async findServiceAccounts(
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto[]> {
+    await this.ensurePlatformAdmin(actor);
+    const users = await this.usersRepository.find({
+      order: { createdAt: 'DESC', email: 'ASC' },
+      relations: { role: { permissions: true } },
+      where: { identityType: UserIdentityType.Service },
+    });
+    users.forEach((user) => this.ensureCurrentIdentityRoleAssignment(user));
+    return users.map((user) => this.toUserResponse(user));
+  }
+
+  async findServiceAccount(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    return this.toUserResponse(await this.findServiceAccountEntity(id));
+  }
+
+  async updateServiceAccountMetadata(
+    id: string,
+    input: UpdateServiceAccountMetadataInput,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    const user = await this.findServiceAccountEntity(id);
+    if (input.email !== undefined) {
+      user.email = input.email;
+    }
+    if (input.firstName !== undefined) {
+      user.firstName = input.firstName;
+    }
+    if (input.lastName !== undefined) {
+      user.lastName = input.lastName;
+    }
+    user.accountHistory = [
+      ...(user.accountHistory ?? []),
+      this.createHistoryEntry('ServiceAccountMetadataUpdated', actor.userId),
+    ];
+    const savedUser = await this.usersRepository.save(user);
+    this.recordServiceAccountAdministrationAudit(
+      'ServiceAccountMetadataUpdated',
+      id,
+      actor,
+    );
+    return this.toUserResponse(savedUser);
+  }
+
+  async findServiceAccountAuthenticationUser(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<User> {
+    await this.ensurePlatformAdmin(actor);
+    const user = await this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .leftJoinAndSelect('user.role', 'role')
+      .where('user.id = :id', { id })
+      .getOne();
+    if (!user || user.identityType !== UserIdentityType.Service) {
+      throw new NotFoundException(`Service account ${id} not found`);
+    }
+    this.ensureCurrentIdentityRoleAssignment(user);
+    return user;
+  }
+
+  async persistServiceAccountCredentialRotation(
+    id: string,
+    passwordHash: string,
+    passwordChangedAt: Date,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    const user = await this.findServiceAccountEntity(id);
+    user.passwordHash = passwordHash;
+    user.passwordChangedAt = passwordChangedAt;
+    user.accountHistory = [
+      ...(user.accountHistory ?? []),
+      this.createHistoryEntry('ServiceAccountCredentialsRotated', actor.userId),
+    ];
+    const savedUser = await this.usersRepository.save(user);
+    this.recordServiceAccountAdministrationAudit(
+      'ServiceAccountCredentialsRotated',
+      id,
+      actor,
+    );
+    return this.toUserResponse(savedUser);
+  }
+
+  async enableServiceAccount(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    return this.updateServiceAccountLifecycleStatus(
+      id,
+      'active',
+      'ServiceAccountEnabled',
+      actor,
+      false,
+    );
+  }
+
+  async disableServiceAccount(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<UserResponseDto> {
+    return this.updateServiceAccountLifecycleStatus(
+      id,
+      'disabled',
+      'ServiceAccountDisabled',
+      actor,
+      true,
+    );
   }
 
   async findAll(actor?: UserAdministrationActor): Promise<UserResponseDto[]> {
@@ -331,12 +495,22 @@ export class UsersService {
       throw new ForbiddenException('Users cannot modify their own status');
     }
     const user = await this.findUserEntity(id);
+    if (
+      user.identityType === UserIdentityType.Service &&
+      updateUserDto.status !== undefined
+    ) {
+      throw new BadRequestException(
+        'Service account lifecycle must use the dedicated administration API',
+      );
+    }
     const roleChanged =
       Boolean(updateUserDto.roleId) && updateUserDto.roleId !== user.roleId;
     let updatedRole: Role | undefined;
     if (updateUserDto.roleId) {
       updatedRole = await this.ensureCanonicalRole(updateUserDto.roleId);
       this.ensureIdentityRoleAssignment(user.identityType, updatedRole);
+    } else {
+      this.ensureCurrentIdentityRoleAssignment(user);
     }
     if (updateUserDto.email !== undefined) {
       user.email = updateUserDto.email;
@@ -356,19 +530,22 @@ export class UsersService {
     if (updatedRole) {
       user.role = updatedRole;
     }
+    const auditAction =
+      user.identityType === UserIdentityType.Service
+        ? 'ServiceAccountMetadataUpdated'
+        : roleChanged
+          ? 'RoleChanged'
+          : 'UserUpdated';
     user.accountHistory = [
       ...(user.accountHistory ?? []),
-      this.createHistoryEntry(
-        roleChanged ? 'RoleChanged' : 'UserUpdated',
-        actor?.userId,
-      ),
+      this.createHistoryEntry(auditAction, actor?.userId),
     ];
     const savedUser = await this.usersRepository.save(user);
-    this.recordUserAdministrationAudit(
-      roleChanged ? 'RoleChanged' : 'UserUpdated',
-      id,
-      actor,
-    );
+    if (user.identityType === UserIdentityType.Service && actor) {
+      this.recordServiceAccountAdministrationAudit(auditAction, id, actor);
+    } else {
+      this.recordUserAdministrationAudit(auditAction, id, actor);
+    }
     return this.findOne(savedUser.id);
   }
 
@@ -380,6 +557,7 @@ export class UsersService {
     if (actor.userId === id) {
       throw new ForbiddenException('Users cannot enable themselves');
     }
+    await this.ensureHumanUserAdministrationTarget(id, actor);
     return this.updateLifecycleStatus(id, 'active', 'UserEnabled', actor);
   }
 
@@ -391,6 +569,7 @@ export class UsersService {
     if (actor.userId === id) {
       throw new ForbiddenException('Users cannot disable themselves');
     }
+    await this.ensureHumanUserAdministrationTarget(id, actor);
     return this.updateLifecycleStatus(id, 'disabled', 'UserDisabled', actor);
   }
 
@@ -411,6 +590,7 @@ export class UsersService {
         'Users cannot reset their own password here',
       );
     }
+    await this.ensureHumanUserAdministrationTarget(id, actor);
     return this.updateLifecycleStatus(
       id,
       'first_login_pending',
@@ -429,6 +609,20 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  async ensureHumanUserAdministrationTarget(
+    id: string,
+    actor: UserAdministrationActor,
+  ): Promise<void> {
+    await this.ensurePlatformAdmin(actor);
+    const user = await this.findUserEntity(id);
+    if (user.identityType === UserIdentityType.Service) {
+      throw new BadRequestException(
+        'Service account lifecycle must use the dedicated administration API',
+      );
+    }
+    this.ensureCurrentIdentityRoleAssignment(user);
   }
 
   async getSessionProfile(userId: string): Promise<{
@@ -457,6 +651,9 @@ export class UsersService {
       id: user.id,
       email: user.email,
       firstName: user.firstName,
+      ...(user.identityType === UserIdentityType.Service
+        ? { identityType: UserIdentityType.Service }
+        : {}),
       lastName: user.lastName,
       roleId: user.roleId,
       status: user.status,
@@ -519,6 +716,37 @@ export class UsersService {
     return this.toUserResponse(savedUser);
   }
 
+  private async updateServiceAccountLifecycleStatus(
+    id: string,
+    status: 'active' | 'disabled',
+    action: string,
+    actor: UserAdministrationActor,
+    invalidateTokens: boolean,
+  ): Promise<UserResponseDto> {
+    await this.ensurePlatformAdmin(actor);
+    const user = await this.findServiceAccountEntity(id);
+    user.status = status;
+    if (invalidateTokens) {
+      user.passwordChangedAt = new Date();
+    }
+    user.accountHistory = [
+      ...(user.accountHistory ?? []),
+      this.createHistoryEntry(action, actor.userId),
+    ];
+    const savedUser = await this.usersRepository.save(user);
+    this.recordServiceAccountAdministrationAudit(action, id, actor);
+    return this.toUserResponse(savedUser);
+  }
+
+  private async findServiceAccountEntity(id: string): Promise<User> {
+    const user = await this.findUserEntity(id);
+    if (user.identityType !== UserIdentityType.Service) {
+      throw new NotFoundException(`Service account ${id} not found`);
+    }
+    this.ensureCurrentIdentityRoleAssignment(user);
+    return user;
+  }
+
   private async ensureCanonicalRole(roleId: string): Promise<Role> {
     const role = await this.rolesRepository.findOne({ where: { id: roleId } });
     if (!role || !canonicalUserRoles.includes(role.name as UserRole)) {
@@ -529,17 +757,31 @@ export class UsersService {
     return role;
   }
 
+  private async findCanonicalRoleByName(roleName: UserRole): Promise<Role> {
+    const role = await this.rolesRepository.findOne({
+      where: { name: roleName },
+    });
+    if (!role || !canonicalUserRoles.includes(role.name as UserRole)) {
+      throw new BadRequestException(
+        'Role is not supported for user administration',
+      );
+    }
+    return role;
+  }
+
   private ensureIdentityRoleAssignment(
     identityType: UserIdentityType,
-    role: Role,
+    role: Pick<Role, 'name'> | null | undefined,
   ): void {
-    if (
-      !isUserIdentityRoleAssignmentAllowed(identityType, role.name as UserRole)
-    ) {
+    if (!isUserIdentityRoleAssignmentAllowed(identityType, role?.name)) {
       throw new BadRequestException(
         'User identity type is incompatible with the selected role',
       );
     }
+  }
+
+  private ensureCurrentIdentityRoleAssignment(user: User): void {
+    this.ensureIdentityRoleAssignment(user.identityType, user.role);
   }
 
   async ensurePlatformAdmin(actor: UserAdministrationActor): Promise<void> {
@@ -568,6 +810,20 @@ export class UsersService {
       action,
       administratorId: actor?.userId ?? 'system',
       event: 'UserAdministrationAction',
+      timestamp: new Date().toISOString(),
+      userId,
+    });
+  }
+
+  private recordServiceAccountAdministrationAudit(
+    action: string,
+    userId: string,
+    actor: UserAdministrationActor,
+  ) {
+    this.logger.log({
+      action,
+      administratorId: actor.userId,
+      event: 'ServiceAccountAdministrationAction',
       timestamp: new Date().toISOString(),
       userId,
     });
