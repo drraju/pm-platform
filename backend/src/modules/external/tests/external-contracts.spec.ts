@@ -45,7 +45,7 @@ describe('external v1 response contracts', () => {
       createdAt,
       description: 'hidden',
       dueDate: '2026-08-20',
-      estimatedHours: 20,
+      estimatedHours: '20.00',
       id: 'task-1',
       latestExecutionUpdate: { remarks: 'hidden' },
       milestoneCategory: null,
@@ -55,7 +55,7 @@ describe('external v1 response contracts', () => {
       plannedStartDate: '2026-08-10',
       priority: 'high',
       projectId: 'project-1',
-      remainingHours: 12,
+      remainingHours: '12.00',
       remarks: 'hidden',
       sequenceNumber: 1,
       startDate: '2026-08-10',
@@ -89,6 +89,8 @@ describe('external v1 response contracts', () => {
         'updatedAt',
       ].sort(),
     );
+    expect(dto.estimatedHours).toBe(20);
+    expect(dto.remainingHours).toBe(12);
   });
 
   it('risks expose only the approved analytical fields', () => {

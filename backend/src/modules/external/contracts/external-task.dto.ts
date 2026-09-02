@@ -6,7 +6,7 @@ export type ExternalTaskSource = {
   actualStartDate?: string | null;
   createdAt: Date | string;
   dueDate?: string | null;
-  estimatedHours?: number | null;
+  estimatedHours?: number | string | null;
   id: string;
   milestoneCategory?: string | null;
   parentTaskId?: string | null;
@@ -15,7 +15,7 @@ export type ExternalTaskSource = {
   plannedStartDate?: string | null;
   priority: string;
   projectId: string;
-  remainingHours?: number | null;
+  remainingHours?: number | string | null;
   sequenceNumber?: number | null;
   startDate?: string | null;
   status: string;
@@ -92,7 +92,7 @@ export function toExternalTaskDto(source: ExternalTaskSource): ExternalTaskDto {
     actualStartDate: source.actualStartDate ?? null,
     createdAt: externalTimestamp(source.createdAt),
     dueDate: source.dueDate ?? null,
-    estimatedHours: source.estimatedHours ?? null,
+    estimatedHours: externalNullableNumber(source.estimatedHours),
     id: source.id,
     milestoneCategory: source.milestoneCategory ?? null,
     parentTaskId: source.parentTaskId ?? null,
@@ -101,7 +101,7 @@ export function toExternalTaskDto(source: ExternalTaskSource): ExternalTaskDto {
     plannedStartDate: source.plannedStartDate ?? null,
     priority: source.priority,
     projectId: source.projectId,
-    remainingHours: source.remainingHours ?? null,
+    remainingHours: externalNullableNumber(source.remainingHours),
     sequenceNumber: source.sequenceNumber ?? null,
     startDate: source.startDate ?? null,
     status: source.status,
@@ -109,4 +109,8 @@ export function toExternalTaskDto(source: ExternalTaskSource): ExternalTaskDto {
     title: source.title,
     updatedAt: externalTimestamp(source.updatedAt),
   };
+}
+
+function externalNullableNumber(value?: number | string | null): number | null {
+  return value == null ? null : Number(value);
 }

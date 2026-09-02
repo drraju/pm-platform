@@ -1,8 +1,14 @@
-import { GUARDS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { RequestMethod } from '@nestjs/common';
+import {
+  GUARDS_METADATA,
+  METHOD_METADATA,
+  PATH_METADATA,
+} from '@nestjs/common/constants';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { AppModule } from '../../../app.module';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ExternalApiGuard } from '../auth/external-api.guard';
+import { EXTERNAL_API_RESOURCE_KEY } from '../auth/external-api-resource.decorator';
 import {
   ExternalApiResource,
   externalV1ReadEndpoints,
@@ -75,11 +81,47 @@ describe('external v1 boundary', () => {
     });
   });
 
-  it('introduces no external data or mutation handlers in 5C-6A', () => {
+  it('exposes exactly the four approved read-only handlers', () => {
     const handlers = Object.getOwnPropertyNames(
       ExternalV1Controller.prototype,
     ).filter((name) => name !== 'constructor');
 
-    expect(handlers).toEqual([]);
+    expect(handlers.sort()).toEqual(
+      ['findIssues', 'findProjects', 'findRisks', 'findTasks'].sort(),
+    );
+    expect(handlerContract('findProjects')).toEqual({
+      method: RequestMethod.GET,
+      path: 'projects',
+      resource: ExternalApiResource.Projects,
+    });
+    expect(handlerContract('findTasks')).toEqual({
+      method: RequestMethod.GET,
+      path: 'tasks',
+      resource: ExternalApiResource.Tasks,
+    });
+    expect(handlerContract('findRisks')).toEqual({
+      method: RequestMethod.GET,
+      path: 'risks',
+      resource: ExternalApiResource.Risks,
+    });
+    expect(handlerContract('findIssues')).toEqual({
+      method: RequestMethod.GET,
+      path: 'issues',
+      resource: ExternalApiResource.Issues,
+    });
   });
 });
+
+function handlerContract(
+  name: 'findIssues' | 'findProjects' | 'findRisks' | 'findTasks',
+) {
+  const handler = ExternalV1Controller.prototype[name];
+  return {
+    method: Reflect.getMetadata(METHOD_METADATA, handler) as RequestMethod,
+    path: Reflect.getMetadata(PATH_METADATA, handler) as string,
+    resource: Reflect.getMetadata(
+      EXTERNAL_API_RESOURCE_KEY,
+      handler,
+    ) as ExternalApiResource,
+  };
+}
