@@ -206,6 +206,7 @@ export class UsersService {
       select: {
         email: true,
         id: true,
+        identityType: true,
         passwordChangedAt: true,
         roleId: true,
         status: true,

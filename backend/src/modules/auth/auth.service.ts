@@ -1,5 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { userIdentityTypes } from '../../common/enums/user-identity-type.enum';
+import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -48,7 +50,7 @@ export class AuthService {
     }
 
     await this.usersService.recordLogin(user.id);
-    return this.issueSession(user.id, user.email, user.roleId, {
+    return this.issueSession(user, {
       requiresPasswordChange: user.status === 'first_login_pending',
     });
   }
@@ -70,14 +72,22 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    if (payload.tokenType !== 'refresh' || !payload.iat) {
+    if (
+      payload.tokenType !== 'refresh' ||
+      !payload.iat ||
+      !userIdentityTypes.includes(payload.identityType)
+    ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
     const user = await this.usersService.findTokenValidationUser(payload.sub);
     if (!user || !['active', 'first_login_pending'].includes(user.status)) {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    if (user.roleId !== payload.roleId || user.email !== payload.email) {
+    if (
+      user.roleId !== payload.roleId ||
+      user.email !== payload.email ||
+      user.identityType !== payload.identityType
+    ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
     if (
@@ -87,7 +97,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    return this.issueSession(user.id, user.email, user.roleId, {
+    return this.issueSession(user, {
       requiresPasswordChange: user.status === 'first_login_pending',
     });
   }
@@ -149,13 +159,17 @@ export class AuthService {
   }
 
   private issueSession(
-    userId: string,
-    email: string,
-    roleId: string,
+    user: Pick<User, 'email' | 'id' | 'identityType' | 'roleId'>,
     options: { requiresPasswordChange?: boolean } = {},
   ): SessionDto {
     const accessToken = this.jwtService.sign(
-      { sub: userId, email, roleId, tokenType: 'access' },
+      {
+        sub: user.id,
+        email: user.email,
+        identityType: user.identityType,
+        roleId: user.roleId,
+        tokenType: 'access',
+      },
       {
         algorithm: this.jwtConfiguration.algorithm,
         audience: this.jwtConfiguration.accessAudience,
@@ -165,7 +179,13 @@ export class AuthService {
       },
     );
     const refreshToken = this.jwtService.sign(
-      { sub: userId, email, roleId, tokenType: 'refresh' },
+      {
+        sub: user.id,
+        email: user.email,
+        identityType: user.identityType,
+        roleId: user.roleId,
+        tokenType: 'refresh',
+      },
       {
         algorithm: this.jwtConfiguration.algorithm,
         audience: this.jwtConfiguration.refreshAudience,

@@ -1,10 +1,8 @@
 import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 
-export interface JwtPayload {
+export interface AuthenticatedUser {
   email: string;
   identityType: UserIdentityType;
-  iat?: number;
   roleId: string;
-  sub: string;
-  tokenType: 'access' | 'refresh';
+  userId: string;
 }

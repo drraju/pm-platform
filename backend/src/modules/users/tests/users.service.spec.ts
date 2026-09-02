@@ -450,6 +450,30 @@ describe('UsersService', () => {
     );
   });
 
+  it('selects identityType for token database revalidation', async () => {
+    usersRepository.findOne?.mockResolvedValue({
+      email: 'user@example.com',
+      id: 'user-1',
+      identityType: UserIdentityType.Human,
+      roleId: 'role-team-member',
+      status: 'active',
+    });
+
+    await service.findTokenValidationUser('user-1');
+
+    expect(usersRepository.findOne).toHaveBeenCalledWith({
+      select: {
+        email: true,
+        id: true,
+        identityType: true,
+        passwordChangedAt: true,
+        roleId: true,
+        status: true,
+      },
+      where: { id: 'user-1' },
+    });
+  });
+
   it('allows a Platform Admin to create a global role', async () => {
     const platformAdmin = {
       roleId: 'role-platform-admin',

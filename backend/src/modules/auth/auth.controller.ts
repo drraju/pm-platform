@@ -6,6 +6,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthMeDto } from './dto/auth-me.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -19,11 +20,7 @@ import { RefreshSessionDto } from './dto/refresh-session.dto';
 import { AuthService } from './auth.service';
 
 type AuthenticatedRequest = Request & {
-  user: {
-    userId: string;
-    email: string;
-    roleId: string;
-  };
+  user: AuthenticatedUser;
 };
 
 @ApiTags('auth')

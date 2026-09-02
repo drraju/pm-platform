@@ -1,7 +1,9 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { userIdentityTypes } from '../../../common/enums/user-identity-type.enum';
 import { UsersService } from '../../users/users.service';
+import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 import { JWT_CONFIGURATION } from '../jwt-configuration';
 import type { JwtConfiguration } from '../jwt-configuration';
@@ -23,15 +25,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload) {
-    if (payload.tokenType !== 'access' || !payload.iat) {
+  async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
+    if (
+      payload.tokenType !== 'access' ||
+      !payload.iat ||
+      !userIdentityTypes.includes(payload.identityType)
+    ) {
       throw new UnauthorizedException('Invalid session');
     }
     const user = await this.usersService.findTokenValidationUser(payload.sub);
     if (!user || !['active', 'first_login_pending'].includes(user.status)) {
       throw new UnauthorizedException('Invalid session');
     }
-    if (user.roleId !== payload.roleId || user.email !== payload.email) {
+    if (
+      user.roleId !== payload.roleId ||
+      user.email !== payload.email ||
+      user.identityType !== payload.identityType
+    ) {
       throw new UnauthorizedException('Invalid session');
     }
 
@@ -45,6 +55,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       userId: payload.sub,
       email: user.email,
+      identityType: user.identityType,
       roleId: user.roleId,
     };
   }

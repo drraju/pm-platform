@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { UsersService } from '../../users/users.service';
 import { AuthService } from '../auth.service';
@@ -48,10 +49,11 @@ describe('JWT security policy', () => {
     );
   });
 
-  it('issues HS256 access and refresh tokens with existing claim and TTL semantics', async () => {
+  it('issues HS256 HUMAN access and refresh tokens with existing TTL semantics', async () => {
     usersService.findByEmail.mockResolvedValue({
       email: 'user@example.com',
       id: 'user-1',
+      identityType: UserIdentityType.Human,
       passwordHash: await passwordService.hashPassword('ValidPass1!'),
       roleId: UserRole.TeamMember,
       status: 'active',
@@ -70,6 +72,7 @@ describe('JWT security policy', () => {
       expect.objectContaining({
         aud: 'pm-platform-api',
         email: 'user@example.com',
+        identityType: UserIdentityType.Human,
         iss: 'pm-platform',
         roleId: UserRole.TeamMember,
         sub: 'user-1',
@@ -79,6 +82,7 @@ describe('JWT security policy', () => {
     expect(refresh?.payload).toEqual(
       expect.objectContaining({
         aud: 'pm-platform-refresh',
+        identityType: UserIdentityType.Human,
         iss: 'pm-platform',
         tokenType: 'refresh',
       }),
@@ -91,6 +95,7 @@ describe('JWT security policy', () => {
     const token = jwtService.sign(
       {
         email: 'user@example.com',
+        identityType: UserIdentityType.Human,
         roleId: UserRole.TeamMember,
         sub: 'user-1',
         tokenType: 'refresh',
@@ -114,6 +119,7 @@ describe('JWT security policy', () => {
     const token = jwtService.sign(
       {
         email: 'user@example.com',
+        identityType: UserIdentityType.Human,
         roleId: UserRole.TeamMember,
         sub: 'user-1',
         tokenType: 'access',
@@ -134,7 +140,189 @@ describe('JWT security policy', () => {
     await expect(authenticate(strategy, token)).rejects.toBeDefined();
     expect(usersService.findTokenValidationUser).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [UserIdentityType.Service, UserIdentityType.Human],
+    [UserIdentityType.Human, UserIdentityType.Service],
+  ])(
+    'rejects token identity %s for database identity %s',
+    async (tokenIdentityType, databaseIdentityType) => {
+      usersService.findTokenValidationUser.mockResolvedValue({
+        email: 'user@example.com',
+        id: 'user-1',
+        identityType: databaseIdentityType,
+        passwordChangedAt: null,
+        roleId: UserRole.TeamMember,
+        status: 'active',
+      });
+      const token = signAccessToken(jwtService, {
+        identityType: tokenIdentityType,
+      });
+      const strategy = new JwtStrategy(
+        usersService as unknown as UsersService,
+        jwtConfiguration,
+      );
+
+      await expect(authenticate(strategy, token)).rejects.toBeDefined();
+      expect(usersService.findTokenValidationUser).toHaveBeenCalledWith(
+        'user-1',
+      );
+    },
+  );
+
+  it('accepts a matching identity and exposes it in request.user context', async () => {
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'user@example.com',
+      id: 'user-1',
+      identityType: UserIdentityType.Human,
+      passwordChangedAt: null,
+      roleId: UserRole.TeamMember,
+      status: 'active',
+    });
+    const strategy = new JwtStrategy(
+      usersService as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(
+      authenticate(strategy, signAccessToken(jwtService)),
+    ).resolves.toEqual({
+      email: 'user@example.com',
+      identityType: UserIdentityType.Human,
+      roleId: UserRole.TeamMember,
+      userId: 'user-1',
+    });
+  });
+
+  it('rejects a correctly signed legacy access token without identityType', async () => {
+    const token = jwtService.sign(
+      {
+        email: 'user@example.com',
+        roleId: UserRole.TeamMember,
+        sub: 'user-1',
+        tokenType: 'access',
+      },
+      accessSignOptions(),
+    );
+    const strategy = new JwtStrategy(
+      usersService as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(authenticate(strategy, token)).rejects.toBeDefined();
+    expect(usersService.findTokenValidationUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects access tokens with the wrong issuer', async () => {
+    const token = jwtService.sign(
+      accessClaims(),
+      accessSignOptions({ issuer: 'untrusted-issuer' }),
+    );
+    const strategy = new JwtStrategy(
+      usersService as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(authenticate(strategy, token)).rejects.toBeDefined();
+    expect(usersService.findTokenValidationUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects access tokens with the wrong audience', async () => {
+    const token = jwtService.sign(
+      accessClaims(),
+      accessSignOptions({ audience: 'untrusted-audience' }),
+    );
+    const strategy = new JwtStrategy(
+      usersService as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(authenticate(strategy, token)).rejects.toBeDefined();
+    expect(usersService.findTokenValidationUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects expired access tokens', async () => {
+    const token = jwtService.sign(
+      accessClaims(),
+      accessSignOptions({ expiresIn: -1 }),
+    );
+    const strategy = new JwtStrategy(
+      usersService as unknown as UsersService,
+      jwtConfiguration,
+    );
+
+    await expect(authenticate(strategy, token)).rejects.toBeDefined();
+    expect(usersService.findTokenValidationUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a signed refresh token when identityType differs from the database', async () => {
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'user@example.com',
+      id: 'user-1',
+      identityType: UserIdentityType.Human,
+      passwordChangedAt: null,
+      roleId: UserRole.TeamMember,
+      status: 'active',
+    });
+    const token = jwtService.sign(
+      {
+        ...accessClaims(),
+        identityType: UserIdentityType.Service,
+        tokenType: 'refresh',
+      },
+      {
+        algorithm: jwtConfiguration.algorithm,
+        audience: jwtConfiguration.refreshAudience,
+        expiresIn: jwtConfiguration.refreshExpiresIn,
+        issuer: jwtConfiguration.issuer,
+        secret: jwtConfiguration.refreshSecret,
+      },
+    );
+
+    await expect(authService.refresh(token)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
 });
+
+function accessClaims(
+  overrides: Partial<{
+    email: string;
+    identityType: UserIdentityType;
+    roleId: UserRole;
+    sub: string;
+    tokenType: 'access';
+  }> = {},
+) {
+  return {
+    email: 'user@example.com',
+    identityType: UserIdentityType.Human,
+    roleId: UserRole.TeamMember,
+    sub: 'user-1',
+    tokenType: 'access' as const,
+    ...overrides,
+  };
+}
+
+function accessSignOptions(
+  overrides: Partial<JwtSignOptions> = {},
+): JwtSignOptions {
+  return {
+    algorithm: jwtConfiguration.algorithm,
+    audience: jwtConfiguration.accessAudience,
+    expiresIn: jwtConfiguration.accessExpiresIn,
+    issuer: jwtConfiguration.issuer,
+    secret: jwtConfiguration.accessSecret,
+    ...overrides,
+  };
+}
+
+function signAccessToken(
+  jwtService: JwtService,
+  overrides: Parameters<typeof accessClaims>[0] = {},
+): string {
+  return jwtService.sign(accessClaims(overrides), accessSignOptions());
+}
 
 function tokenLifetime(payload: string | Record<string, unknown> | null) {
   if (!payload || typeof payload === 'string') {
