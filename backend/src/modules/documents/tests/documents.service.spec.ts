@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { UserRole } from '../../../common/enums/user-role.enum';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { DocumentsService } from '../documents.service';
 import {
   DocumentApprovalStatus,
@@ -14,6 +15,7 @@ import {
 function authorizationPolicy(
   overrides: {
     canManageProject?: boolean;
+    canMutateProjectDomain?: boolean;
     canViewProject?: boolean;
     globalRole?: UserRole;
     isExternalActor?: boolean;
@@ -23,6 +25,12 @@ function authorizationPolicy(
     canManageProject: jest
       .fn()
       .mockResolvedValue(overrides.canManageProject ?? true),
+    canMutateProjectDomain: jest
+      .fn()
+      .mockResolvedValue(
+        overrides.canMutateProjectDomain ??
+          overrides.globalRole !== UserRole.Executive,
+      ),
     canViewProject: jest
       .fn()
       .mockResolvedValue(overrides.canViewProject ?? true),
@@ -277,6 +285,45 @@ describe('DocumentsService', () => {
         executiveActor,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(documentRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('denies a SERVICE document create at the project-domain ceiling before persistence', async () => {
+    const documentRepository = repository<ProjectDocument>();
+    const projectRepository = repository<{ id: string }>();
+    projectRepository.findOne.mockResolvedValue({
+      id: storedDocument.projectId,
+    });
+    const auth = authorizationPolicy({ canMutateProjectDomain: false });
+    const { service } = createService(
+      documentRepository,
+      projectRepository,
+      repository<DocumentType>(),
+      repository<DocumentCategory>(),
+      repository<{ id: string }>(),
+      auth,
+    );
+    const serviceActor = {
+      email: 'service@example.com',
+      identityType: UserIdentityType.Service,
+      roleId: 'role-PLATFORM_ADMIN',
+      userId: 'service-id',
+    };
+
+    await expect(
+      service.create(
+        {
+          documentType: 'Test Plan',
+          externalUrl: 'https://example.com/plan',
+          projectId: storedDocument.projectId,
+          storageProvider: DocumentStorageProvider.OTHER,
+          title: 'Plan',
+        },
+        serviceActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(auth.canMutateProjectDomain).toHaveBeenCalledWith(serviceActor);
     expect(documentRepository.save).not.toHaveBeenCalled();
   });
 

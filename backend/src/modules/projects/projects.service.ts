@@ -1083,7 +1083,10 @@ export class ProjectsService {
   }
 
   private async ensurePlatformAdmin(actor?: AuthenticatedActor): Promise<void> {
-    if (!actor?.roleId) {
+    if (
+      !actor?.roleId ||
+      !(await this.authorizationPolicyService.canMutateProjectDomain(actor))
+    ) {
       throw new ForbiddenException('Platform administrator access is required');
     }
 

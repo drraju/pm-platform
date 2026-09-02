@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectRole } from '../enums/project-role.enum';
+import { UserIdentityType } from '../enums/user-identity-type.enum';
 import { UserRole } from '../enums/user-role.enum';
 import { ProjectMember } from '../../modules/projects/entities/project-member.entity';
 import { Project } from '../../modules/projects/entities/project.entity';
@@ -11,7 +12,7 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from './authorization-policy.service';
-import { PermissionKey } from './permissions';
+import { PermissionKey, serviceUserPermissionKeys } from './permissions';
 
 type MockRepository<T extends object = object> = Partial<
   Record<keyof Repository<T>, jest.Mock>
@@ -387,6 +388,115 @@ describe('AuthorizationPolicyService', () => {
     expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['no permissions', []],
+    ['external read permissions', [...serviceUserPermissionKeys]],
+    ['every available permission', Object.values(PermissionKey)],
+  ])(
+    'denies SERVICE project mutation with %s while preserving its read grants',
+    async (_permissionScenario, grantedPermissions) => {
+      const serviceActor = actor(
+        UserRole.PlatformAdmin,
+        'service-user',
+        UserIdentityType.Service,
+      );
+      permissionOverridesByRoleName.set(
+        UserRole.PlatformAdmin,
+        grantedPermissions,
+      );
+
+      await expect(service.canMutateProjectDomain(serviceActor)).resolves.toBe(
+        false,
+      );
+
+      const effectivePermissions =
+        await service.getGrantedPermissionKeys(serviceActor);
+      for (const permission of grantedPermissions) {
+        const isMutationPermission =
+          !permission.endsWith('.read') &&
+          ![
+            PermissionKey.DashboardView,
+            PermissionKey.ExecutiveView,
+            PermissionKey.ExternalApiAccess,
+            PermissionKey.IntegrationManage,
+            PermissionKey.NotificationManage,
+            PermissionKey.PermissionManage,
+            PermissionKey.PortfolioView,
+            PermissionKey.RoleManage,
+            PermissionKey.UserManage,
+          ].includes(permission);
+        expect(effectivePermissions.has(permission)).toBe(
+          !isMutationPermission,
+        );
+      }
+    },
+  );
+
+  it.each([ProjectRole.Owner, ProjectRole.Manager])(
+    'makes SERVICE identity dominate hostile %s membership, governance, assignment, and all permissions',
+    async (projectRole) => {
+      const serviceActor = actor(
+        UserRole.PlatformAdmin,
+        'service-user',
+        UserIdentityType.Service,
+      );
+      permissionOverridesByRoleName.set(
+        UserRole.PlatformAdmin,
+        Object.values(PermissionKey),
+      );
+      membershipsByKey.set(`${projectId}:service-user`, projectRole);
+      assignedTaskKeys.add(`${projectId}:service-user`);
+      for (const governanceField of [
+        'ownerId',
+        'businessOwnerId',
+        'deliveryLeadId',
+        'executiveSponsorId',
+      ]) {
+        projectGovernorAssignments.add(
+          `${projectId}:${governanceField}:service-user`,
+        );
+      }
+
+      await expect(
+        service.canManageProject(projectId, serviceActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canDeleteProject(projectId, serviceActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canManageTask(projectId, serviceActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canManageRaid(projectId, serviceActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.canContributeRaid(projectId, serviceActor),
+      ).resolves.toBe(false);
+      await expect(
+        service.hasPermission(serviceActor, PermissionKey.ProjectCreate),
+      ).resolves.toBe(false);
+      await expect(
+        service.hasPermission(
+          serviceActor,
+          PermissionKey.ResourceAssignmentCreate,
+        ),
+      ).resolves.toBe(false);
+      await expect(service.canMutateProjectDomain(serviceActor)).resolves.toBe(
+        false,
+      );
+
+      await expect(
+        service.hasPermission(serviceActor, PermissionKey.ProjectRead),
+      ).resolves.toBe(true);
+      await expect(
+        service.canViewProject(projectId, serviceActor),
+      ).resolves.toBe(true);
+      expect(projectsRepository.findOne).not.toHaveBeenCalled();
+      expect(projectMembersRepository.findOne).not.toHaveBeenCalled();
+      expect(tasksRepository.findOne).not.toHaveBeenCalled();
+    },
+  );
+
   it('preserves the Platform Admin project mutation override', async () => {
     const platformActor = actor(UserRole.PlatformAdmin, 'user-admin');
 
@@ -608,9 +718,11 @@ describe('AuthorizationPolicyService', () => {
 function actor(
   roleName: string,
   userId = `user-${roleName.toLowerCase()}`,
+  identityType = UserIdentityType.Human,
 ): AuthorizationActor {
   return {
     email: `${userId}@example.com`,
+    identityType,
     roleId: `role-${roleName}`,
     userId,
   };

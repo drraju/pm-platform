@@ -8,10 +8,12 @@ import { Task } from '../../modules/tasks/entities/task.entity';
 import { Role } from '../../modules/users/entities/role.entity';
 import { PermissionKey } from './permissions';
 import { UserRole } from '../enums/user-role.enum';
+import { UserIdentityType } from '../enums/user-identity-type.enum';
 
 export type AuthorizationActor = {
   userId: string;
   email?: string;
+  identityType?: UserIdentityType;
   roleId: string;
 };
 
@@ -31,6 +33,39 @@ const executiveDeniedLegacyProjectMutationPermissions = new Set<string>([
   PermissionKey.ResourceAssignmentArchive,
   PermissionKey.ResourceAssignmentCreate,
   PermissionKey.ResourceAssignmentUpdate,
+  PermissionKey.TaskComment,
+  PermissionKey.TaskCreate,
+  PermissionKey.TaskDelete,
+  PermissionKey.TaskReassign,
+  PermissionKey.TaskUpdate,
+]);
+
+const serviceDeniedProjectMutationPermissions = new Set<string>([
+  PermissionKey.ProjectCreate,
+  PermissionKey.ProjectDelete,
+  PermissionKey.ProjectTeamManage,
+  PermissionKey.ProjectUpdate,
+  PermissionKey.RaidCreate,
+  PermissionKey.RaidDelete,
+  PermissionKey.RaidUpdate,
+  PermissionKey.ResourceArchive,
+  PermissionKey.ResourceAvailabilityArchive,
+  PermissionKey.ResourceAvailabilityCreate,
+  PermissionKey.ResourceAvailabilityUpdate,
+  PermissionKey.ResourceAssignmentArchive,
+  PermissionKey.ResourceAssignmentCreate,
+  PermissionKey.ResourceAssignmentUpdate,
+  PermissionKey.ResourceCapacityArchive,
+  PermissionKey.ResourceCapacityCreate,
+  PermissionKey.ResourceCapacityUpdate,
+  PermissionKey.ResourceCreate,
+  PermissionKey.ResourceSkillArchive,
+  PermissionKey.ResourceSkillCreate,
+  PermissionKey.ResourceSkillUpdate,
+  PermissionKey.ResourceUpdate,
+  PermissionKey.SkillArchive,
+  PermissionKey.SkillCreate,
+  PermissionKey.SkillUpdate,
   PermissionKey.TaskComment,
   PermissionKey.TaskCreate,
   PermissionKey.TaskDelete,
@@ -259,6 +294,10 @@ export class AuthorizationPolicyService {
       return false;
     }
 
+    if (actor.identityType === UserIdentityType.Service) {
+      return false;
+    }
+
     return (await this.getActorRoleName(actor)) !== UserRole.Executive;
   }
 
@@ -364,14 +403,21 @@ export class AuthorizationPolicyService {
 
     const permissionKeys =
       role?.permissions?.map((permission) => permission.key) ?? [];
-    if (role?.name !== UserRole.Executive) {
-      return new Set(permissionKeys);
+    const deniedPermissions = new Set<string>();
+    if (actor.identityType === UserIdentityType.Service) {
+      for (const permissionKey of serviceDeniedProjectMutationPermissions) {
+        deniedPermissions.add(permissionKey);
+      }
+    }
+    if (role?.name === UserRole.Executive) {
+      for (const permissionKey of executiveDeniedLegacyProjectMutationPermissions) {
+        deniedPermissions.add(permissionKey);
+      }
     }
 
     return new Set(
       permissionKeys.filter(
-        (permissionKey) =>
-          !executiveDeniedLegacyProjectMutationPermissions.has(permissionKey),
+        (permissionKey) => !deniedPermissions.has(permissionKey),
       ),
     );
   }

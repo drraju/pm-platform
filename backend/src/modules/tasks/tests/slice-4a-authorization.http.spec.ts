@@ -61,6 +61,9 @@ describe('Slice 4A project-scoped HTTP authorization', () => {
     );
 
     const policy = {
+      canMutateProjectDomain: jest.fn(
+        async (actor: Actor) => actor.roleId !== UserRole.Executive,
+      ),
       canViewProject: jest.fn().mockResolvedValue(true),
       getActorRoleName: jest.fn(async (actor: Actor) => actor.roleId),
       getGrantedPermissionKeys: jest.fn().mockResolvedValue(new Set()),

@@ -11,7 +11,10 @@ import {
   PLATFORM_ADMIN_REQUIRED_KEY,
   PermissionKey,
 } from './permissions';
-import { AuthorizationPolicyService } from './authorization-policy.service';
+import {
+  AuthorizationActor,
+  AuthorizationPolicyService,
+} from './authorization-policy.service';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -42,7 +45,7 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<{
-      user?: { email?: string; roleId?: string; userId?: string };
+      user?: Partial<AuthorizationActor>;
     }>();
     const userId = request.user?.userId;
     const roleId = request.user?.roleId;
@@ -52,6 +55,7 @@ export class PermissionsGuard implements CanActivate {
     const grantedPermissions =
       await this.authorizationPolicyService.getGrantedPermissionKeys({
         email: request.user?.email,
+        identityType: request.user?.identityType,
         roleId,
         userId,
       });
@@ -76,6 +80,7 @@ export class PermissionsGuard implements CanActivate {
       platformAdminRequired &&
       !(await this.authorizationPolicyService.isPlatformAdministrator({
         email: request.user?.email,
+        identityType: request.user?.identityType,
         roleId,
         userId,
       }))

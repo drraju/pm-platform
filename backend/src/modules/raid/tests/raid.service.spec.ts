@@ -5,6 +5,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { RaidType } from '../../../common/enums/raid-type.enum';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { Assumption } from '../entities/assumption.entity';
 import { Dependency } from '../entities/dependency.entity';
@@ -260,6 +261,32 @@ describe('RaidService', () => {
     expect(risksRepository.softRemove).not.toHaveBeenCalled();
     expect(raidCommentsRepository.save).not.toHaveBeenCalled();
     expect(raidHistoryRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('denies a SERVICE RAID create before persistence', async () => {
+    const serviceActor = {
+      identityType: UserIdentityType.Service,
+      roleId: 'role-PLATFORM_ADMIN',
+      userId: 'service-1',
+    };
+    authorizationPolicyService.canContributeRaid.mockResolvedValue(false);
+
+    await expect(
+      service.create(
+        {
+          projectId: 'project-1',
+          title: 'Forbidden service risk',
+          type: RaidType.Risk,
+        },
+        serviceActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(authorizationPolicyService.canContributeRaid).toHaveBeenCalledWith(
+      'project-1',
+      serviceActor,
+    );
+    expect(risksRepository.save).not.toHaveBeenCalled();
   });
 
   it('updates an owned RAID item when the actor has item-level update permission', async () => {

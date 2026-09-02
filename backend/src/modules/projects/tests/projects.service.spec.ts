@@ -9,8 +9,10 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { CanonicalCapabilityResolverService } from '../../../common/authz/canonical-capability-resolver.service';
+import { PermissionKey } from '../../../common/authz/permissions';
 import { INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE } from '../../../common/authz/project-role-eligibility';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { TaskDependencyType } from '../../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
@@ -61,6 +63,7 @@ describe('ProjectsService', () => {
     canDeleteProject: jest.Mock;
     canManageProject: jest.Mock;
     canManageTask: jest.Mock;
+    canMutateProjectDomain: jest.Mock;
     hasPermission: jest.Mock;
     isExternalActor: jest.Mock;
   };
@@ -192,6 +195,7 @@ describe('ProjectsService', () => {
       canDeleteProject: jest.fn().mockResolvedValue(true),
       canManageProject: jest.fn().mockResolvedValue(true),
       canManageTask: jest.fn().mockResolvedValue(true),
+      canMutateProjectDomain: jest.fn().mockResolvedValue(true),
       hasPermission: jest.fn().mockResolvedValue(true),
       isExternalActor: jest.fn().mockResolvedValue(false),
     };
@@ -694,6 +698,47 @@ describe('ProjectsService', () => {
     expect(projectsRepository.save).not.toHaveBeenCalled();
     expect(projectMembersRepository.save).not.toHaveBeenCalled();
     expect(projectMembersRepository.softRemove).not.toHaveBeenCalled();
+    expect(projectsRepository.manager.transaction).not.toHaveBeenCalled();
+  });
+
+  it('denies a SERVICE project create through the legacy permission path before persistence', async () => {
+    const serviceActor = {
+      email: 'service@example.com',
+      identityType: UserIdentityType.Service,
+      roleId: 'role-PLATFORM_ADMIN',
+      userId: 'service-id',
+    };
+    authorizationPolicyService.hasPermission.mockResolvedValue(false);
+
+    await expect(
+      service.create({ name: 'Forbidden service project' }, serviceActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(authorizationPolicyService.hasPermission).toHaveBeenCalledWith(
+      serviceActor,
+      PermissionKey.ProjectCreate,
+    );
+    expect(projectsRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('denies a SERVICE project purge through the direct Platform Admin legacy path', async () => {
+    const serviceActor = {
+      email: 'service@example.com',
+      identityType: UserIdentityType.Service,
+      roleId: 'role-PLATFORM_ADMIN',
+      userId: 'service-id',
+    };
+    authorizationPolicyService.canMutateProjectDomain.mockResolvedValue(false);
+
+    await expect(service.purge(projectId, serviceActor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    expect(
+      authorizationPolicyService.canMutateProjectDomain,
+    ).toHaveBeenCalledWith(serviceActor);
+    expect(rolesRepository.findOne).not.toHaveBeenCalled();
+    expect(projectsRepository.findOne).not.toHaveBeenCalled();
     expect(projectsRepository.manager.transaction).not.toHaveBeenCalled();
   });
 

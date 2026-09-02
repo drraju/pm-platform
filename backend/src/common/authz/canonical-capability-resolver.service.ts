@@ -48,33 +48,32 @@ const taskCapabilities = new Set([
   'task.delete',
 ]);
 
-const executiveProjectMutationCapabilities: ReadonlySet<CanonicalCapability> =
-  new Set([
-    'project.create',
-    'project.edit_metadata',
-    'project.manage_team',
-    'project.archive',
-    'project.restore',
-    'project.purge',
-    'task.create',
-    'task.edit_plan',
-    'task.edit_execution',
-    'task.record_update',
-    'task.assign',
-    'task.reassign',
-    'task.complete',
-    'task.move',
-    'task.delete',
-    'document.create',
-    'document.edit',
-    'document.approve',
-    'document.move',
-    'document.delete',
-    'raid.create',
-    'raid.update',
-    'raid.comment',
-    'raid.delete',
-  ]);
+const projectMutationCapabilities: ReadonlySet<CanonicalCapability> = new Set([
+  'project.create',
+  'project.edit_metadata',
+  'project.manage_team',
+  'project.archive',
+  'project.restore',
+  'project.purge',
+  'task.create',
+  'task.edit_plan',
+  'task.edit_execution',
+  'task.record_update',
+  'task.assign',
+  'task.reassign',
+  'task.complete',
+  'task.move',
+  'task.delete',
+  'document.create',
+  'document.edit',
+  'document.approve',
+  'document.move',
+  'document.delete',
+  'raid.create',
+  'raid.update',
+  'raid.comment',
+  'raid.delete',
+]);
 
 const summaryTaskRestrictedCapabilities = new Set([
   'task.edit_execution',
@@ -93,13 +92,14 @@ export class CanonicalCapabilityResolverService {
   ) {}
 
   async resolve(input: CapabilityResolverInput): Promise<CapabilityDecision> {
+    const mutationDenied =
+      projectMutationCapabilities.has(input.capability) &&
+      !(await this.authorizationPolicyService.canMutateProjectDomain(
+        input.actor,
+      ));
     const audience = await this.resolveAudience(input.actor);
 
-    if (
-      executiveProjectMutationCapabilities.has(input.capability) &&
-      (await this.authorizationPolicyService.getActorRoleName(input.actor)) ===
-        UserRole.Executive
-    ) {
+    if (mutationDenied) {
       return this.deny(audience, 'MISSING_PERMISSION');
     }
 

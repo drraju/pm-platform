@@ -37,6 +37,7 @@ describe('TaskAssignmentService', () => {
   let projectMembersRepository: { findOne: jest.Mock };
   let usersRepository: { findOne: jest.Mock };
   let policy: {
+    canMutateProjectDomain: jest.Mock;
     getActorRoleName: jest.Mock;
     getProjectMembershipRole: jest.Mock;
     isExternalActor: jest.Mock;
@@ -83,6 +84,10 @@ describe('TaskAssignmentService', () => {
       findOne: jest.fn(async ({ where }) => users.get(where.id) ?? null),
     };
     policy = {
+      canMutateProjectDomain: jest.fn(
+        async (resolvedActor: AuthorizationActor) =>
+          resolvedActor.roleId !== UserRole.Executive,
+      ),
       getActorRoleName: jest.fn(
         async (resolvedActor: AuthorizationActor) => resolvedActor.roleId,
       ),

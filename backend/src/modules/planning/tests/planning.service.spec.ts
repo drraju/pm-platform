@@ -11,6 +11,7 @@ import { MilestoneCategory } from '../../../common/enums/milestone-category.enum
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { SchedulingContextFactory } from '../../../common/scheduling/scheduling-context.factory';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { Project } from '../../projects/entities/project.entity';
@@ -1860,6 +1861,35 @@ describe('PlanningService', () => {
         userId,
       }),
     );
+  });
+
+  it('denies a SERVICE planning capacity mutation before persistence', async () => {
+    const serviceActor = {
+      email: 'service@example.com',
+      identityType: UserIdentityType.Service,
+      roleId: 'role-PLATFORM_ADMIN',
+      userId: 'service-id',
+    };
+    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+
+    await expect(
+      service.createResourceCapacity(
+        projectId,
+        {
+          capacityDate: '2026-07-01',
+          capacityMinutes: 420,
+          resourceUnit: ResourceAllocationUnit.User,
+          userId,
+        },
+        serviceActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(authorizationPolicyService.canManageProject).toHaveBeenCalledWith(
+      projectId,
+      serviceActor,
+    );
+    expect(resourceCapacitiesRepository.save).not.toHaveBeenCalled();
   });
 
   it('denies Executive project capacity, allocation, and portfolio dependency mutations', async () => {

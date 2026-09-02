@@ -1,10 +1,15 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { CanonicalCapabilityResolverService } from '../../../common/authz/canonical-capability-resolver.service';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
@@ -666,6 +671,32 @@ describe('TasksService', () => {
         taskKind: TaskKind.Milestone,
       }),
     );
+  });
+
+  it('denies a SERVICE task create through the canonical capability boundary before persistence', async () => {
+    const serviceActor = {
+      email: 'service@example.com',
+      identityType: UserIdentityType.Service,
+      roleId: 'role-PLATFORM_ADMIN',
+      userId: 'service-id',
+    };
+    canonicalCapabilityResolver.resolve.mockResolvedValue({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'MISSING_PERMISSION',
+    });
+
+    await expect(
+      service.create({ projectId, title: 'Forbidden task' }, serviceActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: serviceActor,
+        capability: 'task.create',
+      }),
+    );
+    expect(tasksRepository.save).not.toHaveBeenCalled();
   });
 
   it('lists all tasks with project and assignee relations', async () => {

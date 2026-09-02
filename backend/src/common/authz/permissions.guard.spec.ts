@@ -1,5 +1,6 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { UserIdentityType } from '../enums/user-identity-type.enum';
 import {
   ANY_PERMISSIONS_KEY,
   PERMISSIONS_KEY,
@@ -90,6 +91,7 @@ describe('PermissionsGuard', () => {
       authorizationPolicyService.getGrantedPermissionKeys,
     ).toHaveBeenCalledWith({
       email: 'user@example.com',
+      identityType: UserIdentityType.Human,
       roleId: 'role-1',
       userId: 'user-1',
     });
@@ -110,6 +112,7 @@ describe('PermissionsGuard', () => {
       authorizationPolicyService.isPlatformAdministrator,
     ).toHaveBeenCalledWith({
       email: 'user@example.com',
+      identityType: UserIdentityType.Human,
       roleId: 'role-1',
       userId: 'user-1',
     });
@@ -158,6 +161,7 @@ function createContext(): ExecutionContext {
       getRequest: () => ({
         user: {
           email: 'user@example.com',
+          identityType: UserIdentityType.Human,
           roleId: 'role-1',
           userId: 'user-1',
         },

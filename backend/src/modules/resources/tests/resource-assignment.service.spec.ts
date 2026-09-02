@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
+import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { Repository } from 'typeorm';
 import {
   CreateResourceAssignmentCommand,
@@ -125,6 +126,36 @@ describe('ResourceAssignmentService', () => {
       expect(assignmentsRepository.manager.transaction).not.toHaveBeenCalled();
     },
   );
+
+  it('denies a SERVICE assignment mutation at the explicit project-domain ceiling', async () => {
+    const serviceActor = {
+      email: 'service@example.com',
+      identityType: UserIdentityType.Service,
+      roleId: 'role-PLATFORM_ADMIN',
+      userId: 'service-id',
+    };
+    authorizationPolicyService.canMutateProjectDomain.mockResolvedValue(false);
+
+    await expect(
+      service.createAssignment(
+        {
+          allocationPercent: 50,
+          endDate: '2026-07-18',
+          projectId: 'project-id',
+          resourceId: 'resource-id',
+          startDate: '2026-07-11',
+          status: ResourceAssignmentStatus.Active,
+          taskId: 'task-id',
+        },
+        serviceActor,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(
+      authorizationPolicyService.canMutateProjectDomain,
+    ).toHaveBeenCalledWith(serviceActor);
+    expect(assignmentsRepository.manager.transaction).not.toHaveBeenCalled();
+  });
 
   it('creates an assignment in a transaction with audit metadata', async () => {
     const input: CreateResourceAssignmentCommand = {

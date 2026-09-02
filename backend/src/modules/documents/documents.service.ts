@@ -9,7 +9,6 @@ import {
   AuthorizationActor,
   AuthorizationPolicyService,
 } from '../../common/authz/authorization-policy.service';
-import { UserRole } from '../../common/enums/user-role.enum';
 import { Project } from '../projects/entities/project.entity';
 import { User } from '../users/entities/user.entity';
 import {
@@ -389,9 +388,9 @@ export class DocumentsService {
   private async ensureDocumentMutationAllowed(
     actor?: AuthorizationActor,
   ): Promise<void> {
-    const roleName =
-      await this.authorizationPolicyService.getActorRoleName(actor);
-    if (roleName === UserRole.Executive) {
+    if (
+      !(await this.authorizationPolicyService.canMutateProjectDomain(actor))
+    ) {
       throw new ForbiddenException('Document mutation is not permitted');
     }
   }

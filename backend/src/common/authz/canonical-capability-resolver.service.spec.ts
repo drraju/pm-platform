@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ProjectRole } from '../enums/project-role.enum';
+import { UserIdentityType } from '../enums/user-identity-type.enum';
 import {
   AuthorizationActor,
   AuthorizationPolicyService,
@@ -12,6 +13,7 @@ import { PermissionKey } from './permissions';
 
 type MockAuthorizationPolicy = {
   canManageProject: jest.Mock;
+  canMutateProjectDomain: jest.Mock;
   canViewProject: jest.Mock;
   getActorRoleName: jest.Mock;
   getProjectMembershipRole: jest.Mock;
@@ -34,6 +36,12 @@ describe('CanonicalCapabilityResolverService', () => {
     memberships = new Map();
     policy = {
       canManageProject: jest.fn().mockResolvedValue(true),
+      canMutateProjectDomain: jest.fn((resolvedActor: AuthorizationActor) =>
+        Promise.resolve(
+          resolvedActor.identityType !== UserIdentityType.Service &&
+            resolvedActor.roleId !== 'role-EXECUTIVE',
+        ),
+      ),
       canViewProject: jest.fn().mockResolvedValue(true),
       getActorRoleName: jest.fn(async (resolvedActor: AuthorizationActor) =>
         resolvedActor.roleId.replace(/^role-/, ''),
@@ -222,6 +230,72 @@ describe('CanonicalCapabilityResolverService', () => {
 
     expect(policy.canManageProject).not.toHaveBeenCalled();
   });
+
+  it.each([ProjectRole.Owner, ProjectRole.Manager])(
+    'denies every SERVICE mutation before hostile %s membership and lower-level grants are resolved',
+    async (projectRole) => {
+      const actor = createActor(
+        'PLATFORM_ADMIN',
+        actorId,
+        UserIdentityType.Service,
+      );
+      policy.canMutateProjectDomain.mockResolvedValue(false);
+      setMembership(actor.userId, projectRole);
+      setMembership(targetUserId, ProjectRole.Contributor);
+
+      for (const capability of [
+        'project.create',
+        'project.edit_metadata',
+        'project.manage_team',
+        'project.archive',
+        'project.restore',
+        'project.purge',
+        'task.create',
+        'task.edit_plan',
+        'task.edit_execution',
+        'task.record_update',
+        'task.assign',
+        'task.reassign',
+        'task.complete',
+        'task.move',
+        'task.delete',
+        'document.create',
+        'document.edit',
+        'document.approve',
+        'document.move',
+        'document.delete',
+        'raid.create',
+        'raid.update',
+        'raid.comment',
+        'raid.delete',
+      ] as const) {
+        await expect(
+          service.resolve({
+            actor,
+            capability,
+            destinationProjectId:
+              capability === 'task.move' ? destinationProjectId : undefined,
+            requestedAssigneeId:
+              capability === 'task.assign' || capability === 'task.reassign'
+                ? targetUserId
+                : undefined,
+            resource: capability.startsWith('task.')
+              ? taskResource({ assigneeId: actor.userId })
+              : capability.startsWith('document.')
+                ? { projectId, type: 'document' }
+                : capability.startsWith('raid.')
+                  ? { projectId, type: 'raid' }
+                  : { projectId, type: 'project' },
+          }),
+        ).resolves.toEqual(deniedDecision('MISSING_PERMISSION'));
+      }
+
+      expect(policy.isPlatformAdministrator).not.toHaveBeenCalled();
+      expect(policy.getProjectMembershipRole).not.toHaveBeenCalled();
+      expect(policy.canManageProject).not.toHaveBeenCalled();
+      expect(policy.hasPermission).not.toHaveBeenCalled();
+    },
+  );
 
   it('grants owner and manager the complete project task capability set', async () => {
     for (const projectRole of [ProjectRole.Owner, ProjectRole.Manager]) {
@@ -793,8 +867,13 @@ describe('classifyTaskAssignment', () => {
   );
 });
 
-function createActor(globalRole: string, userId = actorId): AuthorizationActor {
+function createActor(
+  globalRole: string,
+  userId = actorId,
+  identityType = UserIdentityType.Human,
+): AuthorizationActor {
   return {
+    identityType,
     roleId: `role-${globalRole}`,
     userId,
   };
