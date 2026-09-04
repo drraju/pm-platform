@@ -13,6 +13,7 @@ import { ServiceAccountAdministrationService } from './service-account-administr
 import { ServiceAccountsController } from './service-accounts.controller';
 import { ExternalIdentity } from './entities/external-identity.entity';
 import { ExternalIdentitiesService } from './external-identities.service';
+import { GoogleIdentityLinkingService } from './google-identity-linking.service';
 
 @Module({
   imports: [
@@ -32,7 +33,12 @@ import { ExternalIdentitiesService } from './external-identities.service';
     PasswordUpdateService,
     ServiceAccountAdministrationService,
     ExternalIdentitiesService,
+    GoogleIdentityLinkingService,
   ],
-  exports: [ExternalIdentitiesService, UsersService],
+  exports: [
+    ExternalIdentitiesService,
+    GoogleIdentityLinkingService,
+    UsersService,
+  ],
 })
 export class UsersModule {}

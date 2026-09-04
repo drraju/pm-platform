@@ -21,6 +21,7 @@ import {
   GOOGLE_OIDC_CONFIGURATION,
 } from './oidc/google-oidc.configuration';
 import { GoogleOidcController } from './oidc/google-oidc.controller';
+import { GoogleOidcAuthenticationService } from './oidc/google-oidc-authentication.service';
 import { GoogleOidcProtocolService } from './oidc/google-oidc-protocol.service';
 import {
   OIDC_RANDOM_SOURCE,
@@ -61,6 +62,7 @@ import { GoogleWorkspaceIdentityValidator } from './oidc/google-workspace-identi
     PasswordResetTokenService,
     PasswordUpdateService,
     PmSessionIssuer,
+    GoogleOidcAuthenticationService,
     GoogleOidcClient,
     GoogleOidcProtocolService,
     GoogleWorkspaceIdentityValidator,

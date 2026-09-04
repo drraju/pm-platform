@@ -1,11 +1,15 @@
 import { Controller, Get, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { GoogleOidcAuthenticationService } from './google-oidc-authentication.service';
 import { GoogleOidcProtocolService } from './google-oidc-protocol.service';
 import type { OidcCallbackQuery } from './google-oidc-protocol.service';
 
 @Controller('auth/google/oidc')
 export class GoogleOidcController {
-  constructor(private readonly protocol: GoogleOidcProtocolService) {}
+  constructor(
+    private readonly protocol: GoogleOidcProtocolService,
+    private readonly authentication: GoogleOidcAuthenticationService,
+  ) {}
 
   @Get('authorize')
   async authorize(@Res() response: Response): Promise<void> {
@@ -34,7 +38,8 @@ export class GoogleOidcController {
       query,
       correlationCookie,
     );
-    response.json(identity);
+    const session = await this.authentication.authenticate(identity);
+    response.json(session);
   }
 }
 
