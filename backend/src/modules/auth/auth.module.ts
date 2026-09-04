@@ -9,6 +9,7 @@ import { PasswordResetToken } from './entities/password-reset-token.entity';
 import { PasswordModule } from './password.module';
 import { PasswordResetTokenService } from './password-reset-token.service';
 import { PasswordUpdateService } from './password-update.service';
+import { PmSessionIssuer } from './pm-session-issuer.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { getJwtConfiguration, JWT_CONFIGURATION } from './jwt-configuration';
 
@@ -39,6 +40,7 @@ import { getJwtConfiguration, JWT_CONFIGURATION } from './jwt-configuration';
     JwtStrategy,
     PasswordResetTokenService,
     PasswordUpdateService,
+    PmSessionIssuer,
     {
       provide: JWT_CONFIGURATION,
       useFactory: getJwtConfiguration,

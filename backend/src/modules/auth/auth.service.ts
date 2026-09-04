@@ -10,6 +10,11 @@ import {
 } from '../../common/enums/user-identity-type.enum';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
+import {
+  AuthenticationMethod,
+  authenticationMethods,
+  SessionAuthenticationContext,
+} from './authentication-method';
 import { ChangePasswordResponseDto } from './dto/change-password-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -23,7 +28,8 @@ import {
   PasswordUpdateService,
 } from './password-update.service';
 import { PasswordService } from './password.service';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { PmSessionIssuer } from './pm-session-issuer.service';
+import { CompatibleJwtPayload } from './interfaces/jwt-payload.interface';
 import { JWT_CONFIGURATION } from './jwt-configuration';
 import { isTokenCurrentForPasswordState } from './token-password-state';
 import type { JwtConfiguration } from './jwt-configuration';
@@ -36,6 +42,7 @@ export class AuthService {
     private readonly passwordService: PasswordService,
     private readonly passwordResetTokenService: PasswordResetTokenService,
     private readonly passwordUpdateService: PasswordUpdateService,
+    private readonly pmSessionIssuer: PmSessionIssuer,
     @Inject(JWT_CONFIGURATION)
     private readonly jwtConfiguration: JwtConfiguration,
   ) {}
@@ -58,11 +65,17 @@ export class AuthService {
     }
 
     this.validateAuthenticationInvariant(user, 'Invalid credentials');
+    const authenticatedAt = Math.floor(Date.now() / 1000);
 
     await this.usersService.recordLogin(user.id);
-    return this.issueSession(user, {
-      requiresPasswordChange: user.status === 'first_login_pending',
-    });
+    return this.pmSessionIssuer.issue(
+      user,
+      {
+        authenticatedAt,
+        authenticationMethod: AuthenticationMethod.Local,
+      },
+      { requiresPasswordChange: user.status === 'first_login_pending' },
+    );
   }
 
   getMe(userId: string) {
@@ -70,14 +83,17 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string): Promise<SessionDto> {
-    let payload: JwtPayload;
+    let payload: CompatibleJwtPayload;
     try {
-      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
-        algorithms: [this.jwtConfiguration.algorithm],
-        audience: this.jwtConfiguration.refreshAudience,
-        issuer: this.jwtConfiguration.issuer,
-        secret: this.jwtConfiguration.refreshSecret,
-      });
+      payload = await this.jwtService.verifyAsync<CompatibleJwtPayload>(
+        refreshToken,
+        {
+          algorithms: [this.jwtConfiguration.algorithm],
+          audience: this.jwtConfiguration.refreshAudience,
+          issuer: this.jwtConfiguration.issuer,
+          secret: this.jwtConfiguration.refreshSecret,
+        },
+      );
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -89,6 +105,7 @@ export class AuthService {
     ) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+    const authenticationContext = this.getAuthenticationContext(payload);
     const user = await this.usersService.findTokenValidationUser(payload.sub);
     if (
       !user ||
@@ -114,7 +131,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    return this.issueSession(user, {
+    return this.pmSessionIssuer.issue(user, authenticationContext, {
       requiresPasswordChange: user.status === 'first_login_pending',
     });
   }
@@ -178,55 +195,36 @@ export class AuthService {
     };
   }
 
-  private issueSession(
-    user: Pick<
-      User,
-      'email' | 'id' | 'identityType' | 'passwordChangedAt' | 'roleId'
-    >,
-    options: { requiresPasswordChange?: boolean } = {},
-  ): SessionDto {
-    const accessToken = this.jwtService.sign(
-      {
-        sub: user.id,
-        email: user.email,
-        identityType: user.identityType,
-        passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
-        roleId: user.roleId,
-        tokenType: 'access',
-      },
-      {
-        algorithm: this.jwtConfiguration.algorithm,
-        audience: this.jwtConfiguration.accessAudience,
-        expiresIn: this.jwtConfiguration.accessExpiresIn,
-        issuer: this.jwtConfiguration.issuer,
-        secret: this.jwtConfiguration.accessSecret,
-      },
-    );
-    const refreshToken = this.jwtService.sign(
-      {
-        sub: user.id,
-        email: user.email,
-        identityType: user.identityType,
-        passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
-        roleId: user.roleId,
-        tokenType: 'refresh',
-      },
-      {
-        algorithm: this.jwtConfiguration.algorithm,
-        audience: this.jwtConfiguration.refreshAudience,
-        expiresIn: this.jwtConfiguration.refreshExpiresIn,
-        issuer: this.jwtConfiguration.issuer,
-        secret: this.jwtConfiguration.refreshSecret,
-      },
-    );
+  private getAuthenticationContext(
+    payload: CompatibleJwtPayload,
+  ): SessionAuthenticationContext {
+    if (
+      payload.authenticationMethod !== undefined &&
+      authenticationMethods.includes(payload.authenticationMethod) &&
+      typeof payload.authenticatedAt === 'number' &&
+      Number.isInteger(payload.authenticatedAt) &&
+      payload.authenticatedAt >= 0
+    ) {
+      return {
+        authenticatedAt: payload.authenticatedAt,
+        authenticationMethod: payload.authenticationMethod,
+      };
+    }
 
-    return {
-      accessToken,
-      refreshToken,
-      ...(options.requiresPasswordChange
-        ? { requiresPasswordChange: true }
-        : {}),
-    };
+    if (
+      payload.authenticationMethod === undefined &&
+      payload.authenticatedAt === undefined &&
+      payload.iat
+    ) {
+      // Pre-Slice 2 tokens have no explicit provenance; their original iat is
+      // the only available local authentication boundary during refresh.
+      return {
+        authenticatedAt: payload.iat,
+        authenticationMethod: AuthenticationMethod.Local,
+      };
+    }
+
+    throw new UnauthorizedException('Invalid refresh token');
   }
 
   private validateAuthenticationInvariant(

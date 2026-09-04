@@ -11,7 +11,7 @@ import {
 } from '../../../common/enums/user-identity-type.enum';
 import { UsersService } from '../../users/users.service';
 import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
-import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { CompatibleJwtPayload } from '../interfaces/jwt-payload.interface';
 import { JWT_CONFIGURATION } from '../jwt-configuration';
 import { isTokenCurrentForPasswordState } from '../token-password-state';
 import type { JwtConfiguration } from '../jwt-configuration';
@@ -33,7 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
+  async validate(payload: CompatibleJwtPayload): Promise<AuthenticatedUser> {
     if (
       payload.tokenType !== 'access' ||
       !payload.iat ||
