@@ -12,25 +12,25 @@ export type ExternalIssueSource = {
 };
 
 export class ExternalIssueDto {
-  @ApiProperty()
+  @ApiProperty({ format: 'uuid', type: String })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ format: 'uuid', type: String })
   projectId: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   title: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   status: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   severity: string;
 
-  @ApiProperty({ format: 'date-time' })
+  @ApiProperty({ format: 'date-time', type: String })
   createdAt: string;
 
-  @ApiProperty({ format: 'date-time' })
+  @ApiProperty({ format: 'date-time', type: String })
   updatedAt: string;
 }
 

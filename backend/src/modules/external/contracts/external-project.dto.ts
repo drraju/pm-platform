@@ -12,25 +12,25 @@ export type ExternalProjectSource = {
 };
 
 export class ExternalProjectDto {
-  @ApiProperty()
+  @ApiProperty({ format: 'uuid', type: String })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   name: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   status: string;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   startDate: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   targetEndDate: string | null;
 
-  @ApiProperty({ format: 'date-time' })
+  @ApiProperty({ format: 'date-time', type: String })
   createdAt: string;
 
-  @ApiProperty({ format: 'date-time' })
+  @ApiProperty({ format: 'date-time', type: String })
   updatedAt: string;
 }
 

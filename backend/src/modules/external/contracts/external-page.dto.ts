@@ -29,7 +29,11 @@ export const EXTERNAL_UPDATED_SINCE_IS_INCLUSIVE = true;
 export const EXTERNAL_SNAPSHOT_BOUNDARY_IS_INCLUSIVE = true;
 
 export class ExternalPageRequestDto {
-  @ApiPropertyOptional({ description: 'Opaque signed keyset cursor.' })
+  @ApiPropertyOptional({
+    description:
+      'Opaque signed keyset cursor. Continuation requests must reuse the same resource, snapshotAt, and updatedSince context.',
+    type: String,
+  })
   @IsOptional()
   @IsString()
   cursor?: string;
@@ -38,6 +42,7 @@ export class ExternalPageRequestDto {
     default: EXTERNAL_DEFAULT_PAGE_LIMIT,
     maximum: EXTERNAL_MAX_PAGE_LIMIT,
     minimum: 1,
+    type: 'integer',
   })
   @IsOptional()
   @Type(() => Number)
@@ -49,6 +54,7 @@ export class ExternalPageRequestDto {
   @ApiPropertyOptional({
     description: 'Inclusive lower bound: updatedAt >= updatedSince.',
     format: 'date-time',
+    type: String,
   })
   @IsOptional()
   @IsISO8601({ strict: true, strictSeparator: true })
@@ -58,6 +64,7 @@ export class ExternalPageRequestDto {
     description:
       'Inclusive stable extraction upper bound, reused across every page.',
     format: 'date-time',
+    type: String,
   })
   @IsOptional()
   @IsISO8601({ strict: true, strictSeparator: true })
@@ -65,13 +72,17 @@ export class ExternalPageRequestDto {
 }
 
 export class ExternalPageDto<T> {
-  @ApiProperty({ isArray: true })
+  @ApiProperty({
+    description: 'Resource records in this page.',
+    isArray: true,
+    type: Object,
+  })
   data: T[];
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ nullable: true, type: String })
   nextCursor: string | null;
 
-  @ApiProperty({ format: 'date-time' })
+  @ApiProperty({ format: 'date-time', type: String })
   snapshotAt: string;
 }
 

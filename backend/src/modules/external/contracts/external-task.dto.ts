@@ -25,64 +25,64 @@ export type ExternalTaskSource = {
 };
 
 export class ExternalTaskDto {
-  @ApiProperty()
+  @ApiProperty({ format: 'uuid', type: String })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ format: 'uuid', type: String })
   projectId: string;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'uuid', nullable: true, type: String })
   parentTaskId: string | null;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   title: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   taskKind: string;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ nullable: true, type: String })
   milestoneCategory: string | null;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   status: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String })
   priority: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: 'integer' })
   percentComplete: number;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ nullable: true, type: 'integer' })
   sequenceNumber: number | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   startDate: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   dueDate: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   plannedStartDate: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   plannedEndDate: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   actualStartDate: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ format: 'date', nullable: true, type: String })
   actualEndDate: string | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ nullable: true, type: Number })
   estimatedHours: number | null;
 
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ nullable: true, type: Number })
   remainingHours: number | null;
 
-  @ApiProperty({ format: 'date-time' })
+  @ApiProperty({ format: 'date-time', type: String })
   createdAt: string;
 
-  @ApiProperty({ format: 'date-time' })
+  @ApiProperty({ format: 'date-time', type: String })
   updatedAt: string;
 }
 
