@@ -4,7 +4,11 @@ import { Project } from '../../projects/entities/project.entity';
 import { Issue } from '../../raid/entities/issue.entity';
 import { Risk } from '../../raid/entities/risk.entity';
 import { Task } from '../../tasks/entities/task.entity';
-import { ExternalCursorCodec } from '../contracts/external-cursor';
+import { ExternalApiResource } from '../auth/external-api-resource';
+import {
+  ExternalCursorCodec,
+  normalizeExternalCursorContext,
+} from '../contracts/external-cursor';
 import { ExternalPaginationPolicy } from '../contracts/external-page.dto';
 import { ExternalReadQueryService } from '../external-read-query.service';
 import {
@@ -58,6 +62,7 @@ describe('ExternalReadQueryService', () => {
     );
     expect(projects.query.addOrderBy).toHaveBeenCalledWith('project.id', 'ASC');
     expect(projects.query.take).toHaveBeenCalledWith(201);
+    expect(projects.query.getCount).not.toHaveBeenCalled();
   });
 
   it('returns a signed next cursor from the last emitted row', async () => {
@@ -73,7 +78,16 @@ describe('ExternalReadQueryService', () => {
     expect(response.data).toHaveLength(2);
     expect(response.snapshotAt).toBe(snapshotAt);
     expect(response.nextCursor).not.toBeNull();
-    expect(codec.decode(response.nextCursor!)).toEqual({
+    expect(
+      codec.decode(
+        response.nextCursor!,
+        normalizeExternalCursorContext(
+          ExternalApiResource.Projects,
+          snapshotAt,
+          null,
+        ),
+      ),
+    ).toEqual({
       id: '22222222-2222-4222-8222-222222222222',
       updatedAt: '2026-08-02T10:00:00.000Z',
     });
@@ -152,10 +166,17 @@ describe('ExternalReadQueryService', () => {
   });
 
   it('applies the strict (updatedAt, id) keyset after a cursor', async () => {
-    const cursor = codec.encode({
-      id: '22222222-2222-4222-8222-222222222222',
-      updatedAt: '2026-08-02T10:00:00.000Z',
-    });
+    const cursor = codec.encode(
+      normalizeExternalCursorContext(
+        ExternalApiResource.Tasks,
+        snapshotAt,
+        null,
+      ),
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        updatedAt: '2026-08-02T10:00:00.000Z',
+      },
+    );
 
     await service.findTasks(allProjectsScope, {
       cursor,
@@ -183,6 +204,74 @@ describe('ExternalReadQueryService', () => {
         cursorUpdatedAt: '2026-08-02T10:00:00.000Z',
       },
     );
+  });
+
+  it('binds emitted cursors to each explicit resource wrapper', async () => {
+    projects = repositoryStub([
+      project('11111111-1111-4111-8111-111111111111', '10:00:00'),
+      project('22222222-2222-4222-8222-222222222222', '11:00:00'),
+    ]);
+    tasks = repositoryStub([
+      task(),
+      { ...task(), id: '77777777-7777-4777-8777-777777777777' },
+    ]);
+    risks = repositoryStub([
+      risk(),
+      { ...risk(), id: '88888888-8888-4888-8888-888888888888' },
+    ]);
+    issues = repositoryStub([
+      issue(),
+      { ...issue(), id: '99999999-9999-4999-8999-999999999999' },
+    ]);
+    service = createService();
+
+    const pages = await Promise.all([
+      service.findProjects(allProjectsScope, { limit: 1 }),
+      service.findTasks(allProjectsScope, { limit: 1 }),
+      service.findRisks(allProjectsScope, { limit: 1 }),
+      service.findIssues(allProjectsScope, { limit: 1 }),
+    ]);
+
+    const pageResources = [
+      ExternalApiResource.Projects,
+      ExternalApiResource.Tasks,
+      ExternalApiResource.Risks,
+      ExternalApiResource.Issues,
+    ];
+    for (const [index, resource] of pageResources.entries()) {
+      expect(pages[index].nextCursor).not.toBeNull();
+      expect(() =>
+        codec.decode(
+          pages[index].nextCursor!,
+          normalizeExternalCursorContext(resource, snapshotAt, null),
+        ),
+      ).not.toThrow();
+    }
+  });
+
+  it('allows page-size changes without changing keyset query semantics', async () => {
+    projects = repositoryStub(
+      [
+        project('11111111-1111-4111-8111-111111111111', '10:00:00'),
+        project('22222222-2222-4222-8222-222222222222', '11:00:00'),
+        project('33333333-3333-4333-8333-333333333333', '12:00:00'),
+      ],
+      true,
+    );
+    service = createService();
+
+    const firstPage = await service.findProjects(allProjectsScope, {
+      limit: 1,
+    });
+    const secondPage = await service.findProjects(allProjectsScope, {
+      cursor: firstPage.nextCursor!,
+      limit: 2,
+      snapshotAt: firstPage.snapshotAt,
+    });
+
+    expect(secondPage.data).toHaveLength(2);
+    expect(projects.query.take).toHaveBeenLastCalledWith(3);
+    expect(projects.query.getCount).not.toHaveBeenCalled();
   });
 
   it('projects only the approved columns and maps every resource to its external DTO', async () => {
@@ -319,6 +408,7 @@ function repositoryStub(records: unknown[], applyQuery = false) {
     .mockImplementation(() =>
       Promise.resolve(applyQuery ? applyQueryState(records, state) : records),
     );
+  query.getCount = jest.fn();
   query.orderBy = jest.fn().mockReturnValue(query);
   query.select = jest.fn().mockReturnValue(query);
   query.take = jest.fn().mockImplementation((limit: number) => {
@@ -342,6 +432,7 @@ function repositoryStub(records: unknown[], applyQuery = false) {
 type QueryStub = {
   addOrderBy: jest.Mock;
   andWhere: jest.Mock;
+  getCount: jest.Mock;
   getMany: jest.Mock;
   orderBy: jest.Mock;
   select: jest.Mock;

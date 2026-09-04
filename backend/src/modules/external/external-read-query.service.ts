@@ -5,6 +5,7 @@ import { Project } from '../projects/entities/project.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { ExternalApiResource } from './auth/external-api-resource';
 import { ExternalCursorCodec } from './contracts/external-cursor';
 import {
   ExternalIssueDto,
@@ -58,6 +59,7 @@ export class ExternalReadQueryService {
   ): Promise<ExternalPageDto<ExternalProjectDto>> {
     return this.findPage<Project, ExternalProjectDto>(
       this.projectsRepository,
+      ExternalApiResource.Projects,
       'project',
       [
         'project.id',
@@ -80,6 +82,7 @@ export class ExternalReadQueryService {
   ): Promise<ExternalPageDto<ExternalTaskDto>> {
     return this.findPage<Task, ExternalTaskDto>(
       this.tasksRepository,
+      ExternalApiResource.Tasks,
       'task',
       [
         'task.id',
@@ -115,6 +118,7 @@ export class ExternalReadQueryService {
   ): Promise<ExternalPageDto<ExternalRiskDto>> {
     return this.findPage<Risk, ExternalRiskDto>(
       this.risksRepository,
+      ExternalApiResource.Risks,
       'risk',
       [
         'risk.id',
@@ -138,6 +142,7 @@ export class ExternalReadQueryService {
   ): Promise<ExternalPageDto<ExternalIssueDto>> {
     return this.findPage<Issue, ExternalIssueDto>(
       this.issuesRepository,
+      ExternalApiResource.Issues,
       'issue',
       [
         'issue.id',
@@ -156,6 +161,7 @@ export class ExternalReadQueryService {
 
   private async findPage<Entity extends ExternalPageEntity, Dto>(
     repository: Repository<Entity>,
+    resource: ExternalApiResource,
     alias: string,
     selection: string[],
     scope: ResolvedExternalDataScope,
@@ -166,8 +172,8 @@ export class ExternalReadQueryService {
       throw new ForbiddenException('External API access denied');
     }
 
-    const page = this.paginationPolicy.validate(request);
-    const snapshotAt = page.snapshotAt ?? new Date().toISOString();
+    const page = this.paginationPolicy.validate(resource, request);
+    const snapshotAt = page.snapshotAt;
     const query = repository
       .createQueryBuilder(alias)
       .select(selection)
@@ -209,7 +215,7 @@ export class ExternalReadQueryService {
       data: pageEntities.map(toDto),
       nextCursor:
         hasMore && lastEntity
-          ? this.cursorCodec.encode({
+          ? this.cursorCodec.encode(page.cursorContext, {
               id: lastEntity.id,
               updatedAt: lastEntity.updatedAt.toISOString(),
             })

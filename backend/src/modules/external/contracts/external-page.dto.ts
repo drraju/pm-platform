@@ -10,7 +10,14 @@ import {
   Min,
   isISO8601,
 } from 'class-validator';
-import { ExternalCursor, ExternalCursorCodec } from './external-cursor';
+import { ExternalApiResource } from '../auth/external-api-resource';
+import {
+  ExternalCursor,
+  ExternalCursorCodec,
+  ExternalCursorContext,
+  invalidExternalCursor,
+  normalizeExternalCursorContext,
+} from './external-cursor';
 
 export const EXTERNAL_DEFAULT_PAGE_LIMIT = 200;
 export const EXTERNAL_MAX_PAGE_LIMIT = 1000;
@@ -70,8 +77,9 @@ export class ExternalPageDto<T> {
 
 export type ValidatedExternalPageRequest = Readonly<{
   cursor: ExternalCursor | null;
+  cursorContext: ExternalCursorContext;
   limit: number;
-  snapshotAt: string | null;
+  snapshotAt: string;
   updatedSince: string | null;
 }>;
 
@@ -79,7 +87,11 @@ export type ValidatedExternalPageRequest = Readonly<{
 export class ExternalPaginationPolicy {
   constructor(private readonly cursorCodec: ExternalCursorCodec) {}
 
-  validate(request: ExternalPageRequestDto): ValidatedExternalPageRequest {
+  validate(
+    resource: ExternalApiResource,
+    request: ExternalPageRequestDto,
+  ): ValidatedExternalPageRequest {
+    const hasCursor = request.cursor !== undefined;
     const limit = request.limit ?? EXTERNAL_DEFAULT_PAGE_LIMIT;
     if (
       !Number.isInteger(limit) ||
@@ -90,45 +102,52 @@ export class ExternalPaginationPolicy {
     }
     for (const timestamp of [request.updatedSince, request.snapshotAt]) {
       if (
-        timestamp &&
-        !isISO8601(timestamp, { strict: true, strictSeparator: true })
+        timestamp !== undefined &&
+        (typeof timestamp !== 'string' ||
+          timestamp !== timestamp.trim() ||
+          !isISO8601(timestamp, { strict: true, strictSeparator: true }) ||
+          !Number.isFinite(Date.parse(timestamp)))
       ) {
         throw new BadRequestException('Invalid external timestamp filter');
       }
     }
-    if (request.cursor && !request.snapshotAt) {
-      throw new BadRequestException(
-        'snapshotAt is required when an external cursor is provided',
-      );
+    if (
+      hasCursor &&
+      (typeof request.cursor !== 'string' || request.cursor.length === 0)
+    ) {
+      throw invalidExternalCursor();
+    }
+    if (hasCursor && !request.snapshotAt) {
+      throw invalidExternalCursor();
     }
     if (
       request.updatedSince &&
       request.snapshotAt &&
       Date.parse(request.updatedSince) > Date.parse(request.snapshotAt)
     ) {
+      if (hasCursor) {
+        throw invalidExternalCursor();
+      }
       throw new BadRequestException(
         'updatedSince must not be later than snapshotAt',
       );
     }
 
-    const cursor = request.cursor
-      ? this.cursorCodec.decode(request.cursor)
+    const cursorContext = normalizeExternalCursorContext(
+      resource,
+      request.snapshotAt ?? new Date().toISOString(),
+      request.updatedSince ?? null,
+    );
+    const cursor = hasCursor
+      ? this.cursorCodec.decode(request.cursor!, cursorContext)
       : null;
-    if (
-      cursor &&
-      request.snapshotAt &&
-      Date.parse(cursor.updatedAt) > Date.parse(request.snapshotAt)
-    ) {
-      throw new BadRequestException(
-        'External cursor is outside the snapshot boundary',
-      );
-    }
 
     return Object.freeze({
       cursor,
+      cursorContext,
       limit,
-      snapshotAt: request.snapshotAt ?? null,
-      updatedSince: request.updatedSince ?? null,
+      snapshotAt: cursorContext.snapshotAt,
+      updatedSince: cursorContext.filters.updatedSince,
     });
   }
 }
