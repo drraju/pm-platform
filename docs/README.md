@@ -58,6 +58,7 @@ docs/vision/
 - API Design Standard
 - API Guidelines
 - Enterprise Dependency API
+- [External API v1 Consumer Guide](api/external-v1.md)
 
 ---
 
@@ -187,6 +188,7 @@ deployment guidance, API documentation, and release notes.
 - [REST API Design Standard](architecture/API_DESIGN_STANDARD.md)
 - [API Guidelines](development/api-guidelines.md)
 - [Enterprise Dependency API](api/enterprise-dependencies.md)
+- [External API v1 Consumer Guide](api/external-v1.md)
 - [Technical Debt Register](development/TECHNICAL_DEBT.md)
 
 ## Release Notes
