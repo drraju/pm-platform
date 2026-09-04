@@ -19,6 +19,7 @@ import {
 } from '../external.constants';
 import { ExternalModule } from '../external.module';
 import { ExternalV1Controller } from '../external-v1.controller';
+import { ExternalApiAccessLoggingGuard } from '../logging/external-api-access-logging.guard';
 
 describe('external v1 boundary', () => {
   it('registers a dedicated external module under exactly /external/v1', () => {
@@ -41,6 +42,7 @@ describe('external v1 boundary', () => {
 
   it('applies JWT and external policy guards to the complete boundary', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, ExternalV1Controller)).toEqual([
+      ExternalApiAccessLoggingGuard,
       JwtAuthGuard,
       ExternalApiGuard,
     ]);

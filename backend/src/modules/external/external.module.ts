@@ -11,12 +11,14 @@ import { ExternalCursorCodec } from './contracts/external-cursor';
 import { ExternalPaginationPolicy } from './contracts/external-page.dto';
 import { ExternalV1Controller } from './external-v1.controller';
 import { ExternalReadQueryService } from './external-read-query.service';
+import { ExternalApiAccessLoggingGuard } from './logging/external-api-access-logging.guard';
 import { ExternalDataScopeService } from './scope/external-data-scope';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Project, Task, Risk, Issue])],
   controllers: [ExternalV1Controller],
   providers: [
+    ExternalApiAccessLoggingGuard,
     ExternalApiGuard,
     ExternalApiPolicyService,
     ExternalDataScopeService,

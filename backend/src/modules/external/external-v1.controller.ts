@@ -19,12 +19,13 @@ import { ExternalRiskDto } from './contracts/external-risk.dto';
 import { ExternalTaskDto } from './contracts/external-task.dto';
 import { EXTERNAL_V1_BASE_PATH } from './external.constants';
 import { ExternalReadQueryService } from './external-read-query.service';
+import { ExternalApiAccessLoggingGuard } from './logging/external-api-access-logging.guard';
 import { ExternalScope } from './scope/external-data-scope';
 import type { ResolvedExternalDataScope } from './scope/external-data-scope';
 
 @ApiTags('external-v1')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, ExternalApiGuard)
+@UseGuards(ExternalApiAccessLoggingGuard, JwtAuthGuard, ExternalApiGuard)
 @Controller(EXTERNAL_V1_BASE_PATH)
 export class ExternalV1Controller {
   constructor(private readonly queryService: ExternalReadQueryService) {}
