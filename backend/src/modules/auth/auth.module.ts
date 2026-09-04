@@ -12,6 +12,26 @@ import { PasswordUpdateService } from './password-update.service';
 import { PmSessionIssuer } from './pm-session-issuer.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { getJwtConfiguration, JWT_CONFIGURATION } from './jwt-configuration';
+import {
+  GoogleOidcClient,
+  GOOGLE_OIDC_CLIENT,
+} from './oidc/google-oidc.client';
+import {
+  getGoogleOidcConfiguration,
+  GOOGLE_OIDC_CONFIGURATION,
+} from './oidc/google-oidc.configuration';
+import { GoogleOidcController } from './oidc/google-oidc.controller';
+import { GoogleOidcProtocolService } from './oidc/google-oidc-protocol.service';
+import {
+  OIDC_RANDOM_SOURCE,
+  OidcRandomSource,
+} from './oidc/oidc-random.source';
+import { OIDC_REDIS_COMMANDS, OidcRedisClient } from './oidc/oidc-redis.client';
+import {
+  OIDC_TRANSACTION_STORE,
+  OidcTransactionStore,
+} from './oidc/oidc-transaction.store';
+import { GoogleWorkspaceIdentityValidator } from './oidc/google-workspace-identity.validator';
 
 @Module({
   imports: [
@@ -34,13 +54,39 @@ import { getJwtConfiguration, JWT_CONFIGURATION } from './jwt-configuration';
     PasswordModule,
     UsersModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, GoogleOidcController],
   providers: [
     AuthService,
     JwtStrategy,
     PasswordResetTokenService,
     PasswordUpdateService,
     PmSessionIssuer,
+    GoogleOidcClient,
+    GoogleOidcProtocolService,
+    GoogleWorkspaceIdentityValidator,
+    OidcRandomSource,
+    OidcRedisClient,
+    OidcTransactionStore,
+    {
+      provide: GOOGLE_OIDC_CLIENT,
+      useExisting: GoogleOidcClient,
+    },
+    {
+      provide: GOOGLE_OIDC_CONFIGURATION,
+      useFactory: getGoogleOidcConfiguration,
+    },
+    {
+      provide: OIDC_RANDOM_SOURCE,
+      useExisting: OidcRandomSource,
+    },
+    {
+      provide: OIDC_REDIS_COMMANDS,
+      useExisting: OidcRedisClient,
+    },
+    {
+      provide: OIDC_TRANSACTION_STORE,
+      useExisting: OidcTransactionStore,
+    },
     {
       provide: JWT_CONFIGURATION,
       useFactory: getJwtConfiguration,
