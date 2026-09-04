@@ -1,11 +1,23 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import {
+  Check,
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+} from 'typeorm';
 import { TimestampedEntity } from '../../../common/entities/timestamped.entity';
 import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
+import { ExternalIdentity } from './external-identity.entity';
 import { Role } from './role.entity';
 
 @Entity({ name: 'users' })
+@Check(
+  'chk_users_service_password_required',
+  `"identity_type" <> '${UserIdentityType.Service}' OR "password_hash" IS NOT NULL`,
+)
 export class User extends TimestampedEntity {
   @Column({ unique: true })
   email: string;
@@ -16,8 +28,13 @@ export class User extends TimestampedEntity {
   @Column({ name: 'last_name' })
   lastName: string;
 
-  @Column({ name: 'password_hash', select: false })
-  passwordHash: string;
+  @Column({
+    name: 'password_hash',
+    nullable: true,
+    select: false,
+    type: 'varchar',
+  })
+  passwordHash: string | null;
 
   @Column({ name: 'password_changed_at', type: 'timestamptz', nullable: true })
   passwordChangedAt?: Date | null;
@@ -53,6 +70,9 @@ export class User extends TimestampedEntity {
 
   @OneToMany(() => ProjectMember, (member) => member.user)
   projectMemberships: ProjectMember[];
+
+  @OneToMany(() => ExternalIdentity, (identity) => identity.user)
+  externalIdentities: ExternalIdentity[];
 
   @OneToMany(() => Notification, (notification) => notification.user)
   notifications: Notification[];

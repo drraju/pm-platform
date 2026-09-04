@@ -11,11 +11,14 @@ import { UsersService } from './users.service';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import { ServiceAccountAdministrationService } from './service-account-administration.service';
 import { ServiceAccountsController } from './service-accounts.controller';
+import { ExternalIdentity } from './entities/external-identity.entity';
+import { ExternalIdentitiesService } from './external-identities.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       User,
+      ExternalIdentity,
       Role,
       Permission,
       RolePermission,
@@ -28,7 +31,8 @@ import { ServiceAccountsController } from './service-accounts.controller';
     UsersService,
     PasswordUpdateService,
     ServiceAccountAdministrationService,
+    ExternalIdentitiesService,
   ],
-  exports: [UsersService],
+  exports: [ExternalIdentitiesService, UsersService],
 })
 export class UsersModule {}

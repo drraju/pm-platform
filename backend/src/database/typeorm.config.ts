@@ -35,6 +35,7 @@ import { TaskDependency } from '../modules/tasks/entities/task-dependency.entity
 import { TaskExecutionUpdate } from '../modules/tasks/entities/task-execution-update.entity';
 import { Task } from '../modules/tasks/entities/task.entity';
 import { Permission } from '../modules/users/entities/permission.entity';
+import { ExternalIdentity } from '../modules/users/entities/external-identity.entity';
 import { RolePermission } from '../modules/users/entities/role-permission.entity';
 import { Role } from '../modules/users/entities/role.entity';
 import { User } from '../modules/users/entities/user.entity';
@@ -43,6 +44,7 @@ type EntityConstructor = abstract new (...args: never[]) => unknown;
 
 export const databaseEntities: EntityConstructor[] = [
   User,
+  ExternalIdentity,
   Role,
   Permission,
   RolePermission,

@@ -46,7 +46,7 @@ export class PasswordUpdateService {
     this.validateNewPassword(changePasswordDto.newPassword);
 
     const user = await this.usersService.findAuthenticationUserById(userId);
-    if (!user) {
+    if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Unable to change password');
     }
     if (user.identityType === UserIdentityType.Service) {
@@ -116,7 +116,7 @@ export class PasswordUpdateService {
     if (!user) {
       throw new UnauthorizedException('Unable to reset password');
     }
-    if (user.identityType === UserIdentityType.Service) {
+    if (user.identityType === UserIdentityType.Service || !user.passwordHash) {
       throw new UnauthorizedException('Unable to reset password');
     }
 
@@ -193,6 +193,9 @@ export class PasswordUpdateService {
       userId,
       actor,
     );
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('Unable to rotate credentials');
+    }
     if (
       await this.passwordService.verifyPassword(newPassword, user.passwordHash)
     ) {
