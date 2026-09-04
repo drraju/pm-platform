@@ -3,11 +3,13 @@ import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { UsersService } from '../../users/users.service';
+import { AuthenticationMethod } from '../authentication-method';
 import { AuthService } from '../auth.service';
 import { JwtConfiguration } from '../jwt-configuration';
 import { PasswordResetTokenService } from '../password-reset-token.service';
 import { PasswordUpdateService } from '../password-update.service';
 import { PasswordService } from '../password.service';
+import { PmSessionIssuer } from '../pm-session-issuer.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
 
 const jwtConfiguration: JwtConfiguration = {
@@ -45,6 +47,7 @@ describe('JWT security policy', () => {
       passwordService,
       {} as PasswordResetTokenService,
       {} as PasswordUpdateService,
+      new PmSessionIssuer(jwtService, jwtConfiguration),
       jwtConfiguration,
     );
   });
@@ -65,12 +68,15 @@ describe('JWT security policy', () => {
     });
     const access = jwtService.decode(session.accessToken, { complete: true });
     const refresh = jwtService.decode(session.refreshToken, { complete: true });
+    const authenticatedAt = Math.floor(Date.now() / 1000);
 
     expect(access?.header.alg).toBe('HS256');
     expect(refresh?.header.alg).toBe('HS256');
     expect(access?.payload).toEqual(
       expect.objectContaining({
         aud: 'pm-platform-api',
+        authenticatedAt,
+        authenticationMethod: AuthenticationMethod.Local,
         email: 'user@example.com',
         identityType: UserIdentityType.Human,
         iss: 'pm-platform',
@@ -82,6 +88,8 @@ describe('JWT security policy', () => {
     expect(refresh?.payload).toEqual(
       expect.objectContaining({
         aud: 'pm-platform-refresh',
+        authenticatedAt,
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Human,
         iss: 'pm-platform',
         tokenType: 'refresh',
@@ -116,6 +124,7 @@ describe('JWT security policy', () => {
 
     expect(access).toEqual(
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Service,
         roleId: UserRole.ServiceUser,
         tokenType: 'access',
@@ -123,6 +132,7 @@ describe('JWT security policy', () => {
     );
     expect(refresh).toEqual(
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Service,
         roleId: UserRole.ServiceUser,
         tokenType: 'refresh',
@@ -143,6 +153,7 @@ describe('JWT security policy', () => {
     const refreshedSession = await authService.refresh(session.refreshToken);
     expect(jwtService.decode(refreshedSession.accessToken)).toEqual(
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Service,
         roleId: UserRole.ServiceUser,
         tokenType: 'access',
@@ -150,6 +161,7 @@ describe('JWT security policy', () => {
     );
     expect(jwtService.decode(refreshedSession.refreshToken)).toEqual(
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Service,
         roleId: UserRole.ServiceUser,
         tokenType: 'refresh',

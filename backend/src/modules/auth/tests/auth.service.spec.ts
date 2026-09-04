@@ -5,11 +5,13 @@ import { UserIdentityType } from '../../../common/enums/user-identity-type.enum'
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { User } from '../../users/entities/user.entity';
 import { UsersService } from '../../users/users.service';
+import { AuthenticationMethod } from '../authentication-method';
 import { AuthService } from '../auth.service';
 import { PasswordPolicyService } from '../password-policy.service';
 import { PasswordResetTokenService } from '../password-reset-token.service';
 import { PasswordUpdateService } from '../password-update.service';
 import { PasswordService } from '../password.service';
+import { PmSessionIssuer } from '../pm-session-issuer.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
 import { JwtConfiguration, JWT_CONFIGURATION } from '../jwt-configuration';
 
@@ -74,6 +76,7 @@ describe('AuthService', () => {
         PasswordPolicyService,
         PasswordService,
         PasswordUpdateService,
+        PmSessionIssuer,
         {
           provide: UsersService,
           useValue: usersService,
@@ -201,6 +204,7 @@ describe('AuthService', () => {
     expect(jwtService.sign).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Human,
         tokenType: 'access',
       }),
@@ -212,6 +216,7 @@ describe('AuthService', () => {
     expect(jwtService.sign).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Human,
         tokenType: 'refresh',
       }),
@@ -227,6 +232,14 @@ describe('AuthService', () => {
     expect(signedPayloads[1]).toHaveProperty(
       'identityType',
       UserIdentityType.Human,
+    );
+    expect(signedPayloads[0]).toHaveProperty(
+      'authenticationMethod',
+      AuthenticationMethod.Local,
+    );
+    expect(typeof signedPayloads[0]?.authenticatedAt).toBe('number');
+    expect(signedPayloads[0]?.authenticatedAt).toBe(
+      signedPayloads[1]?.authenticatedAt,
     );
   });
 
@@ -279,6 +292,7 @@ describe('AuthService', () => {
 
     expect(signedPayloads).toEqual([
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         email: 'automation@example.com',
         identityType: UserIdentityType.Service,
         roleId: 'role-service-user',
@@ -286,6 +300,7 @@ describe('AuthService', () => {
         tokenType: 'access',
       }),
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         email: 'automation@example.com',
         identityType: UserIdentityType.Service,
         roleId: 'role-service-user',
@@ -436,6 +451,8 @@ describe('AuthService', () => {
 
   it('rejects an access token at the refresh boundary', async () => {
     jwtService.verifyAsync.mockResolvedValue({
+      authenticatedAt: 1_788_519_600,
+      authenticationMethod: AuthenticationMethod.Local,
       email: 'user@example.com',
       identityType: UserIdentityType.Human,
       iat: 1,
@@ -541,6 +558,8 @@ describe('AuthService', () => {
 
   it('issues refreshed tokens with the current database identityType', async () => {
     jwtService.verifyAsync.mockResolvedValue({
+      authenticatedAt: 1_788_519_600,
+      authenticationMethod: AuthenticationMethod.Local,
       email: 'user@example.com',
       identityType: UserIdentityType.Human,
       iat: 1,
@@ -560,13 +579,57 @@ describe('AuthService', () => {
     await service.refresh('refresh-token');
 
     expect(signedPayloads).toEqual([
-      expect.objectContaining({ identityType: UserIdentityType.Human }),
-      expect.objectContaining({ identityType: UserIdentityType.Human }),
+      expect.objectContaining({
+        authenticatedAt: 1_788_519_600,
+        authenticationMethod: AuthenticationMethod.Local,
+        identityType: UserIdentityType.Human,
+      }),
+      expect.objectContaining({
+        authenticatedAt: 1_788_519_600,
+        authenticationMethod: AuthenticationMethod.Local,
+        identityType: UserIdentityType.Human,
+      }),
+    ]);
+  });
+
+  it('keeps pre-Slice 2 local refresh tokens valid using their original iat', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      email: 'user@example.com',
+      identityType: UserIdentityType.Human,
+      iat: 1_788_519_600,
+      roleId: 'role-team-member',
+      sub: 'user-1',
+      tokenType: 'refresh',
+    });
+    usersService.findTokenValidationUser.mockResolvedValue({
+      email: 'user@example.com',
+      id: 'user-1',
+      identityType: UserIdentityType.Human,
+      passwordChangedAt: null,
+      roleId: 'role-team-member',
+      status: 'active',
+    });
+
+    await service.refresh('refresh-token');
+
+    expect(signedPayloads).toEqual([
+      expect.objectContaining({
+        authenticatedAt: 1_788_519_600,
+        authenticationMethod: AuthenticationMethod.Local,
+        tokenType: 'access',
+      }),
+      expect.objectContaining({
+        authenticatedAt: 1_788_519_600,
+        authenticationMethod: AuthenticationMethod.Local,
+        tokenType: 'refresh',
+      }),
     ]);
   });
 
   it('refreshes a valid SERVICE_USER session with SERVICE identity claims', async () => {
     jwtService.verifyAsync.mockResolvedValue({
+      authenticatedAt: 1_788_519_600,
+      authenticationMethod: AuthenticationMethod.Local,
       email: 'automation@example.com',
       identityType: UserIdentityType.Service,
       iat: 1,
@@ -591,11 +654,13 @@ describe('AuthService', () => {
     });
     expect(signedPayloads).toEqual([
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Service,
         roleId: 'role-service-user',
         tokenType: 'access',
       }),
       expect.objectContaining({
+        authenticationMethod: AuthenticationMethod.Local,
         identityType: UserIdentityType.Service,
         roleId: 'role-service-user',
         tokenType: 'refresh',

@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { AuthorizationPolicyService } from '../../../common/authz/authorization-policy.service';
 import { UserIdentityType } from '../../../common/enums/user-identity-type.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
+import { AuthenticationMethod } from '../../auth/authentication-method';
 import { AuthService } from '../../auth/auth.service';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { JwtConfiguration } from '../../auth/jwt-configuration';
@@ -16,6 +17,7 @@ import { PasswordPolicyService } from '../../auth/password-policy.service';
 import { PasswordResetTokenService } from '../../auth/password-reset-token.service';
 import { PasswordUpdateService } from '../../auth/password-update.service';
 import { PasswordService } from '../../auth/password.service';
+import { PmSessionIssuer } from '../../auth/pm-session-issuer.service';
 import { JwtStrategy } from '../../auth/strategies/jwt.strategy';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Permission } from '../entities/permission.entity';
@@ -147,6 +149,7 @@ describe('service-account lifecycle security', () => {
       passwordService,
       {} as PasswordResetTokenService,
       passwordUpdateService,
+      new PmSessionIssuer(jwtService, jwtConfiguration),
       jwtConfiguration,
     );
     strategy = new JwtStrategy(usersService, jwtConfiguration);
@@ -279,6 +282,12 @@ describe('service-account lifecycle security', () => {
     const initialAccessPayload = decodeJwtPayload(
       jwtService,
       initialSession.accessToken,
+    );
+    expect(initialAccessPayload.authenticationMethod).toBe(
+      AuthenticationMethod.Local,
+    );
+    expect(initialAccessPayload.authenticatedAt).toBe(
+      Math.floor(Date.now() / 1000),
     );
     await expect(strategy.validate(initialAccessPayload)).resolves.toEqual(
       expect.objectContaining({ userId: 'service-1' }),

@@ -1,5 +1,6 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { AuthenticationMethod } from '../../modules/auth/authentication-method';
 import { UserIdentityType } from '../enums/user-identity-type.enum';
 import {
   ANY_PERMISSIONS_KEY,
@@ -97,6 +98,31 @@ describe('PermissionsGuard', () => {
     });
   });
 
+  it.each([AuthenticationMethod.Local, AuthenticationMethod.Google])(
+    'does not use %s session provenance as an authorization input',
+    async (authenticationMethod) => {
+      mockMetadata({ all: [PermissionKey.ProjectRead] });
+      authorizationPolicyService.getGrantedPermissionKeys.mockResolvedValue(
+        new Set([PermissionKey.ProjectRead]),
+      );
+
+      await expect(
+        guard.canActivate(
+          createContext({ authenticatedAt: 1, authenticationMethod }),
+        ),
+      ).resolves.toBe(true);
+
+      expect(
+        authorizationPolicyService.getGrantedPermissionKeys,
+      ).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        identityType: UserIdentityType.Human,
+        roleId: 'role-1',
+        userId: 'user-1',
+      });
+    },
+  );
+
   it('allows a permissioned Platform Admin through the administration boundary', async () => {
     mockMetadata({
       all: [PermissionKey.PermissionManage],
@@ -153,7 +179,15 @@ describe('PermissionsGuard', () => {
   }
 });
 
-function createContext(): ExecutionContext {
+function createContext(
+  sessionProvenance: {
+    authenticatedAt: number;
+    authenticationMethod: AuthenticationMethod;
+  } = {
+    authenticatedAt: 1,
+    authenticationMethod: AuthenticationMethod.Local,
+  },
+): ExecutionContext {
   return {
     getClass: jest.fn(),
     getHandler: jest.fn(),
@@ -163,6 +197,7 @@ function createContext(): ExecutionContext {
           email: 'user@example.com',
           identityType: UserIdentityType.Human,
           roleId: 'role-1',
+          ...sessionProvenance,
           userId: 'user-1',
         },
       }),
