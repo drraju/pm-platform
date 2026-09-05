@@ -167,6 +167,8 @@ describe('Google OIDC protocol service', () => {
 
     await expect(complete()).resolves.toEqual({
       emailVerified: true,
+      familyName: null,
+      givenName: null,
       hostedDomain: 'cloudfabrix.com',
       issuer: GOOGLE_OIDC_ISSUER,
       normalizedEmail: 'person@cloudfabrix.com',

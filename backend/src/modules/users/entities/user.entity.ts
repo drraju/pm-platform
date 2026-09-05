@@ -22,11 +22,11 @@ export class User extends TimestampedEntity {
   @Column({ unique: true })
   email: string;
 
-  @Column({ name: 'first_name' })
-  firstName: string;
+  @Column({ name: 'first_name', nullable: true, type: 'varchar' })
+  firstName: string | null;
 
-  @Column({ name: 'last_name' })
-  lastName: string;
+  @Column({ name: 'last_name', nullable: true, type: 'varchar' })
+  lastName: string | null;
 
   @Column({
     name: 'password_hash',

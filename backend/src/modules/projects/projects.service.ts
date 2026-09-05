@@ -1858,8 +1858,8 @@ export class ProjectsService {
         ? {
             id: member.user.id,
             email: member.user.email,
-            firstName: member.user.firstName,
-            lastName: member.user.lastName,
+            firstName: member.user.firstName ?? '',
+            lastName: member.user.lastName ?? '',
             displayName: displayName ?? member.user.email,
             role: member.user.role?.name ?? null,
           }

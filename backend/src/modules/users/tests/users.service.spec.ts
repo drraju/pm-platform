@@ -162,6 +162,28 @@ describe('UsersService', () => {
     expect(JSON.stringify(result)).not.toContain('passwordHash');
   });
 
+  it('keeps the user response contract null-safe for a JIT user without names', async () => {
+    usersRepository.find?.mockResolvedValue([
+      {
+        accountHistory: [],
+        email: 'jit@example.com',
+        firstName: null,
+        id: 'jit-user',
+        lastName: null,
+        roleId: 'role-1',
+        status: 'active',
+      },
+    ]);
+
+    await expect(service.findAll()).resolves.toEqual([
+      expect.objectContaining({
+        email: 'jit@example.com',
+        firstName: '',
+        lastName: '',
+      }),
+    ]);
+  });
+
   it('returns active assignable users with organisation role names', async () => {
     usersRepository.find?.mockResolvedValue([
       {
@@ -194,6 +216,28 @@ describe('UsersService', () => {
       },
     ]);
     expect(JSON.stringify(result)).not.toContain('passwordHash');
+  });
+
+  it('uses email as the assignable display name when JIT names are absent', async () => {
+    usersRepository.find?.mockResolvedValue([
+      {
+        email: 'jit@example.com',
+        firstName: null,
+        id: 'jit-user',
+        lastName: null,
+        role: { id: 'role-1', name: UserRole.TeamMember },
+        roleId: 'role-1',
+        status: 'active',
+      },
+    ]);
+
+    await expect(service.findAssignableUsers(actor)).resolves.toEqual([
+      expect.objectContaining({
+        displayName: 'jit@example.com',
+        firstName: '',
+        lastName: '',
+      }),
+    ]);
   });
 
   it.each([

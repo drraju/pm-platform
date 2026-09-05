@@ -1144,6 +1144,33 @@ describe('ProjectsService', () => {
     });
   });
 
+  it('uses email for a project member whose JIT profile names are absent', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    projectMembersRepository.find?.mockResolvedValue([
+      {
+        id: 'member-id',
+        projectId,
+        role: ProjectRole.Contributor,
+        user: {
+          email: 'jit@example.com',
+          firstName: null,
+          id: userId,
+          lastName: null,
+          role: { name: UserRole.TeamMember },
+        },
+        userId,
+      },
+    ]);
+
+    const [member] = await service.findMembers(projectId);
+
+    expect(member.user).toMatchObject({
+      displayName: 'jit@example.com',
+      firstName: '',
+      lastName: '',
+    });
+  });
+
   it('limits external project member reads to the caller membership', async () => {
     authorizationPolicyService.isExternalActor.mockResolvedValue(true);
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });

@@ -5,6 +5,7 @@ import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { PlanningScheduleSnapshot } from '../../planning/entities/planning-schedule-snapshot.entity';
 import { PlanningTaskSchedule } from '../../planning/entities/planning-task-schedule.entity';
 import { ProjectBaselineTask } from '../../projects/entities/project-baseline-task.entity';
+import { User } from '../../users/entities/user.entity';
 import { Task } from '../entities/task.entity';
 import { MilestoneProjectionComposer } from '../milestone-projection.composer';
 
@@ -55,6 +56,25 @@ describe('MilestoneProjectionComposer', () => {
         varianceDays: 4,
       }),
     );
+  });
+
+  it('uses assignee email when optional profile names are absent', () => {
+    const result = composer.compose({
+      task: {
+        ...task,
+        assignee: {
+          email: 'jit@example.com',
+          firstName: null,
+          id: 'jit-user',
+          lastName: null,
+        } as User,
+      },
+    });
+
+    expect(result.owner).toEqual({
+      id: 'jit-user',
+      name: 'jit@example.com',
+    });
   });
 
   it('derives overdue, completed and unscheduled states without persistence', () => {

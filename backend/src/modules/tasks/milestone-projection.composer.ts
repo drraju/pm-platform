@@ -50,7 +50,9 @@ export class MilestoneProjectionComposer {
       owner: task.assignee
         ? {
             id: task.assignee.id,
-            name: `${task.assignee.firstName} ${task.assignee.lastName}`.trim(),
+            name:
+              `${task.assignee.firstName ?? ''} ${task.assignee.lastName ?? ''}`.trim() ||
+              task.assignee.email,
           }
         : null,
       plannedDate,

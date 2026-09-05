@@ -7,12 +7,15 @@ import {
 } from '../../common/authz/user-identity-role-policy';
 import { ExternalIdentityProvider } from '../../common/enums/external-identity-provider.enum';
 import { UserIdentityType } from '../../common/enums/user-identity-type.enum';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { ExternalIdentity } from './entities/external-identity.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
 
 export type GoogleIdentityLinkingInput = {
+  firstName: string | null;
   issuer: string;
+  lastName: string | null;
   normalizedEmail: string;
   subject: string;
 };
@@ -68,6 +71,7 @@ export class GoogleIdentityLinkingService {
     manager: EntityManager,
     input: GoogleIdentityLinkingInput,
   ): Promise<GoogleIdentityLinkingResult> {
+    const authenticatedAt = new Date();
     const existingIdentity = await this.findByIssuerAndSubject(
       manager,
       input.issuer,
@@ -97,22 +101,24 @@ export class GoogleIdentityLinkingService {
         manager,
         user,
         currentIdentity,
+        authenticatedAt,
         input.normalizedEmail,
       );
       return this.resultFrom(user);
     }
 
+    const existingUser = await this.findUserByNormalizedEmailForUpdate(
+      manager,
+      input.normalizedEmail,
+    );
     const user = await this.ensureEligibleHuman(
       manager,
-      await this.findUserByNormalizedEmailForUpdate(
-        manager,
-        input.normalizedEmail,
-      ),
+      existingUser ??
+        (await this.provisionOrReconcileUser(manager, input, authenticatedAt)),
     );
 
     let identity = await this.reconcileMappings(manager, user, input);
     if (!identity) {
-      const authenticatedAt = new Date();
       await manager
         .createQueryBuilder()
         .insert()
@@ -138,6 +144,7 @@ export class GoogleIdentityLinkingService {
       manager,
       user,
       identity,
+      authenticatedAt,
       input.normalizedEmail,
     );
     return this.resultFrom(user);
@@ -232,6 +239,51 @@ export class GoogleIdentityLinkingService {
       .getOne();
   }
 
+  private async provisionOrReconcileUser(
+    manager: EntityManager,
+    input: GoogleIdentityLinkingInput,
+    authenticatedAt: Date,
+  ): Promise<User> {
+    const role = await manager.findOne(Role, {
+      select: { id: true, name: true },
+      where: { name: UserRole.TeamMember },
+    });
+    if (
+      !role ||
+      !isUserIdentityRoleAssignmentAllowed(UserIdentityType.Human, role.name)
+    ) {
+      throw new GoogleIdentityLinkingPersistenceError();
+    }
+
+    await manager
+      .createQueryBuilder()
+      .insert()
+      .into(User)
+      .values({
+        accountHistory: [],
+        email: input.normalizedEmail,
+        firstName: input.firstName,
+        identityType: UserIdentityType.Human,
+        lastLoginAt: authenticatedAt,
+        lastName: input.lastName,
+        passwordChangedAt: null,
+        passwordHash: null,
+        roleId: role.id,
+        status: 'active',
+      })
+      .orIgnore()
+      .execute();
+
+    const user = await this.findUserByNormalizedEmailForUpdate(
+      manager,
+      input.normalizedEmail,
+    );
+    if (!user) {
+      throw new GoogleIdentityLinkingPersistenceError();
+    }
+    return user;
+  }
+
   private async ensureEligibleHuman(
     manager: EntityManager,
     user: User | null,
@@ -261,9 +313,9 @@ export class GoogleIdentityLinkingService {
     manager: EntityManager,
     user: User,
     identity: ExternalIdentity,
+    authenticatedAt: Date,
     normalizedEmail: string,
   ): Promise<void> {
-    const authenticatedAt = new Date();
     const identityUpdate = await manager.update(
       ExternalIdentity,
       { id: identity.id },

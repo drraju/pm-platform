@@ -18,13 +18,18 @@ import {
 } from '../google-identity-linking.service';
 
 const input = {
+  firstName: 'Ada',
   issuer: 'https://accounts.google.com',
+  lastName: 'Lovelace',
   normalizedEmail: 'person@example.com',
   subject: 'google-subject',
 };
 
 type HarnessOptions = {
   beforeInsert?: (harness: PersistenceHarness) => void | Promise<void>;
+  failIdentityInsert?: boolean;
+  failIdentityUpdate?: boolean;
+  failUserInsert?: boolean;
   failUserUpdate?: boolean;
   identities?: ExternalIdentity[];
   roles?: Role[];
@@ -36,6 +41,7 @@ class PersistenceHarness {
   roles: Role[];
   users: User[];
   readonly insertAttempts: Array<Partial<ExternalIdentity>> = [];
+  readonly userInsertAttempts: Array<Partial<User>> = [];
   readonly manager: any;
   readonly repository: Repository<User>;
 
@@ -55,8 +61,13 @@ class PersistenceHarness {
           );
         }
         if (entity === Role) {
+          const where = findOptions.where;
           return Promise.resolve(
-            this.roles.find(({ id }) => id === findOptions.where.id) ?? null,
+            this.roles.find(
+              (role) =>
+                (where.id === undefined || role.id === where.id) &&
+                (where.name === undefined || role.name === where.name),
+            ) ?? null,
           );
         }
         if (entity === ExternalIdentity) {
@@ -79,6 +90,9 @@ class PersistenceHarness {
       }),
       update: jest.fn(
         async (entity: unknown, criteria: { id: string }, changes: any) => {
+          if (entity === ExternalIdentity && this.options.failIdentityUpdate) {
+            throw new Error('identity update failed');
+          }
           if (entity === User && this.options.failUserUpdate) {
             throw new Error('database unavailable');
           }
@@ -134,21 +148,45 @@ class PersistenceHarness {
   }
 
   private insertBuilder() {
-    let values: Partial<ExternalIdentity> = {};
+    let entity: unknown;
+    let values: Partial<ExternalIdentity> | Partial<User> = {};
     const builder: any = {
       execute: jest.fn(async () => {
+        if (entity === User) {
+          if (this.options.failUserInsert) {
+            throw new Error('user insert failed');
+          }
+          const userValues = values as Partial<User>;
+          this.userInsertAttempts.push(userValues);
+          const conflict = this.users.some(
+            (user) =>
+              user.email.toLowerCase() === userValues.email?.toLowerCase(),
+          );
+          if (!conflict) {
+            this.users.push(
+              Object.assign(new User(), userValues, {
+                id: `user-${this.users.length + 1}`,
+              }),
+            );
+          }
+          return { identifiers: [] };
+        }
+        if (this.options.failIdentityInsert) {
+          throw new Error('identity insert failed');
+        }
         await this.options.beforeInsert?.(this);
-        this.insertAttempts.push(values);
+        const identityValues = values as Partial<ExternalIdentity>;
+        this.insertAttempts.push(identityValues);
         const conflicts = this.identities.some(
           (identity) =>
-            (identity.issuer === values.issuer &&
-              identity.subject === values.subject) ||
-            (identity.userId === values.userId &&
-              identity.provider === values.provider),
+            (identity.issuer === identityValues.issuer &&
+              identity.subject === identityValues.subject) ||
+            (identity.userId === identityValues.userId &&
+              identity.provider === identityValues.provider),
         );
         if (!conflicts) {
           this.identities.push(
-            Object.assign(new ExternalIdentity(), values, {
+            Object.assign(new ExternalIdentity(), identityValues, {
               id: `identity-${this.identities.length + 1}`,
             }),
           );
@@ -156,15 +194,19 @@ class PersistenceHarness {
         return { identifiers: [] };
       }),
       insert: jest.fn(),
-      into: jest.fn(),
-      orIgnore: jest.fn(),
-      values: jest.fn((nextValues: Partial<ExternalIdentity>) => {
-        values = nextValues;
+      into: jest.fn((nextEntity: unknown) => {
+        entity = nextEntity;
         return builder;
       }),
+      orIgnore: jest.fn(),
+      values: jest.fn(
+        (nextValues: Partial<ExternalIdentity> | Partial<User>) => {
+          values = nextValues;
+          return builder;
+        },
+      ),
     };
     builder.insert.mockReturnValue(builder);
-    builder.into.mockReturnValue(builder);
     builder.orIgnore.mockReturnValue(builder);
     return builder;
   }
@@ -282,6 +324,104 @@ describe('GoogleIdentityLinkingService', () => {
     expect(user).toMatchObject(original);
   });
 
+  it('provisions one active passwordless TEAM_MEMBER HUMAN with no memberships or history', async () => {
+    const harness = new PersistenceHarness({ users: [] });
+    const service = new GoogleIdentityLinkingService(harness.repository);
+
+    await expect(
+      service.resolveAndRecordAuthentication(input),
+    ).resolves.toEqual({
+      principal: {
+        email: input.normalizedEmail,
+        id: 'user-1',
+        identityType: UserIdentityType.Human,
+        passwordChangedAt: null,
+        roleId: 'role-human',
+      },
+      status: 'active',
+    });
+
+    expect(harness.userInsertAttempts).toEqual([
+      expect.objectContaining({
+        accountHistory: [],
+        email: input.normalizedEmail,
+        firstName: 'Ada',
+        identityType: UserIdentityType.Human,
+        lastName: 'Lovelace',
+        passwordChangedAt: null,
+        passwordHash: null,
+        roleId: 'role-human',
+        status: 'active',
+      }),
+    ]);
+    expect(harness.users).toHaveLength(1);
+    expect(harness.users[0].projectMemberships).toBeUndefined();
+    expect(harness.identities).toEqual([
+      expect.objectContaining({
+        emailAtLastAuthentication: input.normalizedEmail,
+        issuer: input.issuer,
+        provider: ExternalIdentityProvider.Google,
+        subject: input.subject,
+        userId: 'user-1',
+      }),
+    ]);
+    expect(harness.users[0].lastLoginAt).toEqual(
+      new Date('2026-09-04T12:00:00.000Z'),
+    );
+    expect(harness.identities[0].lastAuthenticatedAt).toEqual(
+      new Date('2026-09-04T12:00:00.000Z'),
+    );
+    expect(harness.manager.findOne).toHaveBeenCalledWith(
+      Role,
+      expect.objectContaining({ where: { name: UserRole.TeamMember } }),
+    );
+  });
+
+  it('provisions a valid JIT user with null names', async () => {
+    const harness = new PersistenceHarness({ users: [] });
+    const service = new GoogleIdentityLinkingService(harness.repository);
+
+    await service.resolveAndRecordAuthentication({
+      ...input,
+      firstName: null,
+      lastName: null,
+    });
+
+    expect(harness.users[0]).toMatchObject({
+      firstName: null,
+      lastName: null,
+    });
+  });
+
+  it('preserves names and skips JIT role resolution for an existing email user', async () => {
+    const existing = humanUser({ firstName: 'Existing', lastName: 'Person' });
+    const harness = new PersistenceHarness({ users: [existing] });
+    const service = new GoogleIdentityLinkingService(harness.repository);
+
+    await service.resolveAndRecordAuthentication(input);
+
+    expect(existing).toMatchObject({
+      firstName: 'Existing',
+      lastName: 'Person',
+    });
+    expect(harness.userInsertAttempts).toHaveLength(0);
+    expect(harness.manager.findOne).not.toHaveBeenCalledWith(
+      Role,
+      expect.objectContaining({ where: { name: UserRole.TeamMember } }),
+    );
+  });
+
+  it('fails safely without creating a user when TEAM_MEMBER is unavailable', async () => {
+    const harness = new PersistenceHarness({ roles: [], users: [] });
+    const service = new GoogleIdentityLinkingService(harness.repository);
+
+    await expect(
+      service.resolveAndRecordAuthentication(input),
+    ).rejects.toBeInstanceOf(GoogleIdentityLinkingPersistenceError);
+    expect(harness.users).toHaveLength(0);
+    expect(harness.identities).toHaveLength(0);
+  });
+
   it.each([
     ['missing linked user', [], [humanRole()]],
     [
@@ -317,7 +457,6 @@ describe('GoogleIdentityLinkingService', () => {
   });
 
   it.each([
-    ['unknown user', [], [humanRole()]],
     [
       'SERVICE user',
       [humanUser({ identityType: UserIdentityType.Service })],
@@ -411,5 +550,21 @@ describe('GoogleIdentityLinkingService', () => {
       lastAuthenticatedAt: originalAuthenticatedAt,
     });
     expect(harness.users[0].lastLoginAt).toBeUndefined();
+  });
+
+  it.each([
+    ['user insertion', { failUserInsert: true }],
+    ['identity insertion', { failIdentityInsert: true }],
+    ['identity metadata update', { failIdentityUpdate: true }],
+    ['lastLoginAt update', { failUserUpdate: true }],
+  ])('rolls back a JIT user after a %s failure', async (_label, failure) => {
+    const harness = new PersistenceHarness({ ...failure, users: [] });
+    const service = new GoogleIdentityLinkingService(harness.repository);
+
+    await expect(
+      service.resolveAndRecordAuthentication(input),
+    ).rejects.toBeInstanceOf(GoogleIdentityLinkingPersistenceError);
+    expect(harness.users).toHaveLength(0);
+    expect(harness.identities).toHaveLength(0);
   });
 });

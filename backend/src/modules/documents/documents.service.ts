@@ -772,7 +772,8 @@ function toUserSummary(user?: User | null): UserSummary | null {
     return null;
   }
   return {
-    displayName: `${user.firstName} ${user.lastName}`.trim() || user.email,
+    displayName:
+      `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email,
     email: user.email,
     id: user.id,
   };

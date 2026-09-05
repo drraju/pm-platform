@@ -25,6 +25,8 @@ describe('GoogleOidcController', () => {
     protocol = {
       completeAuthorization: jest.fn().mockResolvedValue({
         emailVerified: true,
+        familyName: null,
+        givenName: null,
         hostedDomain: 'example.com',
         issuer: GOOGLE_OIDC_ISSUER,
         normalizedEmail: 'person@example.com',
@@ -89,6 +91,8 @@ describe('GoogleOidcController', () => {
       events.push('protocol');
       return Promise.resolve({
         emailVerified: true,
+        familyName: null,
+        givenName: null,
         hostedDomain: 'example.com',
         issuer: GOOGLE_OIDC_ISSUER,
         normalizedEmail: 'person@example.com',

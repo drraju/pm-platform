@@ -49,6 +49,8 @@ export type GoogleIdentityClaims = {
   email?: string;
   email_verified?: boolean;
   exp?: number;
+  family_name?: unknown;
+  given_name?: unknown;
   hd?: string;
   iat?: number;
   iss?: string;
@@ -57,6 +59,8 @@ export type GoogleIdentityClaims = {
 
 export type ValidatedGoogleIdentity = {
   emailVerified: true;
+  familyName: string | null;
+  givenName: string | null;
   hostedDomain: string;
   issuer: typeof GOOGLE_OIDC_ISSUER;
   normalizedEmail: string;

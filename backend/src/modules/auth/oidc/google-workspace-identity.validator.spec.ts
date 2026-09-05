@@ -38,15 +38,67 @@ describe('Google Workspace identity validation', () => {
   const validator = new GoogleWorkspaceIdentityValidator(configuration);
 
   it('returns narrow normalized authentication evidence', () => {
-    expect(validator.validate(validClaims())).toEqual({
+    const identity = validator.validate({
+      ...validClaims(),
+      department: 'Engineering',
+      groups: ['admins@example.com'],
+      role: 'PLATFORM_ADMIN',
+    } as GoogleIdentityClaims);
+
+    expect(identity).toEqual({
       emailVerified: true,
+      familyName: null,
+      givenName: null,
       hostedDomain: 'cloudfabrix.com',
       issuer: GOOGLE_OIDC_ISSUER,
       normalizedEmail: 'person@cloudfabrix.com',
       provider: 'GOOGLE',
       subject: 'google-subject-123',
     });
+    expect(identity).not.toHaveProperty('department');
+    expect(identity).not.toHaveProperty('groups');
+    expect(identity).not.toHaveProperty('role');
   });
+
+  it('normalizes usable Google profile names as display-only evidence', () => {
+    expect(
+      validator.validate({
+        ...validClaims(),
+        family_name: '  Ångström  ',
+        given_name: '  Zoë  ',
+      }),
+    ).toMatchObject({
+      familyName: 'Ångström',
+      givenName: 'Zoë',
+    });
+  });
+
+  it('accepts Unicode names up to the database character limit', () => {
+    const unicodeName = '𐐀'.repeat(255);
+
+    expect(
+      validator.validate({ ...validClaims(), given_name: unicodeName }),
+    ).toMatchObject({ givenName: unicodeName });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['blank', '   '],
+    ['non-string', 42],
+    ['oversized', 'a'.repeat(256)],
+    ['control characters', 'Ada\nLovelace'],
+  ])(
+    'treats %s names as absent without rejecting the identity',
+    (_description, value) => {
+      expect(
+        validator.validate({
+          ...validClaims(),
+          family_name: value,
+          given_name: value,
+        }),
+      ).toMatchObject({ familyName: null, givenName: null });
+    },
+  );
 
   it.each([
     ['wrong issuer', { iss: 'https://evil.example' }, 'authentication_failed'],

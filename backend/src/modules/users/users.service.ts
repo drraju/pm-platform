@@ -650,11 +650,11 @@ export class UsersService {
     return {
       id: user.id,
       email: user.email,
-      firstName: user.firstName,
+      firstName: user.firstName ?? '',
       ...(user.identityType === UserIdentityType.Service
         ? { identityType: UserIdentityType.Service }
         : {}),
-      lastName: user.lastName,
+      lastName: user.lastName ?? '',
       roleId: user.roleId,
       status: user.status,
       accountHistory: user.accountHistory ?? [],
@@ -673,8 +673,8 @@ export class UsersService {
     return {
       id: user.id,
       email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      firstName: user.firstName ?? '',
+      lastName: user.lastName ?? '',
       displayName: displayName || user.email,
       role: user.role?.name ?? null,
     };

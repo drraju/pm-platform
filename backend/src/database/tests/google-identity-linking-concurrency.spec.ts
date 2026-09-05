@@ -25,7 +25,9 @@ const servicePath = join(
   'google-identity-linking.service.ts',
 );
 const request = {
+  firstName: 'Ada',
   issuer: 'https://accounts.google.com',
+  lastName: 'Lovelace',
   normalizedEmail: 'person@example.com',
   subject: 'subject-one',
 };
@@ -114,6 +116,20 @@ describe('Google identity PostgreSQL race reconciliation', () => {
 
     expect(source).toContain('.orIgnore()');
     expect(source).not.toMatch(/catch[\s\S]{0,200}23505/);
+  });
+
+  it('uses conflict-safe insertion and an authoritative re-read for JIT users', () => {
+    const source = readFileSync(servicePath, 'utf8');
+    const userInsert = source.indexOf('.into(User)');
+    const conflictSuppression = source.indexOf('.orIgnore()', userInsert);
+    const authoritativeRead = source.indexOf(
+      'findUserByNormalizedEmailForUpdate(',
+      conflictSuppression,
+    );
+
+    expect(userInsert).toBeGreaterThan(-1);
+    expect(conflictSuppression).toBeGreaterThan(userInsert);
+    expect(authoritativeRead).toBeGreaterThan(conflictSuppression);
   });
 
   it('treats the winner of an identical concurrent insert as idempotent', async () => {

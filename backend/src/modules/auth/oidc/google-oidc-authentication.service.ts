@@ -22,7 +22,9 @@ export class GoogleOidcAuthenticationService {
     let linkedUser: GoogleIdentityLinkingResult;
     try {
       linkedUser = await this.identityLinking.resolveAndRecordAuthentication({
+        firstName: identity.givenName,
         issuer: identity.issuer,
+        lastName: identity.familyName,
         normalizedEmail: identity.normalizedEmail,
         subject: identity.subject,
       });

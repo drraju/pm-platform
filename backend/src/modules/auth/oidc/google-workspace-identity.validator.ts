@@ -59,6 +59,8 @@ export class GoogleWorkspaceIdentityValidator {
 
     return {
       emailVerified: true,
+      familyName: this.normalizeOptionalName(claims.family_name),
+      givenName: this.normalizeOptionalName(claims.given_name),
       hostedDomain,
       issuer: GOOGLE_OIDC_ISSUER,
       normalizedEmail,
@@ -88,5 +90,23 @@ export class GoogleWorkspaceIdentityValidator {
       return null;
     }
     return parts[1];
+  }
+
+  private normalizeOptionalName(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const name = value.trim();
+    if (
+      !name ||
+      Array.from(name).length > 255 ||
+      Array.from(name).some((character) => {
+        const codePoint = character.codePointAt(0) ?? 0;
+        return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+      })
+    ) {
+      return null;
+    }
+    return name;
   }
 }

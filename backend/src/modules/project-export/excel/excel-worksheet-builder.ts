@@ -41,9 +41,17 @@ export abstract class ExcelWorksheetBuilder {
   }
 }
 
-export function displayUser(user?: { firstName?: string; lastName?: string; email?: string } | null) {
+export function displayUser(
+  user?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string;
+  } | null,
+) {
   if (!user) return '';
-  return `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email || '';
+  return (
+    `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email || ''
+  );
 }
 
 export function formatDate(value?: string | Date | null) {

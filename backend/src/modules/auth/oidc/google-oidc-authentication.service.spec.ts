@@ -11,6 +11,8 @@ import { GOOGLE_OIDC_ISSUER } from './google-oidc.types';
 
 const validatedIdentity = {
   emailVerified: true as const,
+  familyName: 'Lovelace',
+  givenName: 'Ada',
   hostedDomain: 'example.com',
   issuer: GOOGLE_OIDC_ISSUER,
   normalizedEmail: 'person@example.com',
@@ -63,7 +65,9 @@ describe('GoogleOidcAuthenticationService', () => {
 
     expect(identityLinking.resolveAndRecordAuthentication).toHaveBeenCalledWith(
       {
+        firstName: 'Ada',
         issuer: GOOGLE_OIDC_ISSUER,
+        lastName: 'Lovelace',
         normalizedEmail: 'person@example.com',
         subject: 'google-subject',
       },
@@ -106,6 +110,33 @@ describe('GoogleOidcAuthenticationService', () => {
       }),
       { requiresPasswordChange: true },
     );
+  });
+
+  it('does not issue a session until identity persistence has completed', async () => {
+    let completePersistence: ((value: unknown) => void) | undefined;
+    identityLinking.resolveAndRecordAuthentication.mockReturnValue(
+      new Promise((resolve) => {
+        completePersistence = resolve;
+      }),
+    );
+
+    const authentication = authenticate.authenticate(validatedIdentity);
+    await Promise.resolve();
+    expect(sessionIssuer.issue).not.toHaveBeenCalled();
+
+    completePersistence?.({
+      principal: {
+        email: 'person@example.com',
+        id: 'user-1',
+        identityType: UserIdentityType.Human,
+        passwordChangedAt: null,
+        roleId: 'role-1',
+      },
+      status: 'active',
+    });
+    await authentication;
+
+    expect(sessionIssuer.issue).toHaveBeenCalledTimes(1);
   });
 
   it.each([
