@@ -23,6 +23,7 @@ import {
 import { GoogleOidcController } from './oidc/google-oidc.controller';
 import { GoogleOidcAuthenticationService } from './oidc/google-oidc-authentication.service';
 import { GoogleOidcProtocolService } from './oidc/google-oidc-protocol.service';
+import { GoogleOidcSessionHandoffService } from './oidc/google-oidc-session-handoff.service';
 import {
   OIDC_RANDOM_SOURCE,
   OidcRandomSource,
@@ -65,6 +66,7 @@ import { GoogleWorkspaceIdentityValidator } from './oidc/google-workspace-identi
     GoogleOidcAuthenticationService,
     GoogleOidcClient,
     GoogleOidcProtocolService,
+    GoogleOidcSessionHandoffService,
     GoogleWorkspaceIdentityValidator,
     OidcRandomSource,
     OidcRedisClient,

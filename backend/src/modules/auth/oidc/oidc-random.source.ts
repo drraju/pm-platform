@@ -21,6 +21,10 @@ export class OidcRandomSource implements OidcRandomSourcePort {
     return randomBytes(32).toString('base64url');
   }
 
+  handoffReference(): string {
+    return randomBytes(32).toString('base64url');
+  }
+
   nonce(): string {
     return randomBytes(32).toString('base64url');
   }

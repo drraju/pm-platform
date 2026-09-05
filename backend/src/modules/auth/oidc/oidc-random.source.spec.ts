@@ -6,6 +6,7 @@ describe('OIDC random source', () => {
     const values = [
       source.browserCorrelation(),
       source.codeVerifier(),
+      source.handoffReference(),
       source.nonce(),
       source.state(),
       source.transactionId(),

@@ -1,7 +1,21 @@
-import { Controller, Get, Query, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
+import { ApiOkResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { ExchangeGoogleOidcSessionDto } from '../dto/exchange-google-oidc-session.dto';
+import { SessionDto } from '../dto/session.dto';
 import { GoogleOidcAuthenticationService } from './google-oidc-authentication.service';
 import { GoogleOidcProtocolService } from './google-oidc-protocol.service';
+import { GoogleOidcSessionHandoffService } from './google-oidc-session-handoff.service';
 import type { OidcCallbackQuery } from './google-oidc-protocol.service';
 
 @Controller('auth/google/oidc')
@@ -9,6 +23,7 @@ export class GoogleOidcController {
   constructor(
     private readonly protocol: GoogleOidcProtocolService,
     private readonly authentication: GoogleOidcAuthenticationService,
+    private readonly sessionHandoff: GoogleOidcSessionHandoffService,
   ) {}
 
   @Get('authorize')
@@ -34,12 +49,32 @@ export class GoogleOidcController {
       cookieName,
       this.protocol.correlationCookieClearOptions(),
     );
-    const identity = await this.protocol.completeAuthorization(
-      query,
-      correlationCookie,
-    );
-    const session = await this.authentication.authenticate(identity);
-    response.json(session);
+    try {
+      const identity = await this.protocol.completeAuthorization(
+        query,
+        correlationCookie,
+      );
+      const session = await this.authentication.authenticate(identity);
+      const handoff = await this.sessionHandoff.create(session);
+      response.redirect(
+        HttpStatus.SEE_OTHER,
+        this.sessionHandoff.frontendSuccessRedirect(handoff),
+      );
+    } catch (error) {
+      response.redirect(
+        HttpStatus.SEE_OTHER,
+        this.sessionHandoff.frontendErrorRedirect(error),
+      );
+    }
+  }
+
+  @Post('exchange')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: SessionDto })
+  exchange(
+    @Body() exchangeDto: ExchangeGoogleOidcSessionDto,
+  ): Promise<SessionDto> {
+    return this.sessionHandoff.consume(exchangeDto.handoff);
   }
 }
 
