@@ -1,8 +1,10 @@
 export {
   changePassword,
   clearSession,
+  exchangeGoogleOidcHandoff,
   forgotPassword,
   getAuthMe,
+  getGoogleOidcAuthorizeUrl,
   getStoredAccessToken,
   getStoredPermissionKeys,
   getStoredRoleNames,
@@ -11,6 +13,7 @@ export {
   resetPassword,
   storeAuthMe,
   storeSession,
+  startGoogleOidcLogin,
   subscribeAuthSessionChange,
 } from "@/lib/api/client";
 export { useStoredAuthSession } from "./stored-auth-session";

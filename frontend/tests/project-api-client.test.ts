@@ -16,6 +16,7 @@ import {
   createProjectTaskDependency,
   getAssignableUsers,
   getAuthMe,
+  getGoogleOidcAuthorizeUrl,
   getDocumentStorageProviders,
   getDocumentTypes,
   getPermissions,
@@ -29,6 +30,7 @@ import {
   disableUser,
   downloadProjectExcel,
   enableUser,
+  exchangeGoogleOidcHandoff,
   getMyTasks,
   getLatestPlanningSchedule,
   getProjectBaseline,
@@ -48,6 +50,7 @@ import {
   recordProjectTaskExecutionUpdate,
   resetPassword,
   restoreProject,
+  startGoogleOidcLogin,
   storeSession,
   updateRolePermissions,
   updateUser,
@@ -1740,6 +1743,46 @@ describe("project API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:3001/auth/me",
       expect.any(Object),
+    );
+  });
+
+  it("builds and starts the Google OIDC authorization as a full browser navigation", () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", { location: { assign } });
+
+    expect(getGoogleOidcAuthorizeUrl()).toBe(
+      "http://localhost:3001/auth/google/oidc/authorize",
+    );
+    startGoogleOidcLogin();
+
+    expect(assign).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/google/oidc/authorize",
+    );
+  });
+
+  it("exchanges a Google OIDC handoff with POST and no bearer token", async () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === "pm_platform_access_token" ? "existing-access-token" : null,
+    );
+    const session = {
+      accessToken: "google-access-token",
+      refreshToken: "google-refresh-token",
+    };
+    const fetchMock = mockFetch(session);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      exchangeGoogleOidcHandoff("a".repeat(43)),
+    ).resolves.toEqual(session);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/auth/google/oidc/exchange",
+      expect.objectContaining({
+        body: JSON.stringify({ handoff: "a".repeat(43) }),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty(
+      "Authorization",
     );
   });
 

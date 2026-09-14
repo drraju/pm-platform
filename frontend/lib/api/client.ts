@@ -1236,6 +1236,22 @@ export function login(email: string, password: string) {
   });
 }
 
+export function getGoogleOidcAuthorizeUrl() {
+  return `${apiBaseUrl}/auth/google/oidc/authorize`;
+}
+
+export function startGoogleOidcLogin() {
+  window.location.assign(getGoogleOidcAuthorizeUrl());
+}
+
+export function exchangeGoogleOidcHandoff(handoff: string) {
+  return apiRequest<ApiSession>("/auth/google/oidc/exchange", {
+    body: JSON.stringify({ handoff }),
+    method: "POST",
+    token: null,
+  });
+}
+
 export function getAuthMe() {
   return apiRequest<ApiAuthMe>("/auth/me");
 }
