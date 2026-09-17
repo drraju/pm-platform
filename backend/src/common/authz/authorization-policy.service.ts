@@ -99,6 +99,10 @@ export class AuthorizationPolicyService {
       return false;
     }
 
+    if ((await this.getActorRoleName(actor)) === UserRole.Customer) {
+      return Boolean(await this.findMembership(projectId, actor.userId));
+    }
+
     if (this.hasGlobalProjectAccess(permissionKeys)) {
       return true;
     }
@@ -298,7 +302,8 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    return (await this.getActorRoleName(actor)) !== UserRole.Executive;
+    const roleName = await this.getActorRoleName(actor);
+    return roleName !== UserRole.Executive && roleName !== UserRole.Customer;
   }
 
   private async canManageProjectWithPermissions(
@@ -409,7 +414,7 @@ export class AuthorizationPolicyService {
         deniedPermissions.add(permissionKey);
       }
     }
-    if (role?.name === UserRole.Executive) {
+    if (role?.name === UserRole.Executive || role?.name === UserRole.Customer) {
       for (const permissionKey of executiveDeniedLegacyProjectMutationPermissions) {
         deniedPermissions.add(permissionKey);
       }

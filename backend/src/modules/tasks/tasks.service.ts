@@ -1,3 +1,4 @@
+import { UserRole } from '../../common/enums/user-role.enum';
 import {
   BadRequestException,
   ConflictException,
@@ -241,13 +242,17 @@ export class TasksService {
     return this.projectTasksForActor(visibleTasks, actor);
   }
 
-  async getMyTasksSummary(userId: string): Promise<MyTasksSummaryDto> {
-    const tasks = await this.tasksRepository.find({
+  async getMyTasksSummary(
+    userId: string,
+    actor?: ProjectVisibilityActor,
+  ): Promise<MyTasksSummaryDto> {
+    const assignedTasks = await this.tasksRepository.find({
       where: {
         assigneeId: userId,
         taskKind: In([TaskKind.Standard, TaskKind.Milestone]),
       },
     });
+    const tasks = await this.filterCustomerTasks(assignedTasks, actor);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const operationalTasks = getOperationalTasks(tasks);
@@ -626,6 +631,11 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<void> {
+    if (
+      !(await this.authorizationPolicyService.canMutateProjectDomain(actor))
+    ) {
+      throw new ForbiddenException('Task mutation is not permitted');
+    }
     const changedFields = Object.keys(updateTaskDto);
     const executionFields = changedFields.filter((field) =>
       taskExecutionFields.has(field),
@@ -812,9 +822,38 @@ export class TasksService {
     if (!(await this.authorizationPolicyService.isExternalActor(actor))) {
       return tasks;
     }
+    const permittedTasks = await this.filterCustomerTasks(tasks, actor);
     return Promise.all(
-      tasks.map((task) => this.projectTaskForActor(task, actor)),
+      permittedTasks.map((task) => this.projectTaskForActor(task, actor)),
     );
+  }
+
+  private async filterCustomerTasks(
+    tasks: Task[],
+    actor?: ProjectVisibilityActor,
+  ): Promise<Task[]> {
+    if (
+      (await this.authorizationPolicyService.getActorRoleName(actor)) !==
+        UserRole.Customer ||
+      !actor
+    ) {
+      return tasks;
+    }
+    const ownTasks = tasks.filter((task) => task.assigneeId === actor.userId);
+    const decisions = await Promise.all(
+      [...new Set(ownTasks.map((task) => task.projectId))].map(
+        async (projectId) => {
+          const decision = await this.canonicalCapabilityResolver.resolve({
+            actor,
+            capability: 'task.view',
+            resource: { type: 'task', projectId, assigneeId: actor.userId },
+          });
+          return [projectId, decision.allowed] as const;
+        },
+      ),
+    );
+    const allowed = new Map(decisions);
+    return ownTasks.filter((task) => allowed.get(task.projectId));
   }
 
   private async validateAssigneeMembership(

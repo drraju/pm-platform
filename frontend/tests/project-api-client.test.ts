@@ -15,6 +15,7 @@ import {
   createProject,
   createProjectTaskDependency,
   getAssignableUsers,
+  getProjectMemberCandidates,
   getAuthMe,
   getGoogleOidcAuthorizeUrl,
   getDocumentStorageProviders,
@@ -128,6 +129,16 @@ describe("project API client", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("searches membership candidates through the project-scoped endpoint", async () => {
+    const fetchMock = mockFetch([]);
+    vi.stubGlobal("fetch", fetchMock);
+    await getProjectMemberCandidates("project-1", "Client & Co");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/projects/project-1/member-candidates?search=Client%20%26%20Co",
+      expect.any(Object),
+    );
   });
 
   it("lists projects", async () => {

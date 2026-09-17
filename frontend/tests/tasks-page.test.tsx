@@ -1,6 +1,8 @@
 import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveProjectUiCapabilities as realCapabilities } from "@/features/auth/capabilities";
+import { getAuthMe } from "@/features/auth";
 import TasksPage from "@/app/(app)/tasks/page";
 
 const taskMocks = vi.hoisted(() => ({
@@ -49,39 +51,7 @@ vi.mock("@/features/auth", () => ({
   ],
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
     permissionKeys.includes(requiredPermission),
-  resolveProjectUiCapabilities: ({
-    currentUserId,
-    permissionKeys = [],
-    task,
-  }: {
-    currentUserId?: string | null;
-    permissionKeys?: string[];
-    task?: { assigneeId?: string | null } | null;
-  }) => {
-    const canUpdateTask =
-      permissionKeys.includes("task.update") &&
-      Boolean(currentUserId) &&
-      task?.assigneeId === currentUserId;
-    return {
-      canAccessDailyReview: false,
-      canAccessDelivery: true,
-      canAccessGovern: false,
-      canAccessPlanning: false,
-      canAccessToday: true,
-      canApproveDocuments: false,
-      canContributeDocuments: true,
-      canEditDocument: false,
-      canEditExecution: canUpdateTask,
-      canEditPlanning: false,
-      canExecuteAssignedTask: canUpdateTask,
-      canManageDocuments: false,
-      canManageProjectTasks: false,
-      canManageTeam: false,
-      canReassignTask: canUpdateTask,
-      canUpdateTask,
-      canUploadDocuments: true,
-    };
-  },
+  resolveProjectUiCapabilities: realCapabilities,
   storeAuthMe: vi.fn(),
 }));
 
@@ -113,6 +83,37 @@ describe("Tasks page", () => {
       },
     ]);
     projectMocks.getProjectMembers.mockResolvedValue([]);
+  });
+
+  it("shows CUSTOMER tasks with permitted project context and no mutation controls", async () => {
+    const auth = await getAuthMe();
+    vi.mocked(getAuthMe).mockResolvedValueOnce({
+      ...auth,
+      roles: [{ id: "customer-role", name: "CUSTOMER" }],
+    });
+    taskMocks.getMyTasks.mockResolvedValue([
+      {
+        id: "customer-task",
+        projectId: "project-1",
+        assigneeId: "user-1",
+        title: "Customer testing",
+        status: "in_progress",
+        taskKind: "standard",
+        percentComplete: 25,
+        priority: "medium",
+      },
+    ]);
+    render(<TasksPage />);
+    await screen.findByText("Customer testing");
+    expect(
+      screen.getAllByText("Customer Experience Platform Upgrade").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: /save update/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: /update notes/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("uses all-visible task scope and honors overdue timing filters from executive drilldowns", async () => {

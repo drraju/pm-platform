@@ -87,7 +87,10 @@ export class TasksController {
   getMyTasksSummary(
     @Req() request: AuthenticatedRequest,
   ): Promise<MyTasksSummaryDto> {
-    return this.tasksService.getMyTasksSummary(request.user.userId);
+    return this.tasksService.getMyTasksSummary(
+      request.user.userId,
+      request.user,
+    );
   }
 
   @Get(':id')

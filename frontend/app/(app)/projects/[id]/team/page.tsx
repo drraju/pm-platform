@@ -11,9 +11,9 @@ import {
   storeAuthMe,
 } from "@/features/auth";
 import {
-  getAssignableUsers,
+  getProjectMemberCandidates,
   getProject,
-  type ApiAssignableUser,
+  type ApiProjectMemberCandidate,
   type ApiProjectDetails,
 } from "@/features/projects";
 import { useProjectMembers } from "@/hooks/use-project-members";
@@ -25,7 +25,9 @@ export default function ProjectTeamPage() {
   const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
   const [roleNames, setRoleNames] = useState<string[]>([]);
-  const [users, setUsers] = useState<ApiAssignableUser[]>([]);
+  const [users, setUsers] = useState<ApiProjectMemberCandidate[]>([]);
+  const [search, setSearch] = useState("");
+  const [candidateError, setCandidateError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const {
@@ -43,16 +45,16 @@ export default function ProjectTeamPage() {
       setError(null);
       setIsLoading(true);
       try {
-        const [projectDetails, assignableUsers, authMe] = await Promise.all([
+        const [projectDetails, authMe] = await Promise.all([
           getProject(projectId),
-          getAssignableUsers(projectId),
           getAuthMe(),
         ]);
         storeAuthMe(authMe);
         setProject(projectDetails);
-        setUsers(assignableUsers);
         setCurrentUserId(authMe.user.id);
-        setPermissionKeys(authMe.permissions.map((permission) => permission.key));
+        setPermissionKeys(
+          authMe.permissions.map((permission) => permission.key),
+        );
         setRoleNames(authMe.roles.map((role) => role.name));
       } catch (requestError) {
         setError(
@@ -68,6 +70,38 @@ export default function ProjectTeamPage() {
     void loadProject();
   }, [projectId]);
 
+  const capabilities = resolveProjectUiCapabilities({
+    currentUserId,
+    members,
+    permissionKeys,
+    project,
+    roleNames,
+  });
+  useEffect(() => {
+    let cancelled = false;
+    setUsers([]);
+    setCandidateError(null);
+    if (!capabilities.canManageTeam) return;
+    const timer = setTimeout(() => {
+      getProjectMemberCandidates(projectId, search)
+        .then((candidates) => {
+          if (!cancelled) setUsers(candidates);
+        })
+        .catch((error: unknown) => {
+          if (!cancelled)
+            setCandidateError(
+              error instanceof Error
+                ? error.message
+                : "Unable to search members",
+            );
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [projectId, search, capabilities.canManageTeam]);
+
   if (isLoading || areMembersLoading) {
     return <ProjectLayoutLoadingState />;
   }
@@ -77,13 +111,6 @@ export default function ProjectTeamPage() {
     name: "Project Team",
     status: "active",
   };
-  const capabilities = resolveProjectUiCapabilities({
-    currentUserId,
-    members,
-    permissionKeys,
-    project,
-    roleNames,
-  });
 
   return (
     <ProjectLayout activeTab="resources" project={workspaceProject}>
@@ -97,8 +124,11 @@ export default function ProjectTeamPage() {
           {memberError}
         </section>
       ) : null}
+      {candidateError ? <p role="alert">{candidateError}</p> : null}
       <ProjectWorkspaceTeam
         availableUsers={users}
+        search={search}
+        onSearchChange={setSearch}
         isSaving={isSaving}
         members={members}
         onAddMember={capabilities.canManageTeam ? addMember : undefined}

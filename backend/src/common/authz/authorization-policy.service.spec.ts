@@ -307,6 +307,49 @@ describe('AuthorizationPolicyService', () => {
     },
   );
 
+  it('requires current CUSTOMER membership even with governance or stale global read scope', async () => {
+    const customer = actor(UserRole.Customer, 'customer');
+    permissionOverridesByRoleName.set(
+      UserRole.Customer,
+      Object.values(PermissionKey),
+    );
+    projectGovernorAssignments.add(`${projectId}:ownerId:customer`);
+    expect(await service.canViewProject(projectId, customer)).toBe(false);
+    membershipsByKey.set(`${projectId}:customer`, ProjectRole.Viewer);
+    expect(await service.canViewProject(projectId, customer)).toBe(true);
+    membershipsByKey.delete(`${projectId}:customer`);
+    expect(await service.canViewProject(projectId, customer)).toBe(false);
+  });
+
+  it('keeps CUSTOMER read-only despite stale mutation grants and contributor membership', async () => {
+    const customer = actor(UserRole.Customer, 'customer');
+    permissionOverridesByRoleName.set(
+      UserRole.Customer,
+      Object.values(PermissionKey),
+    );
+    membershipsByKey.set(`${projectId}:customer`, ProjectRole.Contributor);
+    expect(await service.canMutateProjectDomain(customer)).toBe(false);
+    expect(await service.canManageProject(projectId, customer)).toBe(false);
+    expect(await service.canManageTask(projectId, customer)).toBe(false);
+    const permissions = await service.getGrantedPermissionKeys(customer);
+    for (const key of [
+      PermissionKey.ProjectCreate,
+      PermissionKey.ProjectTeamManage,
+      PermissionKey.ProjectUpdate,
+      PermissionKey.TaskCreate,
+      PermissionKey.TaskUpdate,
+      PermissionKey.TaskReassign,
+      PermissionKey.TaskDelete,
+      PermissionKey.TaskComment,
+    ]) {
+      expect(permissions.has(key)).toBe(false);
+    }
+    expect(permissions.has(PermissionKey.ProjectRead)).toBe(true);
+    expect(
+      await service.canMutateProjectDomain(actor(UserRole.Partner, 'partner')),
+    ).toBe(true);
+  });
+
   it('denies deliberately permissioned Executive project mutations before membership or governance authority', async () => {
     permissionOverridesByRoleName.set(
       UserRole.Executive,

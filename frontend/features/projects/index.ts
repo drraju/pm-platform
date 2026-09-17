@@ -16,6 +16,7 @@ export {
   getProjectDependencies,
   getProjectIssues,
   getProjectMembers,
+  getProjectMemberCandidates,
   getProjectRisks,
   getProjectTaskDependencies,
   getProjectTasks,
@@ -31,6 +32,7 @@ export {
 } from "@/lib/api/client";
 export type {
   ApiProject,
+  ApiProjectMemberCandidate,
   ApiProjectBaseline,
   ApiProjectBaselineTask,
   ApiProjectDetails,

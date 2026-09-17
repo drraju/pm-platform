@@ -143,13 +143,23 @@ function PageContent() {
     setError(null);
     setIsLoading(true);
     try {
-      const [projectData, userData, authMe] = await Promise.all([
+      const [projectData, authMe] = await Promise.all([
         getProjects({ archived: statusFilter === "archived" }),
-        getAssignableUsers(),
         getAuthMe(),
       ]);
+      const customer = authMe.roles.some((role) => role.name === "CUSTOMER");
+      const needsDirectory =
+        !customer &&
+        authMe.permissions.some((permission) =>
+          ["project.create", "project.update"].includes(permission.key),
+        );
+      const userData = needsDirectory ? await getAssignableUsers() : [];
       storeAuthMe(authMe);
-      setPermissionKeys(authMe.permissions.map((permission) => permission.key));
+      setPermissionKeys(
+        authMe.permissions
+          .map((permission) => permission.key)
+          .filter((key) => !customer || key === "project.read"),
+      );
       setIsPlatformAdmin(
         authMe.roles.some((role) => role.name === "PLATFORM_ADMIN"),
       );

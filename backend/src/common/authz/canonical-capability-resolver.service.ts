@@ -141,6 +141,22 @@ export class CanonicalCapabilityResolverService {
       input.resource.assigneeId,
       input.requestedAssigneeId,
     );
+    // Assignment commands are mutations even when the assignee is unchanged.
+    if (
+      (await this.authorizationPolicyService.getActorRoleName(input.actor)) ===
+      UserRole.Customer
+    ) {
+      return {
+        ...this.deny('external', 'MISSING_PERMISSION'),
+        capability:
+          operation === 'none'
+            ? null
+            : operation === 'assign'
+              ? 'task.assign'
+              : 'task.reassign',
+        operation,
+      };
+    }
     if (operation === 'none') {
       const objectStateRestricted =
         Boolean(input.resource.deletedAt) ||
@@ -320,6 +336,18 @@ export class CanonicalCapabilityResolverService {
       );
     if (!projectRole) {
       return this.deny(audience, 'PROJECT_MEMBERSHIP_REQUIRED');
+    }
+
+    if (
+      capability === 'task.view' &&
+      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
+        UserRole.Customer &&
+      !(await this.authorizationPolicyService.canViewProject(
+        resource.projectId,
+        actor,
+      ))
+    ) {
+      return this.deny(audience, 'OUTSIDE_PROJECT_SCOPE');
     }
 
     if (

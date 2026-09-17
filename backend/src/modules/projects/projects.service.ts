@@ -53,6 +53,8 @@ import { Risk } from '../raid/entities/risk.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../users/entities/role.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
+import { ProjectMemberCandidateQueryDto } from './dto/project-member-candidate-query.dto';
+import { ProjectMemberCandidateResponseDto } from './dto/project-member-candidate-response.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateProjectTaskDto } from './dto/create-project-task.dto';
 import { ProjectMemberResponseDto } from './dto/project-member-response.dto';
@@ -168,8 +170,19 @@ export class ProjectsService {
     actor?: ProjectVisibilityActor,
     options: { lifecycle?: ProjectListMode } = {},
   ): Promise<ProjectWithHealth[]> {
-    const projects =
+    let projects =
       await this.projectVisibilityService.getVisibleProjects(actor);
+    if (
+      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
+      UserRole.Customer
+    ) {
+      const visible = await Promise.all(
+        projects.map((project) =>
+          this.projectVisibilityService.canViewProject(project.id, actor),
+        ),
+      );
+      projects = projects.filter((_, index) => visible[index]);
+    }
     const lifecycle = options.lifecycle ?? 'active';
     const filteredProjects = projects.filter((project) => {
       if (lifecycle === 'all') {
@@ -275,6 +288,63 @@ export class ProjectsService {
     await this.projectsRepository.manager.transaction(async (manager) => {
       await this.purgeProjectOwnedData(manager, id);
     });
+  }
+
+  async findMemberCandidates(
+    projectId: string,
+    query: ProjectMemberCandidateQueryDto,
+    actor: AuthenticatedActor,
+  ): Promise<ProjectMemberCandidateResponseDto[]> {
+    if (
+      !(await this.authorizationPolicyService.hasPermission(
+        actor,
+        PermissionKey.ProjectTeamManage,
+      ))
+    ) {
+      throw new ForbiddenException(
+        'Project team management access is required',
+      );
+    }
+    await this.ensureCanManageProject(projectId, actor);
+    await this.ensureProjectExists(projectId);
+    const candidates = this.usersRepository
+      .createQueryBuilder('candidate')
+      .leftJoinAndSelect('candidate.role', 'role')
+      .where('candidate.status = :status', { status: 'active' })
+      .andWhere('(role.name IS NULL OR role.name <> :partner)', {
+        partner: UserRole.Partner,
+      })
+      .andWhere(
+        `NOT EXISTS (SELECT 1 FROM project_members membership WHERE membership.user_id = candidate.id AND membership.project_id = :projectId AND membership.deleted_at IS NULL)`,
+        { projectId },
+      );
+    const search = query.search?.trim();
+    if (search) {
+      // Treat wildcard characters as literal search text.
+      const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+      candidates.andWhere(
+        "(concat_ws(' ', candidate.first_name, candidate.last_name) ILIKE :search OR candidate.email ILIKE :search)",
+        { search: pattern },
+      );
+    }
+    const users = await candidates
+      .orderBy('candidate.firstName', 'ASC')
+      .addOrderBy('candidate.lastName', 'ASC')
+      .addOrderBy('candidate.id', 'ASC')
+      .take(50)
+      .getMany();
+    return users.map((user) => ({
+      id: user.id,
+      displayName:
+        [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
+        user.email,
+      email: user.email,
+      globalRoleName: user.role?.name ?? null,
+      allowedProjectRoles:
+        user.role?.name === String(UserRole.Customer)
+          ? [ProjectRole.Viewer]
+          : Object.values(ProjectRole),
+    }));
   }
 
   async addMember(
@@ -389,16 +459,24 @@ export class ProjectsService {
   ): Promise<Task[]> {
     await this.ensureTaskCapabilityForProject(projectId, 'task.view', actor);
 
+    const external =
+      await this.authorizationPolicyService.isExternalActor(actor);
+    const customer =
+      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
+      UserRole.Customer;
+    if (customer && query.assigneeId && query.assigneeId !== actor!.userId) {
+      return [];
+    }
+
     const tasks = await this.tasksRepository.find({
       order: { createdAt: 'DESC' },
       relations: { assignee: true, project: true },
       where: {
         projectId,
-        ...((await this.authorizationPolicyService.isExternalActor(actor))
-          ? { assigneeId: actor!.userId }
-          : {}),
+        ...(external ? { assigneeId: actor!.userId } : {}),
         ...(query.status ? { status: query.status } : {}),
         ...(query.assigneeId ? { assigneeId: query.assigneeId } : {}),
+        ...(customer ? { assigneeId: actor!.userId } : {}),
         ...(query.priority ? { priority: query.priority } : {}),
       },
     });
@@ -1718,6 +1796,11 @@ export class ProjectsService {
     updateProjectTaskDto: UpdateProjectTaskDto,
     actor?: AuthenticatedActor,
   ): Promise<void> {
+    if (
+      !(await this.authorizationPolicyService.canMutateProjectDomain(actor))
+    ) {
+      throw new ForbiddenException('Task mutation is not permitted');
+    }
     const changedFields = Object.keys(updateProjectTaskDto);
     const executionFields = changedFields.filter((field) =>
       taskExecutionFields.has(field),

@@ -70,6 +70,13 @@ describe('TaskAssignmentController integration', () => {
       }),
     };
     const policy = {
+      getActorRoleName: jest.fn(
+        async ({ roleId }: { roleId: string }) => roleId,
+      ),
+      canMutateProjectDomain: jest.fn(
+        async ({ roleId }: { roleId: string }) =>
+          roleId !== UserRole.Customer && roleId !== UserRole.Executive,
+      ),
       getProjectMembershipRole: jest.fn(
         async (resolvedProjectId: string, userId: string) =>
           memberships.get(membershipKey(userId, resolvedProjectId)) ?? null,

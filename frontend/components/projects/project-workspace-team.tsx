@@ -1,10 +1,15 @@
 import React from "react";
 import { SectionCard } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
-import type { ApiAssignableUser, ApiProjectMember } from "@/lib/api/client";
+import type {
+  ApiProjectMemberCandidate,
+  ApiProjectMember,
+} from "@/lib/api/client";
 
 type ProjectWorkspaceTeamProps = {
-  availableUsers?: ApiAssignableUser[];
+  availableUsers?: ApiProjectMemberCandidate[];
+  search?: string;
+  onSearchChange?: (search: string) => void;
   isSaving?: boolean;
   onAddMember?: (input: { role: string; userId: string }) => void;
   onRemoveMember?: (memberId: string) => void;
@@ -21,6 +26,8 @@ const projectRoles = [
 
 export function ProjectWorkspaceTeam({
   availableUsers = [],
+  search = "",
+  onSearchChange,
   isSaving = false,
   members,
   onAddMember,
@@ -30,7 +37,16 @@ export function ProjectWorkspaceTeam({
   const [userId, setUserId] = React.useState("");
   const [role, setRole] = React.useState("contributor");
   const memberUserIds = new Set(members.map((member) => member.userId));
-  const usersToAdd = availableUsers.filter((user) => !memberUserIds.has(user.id));
+  const usersToAdd = availableUsers.filter(
+    (user) => !memberUserIds.has(user.id),
+  );
+
+  const selectedUser = usersToAdd.find((user) => user.id === userId);
+  const allowedRoles =
+    selectedUser?.allowedProjectRoles ?? projectRoles.map((item) => item.value);
+  const effectiveRole = allowedRoles.includes(role)
+    ? role
+    : (allowedRoles[0] ?? "viewer");
 
   return (
     <SectionCard>
@@ -41,6 +57,20 @@ export function ProjectWorkspaceTeam({
         title="Team Members"
       />
 
+      {onAddMember && onSearchChange ? (
+        <label className="mt-4 block text-sm font-medium text-slate-700">
+          Search members
+          <input
+            className="mt-2 w-full rounded-md border p-2"
+            maxLength={100}
+            value={search}
+            onChange={(event) => {
+              setUserId("");
+              onSearchChange(event.target.value);
+            }}
+          />
+        </label>
+      ) : null}
       {onAddMember ? (
         <div className="mt-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_0.6fr_auto] md:items-end">
           <label className="block text-sm font-medium text-slate-700">
@@ -53,7 +83,7 @@ export function ProjectWorkspaceTeam({
               <option value="">Select user</option>
               {usersToAdd.map((user) => (
                 <option key={user.id} value={user.id}>
-                  {user.firstName} {user.lastName} ({user.email})
+                  {user.displayName} ({user.email})
                 </option>
               ))}
             </select>
@@ -63,20 +93,22 @@ export function ProjectWorkspaceTeam({
             <select
               className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
               onChange={(event) => setRole(event.target.value)}
-              value={role}
+              value={effectiveRole}
             >
-              {projectRoles.map((projectRole) => (
-                <option key={projectRole.value} value={projectRole.value}>
-                  {projectRole.label}
-                </option>
-              ))}
+              {projectRoles
+                .filter((item) => allowedRoles.includes(item.value))
+                .map((projectRole) => (
+                  <option key={projectRole.value} value={projectRole.value}>
+                    {projectRole.label}
+                  </option>
+                ))}
             </select>
           </label>
           <button
             className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!userId || isSaving}
+            disabled={!selectedUser || isSaving}
             onClick={() => {
-              onAddMember({ role, userId });
+              onAddMember({ role: effectiveRole, userId });
               setUserId("");
               setRole("contributor");
             }}
@@ -135,11 +167,17 @@ export function ProjectWorkspaceTeam({
                   }
                   value={member.role}
                 >
-                  {projectRoles.map((projectRole) => (
-                    <option key={projectRole.value} value={projectRole.value}>
-                      {projectRole.label}
-                    </option>
-                  ))}
+                  {projectRoles
+                    .filter(
+                      (item) =>
+                        member.user?.role !== "CUSTOMER" ||
+                        item.value === "viewer",
+                    )
+                    .map((projectRole) => (
+                      <option key={projectRole.value} value={projectRole.value}>
+                        {projectRole.label}
+                      </option>
+                    ))}
                 </select>
               ) : (
                 <span className="capitalize text-slate-600">

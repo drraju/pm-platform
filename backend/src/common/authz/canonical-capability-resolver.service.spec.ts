@@ -39,7 +39,8 @@ describe('CanonicalCapabilityResolverService', () => {
       canMutateProjectDomain: jest.fn((resolvedActor: AuthorizationActor) =>
         Promise.resolve(
           resolvedActor.identityType !== UserIdentityType.Service &&
-            resolvedActor.roleId !== 'role-EXECUTIVE',
+            resolvedActor.roleId !== 'role-EXECUTIVE' &&
+            resolvedActor.roleId !== 'role-CUSTOMER',
         ),
       ),
       canViewProject: jest.fn().mockResolvedValue(true),
@@ -62,6 +63,59 @@ describe('CanonicalCapabilityResolverService', () => {
       policy as unknown as AuthorizationPolicyService,
     );
   });
+
+  it.each([ProjectRole.Viewer, ProjectRole.Contributor])(
+    'denies CUSTOMER mutations with %s membership',
+    async (role) => {
+      const actor = createActor('CUSTOMER');
+      setMembership(actor.userId, role);
+      policy.isExternalActor.mockResolvedValue(true);
+      for (const capability of [
+        'task.create',
+        'task.edit_plan',
+        'task.edit_execution',
+        'task.record_update',
+        'task.complete',
+        'task.assign',
+        'task.reassign',
+        'task.move',
+        'task.delete',
+        'project.create',
+        'project.edit_metadata',
+        'project.manage_team',
+      ] as const) {
+        expect(
+          await service.resolve({
+            actor,
+            capability,
+            resource: { type: 'task', projectId, assigneeId: actor.userId },
+          }),
+        ).toMatchObject({ allowed: false });
+      }
+      expect(
+        await service.resolveTaskAssignment({
+          actor,
+          requestedAssigneeId: actor.userId,
+          resource: { type: 'task', projectId, assigneeId: actor.userId },
+        }),
+      ).toMatchObject({ allowed: false, operation: 'none' });
+      expect(
+        await service.resolve({
+          actor,
+          capability: 'task.view',
+          resource: { type: 'task', projectId, assigneeId: actor.userId },
+        }),
+      ).toMatchObject({ allowed: true });
+      policy.canViewProject.mockResolvedValue(false);
+      expect(
+        await service.resolve({
+          actor,
+          capability: 'task.view',
+          resource: { type: 'task', projectId, assigneeId: actor.userId },
+        }),
+      ).toMatchObject({ allowed: false });
+    },
+  );
 
   it('preserves existing project capability delegation', async () => {
     const actor = createActor('PROJECT_MANAGER');
@@ -365,7 +419,10 @@ describe('CanonicalCapabilityResolverService', () => {
         ).resolves.toEqual({
           allowed: false,
           audience: 'external',
-          reasonCode: 'INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE',
+          reasonCode:
+            globalRole === 'CUSTOMER'
+              ? 'MISSING_PERMISSION'
+              : 'INVALID_PROJECT_ROLE_FOR_GLOBAL_ROLE',
         });
       }
     },

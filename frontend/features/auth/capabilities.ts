@@ -66,6 +66,27 @@ export function resolveProjectUiCapabilities({
   roleNames = authMe?.roles.map((role) => role.name) ?? [],
   task = null,
 }: CapabilityInput): ProjectUiCapabilities {
+  if (roleNames.some((role) => normalizeRoleName(role) === "CUSTOMER")) {
+    return {
+      canAccessDailyReview: false,
+      canAccessDelivery: false,
+      canAccessGovern: false,
+      canAccessPlanning: false,
+      canAccessToday: false,
+      canApproveDocuments: false,
+      canContributeDocuments: false,
+      canEditDocument: false,
+      canEditExecution: false,
+      canEditPlanning: false,
+      canExecuteAssignedTask: false,
+      canManageDocuments: false,
+      canManageProjectTasks: false,
+      canManageTeam: false,
+      canReassignTask: false,
+      canUpdateTask: false,
+      canUploadDocuments: false,
+    };
+  }
   const canReadProject = hasPermission(permissionKeys, "project.read");
   const canUpdateProject = hasPermission(permissionKeys, "project.update");
   const canManageTeamPermission = hasPermission(

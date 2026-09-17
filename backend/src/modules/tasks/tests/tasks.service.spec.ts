@@ -1,3 +1,4 @@
+import { UserRole } from '../../../common/enums/user-role.enum';
 import {
   BadRequestException,
   ForbiddenException,
@@ -64,8 +65,10 @@ describe('TasksService', () => {
   };
   let projectMembersRepository: MockRepository<ProjectMember>;
   let authorizationPolicyService: {
+    getActorRoleName: jest.Mock;
     canManageProject: jest.Mock;
     canManageTask: jest.Mock;
+    canMutateProjectDomain: jest.Mock;
     hasPermission: jest.Mock;
     isExternalActor: jest.Mock;
   };
@@ -134,8 +137,10 @@ describe('TasksService', () => {
       findOne: jest.fn(),
     };
     authorizationPolicyService = {
+      getActorRoleName: jest.fn().mockResolvedValue(UserRole.ProjectManager),
       canManageProject: jest.fn().mockResolvedValue(true),
       canManageTask: jest.fn().mockResolvedValue(true),
+      canMutateProjectDomain: jest.fn().mockResolvedValue(true),
       hasPermission: jest.fn().mockResolvedValue(true),
       isExternalActor: jest.fn().mockResolvedValue(false),
     };
@@ -206,6 +211,43 @@ describe('TasksService', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('filters CUSTOMER personal tasks and summaries when membership is removed', async () => {
+    const customer = { userId, roleId: 'customer-role' };
+    authorizationPolicyService.getActorRoleName.mockResolvedValue(
+      UserRole.Customer,
+    );
+    authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+    const ownTask = {
+      id: taskId,
+      projectId,
+      assigneeId: userId,
+      taskKind: TaskKind.Standard,
+      status: TaskStatus.Todo,
+      title: 'Customer action',
+    };
+    taskQueryBuilder.getMany.mockResolvedValue([ownTask]);
+    tasksRepository.find?.mockResolvedValue([]);
+    canonicalCapabilityResolver.resolve.mockResolvedValue({ allowed: false });
+    expect(await service.findMyTasks(userId, {}, customer)).toEqual([]);
+    tasksRepository.find?.mockResolvedValue([ownTask]);
+    expect(await service.getMyTasksSummary(userId, customer)).toMatchObject({
+      totalTasks: 0,
+    });
+    canonicalCapabilityResolver.resolve.mockResolvedValue({ allowed: true });
+    expect(await service.getMyTasksSummary(userId, customer)).toMatchObject({
+      totalTasks: 1,
+      todoTasks: 1,
+    });
+    expect(
+      await service.projectTasksForActor(
+        [ownTask, { ...ownTask, id: 'other', assigneeId: 'other' }] as Task[],
+        customer,
+      ),
+    ).toEqual([
+      expect.objectContaining({ id: taskId, status: TaskStatus.Todo }),
+    ]);
   });
 
   it('creates a task from the existing DTO shape', async () => {

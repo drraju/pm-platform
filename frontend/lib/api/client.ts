@@ -1690,6 +1690,20 @@ export function purgeProject(projectId: string) {
   });
 }
 
+export type ApiProjectMemberCandidate = {
+  id: string;
+  displayName: string;
+  email: string;
+  globalRoleName: string | null;
+  allowedProjectRoles: string[];
+};
+
+export function getProjectMemberCandidates(projectId: string, search = "") {
+  return apiRequest<ApiProjectMemberCandidate[]>(
+    `/projects/${projectId}/member-candidates?search=${encodeURIComponent(search)}`,
+  );
+}
+
 export function getProjectMembers(projectId: string) {
   return apiRequest<ApiProjectMember[]>(`/projects/${projectId}/members`);
 }

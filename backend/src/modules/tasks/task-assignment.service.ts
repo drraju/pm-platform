@@ -9,14 +9,12 @@ import { EntityManager, Repository } from 'typeorm';
 import { AuthorizationActor } from '../../common/authz/authorization-policy.service';
 import { CanonicalCapabilityResolverService } from '../../common/authz/canonical-capability-resolver.service';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { ProjectRole } from '../../common/enums/project-role.enum';
 import { ProjectMember } from '../projects/entities/project-member.entity';
 import { User } from '../users/entities/user.entity';
 import { Task } from './entities/task.entity';
 
-const ineligibleAssigneeRoles = new Set<string>([
-  UserRole.Customer,
-  UserRole.Partner,
-]);
+const ineligibleAssigneeRoles = new Set<string>([UserRole.Partner]);
 
 @Injectable()
 export class TaskAssignmentService {
@@ -91,6 +89,7 @@ export class TaskAssignmentService {
         requestedAssigneeId,
         projectMembersRepository,
         usersRepository,
+        decision.audience,
       );
     }
 
@@ -112,8 +111,9 @@ export class TaskAssignmentService {
   private async validateTargetAssignee(
     projectId: string,
     assigneeId: string,
-    projectMembersRepository = this.projectMembersRepository,
-    usersRepository = this.usersRepository,
+    projectMembersRepository: Repository<ProjectMember>,
+    usersRepository: Repository<User>,
+    actorAudience: 'internal' | 'external',
   ): Promise<void> {
     const user = await usersRepository.findOne({
       relations: { role: true },
@@ -132,11 +132,23 @@ export class TaskAssignmentService {
     }
 
     const membership = await projectMembersRepository.findOne({
-      select: { id: true },
+      select: { id: true, role: true },
       where: { projectId, userId: assigneeId },
     });
     if (!membership) {
       throw new ConflictException('Assignee must be an active project member');
+    }
+    if (user.role.name === String(UserRole.Customer)) {
+      if (actorAudience !== 'internal') {
+        throw new ForbiddenException(
+          'Only internal actors may assign customer tasks',
+        );
+      }
+      if (membership.role !== ProjectRole.Viewer) {
+        throw new ConflictException(
+          'Customer assignee must have viewer membership',
+        );
+      }
     }
   }
 }

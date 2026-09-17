@@ -541,10 +541,10 @@ describe("Project workspace components", () => {
         availableUsers={[
           {
             email: "nora.bennett@example.com",
-            firstName: "Nora",
+            displayName: "Nora Bennett",
             id: "user-2",
-            lastName: "Bennett",
-            status: "active",
+            globalRoleName: "TEAM_MEMBER",
+            allowedProjectRoles: ["owner", "manager", "contributor", "viewer"],
           },
         ]}
         members={[

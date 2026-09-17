@@ -4,6 +4,24 @@ import { resolveProjectUiCapabilities } from "@/features/auth/capabilities";
 describe("resolveProjectUiCapabilities standup access", () => {
   const leadershipPermissions = ["project.read", "task.update"];
 
+  it("denies all CUSTOMER mutation controls despite stale permissions and contributor membership", () => {
+    const result = resolveProjectUiCapabilities({
+      currentUserId: "customer",
+      roleNames: ["CUSTOMER"],
+      members: [{ id: "membership", userId: "customer", role: "contributor" }],
+      task: { assigneeId: "customer" },
+      permissionKeys: [
+        "project.read",
+        "project.update",
+        "project.team.manage",
+        "task.update",
+        "task.reassign",
+        "raid.update",
+      ],
+    });
+    expect(Object.values(result).every((value) => value === false)).toBe(true);
+  });
+
   it.each([
     "PLATFORM_ADMIN",
     "PORTFOLIO_MANAGER",

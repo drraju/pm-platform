@@ -61,6 +61,7 @@ describe('ProjectsService', () => {
   let rolesRepository: MockRepository<Role>;
   let authorizationPolicyService: {
     canDeleteProject: jest.Mock;
+    getActorRoleName: jest.Mock;
     canManageProject: jest.Mock;
     canManageTask: jest.Mock;
     canMutateProjectDomain: jest.Mock;
@@ -192,6 +193,7 @@ describe('ProjectsService', () => {
       }),
     };
     authorizationPolicyService = {
+      getActorRoleName: jest.fn().mockResolvedValue(UserRole.ProjectManager),
       canDeleteProject: jest.fn().mockResolvedValue(true),
       canManageProject: jest.fn().mockResolvedValue(true),
       canManageTask: jest.fn().mockResolvedValue(true),
@@ -286,6 +288,107 @@ describe('ProjectsService', () => {
     }).compile();
 
     service = moduleRef.get(ProjectsService);
+  });
+
+  it('applies current CUSTOMER project scope to list responses', async () => {
+    authorizationPolicyService.getActorRoleName.mockResolvedValue(
+      UserRole.Customer,
+    );
+    projectVisibilityService.getVisibleProjects.mockResolvedValue([
+      { id: projectId, status: 'active' },
+    ]);
+    projectVisibilityService.canViewProject.mockResolvedValue(false);
+    expect(await service.findAll(actor)).toEqual([]);
+  });
+
+  it('rejects CUSTOMER assignee filter overrides before reading tasks', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    authorizationPolicyService.getActorRoleName.mockResolvedValue(
+      UserRole.Customer,
+    );
+    authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+    expect(
+      await service.findProjectTasks(
+        projectId,
+        { assigneeId: 'another-user' },
+        actor,
+      ),
+    ).toEqual([]);
+    expect(tasksRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('authorizes candidate discovery before touching the user directory', async () => {
+    usersRepository.createQueryBuilder = jest.fn();
+    authorizationPolicyService.hasPermission.mockResolvedValue(false);
+    await expect(
+      service.findMemberCandidates(projectId, {}, actor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(usersRepository.createQueryBuilder).not.toHaveBeenCalled();
+    authorizationPolicyService.hasPermission.mockResolvedValue(true);
+    authorizationPolicyService.canManageProject.mockResolvedValue(false);
+    await expect(
+      service.findMemberCandidates(projectId, {}, actor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(usersRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('bounds and scopes candidate search and returns only permitted identity fields', async () => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    const query = {
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        {
+          id: userId,
+          firstName: 'Client',
+          lastName: 'One',
+          email: 'client@example.com',
+          role: { name: UserRole.Customer },
+          passwordHash: 'secret',
+        },
+        {
+          id: 'internal',
+          firstName: 'Team',
+          lastName: 'Member',
+          email: 'team@example.com',
+          role: { name: UserRole.TeamMember },
+        },
+      ]),
+    };
+    usersRepository.createQueryBuilder = jest.fn().mockReturnValue(query);
+    const result = await service.findMemberCandidates(
+      projectId,
+      { search: 'Client' },
+      actor,
+    );
+    expect(query.where).toHaveBeenCalledWith('candidate.status = :status', {
+      status: 'active',
+    });
+    expect(query.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('membership.deleted_at IS NULL'),
+      { projectId },
+    );
+    expect(query.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('role.name <> :partner'),
+      { partner: UserRole.Partner },
+    );
+    expect(query.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('ILIKE'),
+      { search: '%Client%' },
+    );
+    expect(query.take).toHaveBeenCalledWith(50);
+    expect(result[0]).toEqual({
+      id: userId,
+      displayName: 'Client One',
+      email: 'client@example.com',
+      globalRoleName: UserRole.Customer,
+      allowedProjectRoles: [ProjectRole.Viewer],
+    });
+    expect(result[1].allowedProjectRoles).toEqual(Object.values(ProjectRole));
   });
 
   it('creates a project from the existing DTO shape', async () => {

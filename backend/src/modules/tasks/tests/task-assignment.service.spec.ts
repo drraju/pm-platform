@@ -76,7 +76,12 @@ describe('TaskAssignmentService', () => {
     projectMembersRepository = {
       findOne: jest.fn(async ({ where }) =>
         memberships.has(membershipKey(where.projectId, where.userId))
-          ? { id: `membership-${where.userId}` }
+          ? {
+              id: `membership-${where.userId}`,
+              role: memberships.get(
+                membershipKey(where.projectId, where.userId),
+              ),
+            }
           : null,
       ),
     };
@@ -86,7 +91,8 @@ describe('TaskAssignmentService', () => {
     policy = {
       canMutateProjectDomain: jest.fn(
         async (resolvedActor: AuthorizationActor) =>
-          resolvedActor.roleId !== UserRole.Executive,
+          resolvedActor.roleId !== UserRole.Executive &&
+          resolvedActor.roleId !== UserRole.Customer,
       ),
       getActorRoleName: jest.fn(
         async (resolvedActor: AuthorizationActor) => resolvedActor.roleId,
@@ -115,6 +121,84 @@ describe('TaskAssignmentService', () => {
     addUser(targetAssigneeId);
     grantMembership(currentAssigneeId, ProjectRole.Contributor);
     grantMembership(targetAssigneeId, ProjectRole.Contributor);
+  });
+
+  it('allows an internal manager to assign to an active CUSTOMER viewer', async () => {
+    grantMembership(actorId, ProjectRole.Manager);
+    grantMembership(targetAssigneeId, ProjectRole.Viewer);
+    addUser(targetAssigneeId, 'active', UserRole.Customer);
+    expect(
+      await service.changeTaskAssignment(
+        projectId,
+        taskId,
+        targetAssigneeId,
+        actor(UserRole.ProjectManager),
+      ),
+    ).toMatchObject({ assigneeId: targetAssigneeId });
+  });
+
+  it.each(['inactive', 'removed', 'wrong-project'])(
+    'rejects %s CUSTOMER viewer target',
+    async (condition) => {
+      grantMembership(actorId, ProjectRole.Manager);
+      addUser(
+        targetAssigneeId,
+        condition === 'inactive' ? 'inactive' : 'active',
+        UserRole.Customer,
+      );
+      memberships.delete(membershipKey(projectId, targetAssigneeId));
+      if (condition === 'inactive')
+        grantMembership(targetAssigneeId, ProjectRole.Viewer);
+      if (condition === 'wrong-project')
+        memberships.set(
+          membershipKey(otherProjectId, targetAssigneeId),
+          ProjectRole.Viewer,
+        );
+      await expect(
+        service.changeTaskAssignment(
+          projectId,
+          taskId,
+          targetAssigneeId,
+          actor(UserRole.ProjectManager),
+        ),
+      ).rejects.toThrow();
+      expect(tasksRepository.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['assign', 'reassign', 'none'])(
+    'denies CUSTOMER actor for %s before persistence',
+    async (operation) => {
+      grantMembership(actorId, ProjectRole.Contributor);
+      persistedTask.assigneeId = operation === 'assign' ? null : actorId;
+      const target = operation === 'none' ? actorId : targetAssigneeId;
+      await expect(
+        service.changeTaskAssignment(
+          projectId,
+          taskId,
+          target,
+          actor(UserRole.Customer),
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(tasksRepository.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it('denies an external actor assigning to a CUSTOMER viewer', async () => {
+    grantMembership(actorId, ProjectRole.Contributor);
+    persistedTask.assigneeId = actorId;
+    grantMembership(targetAssigneeId, ProjectRole.Viewer);
+    addUser(targetAssigneeId, 'active', UserRole.Customer);
+    policy.isExternalActor.mockResolvedValue(true);
+    await expect(
+      service.changeTaskAssignment(
+        projectId,
+        taskId,
+        targetAssigneeId,
+        actor(UserRole.Partner),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tasksRepository.save).not.toHaveBeenCalled();
   });
 
   it.each([

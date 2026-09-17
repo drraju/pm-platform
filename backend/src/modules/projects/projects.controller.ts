@@ -40,6 +40,8 @@ import { Dependency } from '../raid/entities/dependency.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
+import { ProjectMemberCandidateQueryDto } from './dto/project-member-candidate-query.dto';
+import { ProjectMemberCandidateResponseDto } from './dto/project-member-candidate-response.dto';
 import { CreateProjectBaselineDto } from './dto/create-project-baseline.dto';
 import { SetActiveProjectBaselineDto } from './dto/set-active-project-baseline.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -114,6 +116,20 @@ export class ProjectsController {
             ? 'all'
             : 'active',
     });
+  }
+
+  @Get(':id/member-candidates')
+  @RequirePermissions(PermissionKey.ProjectTeamManage)
+  @ApiOperation({
+    summary: 'Search eligible project membership candidates (up to 50)',
+  })
+  @ApiOkResponse({ type: ProjectMemberCandidateResponseDto, isArray: true })
+  findMemberCandidates(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Query() query: ProjectMemberCandidateQueryDto,
+  ): Promise<ProjectMemberCandidateResponseDto[]> {
+    return this.projectsService.findMemberCandidates(id, query, request.user);
   }
 
   @Post(':id/members')

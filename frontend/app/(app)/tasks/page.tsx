@@ -154,7 +154,17 @@ function PageContent() {
             [projectId, await getProjectMembers(projectId)] as const,
         ),
       );
-      setTasks(taskData);
+      const customer = authMe.roles.some((role) => role.name === "CUSTOMER");
+      setTasks(
+        customer
+          ? taskData.map((task) => ({
+              ...task,
+              project: projectData.find(
+                (project) => project.id === task.projectId,
+              ),
+            }))
+          : taskData,
+      );
       setProjects(projectData);
       setMembersByProjectId(Object.fromEntries(memberEntries));
       setCurrentUserId(authMe.user.id);

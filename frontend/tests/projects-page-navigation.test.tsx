@@ -514,6 +514,20 @@ describe("Projects List navigation", () => {
     authMocks.storeAuthMe.mockClear();
   });
 
+  it("loads CUSTOMER projects without querying the internal directory", async () => {
+    const auth = await authMocks.getAuthMe();
+    authMocks.getAuthMe.mockResolvedValueOnce({
+      ...auth,
+      roles: [{ id: "customer-role", name: "CUSTOMER" }],
+      permissions: [{ id: "read", key: "project.read" }],
+    });
+    projectMocks.getAssignableUsers.mockClear();
+    render(<ProjectsPage />);
+    await waitFor(() => expect(projectMocks.getProjects).toHaveBeenCalled());
+    await screen.findByText("Customer Experience Platform Upgrade");
+    expect(projectMocks.getAssignableUsers).not.toHaveBeenCalled();
+  });
+
   it("announces project overview loading and error states", async () => {
     window.history.pushState({}, "", "/projects/project-123");
     projectMocks.getProject.mockReturnValueOnce(new Promise(() => {}));
