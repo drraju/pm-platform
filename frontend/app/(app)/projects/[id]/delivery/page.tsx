@@ -56,6 +56,13 @@ import {
 } from "@/features/projects";
 import { decorateProjectPlan } from "@/features/projects/planning";
 import { getTaskExecutionUpdates } from "@/features/tasks";
+import {
+  getProjectBaseline,
+  getProjectForecastOverview,
+  getProjectForecastSnapshot,
+  type ApiForecastSnapshotDetail,
+  type ApiProjectBaseline,
+} from "@/features/planning";
 import { useProjectMembers } from "@/hooks/use-project-members";
 import type { ApiTask } from "@/lib/api/client";
 import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
@@ -110,6 +117,12 @@ function ProjectDeliveryPageContent() {
   const viewFromQuery = parseDeliveryView(viewQuery, "list");
 
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
+  const [timelineForecast, setTimelineForecast] =
+    useState<ApiForecastSnapshotDetail | null>(null);
+  const [timelineBaseline, setTimelineBaseline] =
+    useState<ApiProjectBaseline | null>(null);
+  const [isTimelineReferencesLoading, setIsTimelineReferencesLoading] =
+    useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
   const [roleNames, setRoleNames] = useState<string[]>([]);
@@ -196,6 +209,69 @@ function ProjectDeliveryPageContent() {
   useEffect(() => {
     void loadProject();
   }, [loadProject]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    if (activeView !== "timeline") {
+      setTimelineForecast(null);
+      setTimelineBaseline(null);
+      setIsTimelineReferencesLoading(false);
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    setTimelineForecast(null);
+    setTimelineBaseline(null);
+    setIsTimelineReferencesLoading(true);
+    void getProjectForecastOverview(projectId)
+      .then(async (overview) => {
+        const [forecastResult, baselineResult] = await Promise.allSettled([
+          overview.currentForecast
+            ? getProjectForecastSnapshot(
+                projectId,
+                overview.currentForecast.snapshotId,
+              ).then((snapshot) =>
+                snapshot.snapshot.snapshotId ===
+                overview.currentForecast?.snapshotId
+                  ? snapshot
+                  : null,
+              )
+            : Promise.resolve(null),
+          overview.activeBaseline
+            ? getProjectBaseline(projectId, overview.activeBaseline.id).then(
+                (baseline) =>
+                  overview.activeBaseline?.status === "approved" &&
+                  baseline.status === "approved" &&
+                  baseline.isCurrent
+                    ? baseline
+                    : null,
+              )
+            : Promise.resolve(null),
+        ]);
+        if (!isCurrent) return;
+        setTimelineForecast(
+          forecastResult.status === "fulfilled" ? forecastResult.value : null,
+        );
+        setTimelineBaseline(
+          baselineResult.status === "fulfilled" ? baselineResult.value : null,
+        );
+      })
+      .catch(() => {
+        if (!isCurrent) return;
+        // Forecast and baseline access is optional for Delivery actors. The
+        // authoritative Target / Actual task view remains available.
+        setTimelineForecast(null);
+        setTimelineBaseline(null);
+      })
+      .finally(() => {
+        if (isCurrent) setIsTimelineReferencesLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeView, projectId]);
 
   async function handleUpdateTask(
     taskId: string,
@@ -617,7 +693,12 @@ function ProjectDeliveryPageContent() {
             ) : null}
 
             {activeView === "timeline" ? (
-              <DeliveryTimeline tasks={standardTasks} />
+              <DeliveryTimeline
+                activeBaseline={timelineBaseline}
+                currentForecast={timelineForecast}
+                isLoadingReferences={isTimelineReferencesLoading}
+                tasks={standardTasks}
+              />
             ) : null}
 
             {activeView === "history" ? (
