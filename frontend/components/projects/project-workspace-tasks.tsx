@@ -45,6 +45,9 @@ type TaskOperationInput = {
 };
 
 type ProjectWorkspaceTasksProps = {
+  /** Reuse the task form as a contextual creation dialog without the planning table. */
+  creationContext?: { parentTask?: ApiTask; onClose: () => void };
+  creationDisabled?: boolean;
   canManageDependencies?: boolean;
   canCreateTasks?: boolean;
   canDeleteTasks?: boolean;
@@ -64,7 +67,7 @@ type ProjectWorkspaceTasksProps = {
   }) => void;
   onCreateTask?: (
     input: Required<Pick<TaskOperationInput, "title">> & TaskOperationInput,
-  ) => void;
+  ) => Promise<void> | void;
   onDeleteDependency?: (dependencyId: string) => void;
   onDeleteTask?: (taskId: string) => void;
   onUpdateDependency?: (
@@ -204,6 +207,8 @@ const taskKinds: Array<{
 ];
 
 export function ProjectWorkspaceTasks({
+  creationContext,
+  creationDisabled = false,
   canManageDependencies = false,
   canCreateTasks = false,
   canDeleteTasks = false,
@@ -232,7 +237,9 @@ export function ProjectWorkspaceTasks({
   hideHeaderDescription = false,
   tasks,
 }: ProjectWorkspaceTasksProps) {
-  const [dialogMode, setDialogMode] = React.useState<DialogMode | null>(null);
+  const [dialogMode, setDialogMode] = React.useState<DialogMode | null>(
+    creationContext ? "create" : null,
+  );
   const [taskPendingDelete, setTaskPendingDelete] =
     React.useState<ApiTask | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<ApiTask | null>(null);
@@ -247,7 +254,7 @@ export function ProjectWorkspaceTasks({
   const [isExecutionHistoryLoading, setIsExecutionHistoryLoading] =
     React.useState(false);
   const [form, setForm] = React.useState<TaskFormState>(() =>
-    createEmptyTaskForm(),
+    createEmptyTaskForm({ parentTaskId: creationContext?.parentTask?.id }),
   );
   const [executionForm, setExecutionForm] =
     React.useState<ExecutionUpdateFormState>(() =>
@@ -376,6 +383,7 @@ export function ProjectWorkspaceTasks({
   }
 
   function closeDialog() {
+    creationContext?.onClose();
     setDialogMode(null);
     setSelectedTask(null);
     setForm(createEmptyTaskForm());
@@ -443,7 +451,7 @@ export function ProjectWorkspaceTasks({
     }
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const validationError = validateTaskForm(form);
     if (validationError) {
@@ -454,6 +462,18 @@ export function ProjectWorkspaceTasks({
     const payload = toTaskPayload(form);
 
     if (dialogMode === "create" && payload.title && onCreateTask) {
+      if (creationContext) {
+        if (!canCreateTask || isSaving || creationDisabled) return;
+        try {
+          await onCreateTask({ ...payload, title: payload.title });
+          closeDialog();
+        } catch (error) {
+          setFormError(
+            error instanceof Error ? error.message : "Unable to create task",
+          );
+        }
+        return;
+      }
       onCreateTask({ ...payload, title: payload.title });
       closeDialog();
       return;
@@ -606,8 +626,11 @@ export function ProjectWorkspaceTasks({
     ],
   );
 
+  const Container = creationContext ? React.Fragment : SectionCard;
+
   return (
-    <SectionCard>
+    <Container>
+      {!creationContext ? (<>
       <SectionHeader
         action={
           <ActionGroup>
@@ -1146,11 +1169,17 @@ export function ProjectWorkspaceTasks({
         )}
       </div>
 
-      {dialogMode ? (
+      </>) : null}
+
+      {dialogMode && (!creationContext || canCreateTask) ? (
         <AppModal
           description={
-            dialogMode === "reassign"
-              ? "Move this task to another project team member."
+            creationContext
+              ? creationContext.parentTask
+                ? `Parent task: ${creationContext.parentTask.title}`
+                : "Create a task in the current project."
+              : dialogMode === "reassign"
+                ? "Move this task to another project team member."
               : isPlanningMode
                 ? "Capture summary hierarchy, planning dates, effort, and ownership in one place."
                 : "Update task execution details without changing schedule structure."
@@ -1167,12 +1196,14 @@ export function ProjectWorkspaceTasks({
               <button
                 className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={
-                  isSaving || (dialogMode === "create" && !form.title.trim())
+                  creationDisabled ||
+                  isSaving ||
+                  (dialogMode === "create" && !form.title.trim())
                 }
                 form="project-task-form"
                 type="submit"
               >
-                {isSaving ? "Saving..." : "Save changes"}
+                {isSaving ? "Saving..." : creationContext ? "Create" : "Save changes"}
               </button>
             </>
           }
@@ -1201,7 +1232,7 @@ export function ProjectWorkspaceTasks({
               ) : null}
 
               <ModalFormGrid className="md:grid-cols-2 xl:grid-cols-3">
-                {!shouldHideStructuralFields(dialogMode, form) ? (
+                {!creationContext && !shouldHideStructuralFields(dialogMode, form) ? (
                   <>
                     <label className="block text-sm font-medium text-slate-700">
                       Type
@@ -1992,7 +2023,7 @@ export function ProjectWorkspaceTasks({
           tasks={tasks}
         />
       ) : null}
-    </SectionCard>
+    </Container>
   );
 }
 

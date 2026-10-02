@@ -22,6 +22,9 @@ import {
   getDisplayedPercentComplete,
   type TaskExecutionUpdatePayload,
 } from "@/components/projects/execution-update-payload";
+import { ProjectWorkspaceTasks } from "@/components/projects/project-workspace-tasks";
+import { createProjectTask } from "@/features/projects";
+import { decoratePlanningTasks } from "@/features/projects/planning";
 import type {
   ApiProject,
   ApiProjectDetails,
@@ -70,6 +73,7 @@ type TodayWorkspaceProps = {
   embedded?: boolean;
   isSaving?: boolean;
   members: ApiProjectMember[];
+  onCreateTask?: typeof createProjectTask;
   onLoadHistory: (taskId: string) => Promise<ApiTaskExecutionUpdate[]>;
   onRecordExecutionUpdate: (
     taskId: string,
@@ -127,6 +131,7 @@ export function TodayWorkspace({
   embedded = false,
   isSaving = false,
   members,
+  onCreateTask = createProjectTask,
   onLoadHistory,
   onRecordExecutionUpdate,
   onRefreshTasks,
@@ -139,13 +144,15 @@ export function TodayWorkspace({
   selectedProjectId,
   taskScope: taskScopeProp,
 }: TodayWorkspaceProps) {
-  const canEdit = resolveTaskUiCapabilities({
+  const taskCapabilities = resolveTaskUiCapabilities({
     currentUserId,
     members,
     project,
     roleNames,
     identityType,
-  }).canManageTasks;
+  });
+  const canEdit = taskCapabilities.canManageTasks;
+  const canCreate = taskCapabilities.canCreate;
   const expansion = useTodayExpansionState(project.id);
   const [attention, setAttention] = useState<WorkAttention>("active");
   const [secondary, setSecondary] = useState<WorkSecondary>("none");
@@ -163,6 +170,12 @@ export function TodayWorkspace({
   const { expandedTaskIds } = expansion.getSnapshot();
   const gridRef = useRef<HTMLDivElement | null>(null);
   const filtersRef = useRef<HTMLDivElement | null>(null);
+  const [creationContext, setCreationContext] = useState<{
+    parentTask?: ApiTask;
+  } | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [creationUncertain, setCreationUncertain] = useState(false);
+  const creationPending = useRef(false);
   const [needsRefresh, setNeedsRefresh] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -505,6 +518,67 @@ export function TodayWorkspace({
     [canEditTask, onRecordExecutionUpdate, onRefreshTasks, onLoadHistory],
   );
 
+  const openSubtask = useCallback((task: ApiTask) => {
+    setCreationContext({ parentTask: task });
+  }, []);
+
+  async function handleCreateTask(
+    input: Parameters<typeof createProjectTask>[1],
+  ) {
+    if (!canCreate || creationPending.current || creationUncertain) return;
+    const requestGeneration = generation.current;
+    creationPending.current = true;
+    setIsCreating(true);
+    let created: ApiTask;
+    try {
+      created = await onCreateTask(project.id, {
+        ...input,
+        taskKind: "standard",
+        parentTaskId: creationContext?.parentTask?.id ?? null,
+      });
+    } catch (error) {
+      if (requestGeneration === generation.current) {
+        setCreationUncertain(true);
+        setNeedsRefresh(true);
+        setSaveError(
+          "Creation was not confirmed. Refresh task state and check for the task before creating again.",
+        );
+        setSaveState("error");
+        creationPending.current = false;
+        setIsCreating(false);
+      }
+      throw error;
+    }
+    if (requestGeneration !== generation.current) return;
+    // The POST is confirmed: retain the created task even if the subsequent GET fails.
+    const merged = decoratePlanningTasks([
+      ...committedTasks.current.filter((task) => task.id !== created.id),
+      created,
+    ]);
+    committedTasks.current = merged;
+    setTasks(merged);
+    if (created.parentTaskId) expansion.expandMany([created.parentTaskId]);
+    try {
+      await Promise.allSettled([...queues.current.values()]);
+      const refreshed = await onRefreshTasks();
+      if (requestGeneration !== generation.current) return;
+      committedTasks.current = refreshed;
+      setTasks(refreshed);
+    } catch {
+      if (requestGeneration !== generation.current) return;
+      setNeedsRefresh(true);
+      setSaveError(
+        "Task created, but the task list could not refresh. Refresh task state to reconcile the list.",
+      );
+      setSaveState("error");
+    } finally {
+      if (requestGeneration === generation.current) {
+        creationPending.current = false;
+        setIsCreating(false);
+      }
+    }
+  }
+
   const openHistory = useCallback(
     async (task: ApiTask) => {
       historyTaskId.current = task.id;
@@ -757,6 +831,16 @@ export function TodayWorkspace({
           }
           secondaryActions={
             <div className="flex flex-wrap items-center gap-1.5">
+              {canCreate ? (
+                <button
+                  className="rounded bg-brand px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                  disabled={isCreating || creationUncertain}
+                  onClick={() => setCreationContext({})}
+                  type="button"
+                >
+                  Add Task
+                </button>
+              ) : null}
               {taskScope === "team" ? (
                 <>
                   <button
@@ -775,9 +859,10 @@ export function TodayWorkspace({
                   </button>
                 </>
               ) : null}
-              {needsRefresh ? (
+              {needsRefresh || creationUncertain ? (
                 <button
                   type="button"
+                  disabled={isCreating}
                   onClick={async () => {
                     const requestGeneration = generation.current;
                     try {
@@ -787,6 +872,10 @@ export function TodayWorkspace({
                       setTasks(refreshed);
                       refreshRequired.current.clear();
                       setNeedsRefresh(false);
+                      setCreationUncertain(false);
+                      setCreationContext(null);
+                      setSaveError(null);
+                      setSaveState("idle");
                     } catch (error) {
                       if (requestGeneration !== generation.current) return;
                       setSaveError(
@@ -884,6 +973,16 @@ export function TodayWorkspace({
                 )}
                 canEditDueDate={canEditTask(row.task, "canEditDueDate")}
                 canComplete={canEditTask(row.task, "canComplete")}
+                canAddSubtask={
+                  canCreate &&
+                  !row.task.deletedAt &&
+                  row.task.taskKind !== "summary" &&
+                  row.task.taskKind !== "milestone" &&
+                  (!row.task.parentTaskId ||
+                    tasksById.get(row.task.parentTaskId)?.taskKind === "summary")
+                }
+                creationDisabled={isCreating || creationUncertain}
+                onAddSubtask={openSubtask}
                 currentUserId={currentUserId}
                 expanded={expandedTaskIds.includes(row.task.id)}
                 gridTemplate={gridTemplate}
@@ -899,6 +998,21 @@ export function TodayWorkspace({
           </div>
         </WorkspaceSection>
       )}
+
+      {creationContext && canCreate ? (
+        <ProjectWorkspaceTasks
+          canCreateTasks={canCreate}
+          creationContext={{
+            ...creationContext,
+            onClose: () => setCreationContext(null),
+          }}
+          creationDisabled={creationUncertain}
+          isSaving={isCreating}
+          members={members}
+          onCreateTask={handleCreateTask}
+          tasks={tasks}
+        />
+      ) : null}
 
       {historyTask ? (
         <HistoryPanel
@@ -922,6 +1036,9 @@ const TodayTaskRow = memo(function TodayTaskRow({
   canEditAssignee,
   canEditDueDate,
   canComplete,
+  canAddSubtask,
+  creationDisabled,
+  onAddSubtask,
   currentUserId,
   expanded,
   gridTemplate,
@@ -937,6 +1054,9 @@ const TodayTaskRow = memo(function TodayTaskRow({
   canEditAssignee: boolean;
   canEditDueDate: boolean;
   canComplete: boolean;
+  canAddSubtask: boolean;
+  creationDisabled: boolean;
+  onAddSubtask: (task: ApiTask) => void;
   currentUserId: string | null;
   expanded: boolean;
   gridTemplate: string;
@@ -999,6 +1119,17 @@ const TodayTaskRow = memo(function TodayTaskRow({
         >
           {task.title}
         </span>
+        {canAddSubtask ? (
+          <button
+            aria-label={`Add Subtask to ${task.title}`}
+            className="shrink-0 rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+            disabled={creationDisabled}
+            onClick={() => onAddSubtask(task)}
+            type="button"
+          >
+            Add Subtask
+          </button>
+        ) : null}
         {showContextAssignee ? (
           <span className="shrink-0 text-[11px] font-medium text-slate-500">
             {formatMemberByUserId(task.assigneeId, members)}
@@ -1265,6 +1396,8 @@ function areTodayTaskRowsEqual(
     canEditAssignee: boolean;
     canEditDueDate: boolean;
     canComplete: boolean;
+    canAddSubtask: boolean;
+    creationDisabled: boolean;
     currentUserId: string | null;
     expanded: boolean;
     gridTemplate: string;
@@ -1278,6 +1411,8 @@ function areTodayTaskRowsEqual(
     canEditAssignee: boolean;
     canEditDueDate: boolean;
     canComplete: boolean;
+    canAddSubtask: boolean;
+    creationDisabled: boolean;
     currentUserId: string | null;
     expanded: boolean;
     gridTemplate: string;
@@ -1292,6 +1427,8 @@ function areTodayTaskRowsEqual(
     previous.canEditAssignee === next.canEditAssignee &&
     previous.canEditDueDate === next.canEditDueDate &&
     previous.canComplete === next.canComplete &&
+    previous.canAddSubtask === next.canAddSubtask &&
+    previous.creationDisabled === next.creationDisabled &&
     previous.currentUserId === next.currentUserId &&
     previous.expanded === next.expanded &&
     previous.gridTemplate === next.gridTemplate &&
