@@ -132,6 +132,30 @@ export class SchedulingFoundationService {
     return TaskType.Task;
   }
 
+  getAutomaticTaskCreationDates(
+    taskKind: TaskKind,
+    forecastStartDate?: string | null,
+    projectStartDate?: string | null,
+  ) {
+    const defaultStartDate =
+      forecastStartDate ??
+      projectStartDate ??
+      new Date().toISOString().slice(0, 10);
+    const plannedStartDate =
+      taskKind === TaskKind.Summary ? null : defaultStartDate;
+    const plannedEndDate =
+      taskKind === TaskKind.Milestone
+        ? plannedStartDate
+        : taskKind === TaskKind.Summary || !plannedStartDate
+          ? null
+          : this.shiftDateString(plannedStartDate, 1);
+    const durationDays =
+      taskKind === TaskKind.Milestone
+        ? 0
+        : this.calculateDurationDays(plannedStartDate, plannedEndDate);
+    return { plannedStartDate, plannedEndDate, durationDays };
+  }
+
   normalizeTaskMutation<T extends TaskMutationInput>(
     input: T,
     existingTask?: TaskMutationInput,

@@ -410,10 +410,12 @@ export class PlanningService {
       select: { startDate: true },
       where: { id: projectId },
     });
-    const defaultPlanningStartDate =
-      latestSchedule.projectStartDate ??
-      projectScheduleAnchor?.startDate ??
-      this.todayDateString();
+    const automaticDates =
+      this.schedulingFoundationService.getAutomaticTaskCreationDates(
+        requestedTaskKind,
+        latestSchedule.projectStartDate,
+        projectScheduleAnchor?.startDate,
+      );
     if (input.parentTaskId) {
       await this.ensureTaskCanContainChildren(
         projectId,
@@ -438,7 +440,7 @@ export class PlanningService {
           (maximum, sibling) => Math.max(maximum, sibling.sequenceNumber ?? 0),
           0,
         ) + 1;
-      const plannedDate = defaultPlanningStartDate;
+      const plannedDate = automaticDates.plannedStartDate;
       const task = await this.canonicalTasksService.create(
         {
           assigneeId: input.ownerId ?? null,
@@ -488,24 +490,8 @@ export class PlanningService {
             milestoneCategory: input.milestoneCategory,
             taskKind,
           });
-        const plannedStartDate =
-          taskKind === TaskKind.Summary ? null : defaultPlanningStartDate;
-        const plannedEndDate =
-          taskKind === TaskKind.Milestone
-            ? plannedStartDate
-            : taskKind === TaskKind.Summary || !plannedStartDate
-              ? null
-              : this.schedulingFoundationService.shiftDateString(
-                  plannedStartDate,
-                  1,
-                );
-        const durationDays =
-          taskKind === TaskKind.Milestone
-            ? 0
-            : this.schedulingFoundationService.calculateDurationDays(
-                plannedStartDate,
-                plannedEndDate,
-              );
+        const { plannedStartDate, plannedEndDate, durationDays } =
+          automaticDates;
         const title = input.title?.trim() || 'New Task';
         const lifecycleInput = applyTaskCompletionTransition({
           percentComplete: 0,
@@ -965,10 +951,6 @@ export class PlanningService {
       taskTitle: taskSchedule.taskTitle,
       totalFloatDays: taskSchedule.totalFloatDays ?? null,
     };
-  }
-
-  private todayDateString(): string {
-    return new Date().toISOString().slice(0, 10);
   }
 
   private requireWorkspaceSchedule(

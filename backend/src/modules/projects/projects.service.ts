@@ -70,6 +70,7 @@ import {
 } from './project-visibility.service';
 import { TasksService } from '../tasks/tasks.service';
 import { TaskAssignmentService } from '../tasks/task-assignment.service';
+import { PlanningSnapshotService } from '../planning/planning-snapshot.service';
 
 type ProjectWithHealth = Project & { health: ProjectHealthDto };
 type AuthenticatedActor = AuthorizationActor;
@@ -120,6 +121,7 @@ export class ProjectsService {
     private readonly projectVisibilityService: ProjectVisibilityService,
     private readonly schedulingFoundationService: SchedulingFoundationService,
     private readonly taskAssignmentService: TaskAssignmentService,
+    private readonly planningSnapshotService: PlanningSnapshotService,
     @Inject(forwardRef(() => TasksService))
     @Optional()
     private readonly canonicalTasksService?: TasksService,
@@ -506,9 +508,40 @@ export class ProjectsService {
         actor,
       );
     }
+    // Blank creation dates use the same defaults as Planning. Any supplied
+    // date value keeps the existing explicit/partial-date contract intact.
+    const hasExplicitDates = [
+      createProjectTaskDto.plannedStartDate,
+      createProjectTaskDto.plannedEndDate,
+      createProjectTaskDto.startDate,
+      createProjectTaskDto.dueDate,
+    ].some((value) => value != null);
+    let input = { ...createProjectTaskDto };
+    if (requestedKind === TaskKind.Standard && !hasExplicitDates) {
+      const forecast =
+        await this.planningSnapshotService.calculateOperationalForecast(
+          projectId,
+        );
+      const project = await this.projectsRepository.findOne({
+        select: { startDate: true },
+        where: { id: projectId },
+      });
+      const defaults =
+        this.schedulingFoundationService.getAutomaticTaskCreationDates(
+          requestedKind,
+          forecast.projectStartDate,
+          project?.startDate,
+        );
+      input = {
+        ...input,
+        ...defaults,
+        startDate: defaults.plannedStartDate,
+        dueDate: defaults.plannedEndDate,
+      };
+    }
     const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
-        applyTaskCompletionTransition(createProjectTaskDto),
+        applyTaskCompletionTransition(input),
       );
     const requestedAssigneeId = normalizedMutation.assigneeId;
     const normalizedInput = { ...normalizedMutation };

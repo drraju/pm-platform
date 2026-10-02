@@ -15,6 +15,11 @@ import { UserIdentityType } from '../../../common/enums/user-identity-type.enum'
 import { SchedulingContextFactory } from '../../../common/scheduling/scheduling-context.factory';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
 import { Project } from '../../projects/entities/project.entity';
+import { ProjectMember } from '../../projects/entities/project-member.entity';
+import { ProjectBaseline } from '../../projects/entities/project-baseline.entity';
+import { ProjectBaselineTask } from '../../projects/entities/project-baseline-task.entity';
+import { Role } from '../../users/entities/role.entity';
+import { ProjectHealthService } from '../../health/project-health.service';
 import { ProjectVisibilityService } from '../../projects/project-visibility.service';
 import { ProjectsService } from '../../projects/projects.service';
 import { TaskDependency } from '../../tasks/entities/task-dependency.entity';
@@ -1458,6 +1463,91 @@ describe('PlanningService', () => {
     );
     expect(planningTaskSchedulesRepository.save).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['2026-07-01', '2026-08-01', null],
+    [null, '2026-12-31', null],
+    [null, null, null],
+    ['2026-07-01', '2026-08-01', 'parent-task-id'],
+  ])(
+    'Planning and canonical creation share dates (forecast=%s, project=%s, parent=%s)',
+    async (forecastStart, projectStart, parentTaskId) => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-05T12:00:00Z'));
+      try {
+        projectsRepository.findOne?.mockResolvedValue({
+          id: projectId,
+          startDate: projectStart,
+        });
+        tasksRepository.find?.mockResolvedValue([]);
+        tasksRepository.findOne?.mockResolvedValue({
+          id: parentTaskId,
+          projectId,
+          taskKind: TaskKind.Standard,
+          parentTaskId: null,
+        });
+        jest
+          .spyOn(planningSnapshotService, 'calculateOperationalForecast')
+          .mockResolvedValue({
+            projectStartDate: forecastStart,
+            taskSchedules: [{ taskId, taskKind: TaskKind.Standard }],
+          } as PlanningScheduleSnapshot);
+        (projectsRepository as Repository<Project>).manager =
+          scheduleSnapshotsRepository.manager;
+        const canonical = new ProjectsService(
+          projectsRepository as Repository<Project>,
+          {} as Repository<ProjectMember>,
+          {} as Repository<ProjectBaseline>,
+          {} as Repository<ProjectBaselineTask>,
+          tasksRepository as Repository<Task>,
+          taskDependenciesRepository as Repository<TaskDependency>,
+          usersRepository as Repository<User>,
+          {} as Repository<Role>,
+          new ProjectHealthService(),
+          {
+            ...authorizationPolicyService,
+            isExternalActor: jest.fn().mockResolvedValue(false),
+          } as unknown as AuthorizationPolicyService,
+          canonicalCapabilityResolver as unknown as CanonicalCapabilityResolverService,
+          projectVisibilityService as unknown as ProjectVisibilityService,
+          new SchedulingFoundationService(),
+          taskAssignmentService as unknown as TaskAssignmentService,
+          planningSnapshotService,
+        );
+        await service.createPlanningTask(
+          projectId,
+          { title: 'Equivalent task', parentTaskId },
+          actor,
+        );
+        const creationCalls = tasksRepository.create?.mock.calls as [
+          Partial<Task>,
+        ][];
+        const planningInput = creationCalls[0][0];
+        tasksRepository.create?.mockClear();
+        const created = await canonical.createProjectTask(
+          projectId,
+          { title: 'Equivalent task', parentTaskId },
+          actor,
+        );
+        const expectedStart = forecastStart ?? projectStart ?? '2026-07-05';
+        expect(planningInput.plannedStartDate).toBe(expectedStart);
+        expect(planningInput.plannedEndDate).toBe(
+          new SchedulingFoundationService().shiftDateString(expectedStart, 1),
+        );
+        for (const field of [
+          'plannedStartDate',
+          'plannedEndDate',
+          'startDate',
+          'dueDate',
+          'durationDays',
+          'parentTaskId',
+        ] as const) {
+          expect(created[field]).toBe(planningInput[field]);
+        }
+      } finally {
+        jest.useRealTimers();
+      }
+    },
+  );
 
   it('creates a planning task and matching schedule row in one transaction', async () => {
     const snapshot = {

@@ -13,6 +13,50 @@ describe('SchedulingFoundationService', () => {
     service = new SchedulingFoundationService();
   });
 
+  it.each([
+    [TaskKind.Standard, '2026-07-01', '2026-07-02', 1],
+    [TaskKind.Milestone, '2026-07-01', '2026-07-01', 0],
+    [TaskKind.Summary, null, null, null],
+  ])(
+    'preserves Planning automatic dates for %s',
+    (kind, start, finish, duration) => {
+      expect(
+        service.getAutomaticTaskCreationDates(kind, '2026-07-01', '2026-08-01'),
+      ).toEqual({
+        plannedStartDate: start,
+        plannedEndDate: finish,
+        durationDays: duration,
+      });
+    },
+  );
+
+  it('uses the project anchor when the forecast has no start', () => {
+    expect(
+      service.getAutomaticTaskCreationDates(
+        TaskKind.Standard,
+        null,
+        '2026-12-31',
+      ),
+    ).toEqual({
+      plannedStartDate: '2026-12-31',
+      plannedEndDate: '2027-01-01',
+      durationDays: 1,
+    });
+  });
+
+  it('falls back to UTC today when neither anchor exists', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-01T23:59:00Z'));
+    try {
+      expect(service.getAutomaticTaskCreationDates(TaskKind.Standard)).toEqual({
+        plannedStartDate: '2026-07-01',
+        plannedEndDate: '2026-07-02',
+        durationDays: 1,
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('maps the new taskType contract to the existing taskKind storage values', () => {
     expect(service.normalizeTaskKind({ taskType: TaskType.Task })).toBe(
       TaskKind.Standard,

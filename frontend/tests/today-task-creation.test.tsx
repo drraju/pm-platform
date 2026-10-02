@@ -53,7 +53,7 @@ function expectNoSubtaskAction(title: string) {
 
 function submit() {
   const dialog = screen.getByRole("dialog");
-  fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "New work" } });
+  fireEvent.change(within(dialog).getByLabelText("Task Name"), { target: { value: "New work" } });
   fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
 }
 
@@ -67,13 +67,43 @@ describe("Today contextual task creation", () => {
     expect(within(dialog).queryByLabelText("Project")).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Parent Summary")).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Type")).not.toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Status")).toHaveValue("todo");
+    expect(within(dialog).getByLabelText("Owner")).toHaveValue("");
     submit();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(createTask).toHaveBeenCalledExactlyOnceWith("project", expect.objectContaining({ title: "New work", parentTaskId: null, taskKind: "standard", status: "todo", percentComplete: 0, priority: "medium" }));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.getByText("New work")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "All active (2)" })).toBeInTheDocument();
+  });
+
+  it.each([false, true])("uses the Planning creation fields and canonical payload (subtask=%s)", async (isSubtask) => {
+    setup();
+    fireEvent.click(isSubtask ? subtaskAction("Current work") : screen.getByRole("button", { name: "Add Task" }));
+    const dialog = screen.getByRole("dialog", { name: isSubtask ? "Create Child Task" : "Create Task" });
+    const form = within(dialog);
+    expect(form.getByLabelText("Task Name")).toBeRequired();
+    expect(form.getByLabelText("Owner")).toHaveValue("");
+    for (const label of ["Start", "Finish"]) {
+      const field = form.getByText(label).closest("label")!;
+      expect(within(field).getByText("Auto")).toBeInTheDocument();
+      expect(field.querySelector("input, select, textarea")).toBeNull();
+    }
+    expect(dialog.querySelector('input[type="date"]')).toBeNull();
+    for (const label of ["Description", "Status", "Priority", "Planned Start", "Planned End", "Actual Start", "Actual End", "Estimated Hours", "Remaining Hours", "Percent Complete", "Remarks", "Parent Summary"]) {
+      expect(form.queryByText(label, { exact: true })).not.toBeInTheDocument();
+    }
+    expect(form.getAllByRole("textbox")).toHaveLength(1);
+    expect(form.getAllByRole("combobox")).toHaveLength(1);
+    if (isSubtask) expect(form.getByText("Parent task: Current work")).toBeInTheDocument();
+    fireEvent.change(form.getByLabelText("Owner"), { target: { value: "user" } });
+    submit();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(createTask).toHaveBeenCalledExactlyOnceWith("project", {
+      title: "New work", assigneeId: "user", parentTaskId: isSubtask ? parent.id : null,
+      taskKind: "standard", status: "todo", priority: "medium", percentComplete: 0,
+      plannedStartDate: null, plannedEndDate: null, actualStartDate: null, actualEndDate: null,
+      description: null, estimatedHours: null, remainingHours: null, remarks: null, sequenceNumber: null,
+    });
   });
 
   it("provides a compact, focusable subtask action and native task-name tooltip", () => {

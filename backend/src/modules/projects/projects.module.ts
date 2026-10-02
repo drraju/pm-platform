@@ -16,12 +16,14 @@ import { ProjectVisibilityService } from './project-visibility.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { TasksModule } from '../tasks/tasks.module';
+import { PlanningSnapshotModule } from '../planning/planning-snapshot.module';
 import { ForecastController } from './forecast.controller';
 import { ForecastQueryService } from './forecast-query.service';
 
 @Module({
   imports: [
     HealthModule,
+    PlanningSnapshotModule,
     forwardRef(() => TasksModule),
     TypeOrmModule.forFeature([
       Project,

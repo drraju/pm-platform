@@ -1210,12 +1210,14 @@ export function ProjectWorkspaceTasks({
           labelledById="project-task-dialog-title"
           onClose={closeDialog}
           title={getDialogTitle(dialogMode, form, hasFullEditAccess)}
-          widthClassName="max-w-4xl"
+          widthClassName={creationContext ? "max-w-lg" : "max-w-4xl"}
         >
           <ModalForm id="project-task-form" onSubmit={handleSubmit}>
             <ModalFormSection
               description={
-                dialogMode === "reassign"
+                creationContext
+                  ? undefined
+                  : dialogMode === "reassign"
                   ? "Only assignee changes are available in this mode."
                   : isPhaseForm(form)
                     ? "Summaries are planning containers. Progress and rolled-up dates are calculated from descendant work."
@@ -1224,14 +1226,20 @@ export function ProjectWorkspaceTasks({
                       : "Use this view for execution updates only. Schedule structure remains owned by Planning."
               }
               title={
-                isPlanningMode ? "Planning Detail" : "Task Execution Detail"
+                creationContext
+                  ? "Task details"
+                  : isPlanningMode
+                    ? "Planning Detail"
+                    : "Task Execution Detail"
               }
             >
               {formError ? (
                 <ErrorState className="mb-4">{formError}</ErrorState>
               ) : null}
 
-              <ModalFormGrid className="md:grid-cols-2 xl:grid-cols-3">
+              <ModalFormGrid
+                className={creationContext ? "sm:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3"}
+              >
                 {!creationContext && !shouldHideStructuralFields(dialogMode, form) ? (
                   <>
                     <label className="block text-sm font-medium text-slate-700">
@@ -1314,8 +1322,12 @@ export function ProjectWorkspaceTasks({
                   </>
                 ) : null}
 
-                <label className="block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3">
-                  Title
+                <label
+                  className={creationContext
+                    ? "block text-sm font-medium text-slate-700 sm:col-span-2"
+                    : "block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3"}
+                >
+                  {creationContext ? "Task Name" : "Title"}
                   <input
                     className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100"
                     disabled={
@@ -1329,6 +1341,23 @@ export function ProjectWorkspaceTasks({
                   />
                 </label>
 
+                {creationContext ? (
+                  <>
+                    <div className="sm:col-span-2">
+                      <TaskAssigneeSelect
+                        label="Owner"
+                        members={members}
+                        onChange={(assigneeId) =>
+                          updateForm({ ...form, assigneeId })
+                        }
+                        value={form.assigneeId}
+                      />
+                    </div>
+                    <ReadOnlyPlanningField label="Start" value="Auto" />
+                    <ReadOnlyPlanningField label="Finish" value="Auto" />
+                  </>
+                ) : (
+                  <>
                 <label className="block text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-3">
                   Description
                   <textarea
@@ -1574,6 +1603,8 @@ export function ProjectWorkspaceTasks({
                     value={form.remarks}
                   />
                 </label>
+                  </>
+                )}
               </ModalFormGrid>
             </ModalFormSection>
           </ModalForm>

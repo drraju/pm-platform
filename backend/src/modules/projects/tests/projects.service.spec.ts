@@ -74,6 +74,7 @@ describe('ProjectsService', () => {
   };
   let planningSnapshotService: {
     rebuildWorkspaceSnapshot: jest.Mock;
+    calculateOperationalForecast: jest.Mock;
   };
   let taskAssignmentService: { changeTaskAssignment: jest.Mock };
   let canonicalCapabilityResolver: { resolve: jest.Mock };
@@ -207,6 +208,9 @@ describe('ProjectsService', () => {
     };
     planningSnapshotService = {
       rebuildWorkspaceSnapshot: jest.fn().mockResolvedValue(undefined),
+      calculateOperationalForecast: jest
+        .fn()
+        .mockResolvedValue({ projectStartDate: '2026-07-01' }),
     };
     taskAssignmentService = {
       changeTaskAssignment: jest.fn(
@@ -1524,6 +1528,112 @@ describe('ProjectsService', () => {
     );
   });
 
+  it.each([
+    [{}, '2026-07-01', '2026-07-02'],
+    [
+      { plannedStartDate: null, plannedEndDate: null },
+      '2026-07-01',
+      '2026-07-02',
+    ],
+  ])(
+    'applies Planning defaults to canonical empty-date creation: %j',
+    async (dates, start, finish) => {
+      projectsRepository.findOne?.mockResolvedValue({
+        id: projectId,
+        startDate: '2026-08-01',
+      });
+      const result = await service.createProjectTask(
+        projectId,
+        { title: 'New Task', ...dates },
+        actor,
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          plannedStartDate: start,
+          plannedEndDate: finish,
+          startDate: start,
+          dueDate: finish,
+          durationDays: 1,
+        }),
+      );
+      expect(
+        planningSnapshotService.calculateOperationalForecast,
+      ).toHaveBeenCalledWith(projectId);
+    },
+  );
+
+  it('falls back to the project anchor when the operational forecast has no start', async () => {
+    projectsRepository.findOne?.mockResolvedValue({
+      id: projectId,
+      startDate: '2026-12-31',
+    });
+    planningSnapshotService.calculateOperationalForecast.mockResolvedValue({
+      projectStartDate: null,
+    });
+    const result = await service.createProjectTask(
+      projectId,
+      { title: 'New Task' },
+      actor,
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        plannedStartDate: '2026-12-31',
+        plannedEndDate: '2027-01-01',
+      }),
+    );
+  });
+
+  it.each([
+    { plannedStartDate: '2026-08-01', plannedEndDate: '2026-08-09' },
+    { plannedStartDate: '2026-08-01', plannedEndDate: null },
+    { plannedEndDate: '2026-08-09' },
+    { startDate: '2026-08-01', dueDate: '2026-08-09' },
+  ])('preserves explicit and partial date requests: %j', async (dates) => {
+    projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+    await service.createProjectTask(
+      projectId,
+      { title: 'Explicit dates', ...dates },
+      actor,
+    );
+    const creationCalls = tasksRepository.create?.mock.calls as [
+      Partial<Task>,
+    ][];
+    const saved = creationCalls[0][0];
+    for (const field of [
+      'plannedStartDate',
+      'plannedEndDate',
+      'startDate',
+      'dueDate',
+    ] as const) {
+      expect(saved[field]).toBe((dates as Partial<Task>)[field]);
+    }
+    expect(
+      planningSnapshotService.calculateOperationalForecast,
+    ).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'CUSTOMER_READ_ONLY',
+    'SERVICE_IDENTITY_DENIED',
+    'PROJECT_ACCESS_DENIED',
+  ])(
+    'denies creation before deriving dates or saving: %s',
+    async (reasonCode) => {
+      projectsRepository.findOne?.mockResolvedValue({ id: projectId });
+      canonicalCapabilityResolver.resolve.mockResolvedValue({
+        allowed: false,
+        reasonCode,
+      });
+      await expect(
+        service.createProjectTask(projectId, { title: 'Denied' }, actor),
+      ).rejects.toThrow(ForbiddenException);
+      expect(
+        planningSnapshotService.calculateOperationalForecast,
+      ).not.toHaveBeenCalled();
+      expect(tasksRepository.save).not.toHaveBeenCalled();
+    },
+  );
+
   it('creates a child project task under a summary parent', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     tasksRepository.findOne?.mockResolvedValueOnce({
@@ -1547,6 +1657,8 @@ describe('ProjectsService', () => {
       expect.objectContaining({
         parentTaskId: 'parent-task-id',
         projectId,
+        plannedStartDate: '2026-07-01',
+        plannedEndDate: '2026-07-02',
         taskKind: TaskKind.Standard,
         title: 'Prepare cutover checklist',
       }),
@@ -1576,6 +1688,8 @@ describe('ProjectsService', () => {
       expect.objectContaining({
         parentTaskId: 'parent-task-id',
         projectId,
+        plannedStartDate: '2026-07-01',
+        plannedEndDate: '2026-07-02',
         taskKind: TaskKind.Standard,
         title: 'Prepare cutover checklist',
       }),

@@ -1,3 +1,4 @@
+import { PlanningSnapshotService } from '../../planning/planning-snapshot.service';
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import {
   ExecutionContext,
@@ -246,6 +247,7 @@ describe('CUSTOMER participation HTTP boundaries', () => {
       visibility,
       {} as SchedulingFoundationService,
       assignment,
+      {} as PlanningSnapshotService,
       tasksService,
     );
     const module = await Test.createTestingModule({
