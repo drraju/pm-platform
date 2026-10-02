@@ -41,6 +41,16 @@ function setup(options: {
   return { ...view, refresh };
 }
 
+function subtaskAction(title: string) {
+  const row = screen.getByText(title).closest('[role="row"]') as HTMLElement;
+  return within(row).getByRole("button", { name: "Add subtask" });
+}
+
+function expectNoSubtaskAction(title: string) {
+  const row = screen.getByText(title).closest('[role="row"]') as HTMLElement;
+  expect(within(row).queryByRole("button", { name: "Add subtask" })).not.toBeInTheDocument();
+}
+
 function submit() {
   const dialog = screen.getByRole("dialog");
   fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "New work" } });
@@ -66,13 +76,28 @@ describe("Today contextual task creation", () => {
     expect(screen.getByRole("button", { name: "All active (2)" })).toBeInTheDocument();
   });
 
+  it("provides a compact, focusable subtask action and native task-name tooltip", () => {
+    setup();
+    const button = subtaskAction("Current work");
+    expect(button).toHaveAttribute("aria-label", "Add subtask");
+    expect(button).toHaveAttribute("title", "Add subtask");
+    expect(button).toHaveAttribute("type", "button");
+    expect(button).toHaveClass("h-7", "w-7", "focus:ring-2");
+    expect(button).toHaveTextContent("+");
+    expect(screen.getByText("Current work")).toHaveAttribute("title", "Current work");
+    button.focus();
+    expect(button).toHaveFocus();
+    fireEvent.click(button);
+    expect(screen.getByText("Parent task: Current work")).toBeInTheDocument();
+  });
+
   it("creates a subtask with a fixed parent and recomputes hierarchy and roll-up", async () => {
     const existing: ApiTask = { ...newTask, id: "existing", title: "Existing subtask", parentTaskId: parent.id, status: "done", percentComplete: 100 };
     const created: ApiTask = { ...newTask, parentTaskId: parent.id };
     createTask.mockResolvedValue(created);
     // A failed GET also exercises the existing decoration utility on the merge.
     setup({ tasks: [parent, existing], refresh: vi.fn().mockRejectedValue(new Error("offline")) });
-    fireEvent.click(screen.getByRole("button", { name: "Add Subtask to Current work" }));
+    fireEvent.click(subtaskAction("Current work"));
     expect(screen.getByText("Parent task: Current work")).toBeInTheDocument();
     expect(screen.queryByLabelText("Parent Summary")).not.toBeInTheDocument();
     submit();
@@ -94,12 +119,12 @@ describe("Today contextual task creation", () => {
     createTask.mockResolvedValue(child);
     setup({ tasks: [summary, work], refresh: vi.fn().mockResolvedValue(decoratePlanningTasks([summary, work, child])) });
     fireEvent.click(screen.getByRole("button", { name: "Expand" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add Subtask to Current work" })); submit();
+    fireEvent.click(subtaskAction("Current work")); submit();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByText("New work")).toBeInTheDocument();
     expect(screen.getByText("1.1.1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "All active (2)" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add Subtask to New work" })).not.toBeInTheDocument();
+    expectNoSubtaskAction("New work");
   });
 
   it.each(["Overdue", "Blocked"])("reapplies %s without forcing a new task into the result", async (filter) => {
@@ -143,16 +168,16 @@ describe("Today contextual task creation", () => {
   ])("hides creation for a restricted actor/project: %j", (options) => {
     setup(options);
     expect(screen.queryByRole("button", { name: "Add Task" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Add Subtask/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add subtask" })).not.toBeInTheDocument();
     expect(createTask).not.toHaveBeenCalled();
   });
 
   it("does not offer another hierarchy level or children of milestones", () => {
     setup({ tasks: [parent, { ...newTask, parentTaskId: parent.id }, { ...newTask, id: "milestone", title: "Milestone", taskKind: "milestone" }] });
     fireEvent.click(screen.getByRole("button", { name: "Expand" }));
-    expect(screen.getByRole("button", { name: "Add Subtask to Current work" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add Subtask to New work" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add Subtask to Milestone" })).not.toBeInTheDocument();
+    expect(subtaskAction("Current work")).toBeInTheDocument();
+    expectNoSubtaskAction("New work");
+    expectNoSubtaskAction("Milestone");
   });
 
   it("retains state on failure and requires reconciliation before another submission", async () => {

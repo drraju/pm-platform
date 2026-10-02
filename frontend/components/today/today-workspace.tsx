@@ -114,10 +114,10 @@ const taskPriorities: Array<{ label: string; value: ApiTask["priority"] }> = [
 ];
 
 const teamGridTemplate =
-  "minmax(3.5rem,4.5rem) minmax(14rem,1.8fr) minmax(8rem,10rem) minmax(4.5rem,5.5rem) minmax(5.5rem,6.5rem) minmax(5rem,6rem) minmax(7.5rem,8.5rem) minmax(11rem,1.1fr) minmax(11rem,1.1fr) minmax(8rem,10rem) minmax(4.5rem,5rem)";
+  "60px minmax(14rem,1fr) minmax(96px,110px) minmax(72px,85px) minmax(80px,95px) minmax(60px,70px) minmax(96px,105px) minmax(128px,200px) minmax(112px,180px) minmax(96px,115px) minmax(60px,65px)";
 
 const mineGridTemplate =
-  "minmax(14rem,1.8fr) minmax(4.5rem,5.5rem) minmax(5.5rem,6.5rem) minmax(5rem,6rem) minmax(7.5rem,8.5rem) minmax(11rem,1.1fr) minmax(11rem,1.1fr) minmax(4.5rem,5rem)";
+  "minmax(14rem,1fr) minmax(72px,85px) minmax(80px,95px) minmax(60px,70px) minmax(96px,105px) minmax(128px,200px) minmax(112px,180px) minmax(60px,65px)";
 
 const editableControlClassName =
   "w-full rounded-sm border border-slate-300 bg-white px-1.5 py-1 text-xs text-slate-800 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-500";
@@ -1093,7 +1093,7 @@ const TodayTaskRow = memo(function TodayTaskRow({
     task.assigneeId !== currentUserId;
 
   const taskTitleCell = (
-    <div role="cell">
+    <div role="cell" className="min-w-0">
       <div
         className="flex min-w-0 items-center gap-1"
         style={{ paddingLeft: `${row.depth * 14}px` }}
@@ -1108,7 +1108,7 @@ const TodayTaskRow = memo(function TodayTaskRow({
           <span aria-hidden="true" className="inline-block w-6 shrink-0" />
         ) : null}
         <span
-          className={`truncate font-medium ${
+          className={`min-w-0 flex-1 truncate font-medium ${
             isSummary
               ? "text-slate-900"
               : isDone
@@ -1121,13 +1121,14 @@ const TodayTaskRow = memo(function TodayTaskRow({
         </span>
         {canAddSubtask ? (
           <button
-            aria-label={`Add Subtask to ${task.title}`}
-            className="shrink-0 rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+            aria-label="Add subtask"
+            title="Add subtask"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
             disabled={creationDisabled}
             onClick={() => onAddSubtask(task)}
             type="button"
           >
-            Add Subtask
+            <span aria-hidden="true" className="text-lg leading-none">+</span>
           </button>
         ) : null}
         {showContextAssignee ? (
