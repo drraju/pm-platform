@@ -189,3 +189,53 @@ function isProjectGovernorOrManager({
       projectManagerMembershipRoles.has(member.role),
   );
 }
+
+/** Advisory projection of the canonical task resolver, never a security boundary. */
+export function resolveTaskUiCapabilities({
+  currentUserId,
+  members,
+  project,
+  task,
+  roleNames = [],
+  identityType,
+}: {
+  currentUserId?: string | null;
+  members: ApiProjectMember[];
+  project: Pick<ApiProject, "status">;
+  task?: Pick<ApiTask, "assigneeId" | "taskKind" | "deletedAt">;
+  roleNames?: string[];
+  identityType?: "HUMAN" | "SERVICE";
+}) {
+  const roles = roleNames.map(normalizeRoleName);
+  const mutable =
+    Boolean(currentUserId) &&
+    identityType !== "SERVICE" &&
+    !roles.some((role) => role === "CUSTOMER" || role === "EXECUTIVE") &&
+    project.status !== "archived" &&
+    !task?.deletedAt;
+  const membership = members.find((member) => member.userId === currentUserId);
+  const external = roles.includes("PARTNER");
+  const manager =
+    mutable &&
+    !external &&
+    (roles.includes("PLATFORM_ADMIN") ||
+      membership?.role === "owner" ||
+      membership?.role === "manager");
+  const contributor =
+    mutable &&
+    membership?.role === "contributor" &&
+    Boolean(task) &&
+    task?.assigneeId === currentUserId;
+  const executable = Boolean(task) && task?.taskKind !== "summary" && (manager || contributor);
+  return {
+    canManageTasks: manager,
+    canCreate: manager,
+    canRecordUpdate: executable,
+    canAssign: Boolean(task) && task?.taskKind !== "summary" && manager,
+    canReassign:
+      Boolean(task) && task?.taskKind !== "summary" && (manager || contributor),
+    canEditDueDate: executable,
+    canEditPlannedDates: manager,
+    canComplete: executable,
+  };
+}

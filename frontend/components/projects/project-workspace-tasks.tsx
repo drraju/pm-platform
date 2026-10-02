@@ -501,10 +501,7 @@ export function ProjectWorkspaceTasks({
       return;
     }
 
-    const validationError = validateExecutionUpdateForm(
-      executionForm,
-      executionTask,
-    );
+    const validationError = validateExecutionUpdateForm(executionForm);
     if (validationError) {
       setExecutionFormError(validationError);
       return;
@@ -567,6 +564,26 @@ export function ProjectWorkspaceTasks({
   const executionTaskIndex = executionTask
     ? reviewableTasks.findIndex((task) => task.id === executionTask.id)
     : -1;
+  function changeExecutionProgress(value: string) {
+    if (!executionTask) return;
+    setExecutionForm((current) => {
+      const payload = buildExecutionUpdatePayload(
+        {
+          ...executionTask,
+          status: current.status,
+          percentComplete: Number(current.percentComplete),
+        },
+        { percentComplete: value.trim() ? Number(value) : Number.NaN },
+      );
+      return {
+        ...current,
+        percentComplete: value,
+        status:
+          executionTask.status === "done" ? payload.status : current.status,
+      };
+    });
+  }
+
   const isExecutionUpdateReadOnly = executionDialogMode === "read-only";
   const showExecutionBoard = !isPlanningMode && executionView === "board";
   const canRecordTaskExecution = React.useCallback(
@@ -1649,13 +1666,31 @@ export function ProjectWorkspaceTasks({
                         Status
                         <select
                           className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                          onChange={(event) =>
-                            setExecutionForm({
-                              ...executionForm,
-                              status: event.target.value as ApiTask["status"],
-                              isBlocked: event.target.value === "blocked",
-                            })
-                          }
+                          onChange={(event) => {
+                            const status = event.target
+                              .value as ApiTask["status"];
+                            setExecutionForm((current) => ({
+                              ...current,
+                              status,
+                              isBlocked: status === "blocked",
+                              percentComplete:
+                                executionTask.status === "done" &&
+                                current.status === "done" &&
+                                status !== "done"
+                                  ? String(
+                                      buildExecutionUpdatePayload(
+                                        {
+                                          ...executionTask,
+                                          percentComplete: Number(
+                                            current.percentComplete,
+                                          ),
+                                        },
+                                        { status },
+                                      ).percentComplete,
+                                    )
+                                  : current.percentComplete,
+                            }));
+                          }}
                           value={executionForm.status}
                         >
                           {taskStatuses.map((status) => (
@@ -1730,10 +1765,7 @@ export function ProjectWorkspaceTasks({
                             max={100}
                             min={0}
                             onChange={(event) =>
-                              setExecutionForm({
-                                ...executionForm,
-                                percentComplete: event.target.value,
-                              })
+                              changeExecutionProgress(event.target.value)
                             }
                             type="range"
                             value={executionForm.percentComplete}
@@ -1744,10 +1776,7 @@ export function ProjectWorkspaceTasks({
                             max={100}
                             min={0}
                             onChange={(event) =>
-                              setExecutionForm({
-                                ...executionForm,
-                                percentComplete: event.target.value,
-                              })
+                              changeExecutionProgress(event.target.value)
                             }
                             type="number"
                             value={executionForm.percentComplete}
@@ -2539,10 +2568,7 @@ function createExecutionUpdateForm(task: ApiTask): ExecutionUpdateFormState {
   };
 }
 
-function validateExecutionUpdateForm(
-  form: ExecutionUpdateFormState,
-  task: ApiTask,
-) {
+function validateExecutionUpdateForm(form: ExecutionUpdateFormState) {
   const percentComplete = Number(form.percentComplete);
   const nextStatus = form.isBlocked ? "blocked" : form.status;
 
@@ -2562,6 +2588,10 @@ function validateExecutionUpdateForm(
     return "Priority must be low, medium, high, or critical.";
   }
 
+  if (nextStatus === "done" && percentComplete !== 100) {
+    return "Done tasks must be at 100% progress.";
+  }
+
   if (nextStatus === "todo" && percentComplete !== 0) {
     return "Todo tasks must stay at 0% progress.";
   }
@@ -2571,20 +2601,6 @@ function validateExecutionUpdateForm(
     (percentComplete <= 0 || percentComplete >= 100)
   ) {
     return "In Progress tasks must be between 1% and 99% complete.";
-  }
-
-  const executionStateChanged =
-    nextStatus !== task.status ||
-    percentComplete !== getDisplayedPercentComplete(task) ||
-    form.priority !== task.priority;
-  const isCompletedTerminalState =
-    nextStatus === "done" && percentComplete === 100;
-  if (
-    executionStateChanged &&
-    !isCompletedTerminalState &&
-    !form.nextStep.trim()
-  ) {
-    return "Add a Next Step when status, progress, or priority changes.";
   }
 
   if (form.isBlocked && !form.blockerReason.trim()) {

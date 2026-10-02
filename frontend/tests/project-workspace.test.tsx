@@ -1200,7 +1200,7 @@ describe("Project workspace components", () => {
     });
   });
 
-  it("validates blocked, progress, status, and next step execution updates", async () => {
+  it("validates blocked, progress, and status execution updates", async () => {
     const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -1244,15 +1244,6 @@ describe("Project workspace components", () => {
     fireEvent.change(within(drawer).getByLabelText(/status/i), {
       target: { value: "in_progress" },
     });
-    fireEvent.click(
-      within(drawer).getByRole("button", { name: /save (update|& next|& finish)/i }),
-    );
-    expect(
-      await within(drawer).findByText(
-        "Add a Next Step when status, progress, or priority changes.",
-      ),
-    ).toBeInTheDocument();
-
     fireEvent.change(within(drawer).getByLabelText(/next step/i), {
       target: { value: "Confirm API owner" },
     });
@@ -1299,7 +1290,7 @@ describe("Project workspace components", () => {
       ["priority", /priority/i, "high"],
     ] as const,
   )(
-    "requires a Next Step when incomplete task %s changes",
+    "allows optional Next Step when task %s changes",
     async (_field, fieldLabel, value) => {
       const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
 
@@ -1334,18 +1325,20 @@ describe("Project workspace components", () => {
       fireEvent.change(within(drawer).getByLabelText(fieldLabel), {
         target: { value },
       });
+      if (_field === "status") {
+        fireEvent.change(within(drawer).getByLabelText(/progress value/i), {
+          target: { value: "100" },
+        });
+      }
       fireEvent.click(
         within(drawer).getByRole("button", {
           name: /save (update|& next|& finish)/i,
         }),
       );
 
-      expect(
-        await within(drawer).findByText(
-          "Add a Next Step when status, progress, or priority changes.",
-        ),
-      ).toBeInTheDocument();
-      expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+      await waitFor(() => expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
+        "task-1", expect.objectContaining({ nextStep: null, updateNotes: null }),
+      ));
     },
   );
 
@@ -1391,7 +1384,7 @@ describe("Project workspace components", () => {
     );
     expect(
       await within(drawer).findByText(
-        "Add a Next Step when status, progress, or priority changes.",
+        "Done tasks must be at 100% progress.",
       ),
     ).toBeInTheDocument();
     expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
@@ -1415,11 +1408,6 @@ describe("Project workspace components", () => {
         updateNotes: null,
       });
     });
-    expect(
-      screen.queryByText(
-        "Add a Next Step when status, progress, or priority changes.",
-      ),
-    ).not.toBeInTheDocument();
   });
 
   it("renders the execution Kanban board from existing task data and excludes backlog", () => {
@@ -2469,3 +2457,69 @@ describe("Project workspace components", () => {
     expect(screen.queryByText("No records yet.")).not.toBeInTheDocument();
   });
 });
+
+it.each(["status", "progress"])(
+  "reopens a completed task by editing only %s in the execution drawer",
+  async (field) => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ProjectWorkspaceTasks
+        canEditTasks
+        mode="execution"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            id: "completed",
+            projectId: "project",
+            title: "Completed work",
+            status: "done",
+            percentComplete: 100,
+            priority: "medium",
+            taskKind: "standard",
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(
+      within(
+        screen.getByText("Completed work").closest("tr") as HTMLElement,
+      ).getByRole("button", { name: "Update" }),
+    );
+    const drawer = screen.getByRole("dialog", {
+      name: /task execution update/i,
+    });
+    expect(within(drawer).getByLabelText(/progress value/i)).toBeEnabled();
+    expect(within(drawer).getByLabelText(/^status$/i)).toBeEnabled();
+    if (field === "progress") {
+      fireEvent.change(within(drawer).getByLabelText(/progress value/i), { target: { value: "" } });
+    }
+    fireEvent.change(
+      within(drawer).getByLabelText(
+        field === "status" ? /^status$/i : /progress value/i,
+      ),
+      { target: { value: field === "status" ? "in_progress" : "75" } },
+    );
+    expect(within(drawer).getByLabelText(/^status$/i)).toHaveValue(
+      "in_progress",
+    );
+    expect(within(drawer).getByLabelText(/progress value/i)).toHaveValue(
+      field === "status" ? 99 : 75,
+    );
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: /save (update|& next|& finish)/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
+        "completed",
+        expect.objectContaining({
+          status: "in_progress",
+          percentComplete: field === "status" ? 99 : 75,
+          nextStep: null,
+          updateNotes: null,
+        }),
+      ),
+    );
+  },
+);

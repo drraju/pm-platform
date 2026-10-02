@@ -1,5 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TodayWorkspace } from "@/components/today/today-workspace";
 import type { ApiProjectDetails, ApiTask } from "@/features/projects";
@@ -44,9 +50,11 @@ function createProject(tasks: ApiTask[]): ApiProjectDetails {
 function renderToday(
   project: ApiProjectDetails,
   options: {
-    canEdit?: boolean;
     currentUserId?: string | null;
     onLoadHistory?: ReturnType<typeof vi.fn>;
+    onRefreshTasks?: ReturnType<typeof vi.fn>;
+    roleNames?: string[];
+    identityType?: "HUMAN" | "SERVICE";
     onRecordExecutionUpdate?: ReturnType<typeof vi.fn>;
     searchTerm?: string;
     taskScope?: "mine" | "team";
@@ -55,15 +63,19 @@ function renderToday(
   const onSearchTermChange = vi.fn();
   const onSelectedProjectIdChange = vi.fn();
   const onRecordExecutionUpdate =
-    options.onRecordExecutionUpdate ?? vi.fn().mockResolvedValue({ id: "task-1" });
-  const onLoadHistory =
-    options.onLoadHistory ?? vi.fn().mockResolvedValue([]);
+    options.onRecordExecutionUpdate ??
+    vi.fn().mockResolvedValue({ id: "task-1" });
+  const onLoadHistory = options.onLoadHistory ?? vi.fn().mockResolvedValue([]);
 
-  render(
+  const view = render(
     <TodayWorkspace
-      canEdit={options.canEdit ?? true}
       currentUserId={options.currentUserId ?? "user-1"}
       members={members}
+      roleNames={options.roleNames}
+      identityType={options.identityType}
+      onRefreshTasks={
+        options.onRefreshTasks ?? vi.fn().mockResolvedValue(project.tasks)
+      }
       onLoadHistory={onLoadHistory}
       onRecordExecutionUpdate={onRecordExecutionUpdate}
       onSearchTermChange={onSearchTermChange}
@@ -83,6 +95,7 @@ function renderToday(
   );
 
   return {
+    ...view,
     onLoadHistory,
     onRecordExecutionUpdate,
     onSearchTermChange,
@@ -187,9 +200,15 @@ describe("TodayWorkspace", () => {
     expect(screen.getByLabelText("Today's update for SL1-API")).toBeEnabled();
     expect(screen.getByLabelText("Next step for SL1-API")).toBeEnabled();
     expect(screen.getByLabelText("Next owner for SL1-API")).toBeEnabled();
-    expect(screen.queryByLabelText("Blocked for SL1-API")).not.toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Priority" })).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Blocked" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Blocked for SL1-API"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Priority" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Blocked" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("Type today's update..."),
     ).toBeInTheDocument();
@@ -269,10 +288,9 @@ describe("TodayWorkspace", () => {
       );
     });
 
-    fireEvent.change(
-      screen.getByLabelText("Due date for Draft cutover plan"),
-      { target: { value: "2026-08-20" } },
-    );
+    fireEvent.change(screen.getByLabelText("Due date for Draft cutover plan"), {
+      target: { value: "2026-08-20" },
+    });
     await waitFor(() => {
       expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
         "task-1",
@@ -329,6 +347,16 @@ describe("TodayWorkspace", () => {
       );
     });
 
+    fireEvent.change(updateNotes, {
+      target: { value: "Waiting for credentials" },
+    });
+    fireEvent.blur(updateNotes);
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
+        "task-1",
+        expect.objectContaining({ updateNotes: "Waiting for credentials" }),
+      ),
+    );
     fireEvent.change(screen.getByLabelText("Status for Draft cutover plan"), {
       target: { value: "blocked" },
     });
@@ -397,9 +425,6 @@ describe("TodayWorkspace", () => {
         }),
       );
     });
-    expect(
-      screen.queryByText("Add a Next Step when status or progress changes."),
-    ).not.toBeInTheDocument();
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     await waitFor(
       () => expect(screen.queryByText("Saved")).not.toBeInTheDocument(),
@@ -480,7 +505,9 @@ describe("TodayWorkspace", () => {
     expect(onLoadHistory).toHaveBeenCalledWith("task-1");
     expect(screen.getByText("Chase vendor")).toBeInTheDocument();
     expect(screen.queryByText("Save & Next")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^save$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("exposes a compact Project / Scope / Search / Expand / Collapse toolbar", () => {
@@ -503,7 +530,9 @@ describe("TodayWorkspace", () => {
     expect(screen.getByLabelText("Task scope")).toHaveValue("team");
     expect(screen.getByLabelText("Search tasks")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Collapse" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/stand-up progress/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/Project Manager daily command center/i),
@@ -538,18 +567,22 @@ describe("TodayWorkspace", () => {
       },
     ]);
 
-    renderToday(project, { canEdit: false, currentUserId: "user-2" });
+    renderToday(project, { currentUserId: "user-2" });
 
     expect(screen.getByLabelText("Task scope")).toHaveValue("mine");
     expect(screen.getByText("My assigned task")).toBeInTheDocument();
     expect(screen.queryByText("Someone else's task")).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Owner" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "WBS" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Owner" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "WBS" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Status for My assigned task")).toBeEnabled();
     expect(
-      screen.queryByRole("combobox", { name: "Priority for My assigned task" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Priority for My assigned task")).toHaveTextContent(
+      screen.getByRole("combobox", { name: "Priority for My assigned task" }),
+    ).toBeEnabled();
+    expect(screen.getByLabelText("Priority for My assigned task")).toHaveValue(
       "high",
     );
   });
@@ -594,7 +627,7 @@ describe("TodayWorkspace", () => {
       },
     ]);
 
-    renderToday(project, { canEdit: false, currentUserId: "user-2" });
+    renderToday(project, { currentUserId: "user-2" });
 
     expect(screen.getByText("Task A")).toBeInTheDocument();
     expect(screen.getByText("Sub-task A1")).toBeInTheDocument();
@@ -633,7 +666,6 @@ describe("TodayWorkspace", () => {
     ]);
 
     renderToday(project, {
-      canEdit: false,
       currentUserId: "user-2",
       taskScope: "team",
     });
@@ -641,7 +673,9 @@ describe("TodayWorkspace", () => {
     expect(screen.getByText("My assigned task")).toBeInTheDocument();
     expect(screen.getByText("Someone else's task")).toBeInTheDocument();
     expect(screen.getByLabelText("Status for My assigned task")).toBeDisabled();
-    expect(screen.getByLabelText("Status for Someone else's task")).toBeDisabled();
+    expect(
+      screen.getByLabelText("Status for Someone else's task"),
+    ).toBeDisabled();
   });
 
   it("smart-focuses Today's Update after expanding a work package", async () => {
@@ -682,12 +716,15 @@ describe("TodayWorkspace", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByLabelText(
-          "Today's update for Interview stakeholders. Inherited from previous Next Step",
-        ),
+        screen.getByLabelText("Today's update for Interview stakeholders"),
       ).toHaveFocus();
     });
-    expect(screen.getByText("From next step")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Today\'s update for Interview stakeholders"),
+    ).toHaveValue("");
+    expect(
+      screen.getByLabelText("Next step for Interview stakeholders"),
+    ).toHaveValue("Book follow-up");
   });
 
   it("moves vertically with Enter and horizontally with Tab", async () => {
@@ -787,3 +824,421 @@ describe("TodayWorkspace", () => {
     );
   });
 });
+
+const basicWork: ApiTask = {
+  id: "work",
+  projectId: "project-1",
+  title: "Work",
+  taskKind: "standard",
+  assigneeId: "user-1",
+  status: "in_progress",
+  percentComplete: 20,
+  priority: "medium",
+};
+const latest = {
+  id: "update",
+  taskId: "work",
+  projectId: "project-1",
+  priority: "medium",
+  percentComplete: 20,
+  status: "in_progress" as const,
+};
+
+describe("Today Stage A+B", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("shows primary counts independent of collapse and combines search/secondary filters", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const project = createProject([
+      { ...basicWork, id: "summary", title: "Package", taskKind: "summary" },
+      {
+        ...basicWork,
+        parentTaskId: "summary",
+        dueDate: today,
+        priority: "critical",
+        latestExecutionUpdate: {
+          ...latest,
+          nextActionOwnerId: "user-1",
+          updatedOn: `${today}T10:00:00Z`,
+        },
+      },
+      {
+        ...basicWork,
+        id: "blocked",
+        title: "Blocked work",
+        status: "blocked",
+        dueDate: "2020-01-01",
+      },
+      {
+        ...basicWork,
+        id: "done",
+        title: "Finished",
+        status: "done",
+        latestExecutionUpdate: { ...latest, updatedOn: `${today}T10:00:00Z` },
+      },
+    ]);
+    renderToday(project);
+    expect(
+      screen.getByRole("button", { name: "All active (2)" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Overdue (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Today (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Blocked (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Waiting For Me (1)" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Finished")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(
+      screen.getByRole("button", { name: "All active (2)" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Waiting For Me (1)" }));
+    expect(screen.getByText("Work")).toBeInTheDocument();
+    expect(screen.queryByText("Blocked work")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "All active (2)" }));
+    fireEvent.change(screen.getByLabelText("Additional filter"), {
+      target: { value: "updated" },
+    });
+    expect(screen.getByText("Finished")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "All active (2)" }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Additional filter"), {
+      target: { value: "critical" },
+    });
+    expect(
+      screen.getByRole("button", { name: "All active (1)" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Finished")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Additional filter"), {
+      target: { value: "next7" },
+    });
+    expect(
+      screen.getByRole("button", { name: "All active (1)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("search respects attention counts and ancestor context without counting ancestors", () => {
+    renderToday(
+      createProject([
+        { ...basicWork, id: "parent", title: "Release", taskKind: "summary" },
+        {
+          ...basicWork,
+          parentTaskId: "parent",
+          latestExecutionUpdate: { ...latest, nextStep: "Test interface" },
+          dueDate: "2020-01-01",
+        },
+        { ...basicWork, id: "other", title: "Other" },
+      ]),
+      { searchTerm: "interface" },
+    );
+    expect(screen.getByText("Release")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "All active (1)" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Overdue (1)" }));
+    expect(screen.getByText("Work")).toBeInTheDocument();
+    expect(screen.queryByText("Other")).not.toBeInTheDocument();
+  });
+
+  it("Mine counts exclude delegated context", () => {
+    renderToday(
+      createProject([
+        { ...basicWork, id: "parent", assigneeId: "user-2" },
+        {
+          ...basicWork,
+          id: "child",
+          parentTaskId: "parent",
+          title: "Delegated",
+          assigneeId: "user-1",
+        },
+      ]),
+      { currentUserId: "user-2" },
+    );
+    expect(screen.getByText("Delegated")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "All active (1)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Status for Delegated")).toBeDisabled();
+  });
+
+  it.each(["viewer", "CUSTOMER", "SERVICE", "archived", "deleted"])(
+    "disables execution for %s",
+    (restriction) => {
+      const project = createProject([
+        {
+          ...basicWork,
+          deletedAt: restriction === "deleted" ? "2026-10-02" : null,
+        },
+      ]);
+      if (restriction === "viewer")
+        project.members = [{ ...members[0], role: "viewer" }];
+      if (restriction === "archived") project.status = "archived";
+      // The workspace receives the actual project membership, even if governance implies leadership.
+      render(
+        <TodayWorkspace
+          currentUserId="user-1"
+          members={project.members ?? []}
+          project={project}
+          projects={[project]}
+          selectedProjectId={project.id}
+          searchTerm=""
+          onSearchTermChange={vi.fn()}
+          onLoadHistory={vi.fn().mockResolvedValue([])}
+          onRefreshTasks={vi.fn().mockResolvedValue(project.tasks)}
+          onRecordExecutionUpdate={vi.fn()}
+          roleNames={restriction === "CUSTOMER" ? ["CUSTOMER"] : []}
+          identityType={restriction === "SERVICE" ? "SERVICE" : "HUMAN"}
+        />,
+      );
+      expect(screen.getByLabelText("Status for Work")).toBeDisabled();
+      expect(screen.getByLabelText("Due date for Work")).toBeDisabled();
+    },
+  );
+
+  it("does not accept previous Next Step as commentary or blocker reason", async () => {
+    const onRecordExecutionUpdate = vi
+      .fn()
+      .mockResolvedValue({ ...basicWork, priority: "high" });
+    renderToday(
+      createProject([
+        {
+          ...basicWork,
+          latestExecutionUpdate: {
+            ...latest,
+            nextStep: "Complete interface testing",
+          },
+        },
+      ]),
+      { onRecordExecutionUpdate },
+    );
+    const notes = screen.getByLabelText("Today's update for Work");
+    expect(notes).toHaveValue("");
+    expect(screen.getByLabelText("Next step for Work")).toHaveValue(
+      "Complete interface testing",
+    );
+    fireEvent.focus(notes);
+    fireEvent.blur(notes);
+    expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Priority for Work"), {
+      target: { value: "high" },
+    });
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
+        "work",
+        expect.objectContaining({
+          updateNotes: null,
+          nextStep: "Complete interface testing",
+        }),
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("Status for Work"), {
+      target: { value: "blocked" },
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Validation: Add a blocker reason",
+    );
+    expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("serializes same-task saves using latest committed state", async () => {
+    let finishFirst!: (task: ApiTask) => void;
+    const onRecordExecutionUpdate = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<ApiTask>((resolve) => {
+            finishFirst = resolve;
+          }),
+      )
+      .mockImplementation(
+        async (
+          _id: string,
+          payload: Parameters<
+            typeof import("@/components/projects/execution-update-payload").buildExecutionUpdatePayload
+          >[1],
+        ) => ({ ...basicWork, ...payload }),
+      );
+    renderToday(createProject([basicWork]), { onRecordExecutionUpdate });
+    fireEvent.change(screen.getByLabelText("Priority for Work"), {
+      target: { value: "high" },
+    });
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(1),
+    );
+    fireEvent.change(screen.getByLabelText("Progress for Work"), {
+      target: { value: "30" },
+    });
+    fireEvent.blur(screen.getByLabelText("Progress for Work"));
+    expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(1);
+    await act(async () => finishFirst({ ...basicWork, priority: "high" }));
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(2),
+    );
+    expect(onRecordExecutionUpdate.mock.calls[1][1]).toMatchObject({
+      priority: "high",
+      percentComplete: 30,
+      nextStep: null,
+      updateNotes: null,
+    });
+  });
+
+  it("preserves drafts, cancels queued writes and refreshes state/history on an uncertain failure", async () => {
+    let fail!: (error: Error) => void;
+    const onRecordExecutionUpdate = vi.fn().mockImplementation(
+      () =>
+        new Promise<ApiTask>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const onRefreshTasks = vi.fn().mockResolvedValue([basicWork]);
+    const onLoadHistory = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { ...latest, updateNotes: "Recorded despite timeout" },
+      ]);
+    renderToday(createProject([basicWork]), {
+      onLoadHistory,
+      onRecordExecutionUpdate,
+      onRefreshTasks,
+    });
+    const notes = screen.getByLabelText("Today's update for Work");
+    fireEvent.change(notes, { target: { value: "Explicit commentary" } });
+    fireEvent.blur(notes);
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(1),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    expect(await screen.findByText("No history")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Priority for Work"), {
+      target: { value: "critical" },
+    });
+    await act(async () => fail(new Error("Connection lost")));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Server: Connection lost",
+    );
+    expect(notes).toHaveValue("Explicit commentary");
+    expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(1);
+    expect(onRefreshTasks).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByText("Recorded despite timeout"),
+    ).toBeInTheDocument();
+    expect(onLoadHistory).toHaveBeenCalledWith("work");
+  });
+
+  it("discards a late response after switching project", async () => {
+    let finish!: (task: ApiTask) => void;
+    const onRecordExecutionUpdate = vi.fn().mockImplementation(
+      () =>
+        new Promise<ApiTask>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { rerender } = renderToday(createProject([basicWork]), {
+      onRecordExecutionUpdate,
+    });
+    fireEvent.change(screen.getByLabelText("Priority for Work"), {
+      target: { value: "critical" },
+    });
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(1),
+    );
+    const next = {
+      ...createProject([
+        { ...basicWork, projectId: "project-2", title: "New project task" },
+      ]),
+      id: "project-2",
+    };
+    rerender(
+      <TodayWorkspace
+        currentUserId="user-1"
+        members={members}
+        project={next}
+        projects={[next]}
+        selectedProjectId={next.id}
+        searchTerm=""
+        onSearchTermChange={vi.fn()}
+        onLoadHistory={vi.fn().mockResolvedValue([])}
+        onRefreshTasks={vi.fn().mockResolvedValue(next.tasks)}
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+      />,
+    );
+    await act(async () =>
+      finish({ ...basicWork, priority: "critical", title: "Old response" }),
+    );
+    expect(screen.queryByText("Old response")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Priority for New project task")).toHaveValue(
+      "medium",
+    );
+  });
+});
+
+it("keeps an invalid progress draft without sending a request, and Escape cancels it", async () => {
+  const { onRecordExecutionUpdate } = renderToday(createProject([basicWork]));
+  const progress = screen.getByLabelText("Progress for Work");
+  fireEvent.change(progress, { target: { value: "101" } });
+  fireEvent.blur(progress);
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Validation: Progress must be a whole number between 0 and 100",
+  );
+  expect(progress).toHaveValue(101);
+  expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+  fireEvent.keyDown(progress, { key: "Escape" });
+  expect(progress).toHaveValue(20);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(onRecordExecutionUpdate).not.toHaveBeenCalled();
+});
+
+it.each(["status", "progress"])(
+  "autosaves reopening a Done task through %s in Updated today",
+  async (field) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const completed: ApiTask = {
+      ...basicWork,
+      status: "done",
+      percentComplete: 100,
+      latestExecutionUpdate: {
+        ...latest,
+        status: "done",
+        percentComplete: 100,
+        updatedOn: `${today}T10:00:00Z`,
+      },
+    };
+    const onRecordExecutionUpdate = vi
+      .fn()
+      .mockImplementation(async (_id, input) => ({ ...completed, ...input }));
+    renderToday(createProject([completed]), { onRecordExecutionUpdate });
+    fireEvent.change(screen.getByLabelText("Additional filter"), {
+      target: { value: "updated" },
+    });
+    expect(screen.getByLabelText("Status for Work")).toBeEnabled();
+    expect(screen.getByLabelText("Progress for Work")).toBeEnabled();
+    fireEvent.change(
+      screen.getByLabelText(
+        field === "status" ? "Status for Work" : "Progress for Work",
+      ),
+      { target: { value: field === "status" ? "in_progress" : "75" } },
+    );
+    if (field === "progress")
+      fireEvent.blur(screen.getByLabelText("Progress for Work"));
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
+        "work",
+        expect.objectContaining({
+          status: "in_progress",
+          percentComplete: field === "status" ? 99 : 75,
+        }),
+      ),
+    );
+    expect(onRecordExecutionUpdate).toHaveBeenCalledTimes(1);
+  },
+);

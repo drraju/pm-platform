@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   EmptyState,
@@ -16,6 +16,7 @@ import {
 } from "@/features/auth";
 import {
   getProject,
+  getProjectTasks,
   getProjectMembers,
   getProjects,
   recordProjectTaskExecutionUpdate,
@@ -58,6 +59,11 @@ function TodayPageContent() {
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const activeProjectId = useRef(selectedProjectId);
+  activeProjectId.current = selectedProjectId;
+  const [identityType, setIdentityType] = useState<
+    "HUMAN" | "SERVICE" | undefined
+  >();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
@@ -89,6 +95,7 @@ function TodayPageContent() {
         );
         setRoles(authMe.roles.map((role) => role.name));
         setCurrentUserId(authMe.user.id);
+        setIdentityType(authMe.user.identityType);
         const fromQuery = activeProjects.find(
           (candidate) => candidate.id === projectIdFromQuery,
         );
@@ -187,7 +194,7 @@ function TodayPageContent() {
       );
       // Patch only the changed task so memoized rows keep stable references.
       setProject((current) =>
-        current
+        current && current.id === project.id
           ? {
               ...current,
               tasks: (current.tasks ?? []).map((task) =>
@@ -198,10 +205,13 @@ function TodayPageContent() {
       );
       return updatedTask;
     } catch (requestError) {
-      setError(getErrorMessage(requestError, "Unable to save execution update"));
+      if (activeProjectId.current === project.id)
+        setError(
+          getErrorMessage(requestError, "Unable to save execution update"),
+        );
       throw requestError;
     } finally {
-      setIsSaving(false);
+      if (activeProjectId.current === project.id) setIsSaving(false);
     }
   }
 
@@ -246,11 +256,22 @@ function TodayPageContent() {
 
       {!isProjectLoading && !areMembersLoading && project ? (
         <TodayWorkspace
-          canEdit={capabilities.canManageProjectTasks}
+          key={project.id}
+          roleNames={roles}
+          identityType={identityType}
           currentUserId={currentUserId}
           isSaving={isSaving}
           members={members}
           onLoadHistory={getTaskExecutionUpdates}
+          onRefreshTasks={async () => {
+            const refreshed = await getProjectTasks(project.id);
+            setProject((current) =>
+              current?.id === project.id
+                ? { ...current, tasks: refreshed }
+                : current,
+            );
+            return refreshed;
+          }}
           onRecordExecutionUpdate={handleExecutionUpdate}
           onSearchTermChange={setSearchTerm}
           onSelectedProjectIdChange={setSelectedProjectId}

@@ -22,9 +22,21 @@ export function buildExecutionUpdatePayload(
   overrides: ExecutionUpdatePayloadOverrides = {},
 ): TaskExecutionUpdatePayload {
   const latestUpdate = task.latestExecutionUpdate;
-  const status = overrides.isBlocked
+  let status = overrides.isBlocked
     ? "blocked"
     : (overrides.status ?? task.status);
+  // Lowering progress on completed work is a reopening edit, not another completion.
+  // An explicit status still follows the backend's existing completion precedence.
+  if (
+    task.status === "done" &&
+    overrides.status === undefined &&
+    !overrides.isBlocked &&
+    overrides.percentComplete !== undefined &&
+    overrides.percentComplete >= 0 &&
+    overrides.percentComplete < 100
+  ) {
+    status = overrides.percentComplete === 0 ? "todo" : "in_progress";
+  }
   const percentComplete =
     overrides.percentComplete ??
     getProgressForStatus(getDisplayedPercentComplete(task), status);
@@ -37,7 +49,7 @@ export function buildExecutionUpdatePayload(
     ),
     nextStep: normalizeNullableValue(
       overrides.nextStep,
-      latestUpdate?.nextStep ?? getDefaultNextStep(task, overrides.status),
+      latestUpdate?.nextStep,
     ),
     percentComplete,
     priority: overrides.priority ?? task.priority,
@@ -76,7 +88,10 @@ function buildBlockerUpdateNotes({
     .join("\n\n");
 }
 
-function getProgressForStatus(currentProgress: number, status: ApiTask["status"]) {
+function getProgressForStatus(
+  currentProgress: number,
+  status: ApiTask["status"],
+) {
   if (status === "todo" || status === "backlog") {
     return 0;
   }
@@ -87,18 +102,6 @@ function getProgressForStatus(currentProgress: number, status: ApiTask["status"]
     return Math.min(Math.max(currentProgress || 1, 1), 99);
   }
   return status === "blocked" && currentProgress === 100 ? 99 : currentProgress;
-}
-
-function getDefaultNextStep(task: ApiTask, status?: ApiTask["status"]) {
-  if (!status || status === task.status) {
-    return null;
-  }
-
-  return `Review ${formatLabel(status)} execution state`;
-}
-
-function formatLabel(value: string) {
-  return value.replaceAll("_", " ");
 }
 
 function normalizeNullableValue(

@@ -47,17 +47,24 @@ import {
   getWorkPackageIds,
   isEditableTodayTask,
   readTodayCellCoordinates,
-  resolveInheritedUpdateNotes,
   TODAY_MINE_EDITABLE_COLUMNS,
   TODAY_TEAM_EDITABLE_COLUMNS,
   type TodayEditableColumn,
 } from "./today-grid-navigation";
+import { resolveTaskUiCapabilities } from "@/features/auth/capabilities";
+import {
+  matchesWorkAttention,
+  primaryWorkFilters,
+  type WorkAttention,
+  type WorkSecondary,
+} from "@/lib/tasks/task-work-filters";
 import { useTodayExpansionState } from "./today-expansion-state";
 
 export type TodayTaskScope = "mine" | "team";
 
 type TodayWorkspaceProps = {
-  canEdit: boolean;
+  roleNames?: string[];
+  identityType?: "HUMAN" | "SERVICE";
   currentUserId?: string | null;
   /** When true, project picker is hidden (Delivery → Today). */
   embedded?: boolean;
@@ -68,6 +75,7 @@ type TodayWorkspaceProps = {
     taskId: string,
     input: TaskExecutionUpdatePayload,
   ) => Promise<ApiTask>;
+  onRefreshTasks: () => Promise<ApiTask[]>;
   onSearchTermChange: (value: string) => void;
   onSelectedProjectIdChange?: (projectId: string) => void;
   onTaskScopeChange?: (scope: TodayTaskScope) => void;
@@ -82,7 +90,9 @@ type TodayRow = TaskHierarchyRow;
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-type ExecutionOverrides = Parameters<typeof buildExecutionUpdatePayload>[1];
+type ExecutionOverrides = NonNullable<
+  Parameters<typeof buildExecutionUpdatePayload>[1]
+>;
 
 const taskStatuses: Array<{ label: string; value: ApiTask["status"] }> = [
   { label: "Backlog", value: "backlog" },
@@ -111,13 +121,15 @@ const editableControlClassName =
 const COLUMN_HEADER_OFFSET = "2.25rem";
 
 export function TodayWorkspace({
-  canEdit,
+  roleNames = [],
+  identityType,
   currentUserId = null,
   embedded = false,
   isSaving = false,
   members,
   onLoadHistory,
   onRecordExecutionUpdate,
+  onRefreshTasks,
   onSearchTermChange,
   onSelectedProjectIdChange,
   onTaskScopeChange,
@@ -127,12 +139,35 @@ export function TodayWorkspace({
   selectedProjectId,
   taskScope: taskScopeProp,
 }: TodayWorkspaceProps) {
+  const canEdit = resolveTaskUiCapabilities({
+    currentUserId,
+    members,
+    project,
+    roleNames,
+    identityType,
+  }).canManageTasks;
   const expansion = useTodayExpansionState(project.id);
+  const [attention, setAttention] = useState<WorkAttention>("active");
+  const [secondary, setSecondary] = useState<WorkSecondary>("none");
+  const committedTasks = useRef(project.tasks ?? []);
+  const queues = useRef(new Map<string, Promise<void>>());
+  const failureVersions = useRef(new Map<string, number>());
+  const refreshRequired = useRef(new Set<string>());
+  const generation = useRef(0);
+  useEffect(() => {
+    generation.current += 1;
+    return () => {
+      generation.current += 1;
+    };
+  }, [project.id]);
   const { expandedTaskIds } = expansion.getSnapshot();
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const filtersRef = useRef<HTMLDivElement | null>(null);
+  const [needsRefresh, setNeedsRefresh] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [historyTask, setHistoryTask] = useState<ApiTask | null>(null);
+  const historyTaskId = useRef<string | null>(null);
   const [history, setHistory] = useState<ApiTaskExecutionUpdate[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [tasks, setTasks] = useState<ApiTask[]>(() => project.tasks ?? []);
@@ -152,6 +187,7 @@ export function TodayWorkspace({
     taskScope === "mine" ? mineGridTemplate : teamGridTemplate;
 
   useEffect(() => {
+    committedTasks.current = project.tasks ?? [];
     setTasks(project.tasks ?? []);
   }, [project.id, project.tasks]);
 
@@ -162,7 +198,10 @@ export function TodayWorkspace({
     setInternalTaskScope(canEdit ? "team" : "mine");
   }, [canEdit, project.id, taskScopeProp]);
 
-  const summaryTaskIds = useMemo(() => getHierarchyParentTaskIds(tasks), [tasks]);
+  const summaryTaskIds = useMemo(
+    () => getHierarchyParentTaskIds(tasks),
+    [tasks],
+  );
 
   const scopedTasks = useMemo(() => {
     if (taskScope !== "mine" || !currentUserId) {
@@ -178,17 +217,52 @@ export function TodayWorkspace({
     );
   }, [currentUserId, taskScope, tasks]);
 
+  // Match work before adding hierarchy/context rows; counts never depend on expansion.
+  const searchedTasks = useMemo(() => {
+    const rows = buildTaskHierarchy(
+      scopedTasks,
+      getHierarchyParentTaskIds(scopedTasks),
+    ).rows;
+    const searchIds = new Set(
+      filterRowsForSearch(rows, scopedTasks, searchTerm).map(
+        (row) => row.task.id,
+      ),
+    );
+    const matches = tasks.filter(
+      (task) =>
+        searchIds.has(task.id) &&
+        (taskScope !== "mine" || task.assigneeId === currentUserId),
+    );
+    return [...new Map(matches.map((task) => [task.id, task])).values()];
+  }, [scopedTasks, searchTerm, tasks, taskScope, currentUserId]);
+  const today = new Date().toISOString().slice(0, 10);
+  const attentionMatches = useMemo(() => {
+    return new Map(
+      primaryWorkFilters.map(([key]) => [
+        key,
+        searchedTasks.filter((task) =>
+          matchesWorkAttention(task, key, currentUserId, today, secondary),
+        ),
+      ]),
+    );
+  }, [searchedTasks, currentUserId, secondary, today]);
+  const matchingTasks = useMemo(
+    () => attentionMatches.get(attention) ?? [],
+    [attentionMatches, attention],
+  );
   const visibleRows = useMemo(() => {
-    if (taskScope === "mine") {
-      const hierarchy = buildTaskHierarchy(
-        scopedTasks,
-        getHierarchyParentTaskIds(scopedTasks),
-      );
-      return filterRowsForSearch(hierarchy.rows, scopedTasks, searchTerm);
-    }
-    const hierarchy = buildTaskHierarchy(scopedTasks, expandedTaskIds);
-    return filterRowsForSearch(hierarchy.rows, scopedTasks, searchTerm);
-  }, [expandedTaskIds, scopedTasks, searchTerm, taskScope]);
+    const context =
+      taskScope === "mine"
+        ? includePersonalWorkContext(tasks, matchingTasks, currentUserId ?? "")
+        : matchingTasks;
+    const filtered = includeTaskAncestors(tasks, context);
+    return buildTaskHierarchy(
+      filtered,
+      taskScope === "mine"
+        ? getHierarchyParentTaskIds(filtered)
+        : expandedTaskIds,
+    ).rows;
+  }, [tasks, matchingTasks, currentUserId, expandedTaskIds, taskScope]);
 
   const workPackageIds = useMemo(
     () => getWorkPackageIds(visibleRows),
@@ -251,20 +325,34 @@ export function TodayWorkspace({
   }, [focusPackageEntry, pendingFocusPackageId, visibleRows]);
 
   const canEditTask = useCallback(
-    (task: ApiTask) => {
-      if (task.taskKind === "summary") {
-        return false;
-      }
-      // Contributors may inspect Team Tasks, but only My Tasks are editable.
-      if (taskScope === "team" && !canEdit) {
-        return false;
-      }
-      return (
-        canEdit ||
-        (Boolean(currentUserId) && task.assigneeId === currentUserId)
-      );
+    (
+      task: ApiTask,
+      action:
+        | "canRecordUpdate"
+        | "canAssign"
+        | "canReassign"
+        | "canEditDueDate"
+        | "canComplete" = "canRecordUpdate",
+    ) => {
+      if (taskScope === "team" && !canEdit) return false;
+      return resolveTaskUiCapabilities({
+        currentUserId,
+        members,
+        project,
+        task,
+        roleNames,
+        identityType,
+      })[action];
     },
-    [canEdit, currentUserId, taskScope],
+    [
+      canEdit,
+      currentUserId,
+      taskScope,
+      members,
+      project,
+      roleNames,
+      identityType,
+    ],
   );
 
   const setTaskScope = useCallback(
@@ -286,47 +374,140 @@ export function TodayWorkspace({
     [canEditTask, tasksById, visibleRows],
   );
 
+  useEffect(() => {
+    if (
+      !activeTaskId ||
+      visibleRows.some((row) => row.task.id === activeTaskId)
+    )
+      return;
+    // A completed or filtered-out focused row must leave a usable keyboard target.
+    if (document.activeElement === document.body) {
+      const nextTask = visibleRows.find((row) => canEditTask(row.task))?.task;
+      if (nextTask) focusCell(nextTask.id, getPreferredFocusColumn(nextTask));
+      else
+        filtersRef.current
+          ?.querySelector<HTMLButtonElement>("button[aria-pressed=true]")
+          ?.focus();
+    }
+    setActiveTaskId(null);
+  }, [activeTaskId, visibleRows, canEditTask, focusCell]);
+
   const commitUpdate = useCallback(
-    async (task: ApiTask, overrides: ExecutionOverrides) => {
-      if (!canEditTask(task)) {
-        return;
-      }
-
-      const payload = buildExecutionUpdatePayload(task, overrides);
-      const validationError = validateTodayUpdate(task, payload, overrides);
-      if (validationError) {
-        setSaveState("error");
-        setSaveError(validationError);
-        return;
-      }
-
-      setSaveState("saving");
-      setSaveError(null);
-      try {
-        const updatedTask = await onRecordExecutionUpdate(task.id, payload);
-        setTasks((current) =>
-          current.map((candidate) =>
-            candidate.id === task.id
-              ? { ...candidate, ...updatedTask }
-              : candidate,
-          ),
+    (task: ApiTask, overrides: ExecutionOverrides): Promise<void> => {
+      const version = failureVersions.current.get(task.id) ?? 0;
+      const requestGeneration = generation.current;
+      const isCurrent = () => generation.current === requestGeneration;
+      const save = async () => {
+        if (
+          !isCurrent() ||
+          version !== (failureVersions.current.get(task.id) ?? 0)
+        )
+          return;
+        const latest = committedTasks.current.find(
+          (candidate) => candidate.id === task.id,
         );
-        setSaveState("saved");
-        window.setTimeout(() => {
-          setSaveState((current) => (current === "saved" ? "idle" : current));
-        }, 1200);
-      } catch (error) {
-        setSaveState("error");
-        setSaveError(
-          error instanceof Error ? error.message : "Unable to save update",
-        );
-      }
+        if (!latest || !canEditTask(latest)) return;
+        if (refreshRequired.current.has(task.id)) {
+          setSaveState("error");
+          setSaveError("Refresh task state before saving another update.");
+          return;
+        }
+        const changes = { ...overrides };
+        if (
+          changes.percentComplete !== undefined &&
+          changes.status === undefined
+        ) {
+          changes.status =
+            changes.percentComplete === 100
+              ? "done"
+              : latest.status === "done"
+                ? changes.percentComplete === 0
+                  ? "todo"
+                  : "in_progress"
+                : changes.percentComplete > 0 &&
+                    ["todo", "backlog"].includes(latest.status)
+                  ? "in_progress"
+                  : latest.status;
+        }
+        if (
+          latest.status === "blocked" &&
+          changes.updateNotes !== undefined &&
+          changes.status === undefined
+        ) {
+          changes.isBlocked = true;
+          changes.blockerCategory = "Other";
+          changes.blockerReason = changes.updateNotes ?? "";
+        }
+        if (changes.status === "blocked") {
+          changes.blockerReason = getDisplayUpdateNotes(
+            latest.latestExecutionUpdate?.updateNotes,
+          );
+          changes.blockerCategory = "Other";
+        }
+        const payload = buildExecutionUpdatePayload(latest, changes);
+        const validationError = validateTodayUpdate(payload, changes);
+        if (validationError) {
+          setSaveState("error");
+          setSaveError(`Validation: ${validationError}`);
+          return;
+        }
+        setSaveState("saving");
+        setSaveError(null);
+        try {
+          const updated = await onRecordExecutionUpdate(task.id, payload);
+          if (!isCurrent()) return;
+          committedTasks.current = committedTasks.current.map((candidate) =>
+            candidate.id === task.id ? { ...candidate, ...updated } : candidate,
+          );
+          setTasks(committedTasks.current);
+          setSaveState("saved");
+          window.setTimeout(() => {
+            if (isCurrent())
+              setSaveState((current) =>
+                current === "saved" ? "idle" : current,
+              );
+          }, 1200);
+        } catch (error) {
+          if (!isCurrent()) return;
+          // A failed response may follow a committed POST. Cancel queued writes; never retry it.
+          failureVersions.current.set(task.id, version + 1);
+          refreshRequired.current.add(task.id);
+          setNeedsRefresh(true);
+          setSaveState("error");
+          setSaveError(
+            `Server: ${error instanceof Error ? error.message : "Unable to save update"}. Update was not retried.`,
+          );
+          const [state, refreshedHistory] = await Promise.allSettled([
+            onRefreshTasks(),
+            onLoadHistory(task.id),
+          ]);
+          if (!isCurrent()) return;
+          if (
+            refreshedHistory.status === "fulfilled" &&
+            historyTaskId.current === task.id
+          ) {
+            setHistory(refreshedHistory.value);
+          }
+          if (state.status === "fulfilled") {
+            committedTasks.current = state.value;
+            setTasks(state.value);
+            refreshRequired.current.delete(task.id);
+            setNeedsRefresh(refreshRequired.current.size > 0);
+          }
+        }
+      };
+      const queued = (queues.current.get(task.id) ?? Promise.resolve()).then(
+        save,
+      );
+      queues.current.set(task.id, queued);
+      return queued;
     },
-    [canEditTask, onRecordExecutionUpdate],
+    [canEditTask, onRecordExecutionUpdate, onRefreshTasks, onLoadHistory],
   );
 
   const openHistory = useCallback(
     async (task: ApiTask) => {
+      historyTaskId.current = task.id;
       setHistoryTask(task);
       setIsHistoryLoading(true);
       setHistory([]);
@@ -371,7 +552,11 @@ export function TodayWorkspace({
         if (focusCell(currentTaskId, nextColumn)) {
           return;
         }
-        nextColumn = findAdjacentColumn(nextColumn, direction, navigableColumns);
+        nextColumn = findAdjacentColumn(
+          nextColumn,
+          direction,
+          navigableColumns,
+        );
       }
 
       const adjacentTaskId = findAdjacentEditableTaskId(
@@ -461,10 +646,7 @@ export function TodayWorkspace({
       }
 
       const target = event.target;
-      if (
-        !(target instanceof HTMLInputElement) &&
-        !(target instanceof HTMLSelectElement)
-      ) {
+      if (!(target instanceof HTMLInputElement)) {
         return;
       }
 
@@ -485,6 +667,43 @@ export function TodayWorkspace({
   return (
     <WorkspaceContent aria-label="Today workspace" spacing="compact">
       <WorkspaceSection padding="none" surface="plain">
+        <div
+          ref={filtersRef}
+          aria-label="Attention filters"
+          className="flex flex-wrap items-center gap-2 p-2"
+        >
+          {primaryWorkFilters.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={attention === key}
+              className={`rounded border px-2 py-1 text-xs font-semibold ${attention === key ? "border-brand bg-sky-50" : "border-slate-300 bg-white"}`}
+              onClick={() => setAttention(key)}
+            >
+              {label} ({attentionMatches.get(key)?.length ?? 0})
+            </button>
+          ))}
+          <details>
+            <summary className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-xs font-semibold">
+              More
+            </summary>
+            <label className="flex flex-col gap-1 p-2 text-xs">
+              Additional filter
+              <select
+                aria-label="Additional filter"
+                value={secondary}
+                onChange={(event) =>
+                  setSecondary(event.target.value as WorkSecondary)
+                }
+              >
+                <option value="none">None</option>
+                <option value="next7">Next 7 days</option>
+                <option value="updated">Updated today</option>
+                <option value="critical">Critical priority</option>
+              </select>
+            </label>
+          </details>
+        </div>
         <ActionToolbar
           className="gap-2 p-2"
           label="Today toolbar"
@@ -556,6 +775,29 @@ export function TodayWorkspace({
                   </button>
                 </>
               ) : null}
+              {needsRefresh ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const requestGeneration = generation.current;
+                    try {
+                      const refreshed = await onRefreshTasks();
+                      if (requestGeneration !== generation.current) return;
+                      committedTasks.current = refreshed;
+                      setTasks(refreshed);
+                      refreshRequired.current.clear();
+                      setNeedsRefresh(false);
+                    } catch (error) {
+                      if (requestGeneration !== generation.current) return;
+                      setSaveError(
+                        `Server: ${error instanceof Error ? error.message : "Unable to refresh task state"}`,
+                      );
+                    }
+                  }}
+                >
+                  Refresh task state
+                </button>
+              ) : null}
               <SaveIndicator
                 error={saveError}
                 isBusy={isSaving || saveState === "saving"}
@@ -574,8 +816,8 @@ export function TodayWorkspace({
         <EmptyState
           description={
             searchTerm.trim()
-              ? "No tasks match the current search."
-              : "This project has no tasks to review."
+              ? "No tasks match the current search and filters."
+              : "No work matches the current scope and filters."
           }
           title="Nothing to update"
         />
@@ -597,6 +839,7 @@ export function TodayWorkspace({
             onKeyDownCapture={handleGridKeyDownCapture}
             ref={gridRef}
             role="table"
+            tabIndex={-1}
           >
             <div
               className="sticky top-0 z-30 grid min-w-[64rem] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600"
@@ -635,11 +878,16 @@ export function TodayWorkspace({
               <TodayTaskRow
                 active={activeTaskId === row.task.id}
                 canEdit={canEditTask(row.task)}
-                canEditPriority={canEdit}
+                canEditAssignee={canEditTask(
+                  row.task,
+                  row.task.assigneeId ? "canReassign" : "canAssign",
+                )}
+                canEditDueDate={canEditTask(row.task, "canEditDueDate")}
+                canComplete={canEditTask(row.task, "canComplete")}
                 currentUserId={currentUserId}
                 expanded={expandedTaskIds.includes(row.task.id)}
                 gridTemplate={gridTemplate}
-                key={row.task.id}
+                key={`${project.id}:${row.task.id}`}
                 members={members}
                 onCommit={commitUpdate}
                 onOpenHistory={openHistory}
@@ -657,7 +905,10 @@ export function TodayWorkspace({
           history={history}
           isLoading={isHistoryLoading}
           members={members}
-          onClose={() => setHistoryTask(null)}
+          onClose={() => {
+            historyTaskId.current = null;
+            setHistoryTask(null);
+          }}
           task={historyTask}
         />
       ) : null}
@@ -668,7 +919,9 @@ export function TodayWorkspace({
 const TodayTaskRow = memo(function TodayTaskRow({
   active,
   canEdit,
-  canEditPriority,
+  canEditAssignee,
+  canEditDueDate,
+  canComplete,
   currentUserId,
   expanded,
   gridTemplate,
@@ -681,7 +934,9 @@ const TodayTaskRow = memo(function TodayTaskRow({
 }: {
   active: boolean;
   canEdit: boolean;
-  canEditPriority: boolean;
+  canEditAssignee: boolean;
+  canEditDueDate: boolean;
+  canComplete: boolean;
   currentUserId: string | null;
   expanded: boolean;
   gridTemplate: string;
@@ -695,15 +950,13 @@ const TodayTaskRow = memo(function TodayTaskRow({
   const { task } = row;
   const isSummary = task.taskKind === "summary";
   const editable = canEdit && !isSummary;
-  const priorityEditable = canEditPriority && editable;
-  const isBlocked = task.status === "blocked";
+  const priorityEditable = editable;
   const isDone = task.status === "done";
   const nextStep = task.latestExecutionUpdate?.nextStep ?? "";
-  const inheritedUpdate = resolveInheritedUpdateNotes(task);
   const storedUpdateNotes = getDisplayUpdateNotes(
     task.latestExecutionUpdate?.updateNotes,
   );
-  const updateNotes = inheritedUpdate.displayValue;
+  const updateNotes = storedUpdateNotes;
   const nextOwnerId =
     task.latestExecutionUpdate?.nextActionOwnerId ?? task.assigneeId ?? "";
   const targetDate =
@@ -767,7 +1020,6 @@ const TodayTaskRow = memo(function TodayTaskRow({
           onCommit={(priority) =>
             void onCommit(task, {
               priority: priority as ApiTask["priority"],
-              nextStep: nextStep || undefined,
             })
           }
           options={taskPriorities}
@@ -800,20 +1052,12 @@ const TodayTaskRow = memo(function TodayTaskRow({
             void onCommit(task, {
               status: status as ApiTask["status"],
               isBlocked: status === "blocked",
-              nextStep: nextStep || undefined,
-              nextActionOwnerId: nextOwnerId || task.assigneeId || null,
-              updateNotes:
-                status === "blocked"
-                  ? updateNotes || storedUpdateNotes || undefined
-                  : undefined,
-              blockerCategory: status === "blocked" ? "Other" : undefined,
-              blockerReason:
-                status === "blocked"
-                  ? updateNotes || storedUpdateNotes || undefined
-                  : undefined,
             })
           }
-          options={taskStatuses}
+          options={taskStatuses.map((status) => ({
+            ...status,
+            disabled: status.value === "done" && !canComplete,
+          }))}
           taskId={task.id}
           value={task.status}
         />
@@ -833,17 +1077,6 @@ const TodayTaskRow = memo(function TodayTaskRow({
           onCommit={(percentComplete) =>
             void onCommit(task, {
               percentComplete,
-              nextStep: nextStep || undefined,
-              status:
-                percentComplete === 100
-                  ? "done"
-                  : percentComplete === 0
-                    ? task.status === "done"
-                      ? "todo"
-                      : task.status
-                    : task.status === "todo" || task.status === "backlog"
-                      ? "in_progress"
-                      : task.status,
             })
           }
           taskId={task.id}
@@ -860,12 +1093,11 @@ const TodayTaskRow = memo(function TodayTaskRow({
       ) : (
         <InlineDateInput
           column="targetDate"
-          disabled={!editable}
+          disabled={!canEditDueDate}
           label={`Due date for ${task.title}`}
           onCommit={(targetCompletionDate) =>
             void onCommit(task, {
               targetCompletionDate,
-              nextStep: nextStep || undefined,
             })
           }
           taskId={task.id}
@@ -884,17 +1116,10 @@ const TodayTaskRow = memo(function TodayTaskRow({
           column="updateNotes"
           committedValue={storedUpdateNotes}
           disabled={!editable}
-          inherited={inheritedUpdate.isInherited}
-          inheritedHint="Inherited from previous Next Step"
           label={`Today's update for ${task.title}`}
           onCommit={(notes) =>
             void onCommit(task, {
               updateNotes: notes,
-              isBlocked,
-              blockerCategory: isBlocked ? "Other" : undefined,
-              blockerReason: isBlocked ? notes : undefined,
-              nextStep: nextStep || undefined,
-              nextActionOwnerId: nextOwnerId || task.assigneeId || null,
             })
           }
           placeholder="Type today's update..."
@@ -918,7 +1143,6 @@ const TodayTaskRow = memo(function TodayTaskRow({
           onCommit={(value) =>
             void onCommit(task, {
               nextStep: value,
-              nextActionOwnerId: nextOwnerId || task.assigneeId || null,
             })
           }
           placeholder="Next step..."
@@ -977,16 +1201,12 @@ const TodayTaskRow = memo(function TodayTaskRow({
             ) : (
               <InlineAssigneeSelect
                 column="owner"
-                disabled={!editable}
+                disabled={!canEditAssignee}
                 label={`Owner for ${task.title}`}
                 members={members}
                 onCommit={(assigneeId) =>
                   void onCommit(task, {
                     assigneeId,
-                    nextActionOwnerId:
-                      task.latestExecutionUpdate?.nextActionOwnerId ??
-                      assigneeId,
-                    nextStep: nextStep || undefined,
                   })
                 }
                 taskId={task.id}
@@ -1013,7 +1233,6 @@ const TodayTaskRow = memo(function TodayTaskRow({
                   void onCommit(task, {
                     nextActionOwnerId:
                       nextActionOwnerId || task.assigneeId || null,
-                    nextStep: nextStep || undefined,
                   })
                 }
                 taskId={task.id}
@@ -1043,7 +1262,9 @@ function areTodayTaskRowsEqual(
   previous: Readonly<{
     active: boolean;
     canEdit: boolean;
-    canEditPriority: boolean;
+    canEditAssignee: boolean;
+    canEditDueDate: boolean;
+    canComplete: boolean;
     currentUserId: string | null;
     expanded: boolean;
     gridTemplate: string;
@@ -1054,7 +1275,9 @@ function areTodayTaskRowsEqual(
   next: Readonly<{
     active: boolean;
     canEdit: boolean;
-    canEditPriority: boolean;
+    canEditAssignee: boolean;
+    canEditDueDate: boolean;
+    canComplete: boolean;
     currentUserId: string | null;
     expanded: boolean;
     gridTemplate: string;
@@ -1066,7 +1289,9 @@ function areTodayTaskRowsEqual(
   return (
     previous.active === next.active &&
     previous.canEdit === next.canEdit &&
-    previous.canEditPriority === next.canEditPriority &&
+    previous.canEditAssignee === next.canEditAssignee &&
+    previous.canEditDueDate === next.canEditDueDate &&
+    previous.canComplete === next.canComplete &&
     previous.currentUserId === next.currentUserId &&
     previous.expanded === next.expanded &&
     previous.gridTemplate === next.gridTemplate &&
@@ -1183,6 +1408,19 @@ function SaveIndicator({
   return null;
 }
 
+function useCommittedDraft(value: string) {
+  const [draft, setDraft] = useState(value);
+  const previous = useRef(value);
+  useEffect(() => {
+    const previousValue = previous.current;
+    setDraft((current) =>
+      current === previousValue || current === value ? value : current,
+    );
+    previous.current = value;
+  }, [value]);
+  return [draft, setDraft] as const;
+}
+
 function InlineSelect({
   column,
   disabled,
@@ -1196,10 +1434,11 @@ function InlineSelect({
   disabled: boolean;
   label: string;
   onCommit: (value: string) => void;
-  options: Array<{ label: string; value: string }>;
+  options: Array<{ label: string; value: string; disabled?: boolean }>;
   taskId: string;
   value: string;
 }) {
+  const [draft, setDraft] = useCommittedDraft(value);
   return (
     <select
       aria-label={label}
@@ -1207,11 +1446,18 @@ function InlineSelect({
       data-today-column={column}
       data-today-task-id={taskId}
       disabled={disabled}
-      onChange={(event) => onCommit(event.target.value)}
-      value={value}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        onCommit(event.target.value);
+      }}
+      value={draft}
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value}>
+        <option
+          key={option.value}
+          value={option.value}
+          disabled={option.disabled}
+        >
           {option.label}
         </option>
       ))}
@@ -1236,6 +1482,7 @@ function InlineAssigneeSelect({
   taskId: string;
   value: string;
 }) {
+  const [draft, setDraft] = useCommittedDraft(value);
   return (
     <select
       aria-label={label}
@@ -1243,12 +1490,25 @@ function InlineAssigneeSelect({
       data-today-column={column}
       data-today-task-id={taskId}
       disabled={disabled}
-      onChange={(event) => onCommit(event.target.value || null)}
-      value={value}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        onCommit(event.target.value || null);
+      }}
+      value={draft}
     >
       <option value="">Unassigned</option>
       {members.map((member) => (
-        <option key={member.id} value={member.userId}>
+        <option
+          key={member.id}
+          value={member.userId}
+          disabled={
+            column === "owner" &&
+            ((Boolean(member.user?.status) &&
+              member.user?.status !== "active") ||
+              member.user?.role === "PARTNER" ||
+              (member.user?.role === "CUSTOMER" && member.role !== "viewer"))
+          }
+        >
           {formatMemberName(member)}
         </option>
       ))}
@@ -1260,8 +1520,6 @@ function InlineTextInput({
   column,
   committedValue,
   disabled,
-  inherited = false,
-  inheritedHint,
   label,
   onCommit,
   placeholder,
@@ -1271,37 +1529,20 @@ function InlineTextInput({
   column: TodayEditableColumn;
   committedValue: string;
   disabled: boolean;
-  inherited?: boolean;
-  inheritedHint?: string;
   label: string;
   onCommit: (value: string) => void;
   placeholder?: string;
   taskId: string;
   value: string;
 }) {
-  const [draft, setDraft] = useState(value);
-  const [touched, setTouched] = useState(false);
+  const [draft, setDraft] = useCommittedDraft(value);
   const cancelCommitRef = useRef(false);
 
-  useEffect(() => {
-    setDraft(value);
-    setTouched(false);
-  }, [value]);
-
   return (
-    <div className={inherited && !touched ? "relative pb-3" : "relative"}>
+    <div className="relative">
       <input
-        aria-label={
-          inherited && !touched && inheritedHint
-            ? `${label}. ${inheritedHint}`
-            : label
-        }
-        className={[
-          editableControlClassName,
-          inherited && !touched ? "italic text-slate-500" : null,
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        aria-label={label}
+        className={editableControlClassName}
         data-today-column={column}
         data-today-task-id={taskId}
         disabled={disabled}
@@ -1310,13 +1551,12 @@ function InlineTextInput({
             cancelCommitRef.current = false;
             return;
           }
-          // Commit when draft differs from stored value (accepts inherited text).
+          // Only explicit edits become new commentary.
           if (draft !== committedValue) {
             onCommit(draft);
           }
         }}
         onChange={(event) => {
-          setTouched(true);
           setDraft(event.target.value);
         }}
         onKeyDown={(event) => {
@@ -1324,19 +1564,12 @@ function InlineTextInput({
             event.preventDefault();
             cancelCommitRef.current = true;
             setDraft(value);
-            setTouched(false);
             (event.target as HTMLInputElement).blur();
           }
         }}
         placeholder={placeholder}
-        title={inherited && !touched ? inheritedHint : undefined}
         value={draft}
       />
-      {inherited && !touched ? (
-        <span className="pointer-events-none absolute bottom-0 left-0 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-          From next step
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -1356,23 +1589,17 @@ function InlineProgressInput({
   taskId: string;
   value: number;
 }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => {
-    setDraft(String(value));
-  }, [value]);
+  const [draft, setDraft] = useCommittedDraft(String(value));
+
+  const cancelCommitRef = useRef(false);
 
   function commitDraft() {
-    const nextValue = Number(draft);
-    if (
-      Number.isFinite(nextValue) &&
-      nextValue >= 0 &&
-      nextValue <= 100 &&
-      nextValue !== value
-    ) {
-      onCommit(Math.round(nextValue));
+    if (cancelCommitRef.current) {
+      cancelCommitRef.current = false;
       return;
     }
-    setDraft(String(value));
+    const nextValue = draft.trim() ? Number(draft) : Number.NaN;
+    if (nextValue !== value) onCommit(nextValue);
   }
 
   return (
@@ -1390,6 +1617,7 @@ function InlineProgressInput({
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
+            cancelCommitRef.current = true;
             setDraft(String(value));
             (event.target as HTMLInputElement).blur();
             return;
@@ -1429,6 +1657,7 @@ function InlineDateInput({
   value: string;
 }) {
   const normalized = value ? value.slice(0, 10) : "";
+  const [draft, setDraft] = useCommittedDraft(normalized);
 
   return (
     <input
@@ -1437,16 +1666,19 @@ function InlineDateInput({
       data-today-column={column}
       data-today-task-id={taskId}
       disabled={disabled}
-      onChange={(event) => onCommit(event.target.value || null)}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        onCommit(event.target.value || null);
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          (event.target as HTMLInputElement).value = normalized;
+          setDraft(normalized);
           (event.target as HTMLInputElement).blur();
         }
       }}
       type="date"
-      value={normalized}
+      value={draft}
     />
   );
 }
@@ -1561,7 +1793,6 @@ function matchesSearch(task: ApiTask, searchTerm: string) {
 }
 
 function validateTodayUpdate(
-  task: ApiTask,
   payload: TaskExecutionUpdatePayload,
   overrides: ExecutionOverrides,
 ) {
@@ -1573,25 +1804,30 @@ function validateTodayUpdate(
     return "Progress must be a whole number between 0 and 100.";
   }
 
-  const executionStateChanged =
-    payload.status !== task.status ||
-    payload.percentComplete !== getDisplayedPercentComplete(task);
-  const isCompletedTerminalState =
-    payload.status === "done" && payload.percentComplete === 100;
-
+  if (!taskPriorities.some((priority) => priority.value === payload.priority)) {
+    return "Priority must be low, medium, high, or critical.";
+  }
+  if (payload.status === "done" && payload.percentComplete !== 100) {
+    return "Done tasks must be at 100% progress.";
+  }
   if (
-    executionStateChanged &&
-    !isCompletedTerminalState &&
-    !payload.nextStep?.trim()
+    ["todo", "backlog"].includes(payload.status) &&
+    payload.percentComplete !== 0
   ) {
-    return "Add a Next Step when status or progress changes.";
+    return "Todo and Backlog tasks must stay at 0% progress.";
+  }
+  if (
+    payload.status === "in_progress" &&
+    (payload.percentComplete <= 0 || payload.percentComplete >= 100)
+  ) {
+    return "In Progress tasks must be between 1% and 99% complete.";
   }
 
-  if (payload.status === "blocked") {
-    const reason =
-      overrides?.blockerReason?.trim() ||
-      payload.updateNotes?.trim() ||
-      "";
+  if (
+    payload.status === "blocked" &&
+    (overrides.status === "blocked" || overrides.isBlocked)
+  ) {
+    const reason = overrides.blockerReason?.trim() ?? "";
     if (!reason) {
       return "Add a blocker reason in Today's Update when marking blocked.";
     }

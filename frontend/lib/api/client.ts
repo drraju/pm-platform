@@ -53,6 +53,7 @@ export type ApiPermission = {
 };
 
 export type ApiUser = {
+  identityType?: "HUMAN" | "SERVICE";
   id: string;
   email: string;
   firstName: string;
@@ -148,6 +149,7 @@ export type ApiTaskCounts = {
 };
 
 export type ApiTask = {
+  deletedAt?: string | null;
   id: string;
   projectId: string;
   parentTaskId?: string | null;

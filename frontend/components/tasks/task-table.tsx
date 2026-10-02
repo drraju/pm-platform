@@ -317,9 +317,27 @@ function EditableTaskRow({
                 void saveRow();
               }
             }}
-            onChange={(event) =>
-              setStatus(event.target.value as ApiTask["status"])
-            }
+            onChange={(event) => {
+              const nextStatus = event.target.value as ApiTask["status"];
+              if (
+                task.status === "done" &&
+                status === "done" &&
+                nextStatus !== "done"
+              ) {
+                setPercentComplete(
+                  String(
+                    buildExecutionUpdatePayload(
+                      {
+                        ...task,
+                        percentComplete: Number(percentComplete),
+                      },
+                      { status: nextStatus },
+                    ).percentComplete,
+                  ),
+                );
+              }
+              setStatus(nextStatus);
+            }}
             value={status}
           >
             {taskStatuses.map((taskStatus) => (
@@ -347,7 +365,17 @@ function EditableTaskRow({
                 void saveRow();
               }
             }}
-            onChange={(event) => setPercentComplete(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              const payload = buildExecutionUpdatePayload(
+                { ...task, status },
+                {
+                  percentComplete: value.trim() ? Number(value) : Number.NaN,
+                },
+              );
+              setPercentComplete(value);
+              if (task.status === "done") setStatus(payload.status);
+            }}
             type="number"
             value={percentComplete}
           />

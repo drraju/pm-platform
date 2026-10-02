@@ -281,3 +281,51 @@ describe("TaskTable", () => {
     });
   });
 });
+
+it.each(["status", "progress"])(
+  "reopens Done work by editing only %s in My Tasks",
+  async (field) => {
+    const onRecordExecutionUpdate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <TaskTable
+        currentUserId="user"
+        roleNames={["PROJECT_MANAGER"]}
+        permissionKeys={["task.update", "task.read", "project.update"]}
+        membersByProjectId={{
+          project: [{ id: "member", userId: "user", role: "manager" }],
+        }}
+        isLoading={false}
+        emptyMessage="No tasks"
+        onRecordExecutionUpdate={onRecordExecutionUpdate}
+        tasks={[
+          {
+            id: "done",
+            projectId: "project",
+            assigneeId: "user",
+            title: "Completed work",
+            status: "done",
+            percentComplete: 100,
+            priority: "medium",
+          },
+        ]}
+      />,
+    );
+    const control = screen.getByLabelText(
+      `${field === "status" ? "Status" : "Progress"} for Completed work`,
+    );
+    if (field === "progress") fireEvent.change(control, { target: { value: "" } });
+    fireEvent.change(control, {
+      target: { value: field === "status" ? "in_progress" : "75" },
+    });
+    fireEvent.blur(control);
+    await waitFor(() =>
+      expect(onRecordExecutionUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "done" }),
+        expect.objectContaining({
+          status: "in_progress",
+          percentComplete: field === "status" ? 99 : 75,
+        }),
+      ),
+    );
+  },
+);

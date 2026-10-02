@@ -515,6 +515,77 @@ describe('TasksService', () => {
     );
   });
 
+  it.each([
+    [TaskStatus.InProgress, 75, TaskStatus.InProgress, 75],
+    [TaskStatus.Todo, 0, TaskStatus.Todo, 0],
+    [TaskStatus.InProgress, 100, TaskStatus.Done, 100],
+    [TaskStatus.Done, 75, TaskStatus.Done, 100],
+  ])(
+    'executes Done -> %s/%s with existing completion precedence',
+    async (status, percentComplete, expectedStatus, expectedProgress) => {
+      const task = {
+        id: taskId,
+        projectId,
+        assigneeId: null,
+        status: TaskStatus.Done,
+        percentComplete: 100,
+        actualEndDate: '2026-08-03',
+        priority: 'medium',
+        taskKind: TaskKind.Standard,
+        title: 'Completed work',
+      };
+      tasksRepository.findOne?.mockResolvedValue(task);
+      const result = await service.recordExecutionUpdate(
+        taskId,
+        { status, percentComplete, priority: 'medium' },
+        managerActor,
+      );
+      expect(result).toMatchObject({
+        status: expectedStatus,
+        percentComplete: expectedProgress,
+      });
+      expect(taskTransactionManager.create).toHaveBeenCalledWith(
+        TaskExecutionUpdate,
+        expect.objectContaining({
+          status: expectedStatus,
+          percentComplete: expectedProgress,
+          changes: expect.any(Object),
+        }),
+      );
+      expect(canonicalCapabilityResolver.resolve).toHaveBeenCalledWith(
+        expect.objectContaining({ capability: 'task.record_update' }),
+      );
+    },
+  );
+
+  it('rejects an unauthorized reopening before saving work or history', async () => {
+    tasksRepository.findOne?.mockResolvedValue({
+      id: taskId,
+      projectId,
+      status: TaskStatus.Done,
+      percentComplete: 100,
+      priority: 'medium',
+      taskKind: TaskKind.Standard,
+    });
+    canonicalCapabilityResolver.resolve.mockResolvedValueOnce({
+      allowed: false,
+      audience: 'internal',
+      reasonCode: 'MISSING_PERMISSION',
+    });
+    await expect(
+      service.recordExecutionUpdate(
+        taskId,
+        {
+          status: TaskStatus.InProgress,
+          percentComplete: 75,
+          priority: 'medium',
+        },
+        managerActor,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(taskTransactionManager.save).not.toHaveBeenCalled();
+  });
+
   it('loads recent execution history for one visible task', async () => {
     tasksRepository.findOne?.mockResolvedValue({
       id: taskId,

@@ -7,7 +7,6 @@ import {
   getEditableTaskIds,
   getPreferredFocusColumn,
   getWorkPackageIds,
-  resolveInheritedUpdateNotes,
 } from "@/components/today/today-grid-navigation";
 
 describe("today-grid-navigation", () => {
@@ -60,31 +59,4 @@ describe("today-grid-navigation", () => {
     ).toBe("updateNotes");
   });
 
-  it("inherits previous Next Step into empty Today's Update without overwriting", () => {
-    expect(
-      resolveInheritedUpdateNotes({
-        latestExecutionUpdate: {
-          nextStep: "Prepare cutover checklist",
-          updateNotes: null,
-        },
-      }),
-    ).toEqual({
-      displayValue: "Prepare cutover checklist",
-      inheritedFromNextStep: "Prepare cutover checklist",
-      isInherited: true,
-    });
-
-    expect(
-      resolveInheritedUpdateNotes({
-        latestExecutionUpdate: {
-          nextStep: "Prepare cutover checklist",
-          updateNotes: "Already typed today",
-        },
-      }),
-    ).toEqual({
-      displayValue: "Already typed today",
-      inheritedFromNextStep: null,
-      isInherited: false,
-    });
-  });
 });

@@ -64,6 +64,31 @@ describe('CanonicalCapabilityResolverService', () => {
     );
   });
 
+  it.each([
+    [ProjectRole.Manager, 'PROJECT_MANAGER', true],
+    [ProjectRole.Contributor, 'TEAM_MEMBER', true],
+    [ProjectRole.Viewer, 'TEAM_MEMBER', false],
+    [ProjectRole.Contributor, 'CUSTOMER', false],
+  ] as const)(
+    'keeps Done reopening capability for %s/%s at %s',
+    async (role, globalRole, allowed) => {
+      const actor = createActor(globalRole);
+      memberships.set(`${projectId}:${actor.userId}`, role);
+      const decision = await service.resolve({
+        actor,
+        capability: 'task.record_update',
+        changedFields: ['status', 'percentComplete'],
+        resource: taskResource({
+          status: 'done',
+          taskKind: 'standard',
+          assigneeId: actor.userId,
+          projectStatus: 'active',
+        }),
+      });
+      expect(decision.allowed).toBe(allowed);
+    },
+  );
+
   it.each([ProjectRole.Viewer, ProjectRole.Contributor])(
     'denies CUSTOMER mutations with %s membership',
     async (role) => {

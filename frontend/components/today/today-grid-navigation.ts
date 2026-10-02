@@ -69,37 +69,6 @@ export function getPreferredFocusColumn(task: {
   return "updateNotes";
 }
 
-export function resolveInheritedUpdateNotes(task: {
-  latestExecutionUpdate?: {
-    nextStep?: string | null;
-    updateNotes?: string | null;
-  } | null;
-}) {
-  const storedUpdate = stripBlockerPrefix(
-    task.latestExecutionUpdate?.updateNotes,
-  );
-  const previousNextStep = task.latestExecutionUpdate?.nextStep?.trim() ?? "";
-  if (storedUpdate) {
-    return {
-      displayValue: storedUpdate,
-      inheritedFromNextStep: null as string | null,
-      isInherited: false,
-    };
-  }
-  if (!previousNextStep) {
-    return {
-      displayValue: "",
-      inheritedFromNextStep: null as string | null,
-      isInherited: false,
-    };
-  }
-  return {
-    displayValue: previousNextStep,
-    inheritedFromNextStep: previousNextStep,
-    isInherited: true,
-  };
-}
-
 export function getCellSelector(taskId: string, column: TodayEditableColumn) {
   return `[data-today-task-id="${cssEscape(taskId)}"][data-today-column="${column}"]`;
 }
@@ -212,17 +181,6 @@ export function readTodayCellCoordinates(element: EventTarget | null): {
   return { column, taskId };
 }
 
-function stripBlockerPrefix(updateNotes?: string | null) {
-  if (!updateNotes) {
-    return "";
-  }
-  return updateNotes
-    .split("\n")
-    .filter((line) => !line.startsWith("Blocker Category:"))
-    .join("\n")
-    .replace(/^Blocker:\s*/gm, "")
-    .trim();
-}
 
 function isDisabledControl(element: HTMLElement) {
   return (

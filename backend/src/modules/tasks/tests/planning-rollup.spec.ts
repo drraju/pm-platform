@@ -1,8 +1,37 @@
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
+import { applyTaskCompletionTransition } from '../../../common/scheduling/task-completion-transition';
 import { decoratePlanningTasks } from '../planning-rollup';
 
 describe('planning rollup', () => {
+  it('recalculates parent progress when a completed child is reopened', () => {
+    const child = {
+      id: 'child',
+      parentTaskId: 'parent',
+      taskKind: TaskKind.Standard,
+      title: 'Child',
+      status: TaskStatus.Done,
+      percentComplete: 100,
+    };
+    const tasks = [
+      { id: 'parent', taskKind: TaskKind.Summary, title: 'Parent' },
+      child,
+    ];
+    expect(
+      decoratePlanningTasks(tasks).find((task) => task.id === 'parent')
+        ?.percentComplete,
+    ).toBe(100);
+    const reopened = applyTaskCompletionTransition(
+      { status: TaskStatus.InProgress, percentComplete: 75 },
+      child,
+    );
+    expect(
+      decoratePlanningTasks([tasks[0], { ...child, ...reopened }]).find(
+        (task) => task.id === 'parent',
+      )?.percentComplete,
+    ).toBe(75);
+  });
+
   it('rolls 100/100/0 descendant work progress up to 67%', () => {
     const tasks = decoratePlanningTasks([
       {

@@ -1,6 +1,13 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ActionToolbar,
@@ -50,6 +57,7 @@ import {
 } from "@/features/auth";
 import {
   getProject,
+  getProjectTasks,
   recordProjectTaskExecutionUpdate,
   updateProjectTask,
   type ApiProjectDetails,
@@ -123,6 +131,11 @@ function ProjectDeliveryPageContent() {
     useState<ApiProjectBaseline | null>(null);
   const [isTimelineReferencesLoading, setIsTimelineReferencesLoading] =
     useState(false);
+  const activeProjectId = useRef(projectId);
+  activeProjectId.current = projectId;
+  const [identityType, setIdentityType] = useState<
+    "HUMAN" | "SERVICE" | undefined
+  >();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
   const [roleNames, setRoleNames] = useState<string[]>([]);
@@ -193,6 +206,7 @@ function ProjectDeliveryPageContent() {
       storeAuthMe(authMe);
       setProject(decorateProjectPlan(projectDetails));
       setCurrentUserId(authMe.user.id);
+      setIdentityType(authMe.user.identityType);
       setPermissionKeys(authMe.permissions.map((permission) => permission.key));
       setRoleNames(authMe.roles.map((role) => role.name));
     } catch (requestError) {
@@ -317,20 +331,21 @@ function ProjectDeliveryPageContent() {
       updateTaskInProject(updatedTask);
       return updatedTask;
     } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to record task execution update",
-      );
+      if (activeProjectId.current === projectId)
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to record task execution update",
+        );
       throw requestError;
     } finally {
-      setIsSaving(false);
+      if (activeProjectId.current === projectId) setIsSaving(false);
     }
   }
 
   function updateTaskInProject(updatedTask: ApiTask) {
     setProject((currentProject) => {
-      if (!currentProject) {
+      if (!currentProject || currentProject.id !== projectId) {
         return currentProject;
       }
       return {
@@ -677,12 +692,23 @@ function ProjectDeliveryPageContent() {
 
             {activeView === "today" ? (
               <TodayWorkspace
-                canEdit={capabilities.canManageProjectTasks}
+                key={project.id}
+                roleNames={roleNames}
+                identityType={identityType}
                 currentUserId={currentUserId}
                 embedded
                 isSaving={isSaving}
                 members={members}
                 onLoadHistory={getTaskExecutionUpdates}
+                onRefreshTasks={async () => {
+                  const refreshed = await getProjectTasks(project.id);
+                  setProject((current) =>
+                    current?.id === project.id
+                      ? { ...current, tasks: refreshed }
+                      : current,
+                  );
+                  return refreshed;
+                }}
                 onRecordExecutionUpdate={handleRecordExecutionUpdate}
                 onSearchTermChange={setTodaySearchTerm}
                 project={project}
