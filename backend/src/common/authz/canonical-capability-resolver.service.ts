@@ -142,10 +142,7 @@ export class CanonicalCapabilityResolverService {
       input.requestedAssigneeId,
     );
     // Assignment commands are mutations even when the assignee is unchanged.
-    if (
-      (await this.authorizationPolicyService.getActorRoleName(input.actor)) ===
-      UserRole.Customer
-    ) {
+    if (await this.actorIsCustomerOnly(input.actor)) {
       return {
         ...this.deny('external', 'MISSING_PERMISSION'),
         capability:
@@ -340,8 +337,7 @@ export class CanonicalCapabilityResolverService {
 
     if (
       capability === 'task.view' &&
-      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
-        UserRole.Customer &&
+      (await this.actorIsCustomerOnly(actor)) &&
       !(await this.authorizationPolicyService.canViewProject(
         resource.projectId,
         actor,
@@ -434,10 +430,7 @@ export class CanonicalCapabilityResolverService {
     projectId: string,
     audience: CapabilityAudience,
   ): Promise<CapabilityDecision | null> {
-    if (
-      (await this.authorizationPolicyService.getActorRoleName(actor)) !==
-      UserRole.Executive
-    ) {
+    if (!(await this.actorIsExecutiveOnly(actor))) {
       return null;
     }
 
@@ -540,6 +533,34 @@ export class CanonicalCapabilityResolverService {
     }
 
     return null;
+  }
+
+  private async actorIsCustomerOnly(
+    actor: AuthorizationActor | undefined,
+  ): Promise<boolean> {
+    if (
+      typeof this.authorizationPolicyService.isCustomerOnly === 'function'
+    ) {
+      return this.authorizationPolicyService.isCustomerOnly(actor);
+    }
+    return (
+      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
+      UserRole.Customer
+    );
+  }
+
+  private async actorIsExecutiveOnly(
+    actor: AuthorizationActor,
+  ): Promise<boolean> {
+    if (
+      typeof this.authorizationPolicyService.isExecutiveOnly === 'function'
+    ) {
+      return this.authorizationPolicyService.isExecutiveOnly(actor);
+    }
+    return (
+      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
+      UserRole.Executive
+    );
   }
 
   private async permissionDecision(

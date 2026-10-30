@@ -89,7 +89,11 @@ export function useProjectMembers(
       setIsSaving(true);
       try {
         const member = await addProjectMember(projectId, input);
-        setMembers((currentMembers) => [...currentMembers, member]);
+        if (input.role === "owner" || input.role === "manager") {
+          setMembers(await getProjectMembers(projectId));
+        } else {
+          setMembers((currentMembers) => [...currentMembers, member]);
+        }
         return member;
       } catch (requestError) {
         setError(
@@ -111,11 +115,15 @@ export function useProjectMembers(
       setIsSaving(true);
       try {
         const member = await updateProjectMember(projectId, memberId, input);
-        setMembers((currentMembers) =>
-          currentMembers.map((currentMember) =>
-            currentMember.id === member.id ? member : currentMember,
-          ),
-        );
+        if (input.role === "owner" || input.role === "manager") {
+          setMembers(await getProjectMembers(projectId));
+        } else {
+          setMembers((currentMembers) =>
+            currentMembers.map((currentMember) =>
+              currentMember.id === member.id ? member : currentMember,
+            ),
+          );
+        }
         return member;
       } catch (requestError) {
         setError(

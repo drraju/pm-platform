@@ -6,6 +6,7 @@ import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
 import { TaskDependency } from '../tasks/entities/task-dependency.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../users/entities/role.entity';
 import { ProjectBaselineTask } from './entities/project-baseline-task.entity';
@@ -33,6 +34,7 @@ import { ForecastQueryService } from './forecast-query.service';
       Task,
       TaskDependency,
       User,
+      Customer,
       Role,
       Risk,
       Issue,

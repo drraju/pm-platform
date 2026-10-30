@@ -968,7 +968,7 @@ describe("Today Stage A+B", () => {
     expect(screen.getByLabelText("Status for Delegated")).toBeDisabled();
   });
 
-  it.each(["viewer", "CUSTOMER", "SERVICE", "archived", "deleted"])(
+  it.each(["viewer", "SERVICE", "archived", "deleted"])(
     "disables execution for %s",
     (restriction) => {
       const project = createProject([
@@ -993,7 +993,7 @@ describe("Today Stage A+B", () => {
           onLoadHistory={vi.fn().mockResolvedValue([])}
           onRefreshTasks={vi.fn().mockResolvedValue(project.tasks)}
           onRecordExecutionUpdate={vi.fn()}
-          roleNames={restriction === "CUSTOMER" ? ["CUSTOMER"] : []}
+          roleNames={[]}
           identityType={restriction === "SERVICE" ? "SERVICE" : "HUMAN"}
         />,
       );

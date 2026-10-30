@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ExternalProjectList } from "@/components/projects/external-project-list";
 import { ProjectTable } from "@/components/projects/project-table";
 import { AppModal } from "@/components/ui/app-modal";
 import {
@@ -33,8 +34,10 @@ import {
   getStoredAccessToken,
   getStoredPermissionKeys,
   hasPermission,
+  isExternalContact,
   storeAuthMe,
 } from "@/features/auth";
+import { getCustomers, type ApiCustomer } from "@/features/customers";
 import { subscribeToApplicationCommandActions } from "@/features/commands";
 import {
   createProjectEntityProvider,
@@ -46,10 +49,10 @@ import type {
 } from "@/lib/api/client";
 
 const projectStatuses = [
+  { label: "Planned", value: "planned" },
   { label: "Active", value: "active" },
-  { label: "At risk", value: "at_risk" },
-  { label: "Blocked", value: "blocked" },
-  { label: "Complete", value: "complete" },
+  { label: "Paused", value: "paused" },
+  { label: "Done", value: "done" },
 ];
 
 const projectFilterStatuses = [
@@ -71,6 +74,7 @@ function PageContent() {
   const searchParams = useSearchParams();
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [users, setUsers] = useState<ApiAssignableUser[]>([]);
+  const [customers, setCustomers] = useState<ApiCustomer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingProject, setIsSavingProject] = useState(false);
@@ -98,6 +102,7 @@ function PageContent() {
     getStoredPermissionKeys(),
   );
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [externalContact, setExternalContact] = useState(false);
   const requestedSort = searchParams.get("sort");
   const sortMode:
     | "created_asc"
@@ -147,22 +152,30 @@ function PageContent() {
         getProjects({ archived: statusFilter === "archived" }),
         getAuthMe(),
       ]);
-      const customer = authMe.roles.some((role) => role.name === "CUSTOMER");
-      const needsDirectory =
-        !customer &&
-        authMe.permissions.some((permission) =>
-          ["project.create", "project.update"].includes(permission.key),
-        );
-      const userData = needsDirectory ? await getAssignableUsers() : [];
+      const needsDirectory = authMe.permissions.some((permission) =>
+        ["project.create", "project.update"].includes(permission.key),
+      );
+      const [userData, customerData] = needsDirectory
+        ? await Promise.all([
+            getAssignableUsers(),
+            getCustomers("all").catch(() => [] as ApiCustomer[]),
+          ])
+        : [[], []];
       storeAuthMe(authMe);
       setPermissionKeys(
-        authMe.permissions
-          .map((permission) => permission.key)
-          .filter((key) => !customer || key === "project.read"),
+        authMe.permissions.map((permission) => permission.key),
       );
       setIsPlatformAdmin(
         authMe.roles.some((role) => role.name === "PLATFORM_ADMIN"),
       );
+      const contact = isExternalContact(authMe.roles);
+      setExternalContact(contact);
+      if (contact) {
+        setProjects(projectData);
+        setUsers([]);
+        setCustomers([]);
+        return;
+      }
       const projectsWithWorkspaceContext = await Promise.all(
         projectData.map(async (project) => {
           try {
@@ -184,6 +197,8 @@ function PageContent() {
               issues: details.issues ?? project.issues,
               members: details.members ?? project.members,
               startDate: details.startDate ?? project.startDate,
+              customer: details.customer ?? project.customer,
+              customerId: details.customerId ?? project.customerId,
               owner: details.owner ?? project.owner,
               ownerId: details.ownerId ?? project.ownerId,
               risks: details.risks ?? project.risks,
@@ -197,6 +212,7 @@ function PageContent() {
       );
       setProjects(projectsWithWorkspaceContext);
       setUsers(userData);
+      setCustomers(customerData);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -295,6 +311,8 @@ function PageContent() {
       status: String(formData.get("status") ?? "active"),
       startDate: String(formData.get("startDate") ?? "") || undefined,
       targetEndDate: String(formData.get("targetEndDate") ?? "") || undefined,
+      customerId: String(formData.get("customerId") ?? "") || undefined,
+      leadUserId: optionalValue(formData.get("leadUserId")),
       ownerId: optionalValue(formData.get("ownerId")),
       businessOwnerId: optionalValue(formData.get("businessOwnerId")),
       executiveSponsorId: optionalValue(formData.get("executiveSponsorId")),
@@ -388,6 +406,24 @@ function PageContent() {
     }
   }
 
+  if (externalContact) {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-xl font-semibold tracking-tight text-slate-950">Projects</h1>
+        {error ? (
+          <section className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </section>
+        ) : null}
+        {isLoading ? (
+          <p className="text-sm text-slate-600">Loading projects</p>
+        ) : (
+          <ExternalProjectList projects={filteredProjects} />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -420,7 +456,7 @@ function PageContent() {
 
       <section
         aria-label="Project filters"
-        className="grid gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 sm:grid-cols-2"
       >
         <label className="grid gap-0.5 text-[11px] font-semibold text-slate-600">
           Search
@@ -434,24 +470,6 @@ function PageContent() {
             type="search"
             value={searchTerm}
           />
-        </label>
-        <label className="grid gap-0.5 text-[11px] font-semibold text-slate-600">
-          Health
-          <select
-            aria-label="Filter by health"
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-            onChange={(event) =>
-              syncProjectFilters({
-                health: event.target.value as "all" | ApiProjectHealthStatus,
-              })
-            }
-            value={healthFilter}
-          >
-            <option value="all">All health</option>
-            <option value="RED">Red</option>
-            <option value="AMBER">Amber</option>
-            <option value="GREEN">Green</option>
-          </select>
         </label>
         <label className="grid gap-0.5 text-[11px] font-semibold text-slate-600">
           Status
@@ -525,6 +543,7 @@ function PageContent() {
           widthClassName="max-w-3xl"
         >
           <ProjectForm
+            customers={customers}
             onSubmit={handleProjectSubmit}
             project={selectedProject}
             users={users}
@@ -694,14 +713,25 @@ function buildProjectFiltersUrl(
 }
 
 function ProjectForm({
+  customers,
   onSubmit,
   project,
   users,
 }: {
+  customers: ApiCustomer[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   project: ApiProject | null;
   users: ApiAssignableUser[];
 }) {
+  const customerOptions = [
+    ...(project?.customer ? [project.customer] : []),
+    ...customers.filter((customer) => customer.id !== project?.customer?.id),
+  ];
+  const statusOptions = projectStatuses.some((status) => status.value === project?.status)
+    ? projectStatuses
+    : project?.status
+      ? [...projectStatuses, { label: project.status.replaceAll("_", " "), value: project.status }]
+      : projectStatuses;
   return (
     <ModalForm id="project-form" onSubmit={onSubmit}>
       <ModalFormSection
@@ -709,6 +739,23 @@ function ProjectForm({
         title="Project Detail"
       >
         <ModalFormGrid>
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Customer</span>
+            <select
+              className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+              defaultValue={project?.customerId ?? ""}
+              name="customerId"
+              required
+            >
+              <option value="">Choose a customer</option>
+              {customerOptions.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-slate-700">Name</span>
             <input
@@ -721,7 +768,7 @@ function ProjectForm({
 
           <label className="block sm:col-span-2">
             <span className="text-sm font-medium text-slate-700">
-              Description
+              Summary
             </span>
             <textarea
               className="mt-2 min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
@@ -737,7 +784,7 @@ function ProjectForm({
               defaultValue={project?.status ?? "active"}
               name="status"
             >
-              {projectStatuses.map((status) => (
+              {statusOptions.map((status) => (
                 <option key={status.value} value={status.value}>
                   {status.label}
                 </option>
@@ -747,8 +794,8 @@ function ProjectForm({
 
           <ProjectUserSelect
             defaultValue={project?.ownerId ?? ""}
-            label="Owner"
-            name="ownerId"
+            label="Lead"
+            name="leadUserId"
             users={users}
           />
           <ProjectUserSelect
@@ -781,7 +828,7 @@ function ProjectForm({
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Target</span>
+            <span className="text-sm font-medium text-slate-700">Target finish</span>
             <input
               className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
               defaultValue={project?.targetEndDate ?? ""}

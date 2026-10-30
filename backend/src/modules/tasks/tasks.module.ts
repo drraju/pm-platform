@@ -26,10 +26,12 @@ import {
 import { DependencyResponseMapper } from './dependency-response.mapper';
 import { TaskAssignmentController } from './task-assignment.controller';
 import { TaskAssignmentService } from './task-assignment.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     forwardRef(() => ProjectsModule),
+    NotificationsModule,
     PlanningSnapshotModule,
     TypeOrmModule.forFeature([
       Task,

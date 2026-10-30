@@ -4,13 +4,22 @@ import { ProjectMember } from '../../modules/projects/entities/project-member.en
 import { Project } from '../../modules/projects/entities/project.entity';
 import { Task } from '../../modules/tasks/entities/task.entity';
 import { Role } from '../../modules/users/entities/role.entity';
+import { UserRoleAssignment } from '../../modules/users/entities/user-role-assignment.entity';
 import { AuthorizationPolicyService } from './authorization-policy.service';
 import { CanonicalCapabilityResolverService } from './canonical-capability-resolver.service';
 import { PermissionsGuard } from './permissions.guard';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([Project, ProjectMember, Task, Role])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Project,
+      ProjectMember,
+      Task,
+      Role,
+      UserRoleAssignment,
+    ]),
+  ],
   providers: [
     AuthorizationPolicyService,
     CanonicalCapabilityResolverService,

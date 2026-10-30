@@ -1,24 +1,18 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  CommandPalette,
-  createApplicationCommandRegistry,
-} from "@/features/commands";
 import {
   clearSession,
   type ApiAuthMe,
   getAuthMe,
+  getLandingPath,
   getStoredPermissionKeys,
   getStoredRoleNames,
+  hasAnyPermission,
   storeAuthMe,
 } from "@/features/auth";
-import {
-  createApplicationEntityRegistry,
-  EntityPresentationCatalog,
-  EntityRegistryProvider,
-} from "@/features/entity-search";
+import { getUnreadNotificationCount } from "@/features/notifications";
 import { AppSidebar } from "./app-sidebar";
 import { GlobalHeader } from "./global-header";
 import { WorkspaceContextBar } from "./workspace-context";
@@ -26,7 +20,6 @@ import { WorkspaceContextBar } from "./workspace-context";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [sessionProfile, setSessionProfile] = useState<ApiAuthMe | null>(null);
@@ -36,20 +29,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [roleNames, setRoleNames] = useState<string[]>(() =>
     getStoredRoleNames(),
   );
-  const commandRegistry = useMemo(
-    () => createApplicationCommandRegistry({ pathname, permissionKeys }),
-    [pathname, permissionKeys],
-  );
-  const { entityPresentationCatalog, entityRegistry } = useMemo(
-    () => ({
-      entityPresentationCatalog: new EntityPresentationCatalog(),
-      entityRegistry: createApplicationEntityRegistry({
-        pathname,
-        permissionKeys,
-      }),
-    }),
-    [pathname, permissionKeys],
-  );
+  const homeHref = getLandingPath(permissionKeys);
+  const canReadNotifications = permissionKeys.includes("notification.read");
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -82,21 +64,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    function handleCommandPaletteShortcut(event: KeyboardEvent) {
-      if (
-        event.key.toLowerCase() === "k" &&
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey
-      ) {
-        event.preventDefault();
-        setIsCommandPaletteOpen(true);
-      }
+    if (!canReadNotifications) {
+      return;
     }
-
-    document.addEventListener("keydown", handleCommandPaletteShortcut);
-    return () =>
-      document.removeEventListener("keydown", handleCommandPaletteShortcut);
-  }, []);
+    let mounted = true;
+    const refresh = () => {
+      getUnreadNotificationCount()
+        .then((count) => {
+          if (mounted) setUnreadNotifications(count);
+        })
+        .catch(() => {
+          if (mounted) setUnreadNotifications(0);
+        });
+    };
+    refresh();
+    window.addEventListener("pm-notifications", refresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener("pm-notifications", refresh);
+    };
+  }, [canReadNotifications, pathname]);
 
   function handleLogout() {
     clearSession();
@@ -104,65 +91,59 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <EntityRegistryProvider
-      presentationCatalog={entityPresentationCatalog}
-      registry={entityRegistry}
-    >
-      <div className="min-h-screen bg-surface text-ink antialiased">
-        <AppSidebar
-          isCollapsed={isSidebarCollapsed}
-          onToggle={() => setIsSidebarCollapsed((value) => !value)}
-          pathname={pathname}
-          permissionKeys={permissionKeys}
-          roleNames={roleNames}
-        />
+    <div className="min-h-screen bg-surface text-ink antialiased">
+      <AppSidebar
+        homeHref={homeHref}
+        isCollapsed={isSidebarCollapsed}
+        onToggle={() => setIsSidebarCollapsed((value) => !value)}
+        pathname={pathname}
+        permissionKeys={permissionKeys}
+        roleNames={roleNames}
+      />
 
-        {isMobileDrawerOpen ? (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <button
-              aria-label="Close navigation overlay"
-              className="absolute inset-0 bg-slate-950/40"
-              onClick={() => setIsMobileDrawerOpen(false)}
-              type="button"
-            />
-            <AppSidebar
-              isMobile
-              onClose={() => setIsMobileDrawerOpen(false)}
-              pathname={pathname}
-              permissionKeys={permissionKeys}
-              roleNames={roleNames}
-            />
-          </div>
-        ) : null}
-
-        <div
-          className={`transition-[padding] duration-200 ${
-            isSidebarCollapsed ? "lg:pl-[4.5rem]" : "lg:pl-60"
-          }`}
-        >
-          <GlobalHeader
-            onLogout={handleLogout}
-            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-            onOpenNavigation={() => setIsMobileDrawerOpen(true)}
-            permissionKeys={permissionKeys}
-            sessionProfile={sessionProfile}
+      {isMobileDrawerOpen ? (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            aria-label="Close navigation overlay"
+            className="absolute inset-0 bg-slate-950/40"
+            onClick={() => setIsMobileDrawerOpen(false)}
+            type="button"
           />
-          <WorkspaceContextBar pathname={pathname} />
-
-          <main className="mx-auto w-full max-w-[1800px] px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
-            {children}
-          </main>
+          <AppSidebar
+            homeHref={homeHref}
+            isMobile
+            onClose={() => setIsMobileDrawerOpen(false)}
+            pathname={pathname}
+            permissionKeys={permissionKeys}
+            roleNames={roleNames}
+          />
         </div>
+      ) : null}
 
-        <CommandPalette
-          entityPresentationCatalog={entityPresentationCatalog}
-          entityRegistry={entityRegistry}
-          isOpen={isCommandPaletteOpen}
-          onClose={() => setIsCommandPaletteOpen(false)}
-          onNavigate={(target) => router.push(target)}
-          registry={commandRegistry}
+      <div
+        className={`transition-[padding] duration-200 ${
+          isSidebarCollapsed ? "lg:pl-[4.5rem]" : "lg:pl-60"
+        }`}
+      >
+        <GlobalHeader
+          canSearch={hasAnyPermission(permissionKeys, [
+            "customer.read",
+            "project.read",
+            "work.update",
+            "task.update",
+          ])}
+          homeHref={homeHref}
+          notifications={canReadNotifications ? { unread: unreadNotifications } : null}
+          onLogout={handleLogout}
+          onOpenNavigation={() => setIsMobileDrawerOpen(true)}
+          sessionProfile={sessionProfile}
         />
+        <WorkspaceContextBar pathname={pathname} />
+
+        <main className="mx-auto w-full max-w-[1800px] px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
+          {children}
+        </main>
       </div>
-    </EntityRegistryProvider>
+    </div>
   );
 }

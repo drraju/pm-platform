@@ -2,13 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
+import { resolveCorsOrigins } from './common/http/cors-origins';
 import { AppModule } from './app.module';
 import { StartupValidationService } from './modules/health/startup-validation.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000',
+    origin: resolveCorsOrigins(),
     credentials: true,
   });
   app.use((_request: Request, response: Response, next: NextFunction) => {

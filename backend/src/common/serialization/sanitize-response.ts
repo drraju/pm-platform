@@ -1,4 +1,8 @@
-const blockedResponseKeys = new Set(['password', 'passwordHash']);
+const blockedResponseKeys = new Set([
+  'password',
+  'passwordHash',
+  'slackWebhookUrl',
+]);
 
 export function sanitizeResponse<T>(value: T): T {
   if (Array.isArray(value)) {

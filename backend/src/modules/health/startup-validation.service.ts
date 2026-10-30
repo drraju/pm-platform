@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { NotificationsService } from '../notifications/notifications.service';
+import { assertBreakGlassPasswordPolicy } from './break-glass-password.policy';
 import { MigrationRunnerService } from './migration-runner.service';
 import { OperationalHealthService } from './operational-health.service';
 
@@ -19,16 +21,26 @@ export class StartupValidationService {
   constructor(
     private readonly migrationRunnerService: MigrationRunnerService,
     private readonly operationalHealthService: OperationalHealthService,
+    @Optional()
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async prepareApplication() {
     this.validateEnvironment();
     await this.migrationRunnerService.runPendingMigrations();
     await this.operationalHealthService.ensureReady();
+    try {
+      await this.notificationsService?.sweepOverdue();
+    } catch (error) {
+      this.logger.warn(
+        error instanceof Error ? error.message : 'Overdue alerts were not recorded',
+      );
+    }
     this.logger.log('Startup validation completed successfully');
   }
 
   private validateEnvironment() {
+    assertBreakGlassPasswordPolicy();
     const missingVariables = requiredEnvironmentVariables.filter(
       (variableName) => !process.env[variableName],
     );

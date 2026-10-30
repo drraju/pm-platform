@@ -30,6 +30,7 @@ import {
 import { PasswordService } from './password.service';
 import { PmSessionIssuer } from './pm-session-issuer.service';
 import { CompatibleJwtPayload } from './interfaces/jwt-payload.interface';
+import { getGoogleOidcConfiguration } from './oidc/google-oidc.configuration';
 import { JWT_CONFIGURATION } from './jwt-configuration';
 import { isTokenCurrentForPasswordState } from './token-password-state';
 import type { JwtConfiguration } from './jwt-configuration';
@@ -61,6 +62,9 @@ export class AuthService {
       user.passwordHash,
     );
     if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (getGoogleOidcConfiguration().enabled && !user.localOnly) {
       throw new UnauthorizedException('Invalid credentials');
     }
 

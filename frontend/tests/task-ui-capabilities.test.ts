@@ -46,7 +46,6 @@ describe("canonical task UI projection", () => {
   it.each([
     "viewer",
     "executive",
-    "customer",
     "service",
     "archived",
     "deleted",
@@ -59,12 +58,7 @@ describe("canonical task UI projection", () => {
       members: ["viewer", "governance owner"].includes(restriction)
         ? [{ ...base.members[0], role: "viewer" }]
         : base.members,
-      roleNames:
-        restriction === "customer"
-          ? ["CUSTOMER"]
-          : restriction === "executive"
-            ? ["EXECUTIVE"]
-            : [],
+      roleNames: restriction === "executive" ? ["EXECUTIVE"] : [],
       identityType: restriction === "service" ? "SERVICE" : "HUMAN",
       project: { status: restriction === "archived" ? "archived" : "active" },
       task: {
@@ -138,7 +132,7 @@ it.each(["manager", "contributor", "viewer", "CUSTOMER"])(
       roleNames: role === "CUSTOMER" ? ["CUSTOMER"] : [],
     });
     expect(result.canRecordUpdate).toBe(
-      ["manager", "contributor"].includes(role),
+      ["manager", "contributor", "CUSTOMER"].includes(role),
     );
   },
 );

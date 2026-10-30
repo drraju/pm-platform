@@ -39,4 +39,7 @@ export class UserResponseDto {
 
   @ApiPropertyOptional({ type: RoleResponseDto })
   role?: RoleResponseDto | null;
+
+  @ApiProperty({ type: RoleResponseDto, isArray: true })
+  roles: RoleResponseDto[];
 }

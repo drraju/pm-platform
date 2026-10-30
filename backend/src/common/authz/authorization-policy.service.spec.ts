@@ -8,6 +8,7 @@ import { ProjectMember } from '../../modules/projects/entities/project-member.en
 import { Project } from '../../modules/projects/entities/project.entity';
 import { Task } from '../../modules/tasks/entities/task.entity';
 import { Role } from '../../modules/users/entities/role.entity';
+import { UserRoleAssignment } from '../../modules/users/entities/user-role-assignment.entity';
 import {
   AuthorizationActor,
   AuthorizationPolicyService,
@@ -95,6 +96,7 @@ describe('AuthorizationPolicyService', () => {
   let projectMembersRepository: MockRepository<ProjectMember>;
   let tasksRepository: MockRepository<Task>;
   let rolesRepository: MockRepository<Role>;
+  let userRolesRepository: MockRepository<UserRoleAssignment>;
   let projectGovernorAssignments: Set<string>;
   let membershipsByKey: Map<string, ProjectRole>;
   let assignedTaskKeys: Set<string>;
@@ -150,6 +152,7 @@ describe('AuthorizationPolicyService', () => {
       }),
     };
     rolesRepository = {
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(({ where }) => {
         const roleName = String(where.id).replace('role-', '');
         const permissionKeys =
@@ -163,6 +166,9 @@ describe('AuthorizationPolicyService', () => {
         });
       }),
     };
+    userRolesRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -174,6 +180,10 @@ describe('AuthorizationPolicyService', () => {
         },
         { provide: getRepositoryToken(Task), useValue: tasksRepository },
         { provide: getRepositoryToken(Role), useValue: rolesRepository },
+        {
+          provide: getRepositoryToken(UserRoleAssignment),
+          useValue: userRolesRepository,
+        },
       ],
     }).compile();
 
@@ -296,7 +306,6 @@ describe('AuthorizationPolicyService', () => {
 
   it.each([
     UserRole.PlatformAdmin,
-    UserRole.PortfolioManager,
     UserRole.Executive,
   ])(
     'grants all-project visibility to %s through centralized policy',
@@ -348,6 +357,46 @@ describe('AuthorizationPolicyService', () => {
     expect(
       await service.canMutateProjectDomain(actor(UserRole.Partner, 'partner')),
     ).toBe(true);
+  });
+
+  it('unions permissions when one person holds customer success and project manager', async () => {
+    const person = actor(UserRole.ProjectManager, 'asha');
+    userRolesRepository.find?.mockResolvedValue([
+      { userId: person.userId, roleId: 'role-customer-success' },
+      { userId: person.userId, roleId: 'role-project-manager' },
+    ]);
+    rolesRepository.find?.mockResolvedValue([
+      {
+        id: 'role-customer-success',
+        name: UserRole.CustomerSuccessManager,
+        permissions: [
+          { key: PermissionKey.CustomerRead },
+          { key: PermissionKey.ProjectRead },
+        ],
+      },
+      {
+        id: 'role-project-manager',
+        name: UserRole.ProjectManager,
+        permissions: [
+          { key: PermissionKey.ProjectRead },
+          { key: PermissionKey.ProjectUpdate },
+          { key: PermissionKey.TaskUpdate },
+        ],
+      },
+    ]);
+
+    const permissions = await service.getGrantedPermissionKeys(person);
+    expect(permissions.has(PermissionKey.CustomerRead)).toBe(true);
+    expect(permissions.has(PermissionKey.ProjectUpdate)).toBe(true);
+    expect(permissions.has(PermissionKey.TaskUpdate)).toBe(true);
+    expect(await service.getActorRoleNames(person)).toEqual(
+      expect.arrayContaining([
+        UserRole.CustomerSuccessManager,
+        UserRole.ProjectManager,
+      ]),
+    );
+    expect(await service.isExternalActor(person)).toBe(false);
+    expect(await service.isCustomerOnly(person)).toBe(false);
   });
 
   it('denies deliberately permissioned Executive project mutations before membership or governance authority', async () => {
@@ -455,19 +504,19 @@ describe('AuthorizationPolicyService', () => {
       const effectivePermissions =
         await service.getGrantedPermissionKeys(serviceActor);
       for (const permission of grantedPermissions) {
+        const preservedForService = new Set<string>([
+          PermissionKey.DashboardView,
+          PermissionKey.ExecutiveView,
+          PermissionKey.ExternalApiAccess,
+          PermissionKey.IntegrationManage,
+          PermissionKey.NotificationManage,
+          PermissionKey.PermissionManage,
+          PermissionKey.PortfolioView,
+          PermissionKey.RoleManage,
+          PermissionKey.UserManage,
+        ]);
         const isMutationPermission =
-          !permission.endsWith('.read') &&
-          ![
-            PermissionKey.DashboardView,
-            PermissionKey.ExecutiveView,
-            PermissionKey.ExternalApiAccess,
-            PermissionKey.IntegrationManage,
-            PermissionKey.NotificationManage,
-            PermissionKey.PermissionManage,
-            PermissionKey.PortfolioView,
-            PermissionKey.RoleManage,
-            PermissionKey.UserManage,
-          ].includes(permission);
+          !permission.endsWith('.read') && !preservedForService.has(permission);
         expect(effectivePermissions.has(permission)).toBe(
           !isMutationPermission,
         );
@@ -564,12 +613,12 @@ describe('AuthorizationPolicyService', () => {
     await expect(service.canViewProject(projectId)).resolves.toBe(false);
   });
 
-  it('allows portfolio visibility but rejects unrelated project mutation', async () => {
+  it('does not open every project for a portfolio role without membership', async () => {
     const portfolioActor = actor(UserRole.PortfolioManager, 'portfolio-user');
 
     await expect(
       service.canViewProject(projectId, portfolioActor),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     await expect(
       service.canManageProject(projectId, portfolioActor),
     ).resolves.toBe(false);
@@ -621,6 +670,32 @@ describe('AuthorizationPolicyService', () => {
       service.canViewProject(
         projectId,
         actor(UserRole.Customer, 'user-customer'),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it('lets a lead edit the project without a global project manager title', async () => {
+    membershipsByKey.set(`${projectId}:user-team-member`, ProjectRole.Owner);
+
+    await expect(
+      service.canManageProject(
+        projectId,
+        actor(UserRole.TeamMember, 'user-team-member'),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('hides a project from a global project manager who is not a member', async () => {
+    await expect(
+      service.canViewProject(
+        projectId,
+        actor(UserRole.ProjectManager, 'user-pm'),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      service.canManageProject(
+        projectId,
+        actor(UserRole.ProjectManager, 'user-pm'),
       ),
     ).resolves.toBe(false);
   });
@@ -748,7 +823,7 @@ describe('AuthorizationPolicyService', () => {
         projectId,
         actor(UserRole.TeamMember, 'user-technical-manager'),
       ),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
     await expect(
       service.canManageTask(
         projectId,

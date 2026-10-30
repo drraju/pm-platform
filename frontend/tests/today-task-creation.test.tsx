@@ -206,7 +206,6 @@ describe("Today contextual task creation", () => {
   it.each([
     { membership: { ...manager, role: "viewer" } },
     { membership: { ...manager, role: "contributor" } },
-    { roles: ["CUSTOMER"] },
     { roles: ["PARTNER"] },
     { identityType: "SERVICE" as const },
     { status: "archived" },

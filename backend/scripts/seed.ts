@@ -316,6 +316,34 @@ const permissions = [
     key: PermissionKey.UserManage,
     description: 'Manage users',
   },
+  {
+    key: PermissionKey.CustomerRead,
+    description: 'Read customers in scope',
+  },
+  {
+    key: PermissionKey.CustomerManage,
+    description: 'Create and edit customers in scope',
+  },
+  {
+    key: PermissionKey.CustomerSuccessView,
+    description: 'Open the customer success view',
+  },
+  {
+    key: PermissionKey.ProgramView,
+    description: 'Read programs',
+  },
+  {
+    key: PermissionKey.AuthConfigure,
+    description: 'Configure Google and local sign-in',
+  },
+  {
+    key: PermissionKey.WorkUpdate,
+    description: 'Update assigned delivery work',
+  },
+  {
+    key: PermissionKey.ProjectLead,
+    description: 'Lead a project plan and team',
+  },
 ] as const;
 
 const serviceUserPermissionKeySet = new Set<PermissionKey>(
@@ -326,6 +354,13 @@ const permissionsByRoleName: Record<UserRole, PermissionKey[]> = {
   [UserRole.PlatformAdmin]: permissions
     .map((permission) => permission.key)
     .filter((permissionKey) => !serviceUserPermissionKeySet.has(permissionKey)),
+  [UserRole.Admin]: permissions
+    .map((permission) => permission.key)
+    .filter(
+      (permissionKey) =>
+        !serviceUserPermissionKeySet.has(permissionKey) &&
+        permissionKey !== PermissionKey.AuthConfigure,
+    ),
   [UserRole.PortfolioManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
@@ -365,6 +400,29 @@ const permissionsByRoleName: Record<UserRole, PermissionKey[]> = {
     PermissionKey.TaskComment,
     PermissionKey.NotificationRead,
   ],
+  [UserRole.ProgramManager]: [
+    PermissionKey.CustomerRead,
+    PermissionKey.DashboardView,
+    PermissionKey.ExecutiveView,
+    PermissionKey.NotificationRead,
+    PermissionKey.PortfolioView,
+    PermissionKey.ProgramView,
+    PermissionKey.ProjectCreate,
+    PermissionKey.ProjectLead,
+    PermissionKey.ProjectRead,
+    PermissionKey.ProjectTeamManage,
+    PermissionKey.ProjectUpdate,
+    PermissionKey.RaidCreate,
+    PermissionKey.RaidDelete,
+    PermissionKey.RaidRead,
+    PermissionKey.RaidUpdate,
+    PermissionKey.TaskComment,
+    PermissionKey.TaskCreate,
+    PermissionKey.TaskDelete,
+    PermissionKey.TaskReassign,
+    PermissionKey.TaskUpdate,
+    PermissionKey.WorkUpdate,
+  ],
   [UserRole.ProjectManager]: [
     PermissionKey.DashboardView,
     PermissionKey.ProjectCreate,
@@ -402,6 +460,17 @@ const permissionsByRoleName: Record<UserRole, PermissionKey[]> = {
     PermissionKey.TaskReassign,
     PermissionKey.TaskComment,
     PermissionKey.NotificationRead,
+    PermissionKey.ProjectLead,
+    PermissionKey.WorkUpdate,
+  ],
+  [UserRole.CustomerSuccessManager]: [
+    PermissionKey.CustomerManage,
+    PermissionKey.CustomerRead,
+    PermissionKey.CustomerSuccessView,
+    PermissionKey.DashboardView,
+    PermissionKey.ExecutiveView,
+    PermissionKey.NotificationRead,
+    PermissionKey.ProjectRead,
   ],
   [UserRole.TeamMember]: [
     PermissionKey.DashboardView,
@@ -419,28 +488,34 @@ const permissionsByRoleName: Record<UserRole, PermissionKey[]> = {
     PermissionKey.TaskComment,
     PermissionKey.NotificationRead,
   ],
+  [UserRole.Sales]: [
+    PermissionKey.CustomerManage,
+    PermissionKey.CustomerRead,
+    PermissionKey.DashboardView,
+    PermissionKey.NotificationRead,
+    PermissionKey.ProjectRead,
+  ],
   [UserRole.Executive]: [
+    PermissionKey.CustomerRead,
     PermissionKey.DashboardView,
     PermissionKey.ExecutiveView,
-    PermissionKey.PortfolioView,
-    PermissionKey.ProjectRead,
-    PermissionKey.RaidRead,
     PermissionKey.NotificationRead,
+    PermissionKey.PortfolioView,
+    PermissionKey.ProgramView,
+    PermissionKey.ProjectRead,
   ],
   [UserRole.Customer]: [
     PermissionKey.DashboardView,
-    PermissionKey.ProjectRead,
-    PermissionKey.RaidRead,
     PermissionKey.NotificationRead,
+    PermissionKey.ProjectRead,
   ],
   [UserRole.Partner]: [
     PermissionKey.DashboardView,
+    PermissionKey.NotificationRead,
     PermissionKey.ProjectRead,
-    PermissionKey.RaidRead,
     PermissionKey.TaskComment,
     PermissionKey.TaskReassign,
     PermissionKey.TaskUpdate,
-    PermissionKey.NotificationRead,
   ],
   [UserRole.ServiceUser]: [...serviceUserPermissionKeys],
 };
@@ -813,9 +888,21 @@ async function seedRolesAndUsers(manager: EntityManager): Promise<SeedContext> {
           firstName: user.firstName,
           lastName: user.lastName,
           roleId: rolesByName.get(user.roleName)?.id,
+          localOnly: true,
           status: getSeedUserStatus(existingUser),
         }),
       ),
+    );
+    await manager.query(
+      `DELETE FROM user_roles WHERE user_id = $1`,
+      [savedUsers[savedUsers.length - 1].id],
+    );
+    await manager.query(
+      `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`,
+      [
+        savedUsers[savedUsers.length - 1].id,
+        savedUsers[savedUsers.length - 1].roleId,
+      ],
     );
   }
 

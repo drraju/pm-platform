@@ -30,6 +30,8 @@ export const PROJECT_ROLE_CAPABILITIES: Readonly<
 });
 
 export const CONTRIBUTOR_TASK_EXECUTION_FIELDS = Object.freeze([
+  'dueDate',
+  'nextStep',
   'remarks',
   'percentComplete',
   'status',

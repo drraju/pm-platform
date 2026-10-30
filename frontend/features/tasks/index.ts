@@ -1,4 +1,5 @@
 export {
+  addTaskComment,
   createTask,
   getMyTasks,
   getTasks,

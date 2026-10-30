@@ -23,6 +23,7 @@ describe('ProjectVisibilityService', () => {
     canViewExecutive: jest.Mock;
     canViewPortfolio: jest.Mock;
     canViewProject: jest.Mock;
+    getActorRoleNames: jest.Mock;
     hasAnyPermission: jest.Mock;
     hasPermission: jest.Mock;
     isExternalActor: jest.Mock;
@@ -42,6 +43,7 @@ describe('ProjectVisibilityService', () => {
       canViewExecutive: jest.fn().mockResolvedValue(false),
       canViewPortfolio: jest.fn().mockResolvedValue(false),
       canViewProject: jest.fn().mockResolvedValue(false),
+      getActorRoleNames: jest.fn().mockResolvedValue([]),
       hasAnyPermission: jest.fn().mockResolvedValue(false),
       hasPermission: jest.fn().mockResolvedValue(true),
       isExternalActor: jest.fn().mockResolvedValue(false),
@@ -91,20 +93,16 @@ describe('ProjectVisibilityService', () => {
     expect(tasksRepository.find).not.toHaveBeenCalled();
   });
 
-  it('returns all projects for users with portfolio or executive visibility', async () => {
+  it('returns every project for an executive and only memberships for a portfolio role', async () => {
     authorizationPolicyService.canViewPortfolio.mockResolvedValue(true);
+    projectsRepository.find?.mockResolvedValue([]);
+    projectMembersRepository.find?.mockResolvedValue([]);
 
     await expect(
       service.getVisibleProjectIds({ roleId: 'role-1', userId: 'user-1' }),
-    ).resolves.toBe('all');
+    ).resolves.toEqual([]);
 
-    expect(authorizationPolicyService.hasPermission).toHaveBeenCalledWith(
-      { roleId: 'role-1', userId: 'user-1' },
-      PermissionKey.ProjectRead,
-    );
-
-    authorizationPolicyService.canViewPortfolio.mockResolvedValue(false);
-    authorizationPolicyService.canViewExecutive.mockResolvedValue(true);
+    authorizationPolicyService.getActorRoleNames.mockResolvedValue(['EXECUTIVE']);
 
     await expect(
       service.getVisibleProjectIds({ roleId: 'role-1', userId: 'user-1' }),
@@ -116,7 +114,7 @@ describe('ProjectVisibilityService', () => {
       roleId: 'role-EXECUTIVE',
       userId: 'executive-1',
     };
-    authorizationPolicyService.canViewExecutive.mockResolvedValue(true);
+    authorizationPolicyService.getActorRoleNames.mockResolvedValue(['EXECUTIVE']);
     projectsRepository.find?.mockResolvedValue([{ id: 'project-1' }]);
 
     await expect(service.getVisibleProjects(executiveActor)).resolves.toEqual([
@@ -125,7 +123,14 @@ describe('ProjectVisibilityService', () => {
 
     expect(projectsRepository.find).toHaveBeenCalledWith({
       order: { createdAt: 'DESC' },
-      relations: { issues: true, owner: true, risks: true, tasks: true },
+      relations: {
+        customer: true,
+        issues: true,
+        members: { user: true },
+        owner: true,
+        risks: true,
+        tasks: true,
+      },
     });
     expect(projectMembersRepository.find).not.toHaveBeenCalled();
   });
@@ -222,6 +227,18 @@ describe('ProjectVisibilityService', () => {
       audience: 'external',
       reasonCode: 'GRANTED',
     });
+  });
+
+  it('limits a program manager to projects in programs they own', async () => {
+    const actor = { roleId: 'role-pm', userId: 'pm-1' };
+    authorizationPolicyService.getActorRoleNames.mockResolvedValue(['PROGRAM_MANAGER']);
+    projectsRepository.query = jest.fn().mockResolvedValue([{ id: 'in-program' }]);
+    projectMembersRepository.find?.mockResolvedValue([{ projectId: 'outside' }]);
+
+    await expect(service.getVisibleProjectIds(actor)).resolves.toEqual(['in-program']);
+    await expect(service.canViewProject('outside', actor)).resolves.toBe(false);
+    await expect(service.canViewProject('in-program', actor)).resolves.toBe(true);
+    expect(projectMembersRepository.find).not.toHaveBeenCalled();
   });
 
   it('delegates point-in-time project visibility checks to the policy service and shadows canonical project.view', async () => {

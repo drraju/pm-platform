@@ -142,7 +142,9 @@ function ProjectDeliveryPageContent() {
   const [filterState, setFilterState] = useState<DeliveryFilterState>(() =>
     createDefaultDeliveryFilterState(),
   );
-  const [activeView, setActiveView] = useState<DeliveryView>(viewFromQuery);
+  const [activeView, setActiveView] = useState<DeliveryView>(
+    viewFromQuery === "board" ? "list" : viewFromQuery,
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [todaySearchTerm, setTodaySearchTerm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -167,7 +169,13 @@ function ProjectDeliveryPageContent() {
     );
     setFilterState(hydrateDeliveryFilterState(prefs));
     setSearchTerm(typeof prefs.searchTerm === "string" ? prefs.searchTerm : "");
-    setActiveView(parseDeliveryView(viewQuery ?? prefs.view, "list"));
+    const storedView = parseDeliveryView(viewQuery ?? prefs.view, "list");
+    if (storedView === "board") {
+      router.replace(`/projects/${projectId}/board`);
+      setActiveView("list");
+    } else {
+      setActiveView(storedView);
+    }
     setPrefsProjectId(projectId);
     // Hydrate once per project; query-driven updates handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional project-scoped hydrate
@@ -177,8 +185,12 @@ function ProjectDeliveryPageContent() {
     if (!viewQuery) {
       return;
     }
+    if (viewQuery === "board") {
+      router.replace(`/projects/${projectId}/board`);
+      return;
+    }
     setActiveView(parseDeliveryView(viewQuery, "list"));
-  }, [viewQuery]);
+  }, [projectId, router, viewQuery]);
 
   useEffect(() => {
     if (prefsProjectId !== projectId) {
@@ -367,6 +379,10 @@ function ProjectDeliveryPageContent() {
   }
 
   function handleViewChange(view: DeliveryView) {
+    if (view === "board") {
+      router.replace(`/projects/${projectId}/board`);
+      return;
+    }
     setActiveView(view);
     router.replace(getDeliveryHref(projectId, view), { scroll: false });
   }

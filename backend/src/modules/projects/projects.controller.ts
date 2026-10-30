@@ -119,7 +119,6 @@ export class ProjectsController {
   }
 
   @Get(':id/member-candidates')
-  @RequirePermissions(PermissionKey.ProjectTeamManage)
   @ApiOperation({
     summary: 'Search eligible project membership candidates (up to 50)',
   })
@@ -133,7 +132,6 @@ export class ProjectsController {
   }
 
   @Post(':id/members')
-  @RequirePermissions(PermissionKey.ProjectTeamManage)
   @ApiOperation({ summary: 'Add a project member' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiCreatedResponse({ type: ProjectMemberResponseDto })
@@ -168,7 +166,6 @@ export class ProjectsController {
   }
 
   @Patch(':id/members/:memberId')
-  @RequirePermissions(PermissionKey.ProjectTeamManage)
   @ApiOperation({ summary: 'Update a project member role' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiParam({ name: 'memberId', format: 'uuid' })
@@ -191,7 +188,6 @@ export class ProjectsController {
   }
 
   @Delete(':id/members/:memberId')
-  @RequirePermissions(PermissionKey.ProjectTeamManage)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove a project member' })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -605,7 +601,6 @@ export class ProjectsController {
   }
 
   @Patch(':id')
-  @RequirePermissions(PermissionKey.ProjectUpdate)
   @ApiOperation({ summary: 'Update a project' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: Project })

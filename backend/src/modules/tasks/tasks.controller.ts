@@ -24,6 +24,7 @@ import { Request } from 'express';
 import { PermissionsGuard } from '../../common/authz/permissions.guard';
 import { TaskStatus } from '../../common/enums/task-status.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CreateTaskCommentDto } from './dto/create-task-comment.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { MyTasksQueryDto } from './dto/my-tasks-query.dto';
 import { MyTasksSummaryDto } from './dto/my-tasks-summary.dto';
@@ -100,6 +101,16 @@ export class TasksController {
     @Param('id') id: string,
   ): Promise<Task> {
     return this.tasksService.findOne(id, request.user);
+  }
+
+  @Post(':id/comments')
+  @ApiCreatedResponse({ type: TaskExecutionUpdateDto })
+  addComment(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: CreateTaskCommentDto,
+  ): Promise<TaskExecutionUpdateDto> {
+    return this.tasksService.addComment(id, body.body, request.user);
   }
 
   @Get(':id/execution-updates')

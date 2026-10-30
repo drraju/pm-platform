@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Breadcrumb = {
@@ -13,7 +15,16 @@ type WorkspaceContext = {
 };
 
 export function WorkspaceContextBar({ pathname }: { pathname: string }) {
-  const context = getWorkspaceContext(pathname);
+  const [projectName, setProjectName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const read = () => setProjectName(sessionStorage.getItem("pm-project-name"));
+    read();
+    window.addEventListener("pm-project-name", read);
+    return () => window.removeEventListener("pm-project-name", read);
+  }, [pathname]);
+
+  const context = getWorkspaceContext(pathname, projectName);
 
   return (
     <div className="border-b border-slate-200/80 bg-white">
@@ -48,7 +59,7 @@ export function WorkspaceContextBar({ pathname }: { pathname: string }) {
   );
 }
 
-export function getWorkspaceContext(pathname: string): WorkspaceContext {
+export function getWorkspaceContext(pathname: string, projectName?: string | null): WorkspaceContext {
   const segments = pathname.split("/").filter(Boolean);
 
   if (pathname === "/dashboard") {
@@ -70,15 +81,20 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
   }
 
   if (pathname.startsWith("/daily-review")) {
-    return createContext("Daily Review", "Project Manager standup console", [
-      { label: "Daily Review" },
+    return createContext("Today", "Work across projects", [
+      { label: "Today" },
     ]);
   }
 
-  if (pathname.startsWith("/executive")) {
-    return createContext("Dashboard", "Cross-project insight", [
-      { label: "Dashboard" },
-      { label: "Executive overview" },
+  if (pathname.startsWith("/programs") || pathname.startsWith("/executive")) {
+    return createContext("Programs", "Projects grouped for leadership", [
+      { label: "Programs" },
+    ]);
+  }
+
+  if (pathname.startsWith("/start")) {
+    return createContext("Start", "Nothing is open for this account yet", [
+      { label: "Start" },
     ]);
   }
 
@@ -87,18 +103,26 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
     const projectRoot = `/projects/${projectId}`;
     const leaf = segments[2];
 
-    if (leaf === "planning") {
-      return createContext("Planning", "Project plan authoring and analysis", [
+    if (leaf === "plan" || leaf === "planning") {
+      return createContext("Plan", "Schedule for this project", [
         { href: "/projects", label: "Projects" },
-        { href: projectRoot, label: "Project" },
-        { label: "Planning" },
+        { href: projectRoot, label: projectName || "Project" },
+        { label: "Plan" },
+      ]);
+    }
+
+    if (leaf === "board" || leaf === "kanban") {
+      return createContext("Board", "The same work, in four columns", [
+        { href: "/projects", label: "Projects" },
+        { href: projectRoot, label: projectName || "Project" },
+        { label: "Board" },
       ]);
     }
 
     if (leaf === "delivery") {
       return createContext("Delivery", "Task execution workspace", [
         { href: "/projects", label: "Projects" },
-        { href: projectRoot, label: "Project" },
+        { href: projectRoot, label: projectName || "Project" },
         { label: "Delivery" },
       ]);
     }
@@ -106,15 +130,22 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
     if (leaf === "govern" || leaf === "raid") {
       return createContext("Govern", "Risks, issues, and control register", [
         { href: "/projects", label: "Projects" },
-        { href: projectRoot, label: "Project" },
+        { href: projectRoot, label: projectName || "Project" },
         { label: "Govern" },
       ]);
     }
 
-    return createContext("Project", "Single-project command center", [
+    const tabLabel = !leaf || leaf === "overview" ? "Overview" : formatSegment(leaf);
+    return createContext(tabLabel, "Single-project command center", [
       { href: "/projects", label: "Projects" },
-      ...(leaf ? [{ href: projectRoot, label: "Project" }] : []),
-      { label: formatSegment(leaf) || "Overview" },
+      { href: leaf ? projectRoot : undefined, label: projectName || "Project" },
+      { label: tabLabel },
+    ]);
+  }
+
+  if (pathname.startsWith("/customers")) {
+    return createContext("Customers", "Companies you sell to or deliver for", [
+      { label: "Customers" },
     ]);
   }
 
@@ -125,9 +156,8 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
   }
 
   if (pathname.startsWith("/tasks")) {
-    return createContext("Projects", "Personal delivery queue", [
-      { href: "/projects", label: "Projects" },
-      { label: "My Tasks" },
+    return createContext("Today", "Work across projects", [
+      { label: "Today" },
     ]);
   }
 
@@ -139,19 +169,21 @@ export function getWorkspaceContext(pathname: string): WorkspaceContext {
     ]);
   }
 
-  if (pathname.startsWith("/calendar") || pathname.startsWith("/users")) {
-    const leaf = pathname.startsWith("/calendar")
-      ? "Enterprise Calendars"
-      : "User Administration";
-    return createContext("Administration", "Enterprise configuration", [
+  if (pathname.startsWith("/calendar")) {
+    return createContext("Calendars", "Enterprise configuration", [
+      { label: "Calendars" },
+    ]);
+  }
+
+  if (pathname.startsWith("/users")) {
+    return createContext("People", "Invite people and assign roles", [
       { label: "Administration" },
-      { label: leaf },
+      { label: "People" },
     ]);
   }
 
   if (pathname.startsWith("/notifications")) {
-    return createContext("Home", "User attention and updates", [
-      { href: "/dashboard", label: "Home" },
+    return createContext("Notifications", "Assignments, blocked work, and overdue work", [
       { label: "Notifications" },
     ]);
   }

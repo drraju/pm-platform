@@ -7,7 +7,10 @@ import {
   commandExperienceStorageKey,
   createApplicationCommandRegistry,
 } from "@/features/commands";
-import { EntityPresentationCatalog } from "@/features/entity-search";
+import {
+  createApplicationEntityRegistry,
+  EntityPresentationCatalog,
+} from "@/features/entity-search";
 import {
   CommandRegistry,
   type CommandDefinition,
@@ -46,6 +49,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/features/auth", () => ({
   clearSession: vi.fn(),
   getAuthMe: vi.fn(() => new Promise(() => undefined)),
+  getLandingPath: () => "/today",
   getStoredPermissionKeys: () => permissionKeys,
   getStoredRoleNames: () => [],
   hasAnyPermission: (
@@ -105,20 +109,22 @@ describe("CommandPalette", () => {
     await waitFor(() => expect(search).toHaveFocus());
   });
 
-  it("opens with Ctrl+K and Cmd+K and closes with Escape", async () => {
-    renderShell();
-    const trigger = openPaletteButton();
-    trigger.focus();
+  it("does not open a command list from the shell", () => {
+    render(
+      <AppShell>
+        <h1>Workspace</h1>
+      </AppShell>,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /open command palette/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/search commands/i)).not.toBeInTheDocument();
 
     fireEvent.keyDown(document, { ctrlKey: true, key: "k" });
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await waitFor(() => expect(trigger).toHaveFocus());
-
     fireEvent.keyDown(document, { key: "k", metaKey: true });
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("filters commands with the registry token filter and shows an empty state", () => {
@@ -509,10 +515,46 @@ describe("CommandPalette", () => {
 });
 
 function renderShell() {
-  return render(
-    <AppShell>
-      <h1>Command workspace</h1>
-    </AppShell>,
+  return render(<PaletteHarness />);
+}
+
+function PaletteHarness() {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const registry = React.useMemo(
+    () =>
+      createApplicationCommandRegistry({
+        pathname: "/dashboard",
+        permissionKeys,
+      }),
+    [],
+  );
+  const entityPresentationCatalog = React.useMemo(
+    () => new EntityPresentationCatalog(),
+    [],
+  );
+  const entityRegistry = React.useMemo(
+    () =>
+      createApplicationEntityRegistry({
+        pathname: "/dashboard",
+        permissionKeys,
+      }),
+    [],
+  );
+
+  return (
+    <>
+      <button onClick={() => setIsOpen(true)} type="button">
+        Open command palette
+      </button>
+      <CommandPalette
+        entityPresentationCatalog={entityPresentationCatalog}
+        entityRegistry={entityRegistry}
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        onNavigate={(target) => navigationMocks.push(target)}
+        registry={registry}
+      />
+    </>
   );
 }
 

@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ProjectRole } from '../enums/project-role.enum';
 import { ProjectMember } from '../../modules/projects/entities/project-member.entity';
 import { Project } from '../../modules/projects/entities/project.entity';
 import { Task } from '../../modules/tasks/entities/task.entity';
 import { Role } from '../../modules/users/entities/role.entity';
+import { UserRoleAssignment } from '../../modules/users/entities/user-role-assignment.entity';
 import { PermissionKey } from './permissions';
 import { UserRole } from '../enums/user-role.enum';
 import { UserIdentityType } from '../enums/user-identity-type.enum';
@@ -71,6 +72,12 @@ const serviceDeniedProjectMutationPermissions = new Set<string>([
   PermissionKey.TaskDelete,
   PermissionKey.TaskReassign,
   PermissionKey.TaskUpdate,
+  PermissionKey.AuthConfigure,
+  PermissionKey.CustomerManage,
+  PermissionKey.CustomerSuccessView,
+  PermissionKey.ProgramView,
+  PermissionKey.ProjectLead,
+  PermissionKey.WorkUpdate,
 ]);
 
 @Injectable()
@@ -84,6 +91,8 @@ export class AuthorizationPolicyService {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(Role)
     private readonly rolesRepository: Repository<Role>,
+    @InjectRepository(UserRoleAssignment)
+    private readonly userRolesRepository: Repository<UserRoleAssignment>,
   ) {}
 
   async canViewProject(
@@ -99,11 +108,11 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    if ((await this.getActorRoleName(actor)) === UserRole.Customer) {
+    if (await this.isCustomerOnly(actor)) {
       return Boolean(await this.findMembership(projectId, actor.userId));
     }
 
-    if (this.hasGlobalProjectAccess(permissionKeys)) {
+    if (await this.hasCompanyProjectAccess(actor, permissionKeys)) {
       return true;
     }
 
@@ -122,8 +131,25 @@ export class AuthorizationPolicyService {
     projectId: string,
     actor?: AuthorizationActor,
   ): Promise<boolean> {
-    if (!actor) {
+    if (!actor || actor.identityType === UserIdentityType.Service) {
       return false;
+    }
+    if (await this.isExternalActor(actor)) {
+      return false;
+    }
+    if (await this.isExecutiveOnly(actor)) {
+      return false;
+    }
+    if (await this.isPlatformAdministrator(actor)) {
+      return true;
+    }
+    if ((await this.getActorRoleNames(actor)).includes(UserRole.Admin)) {
+      return true;
+    }
+
+    const membership = await this.findMembership(projectId, actor.userId);
+    if (membership && projectManagerMembershipRoles.has(membership.role)) {
+      return true;
     }
 
     const permissionKeys = await this.getPermissionKeys(actor);
@@ -287,8 +313,14 @@ export class AuthorizationPolicyService {
   async isExternalActor(
     actor: AuthorizationActor | undefined,
   ): Promise<boolean> {
-    const roleName = await this.getActorRoleName(actor);
-    return roleName === UserRole.Customer || roleName === UserRole.Partner;
+    const roleNames = await this.getActorRoleNames(actor);
+    return (
+      roleNames.length > 0 &&
+      roleNames.every(
+        (roleName) =>
+          roleName === UserRole.Customer || roleName === UserRole.Partner,
+      )
+    );
   }
 
   async canMutateProjectDomain(
@@ -302,8 +334,14 @@ export class AuthorizationPolicyService {
       return false;
     }
 
-    const roleName = await this.getActorRoleName(actor);
-    return roleName !== UserRole.Executive && roleName !== UserRole.Customer;
+    const roleNames = await this.getActorRoleNames(actor);
+    if (roleNames.length === 0) {
+      return true;
+    }
+    return roleNames.some(
+      (roleName) =>
+        roleName !== UserRole.Executive && roleName !== UserRole.Customer,
+    );
   }
 
   private async canManageProjectWithPermissions(
@@ -367,20 +405,54 @@ export class AuthorizationPolicyService {
     ]);
   }
 
-  private hasGlobalProjectAccess(permissionKeys: Set<string>) {
-    return (
-      permissionKeys.has(PermissionKey.ProjectRead) &&
-      (permissionKeys.has(PermissionKey.PortfolioView) ||
-        permissionKeys.has(PermissionKey.ExecutiveView) ||
-        permissionKeys.has(PermissionKey.UserManage) ||
-        permissionKeys.has(PermissionKey.RoleManage) ||
-        permissionKeys.has(PermissionKey.PermissionManage))
-    );
+  private async hasCompanyProjectAccess(
+    actor: AuthorizationActor,
+    permissionKeys: Set<string>,
+  ) {
+    if (!permissionKeys.has(PermissionKey.ProjectRead)) {
+      return false;
+    }
+    if (
+      permissionKeys.has(PermissionKey.UserManage) ||
+      permissionKeys.has(PermissionKey.RoleManage) ||
+      permissionKeys.has(PermissionKey.PermissionManage)
+    ) {
+      return true;
+    }
+    const roleNames = await this.getActorRoleNames(actor);
+    return roleNames.includes(UserRole.Executive);
   }
 
   async isPlatformAdministrator(actor: AuthorizationActor): Promise<boolean> {
-    const roleName = await this.getActorRoleName(actor);
-    return roleName === UserRole.PlatformAdmin;
+    const roleNames = await this.getActorRoleNames(actor);
+    return roleNames.includes(UserRole.PlatformAdmin);
+  }
+
+  async isCustomerOnly(
+    actor: AuthorizationActor | undefined,
+  ): Promise<boolean> {
+    const roleNames = await this.getActorRoleNames(actor);
+    return (
+      roleNames.length > 0 &&
+      roleNames.every((roleName) => roleName === UserRole.Customer)
+    );
+  }
+
+  async isExecutiveOnly(
+    actor: AuthorizationActor | undefined,
+  ): Promise<boolean> {
+    const roleNames = await this.getActorRoleNames(actor);
+    return (
+      roleNames.length > 0 &&
+      roleNames.every((roleName) => roleName === UserRole.Executive)
+    );
+  }
+
+  async getActorRoleNames(
+    actor: AuthorizationActor | undefined,
+  ): Promise<string[]> {
+    const roles = await this.loadActorRoles(actor);
+    return roles.map((role) => role.name);
   }
 
   async getProjectMembershipRole(
@@ -400,21 +472,54 @@ export class AuthorizationPolicyService {
     );
   }
 
-  private async getPermissionKeys(actor: AuthorizationActor) {
-    const role = await this.rolesRepository.findOne({
+  private async loadActorRoles(
+    actor: AuthorizationActor | undefined,
+  ): Promise<Role[]> {
+    if (!actor) {
+      return [];
+    }
+
+    const assignments = this.userRolesRepository
+      ? await this.userRolesRepository.find({
+          where: { userId: actor.userId },
+        })
+      : [];
+    const assignedRoleIds = [
+      ...new Set(assignments.map((assignment) => assignment.roleId)),
+    ];
+    if (assignedRoleIds.length > 0) {
+      return this.rolesRepository.find({
+        relations: { permissions: true },
+        where: { id: In(assignedRoleIds) },
+      });
+    }
+
+    const primaryRole = await this.rolesRepository.findOne({
       relations: { permissions: true },
       where: { id: actor.roleId },
     });
+    return primaryRole ? [primaryRole] : [];
+  }
 
-    const permissionKeys =
-      role?.permissions?.map((permission) => permission.key) ?? [];
+  private async getPermissionKeys(actor: AuthorizationActor) {
+    const roles = await this.loadActorRoles(actor);
+    const permissionKeys = roles.flatMap(
+      (role) => role.permissions?.map((permission) => permission.key) ?? [],
+    );
+    const roleNames = roles.map((role) => role.name);
     const deniedPermissions = new Set<string>();
     if (actor.identityType === UserIdentityType.Service) {
       for (const permissionKey of serviceDeniedProjectMutationPermissions) {
         deniedPermissions.add(permissionKey);
       }
     }
-    if (role?.name === UserRole.Executive || role?.name === UserRole.Customer) {
+    const exclusivelyRestricted =
+      roleNames.length > 0 &&
+      roleNames.every(
+        (roleName) =>
+          roleName === UserRole.Executive || roleName === UserRole.Customer,
+      );
+    if (exclusivelyRestricted) {
       for (const permissionKey of executiveDeniedLegacyProjectMutationPermissions) {
         deniedPermissions.add(permissionKey);
       }

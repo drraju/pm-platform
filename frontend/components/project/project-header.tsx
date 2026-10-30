@@ -1,8 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import { StatusBadge } from "@/components/foundation";
-import { ProjectHealthBadge } from "@/components/projects/project-health-badge";
+import React, { useEffect, useState } from "react";
 import type { ApiProject } from "@/features/projects";
 import { downloadProjectExcel } from "@/lib/api/client";
 import { ProjectTabs, type ProjectWorkspaceTabId } from "./project-tabs";
@@ -34,6 +32,15 @@ export function ProjectHeader({
 }: ProjectHeaderProps) {
   const [isExporting, setIsExporting] = useState(false);
 
+  useEffect(() => {
+    sessionStorage.setItem("pm-project-name", project.name);
+    window.dispatchEvent(new Event("pm-project-name"));
+    return () => {
+      sessionStorage.removeItem("pm-project-name");
+      window.dispatchEvent(new Event("pm-project-name"));
+    };
+  }, [project.name]);
+
   async function exportProject() {
     setIsExporting(true);
     try {
@@ -50,18 +57,11 @@ export function ProjectHeader({
   }
 
   const metadata = [
-    { label: "Project Manager", value: formatUser(project.owner) },
+    { label: "Lead", value: formatUser(project.owner) },
     { label: "Finish", value: formatDate(project.targetEndDate) },
   ].filter((item) => item.value);
 
-  const status = project.health ? (
-    <ProjectHealthBadge
-      reasons={project.health.reasons}
-      status={project.health.status}
-    />
-  ) : (
-    <StatusBadge tone="neutral">{formatLabel(project.status) ?? "Active"}</StatusBadge>
-  );
+  const status = undefined;
 
   const actions = (
     <button
@@ -140,8 +140,4 @@ function formatDate(value?: string | null) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
-}
-
-function formatLabel(value?: string | null) {
-  return value ? value.replaceAll("_", " ") : null;
 }

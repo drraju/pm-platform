@@ -10,6 +10,8 @@ import { createTypeOrmOptions } from './database/typeorm.config';
 import { AiPlaygroundModule } from './modules/ai-playground/ai-playground.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { ProgramsModule } from './modules/programs/programs.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { HealthModule } from './modules/health/health.module';
@@ -34,6 +36,8 @@ import { ExternalModule } from './modules/external/external.module';
     AuthzModule,
     AuthModule,
     CalendarModule,
+    CustomersModule,
+    ProgramsModule,
     ResourceModule,
     UsersModule,
     ProjectsModule,

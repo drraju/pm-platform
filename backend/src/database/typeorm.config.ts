@@ -1,6 +1,8 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSourceOptions } from 'typeorm';
 import { EnterpriseCalendarException } from '../modules/calendars/entities/enterprise-calendar-exception.entity';
+import { CustomerCommitment } from '../modules/customers/entities/customer-commitment.entity';
+import { Customer } from '../modules/customers/entities/customer.entity';
 import { EnterpriseCalendar } from '../modules/calendars/entities/enterprise-calendar.entity';
 import {
   DocumentCategory,
@@ -18,6 +20,8 @@ import { ResourceWorkloadSnapshot } from '../modules/planning/entities/resource-
 import { ProjectBaselineTask } from '../modules/projects/entities/project-baseline-task.entity';
 import { ProjectBaseline } from '../modules/projects/entities/project-baseline.entity';
 import { ProjectMember } from '../modules/projects/entities/project-member.entity';
+import { Program } from '../modules/programs/entities/program.entity';
+import { ProjectRequest } from '../modules/programs/entities/project-request.entity';
 import { Project } from '../modules/projects/entities/project.entity';
 import { Assumption } from '../modules/raid/entities/assumption.entity';
 import { Dependency } from '../modules/raid/entities/dependency.entity';
@@ -38,12 +42,16 @@ import { Permission } from '../modules/users/entities/permission.entity';
 import { ExternalIdentity } from '../modules/users/entities/external-identity.entity';
 import { RolePermission } from '../modules/users/entities/role-permission.entity';
 import { Role } from '../modules/users/entities/role.entity';
+import { UserRoleAssignment } from '../modules/users/entities/user-role-assignment.entity';
 import { User } from '../modules/users/entities/user.entity';
 
 type EntityConstructor = abstract new (...args: never[]) => unknown;
 
 export const databaseEntities: EntityConstructor[] = [
   User,
+  Customer,
+  CustomerCommitment,
+  UserRoleAssignment,
   ExternalIdentity,
   Role,
   Permission,
@@ -56,6 +64,8 @@ export const databaseEntities: EntityConstructor[] = [
   ResourceAssignment,
   ResourceCapacityPolicy,
   ResourceAvailabilityOverride,
+  Program,
+  ProjectRequest,
   Project,
   ProjectBaseline,
   ProjectBaselineTask,

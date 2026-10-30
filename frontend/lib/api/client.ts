@@ -68,6 +68,7 @@ export type ApiUser = {
   lastLoginAt?: string | null;
   roleId?: string;
   role?: ApiRole | null;
+  roles?: ApiRole[];
 };
 
 export type ApiAssignableUser = {
@@ -114,6 +115,8 @@ export type ApiProject = {
   businessOwner?: ApiUser | null;
   executiveSponsor?: ApiUser | null;
   deliveryLead?: ApiUser | null;
+  customerId?: string | null;
+  customer?: { id: string; name: string } | null;
   members?: ApiProjectMember[];
   tasks?: ApiTask[];
   risks?: ApiRaidItem[];
@@ -165,6 +168,7 @@ export type ApiTask = {
   sequenceNumber?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
+  nextStep?: string | null;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   actualStartDate?: string | null;
@@ -1641,6 +1645,8 @@ export function createProject(input: {
   businessOwnerId?: string;
   executiveSponsorId?: string;
   deliveryLeadId?: string;
+  customerId?: string;
+  leadUserId?: string;
 }) {
   return apiRequest<ApiProject>("/projects", {
     method: "POST",
@@ -1660,6 +1666,8 @@ export function updateProject(
     businessOwnerId?: string;
     executiveSponsorId?: string;
     deliveryLeadId?: string;
+    customerId?: string;
+    leadUserId?: string;
   },
 ) {
   return apiRequest<ApiProjectDetails>(`/projects/${projectId}`, {
@@ -1785,8 +1793,9 @@ export function createUser(input: {
   email: string;
   firstName: string;
   lastName: string;
-  password: string;
+  password?: string;
   roleId: string;
+  roleIds?: string[];
   status?: string;
 }) {
   return apiRequest<ApiUser>("/users", {
@@ -1802,6 +1811,7 @@ export function updateUser(
     firstName: string;
     lastName: string;
     roleId: string;
+    roleIds?: string[];
     status: string;
   }>,
 ) {
@@ -1861,6 +1871,13 @@ export function getMyTasks(
   );
 }
 
+export function addTaskComment(taskId: string, body: string) {
+  return apiRequest<ApiTaskExecutionUpdate>(`/tasks/${taskId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
 export function getTaskExecutionUpdates(taskId: string) {
   return apiRequest<ApiTaskExecutionUpdate[]>(
     `/tasks/${taskId}/execution-updates`,
@@ -1870,6 +1887,7 @@ export function getTaskExecutionUpdates(taskId: string) {
 export function createTask(input: {
   projectId: string;
   title: string;
+  parentTaskId?: string | null;
   description?: string;
   assigneeId?: string;
   status?: ApiTask["status"];
@@ -1900,8 +1918,10 @@ export function updateTask(
     priority?: string;
     remarks?: string;
     percentComplete?: number;
-    startDate?: string;
-    dueDate?: string;
+    startDate?: string | null;
+    dueDate?: string | null;
+    nextStep?: string | null;
+    sequenceNumber?: number;
     plannedStartDate?: string;
     plannedEndDate?: string;
     actualStartDate?: string;

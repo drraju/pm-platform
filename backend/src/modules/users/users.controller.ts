@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -62,17 +63,29 @@ export class UsersController {
     @Req() request: AuthenticatedRequest,
     @Body() createUserDto: CreateUserDto,
   ): Promise<UserResponseDto> {
-    const passwordHash = await this.passwordUpdateService.hashTemporaryPassword(
-      createUserDto.password,
-    );
+    const roleIds = createUserDto.roleIds?.length
+      ? createUserDto.roleIds
+      : createUserDto.roleId
+        ? [createUserDto.roleId]
+        : [];
+    if (roleIds.length === 0) {
+      throw new BadRequestException('At least one role is required');
+    }
+    const passwordHash = createUserDto.password
+      ? await this.passwordUpdateService.hashTemporaryPassword(
+          createUserDto.password,
+        )
+      : null;
     return this.usersService.create(
       {
         email: createUserDto.email,
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
         passwordHash,
-        roleId: createUserDto.roleId,
-        status: 'first_login_pending',
+        roleId: roleIds[0],
+        roleIds,
+        localOnly: Boolean(passwordHash),
+        status: passwordHash ? 'first_login_pending' : 'active',
       },
       request.user,
     );

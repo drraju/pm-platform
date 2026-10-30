@@ -9,6 +9,7 @@ describe('sanitizeResponse', () => {
       projects: [
         {
           id: 'project-1',
+          slackWebhookUrl: 'https://hooks.slack.com/services/secret',
           owner: { id: 'owner-1', passwordHash: 'owner-hash' },
           members: [
             {
@@ -51,5 +52,6 @@ describe('sanitizeResponse', () => {
 
     expect(JSON.stringify(response)).not.toContain('passwordHash');
     expect(JSON.stringify(response)).not.toContain('hash');
+    expect(JSON.stringify(response)).not.toContain('hooks.slack.com');
   });
 });

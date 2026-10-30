@@ -5,6 +5,7 @@ import { PasswordUpdateService } from '../auth/password-update.service';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { RolePermission } from './entities/role-permission.entity';
+import { UserRoleAssignment } from './entities/user-role-assignment.entity';
 import { User } from './entities/user.entity';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -19,6 +20,7 @@ import { GoogleIdentityLinkingService } from './google-identity-linking.service'
   imports: [
     TypeOrmModule.forFeature([
       User,
+      UserRoleAssignment,
       ExternalIdentity,
       Role,
       Permission,

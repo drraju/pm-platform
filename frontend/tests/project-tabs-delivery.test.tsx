@@ -34,7 +34,7 @@ describe("ProjectTabs Delivery consolidation", () => {
     });
   });
 
-  it("exposes Delivery and Govern instead of Execution/Tasks/Today/RAID", () => {
+  it("keeps Overview and Team and hides later project rooms", () => {
     storage.set(
       "pm_platform_permissions",
       JSON.stringify([
@@ -52,15 +52,26 @@ describe("ProjectTabs Delivery consolidation", () => {
 
     render(<ProjectTabs activeTab="delivery" projectId="project-123" />);
 
-    expect(screen.getByRole("link", { name: "Delivery" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
       "href",
-      "/projects/project-123/delivery",
+      "/projects/project-123",
     );
-    expect(screen.getByRole("link", { name: "Govern" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Team" })).toHaveAttribute(
       "href",
-      "/projects/project-123/govern",
+      "/projects/project-123/team",
     );
-    expect(screen.getByRole("link", { name: "Planning" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Plan" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/plan",
+    );
+    expect(screen.getByRole("link", { name: "Board" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/board",
+    );
+    expect(screen.queryByRole("link", { name: "Planning" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Delivery" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Documents" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^today$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Execution" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tasks" })).not.toBeInTheDocument();
@@ -77,9 +88,10 @@ describe("ProjectTabs Delivery consolidation", () => {
     render(<ProjectTabs activeTab="overview" projectId="project-123" />);
 
     expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Delivery" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Documents" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Delivery" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Documents" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Team" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Plan" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Planning" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
   });

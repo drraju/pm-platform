@@ -1,13 +1,15 @@
 import React from "react";
 import Link from "next/link";
-import { hasAnyPermission, resolveProjectUiCapabilities } from "@/features/auth";
+import { hasAnyPermission } from "@/features/auth";
 import {
   appNavigation,
   isNavigationItemActive,
   type AppNavigationItem,
 } from "./app-navigation";
+import { NavIcon } from "./nav-icon";
 
 type AppSidebarProps = {
+  homeHref?: string;
   isCollapsed?: boolean;
   isMobile?: boolean;
   onClose?: () => void;
@@ -18,27 +20,17 @@ type AppSidebarProps = {
 };
 
 export function AppSidebar({
+  homeHref = "/start",
   isCollapsed = false,
   isMobile = false,
   onClose,
   onToggle,
   pathname,
   permissionKeys,
-  roleNames = [],
 }: AppSidebarProps) {
-  const navigationCapabilities = resolveProjectUiCapabilities({
-    permissionKeys,
-    roleNames,
-  });
-  const visibleNavigation = appNavigation.filter((item) => {
-    if (item.id === "today") {
-      return navigationCapabilities.canAccessToday;
-    }
-    if (item.id === "daily-review") {
-      return navigationCapabilities.canAccessDailyReview;
-    }
-    return hasAnyPermission(permissionKeys, item.permissions);
-  });
+  const visibleNavigation = appNavigation.filter((item) =>
+    hasAnyPermission(permissionKeys, item.permissions),
+  );
 
   return (
     <aside
@@ -49,7 +41,7 @@ export function AppSidebar({
         <Link
           aria-label="PM Platform Home"
           className={`block min-w-0 ${isCollapsed ? "text-center" : ""}`}
-          href="/dashboard"
+          href={homeHref}
           onClick={onClose}
         >
           <span className="text-sm font-semibold tracking-tight text-brand">
@@ -126,28 +118,13 @@ function NavigationItem({
   item: AppNavigationItem;
   onNavigate?: () => void;
 }) {
-  const className = `flex min-h-9 items-center rounded-md px-3 py-1.5 text-sm font-medium transition ${
-    isCollapsed ? "justify-center" : "justify-between gap-3"
+  const className = `flex min-h-9 items-center gap-2.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+    isCollapsed ? "justify-center px-0" : ""
   } ${
     isActive
       ? "bg-brand/10 text-brand ring-1 ring-inset ring-brand/15"
-      : item.href
-        ? "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
-        : "cursor-not-allowed text-slate-400"
+      : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
   }`;
-
-  if (!item.href) {
-    return (
-      <span
-        aria-disabled="true"
-        className={className}
-        title={item.unavailableHint}
-      >
-        <span>{isCollapsed ? item.label.slice(0, 1) : item.label}</span>
-        {!isCollapsed ? <span className="sr-only">Contextual workspace</span> : null}
-      </span>
-    );
-  }
 
   return (
     <Link
@@ -157,10 +134,8 @@ function NavigationItem({
       onClick={onNavigate}
       title={isCollapsed ? item.label : undefined}
     >
-      <span>{isCollapsed ? item.label.slice(0, 1) : item.label}</span>
-      {!isCollapsed && isActive ? (
-        <span aria-hidden="true" className="h-5 w-0.5 rounded-full bg-brand" />
-      ) : null}
+      <NavIcon id={item.id} />
+      <span className={isCollapsed ? "sr-only" : "truncate"}>{item.label}</span>
     </Link>
   );
 }

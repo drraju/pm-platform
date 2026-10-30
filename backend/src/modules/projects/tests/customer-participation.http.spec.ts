@@ -15,6 +15,7 @@ import { PermissionKey } from '../../../common/authz/permissions';
 import { PermissionsGuard } from '../../../common/authz/permissions.guard';
 import { ProjectRole } from '../../../common/enums/project-role.enum';
 import { UserRole } from '../../../common/enums/user-role.enum';
+import { UserRoleAssignment } from '../../users/entities/user-role-assignment.entity';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ProjectHealthService } from '../../health/project-health.service';
 import { SchedulingFoundationService } from '../../../common/scheduling/scheduling-foundation.service';
@@ -204,6 +205,7 @@ describe('CUSTOMER participation HTTP boundaries', () => {
       membersRepo,
       tasksRepo,
       rolesRepo,
+      { find: async () => [] } as unknown as Repository<UserRoleAssignment>,
     );
     const resolver = new CanonicalCapabilityResolverService(policy);
     const visibility = new ProjectVisibilityService(

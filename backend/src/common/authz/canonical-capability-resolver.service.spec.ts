@@ -10,6 +10,7 @@ import {
   classifyTaskAssignment,
 } from './canonical-capability-resolver.service';
 import { PermissionKey } from './permissions';
+import { UserRole } from '../enums/user-role.enum';
 
 type MockAuthorizationPolicy = {
   canManageProject: jest.Mock;
@@ -19,6 +20,8 @@ type MockAuthorizationPolicy = {
   getProjectMembershipRole: jest.Mock;
   hasPermission: jest.Mock;
   isExternalActor: jest.Mock;
+  isCustomerOnly: jest.Mock;
+  isExecutiveOnly: jest.Mock;
   isPlatformAdministrator: jest.Mock;
 };
 
@@ -53,6 +56,14 @@ describe('CanonicalCapabilityResolverService', () => {
       ),
       hasPermission: jest.fn().mockResolvedValue(true),
       isExternalActor: jest.fn().mockResolvedValue(false),
+      isCustomerOnly: jest.fn(
+        async (resolvedActor: AuthorizationActor) =>
+          resolvedActor.roleId.replace(/^role-/, '') === UserRole.Customer,
+      ),
+      isExecutiveOnly: jest.fn(
+        async (resolvedActor: AuthorizationActor) =>
+          resolvedActor.roleId.replace(/^role-/, '') === UserRole.Executive,
+      ),
       isPlatformAdministrator: jest.fn(
         async (resolvedActor: AuthorizationActor) =>
           resolvedActor.roleId === 'role-PLATFORM_ADMIN',
@@ -551,7 +562,7 @@ describe('CanonicalCapabilityResolverService', () => {
       service.resolve({
         actor,
         capability: 'task.edit_execution',
-        changedFields: ['nextStep'],
+        changedFields: ['title'],
         resource: taskResource({ assigneeId: actor.userId }),
       }),
     ).resolves.toEqual(deniedDecision('FIELD_RESTRICTED'));

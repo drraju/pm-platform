@@ -66,33 +66,8 @@ export function resolveProjectUiCapabilities({
   roleNames = authMe?.roles.map((role) => role.name) ?? [],
   task = null,
 }: CapabilityInput): ProjectUiCapabilities {
-  if (roleNames.some((role) => normalizeRoleName(role) === "CUSTOMER")) {
-    return {
-      canAccessDailyReview: false,
-      canAccessDelivery: false,
-      canAccessGovern: false,
-      canAccessPlanning: false,
-      canAccessToday: false,
-      canApproveDocuments: false,
-      canContributeDocuments: false,
-      canEditDocument: false,
-      canEditExecution: false,
-      canEditPlanning: false,
-      canExecuteAssignedTask: false,
-      canManageDocuments: false,
-      canManageProjectTasks: false,
-      canManageTeam: false,
-      canReassignTask: false,
-      canUpdateTask: false,
-      canUploadDocuments: false,
-    };
-  }
   const canReadProject = hasPermission(permissionKeys, "project.read");
   const canUpdateProject = hasPermission(permissionKeys, "project.update");
-  const canManageTeamPermission = hasPermission(
-    permissionKeys,
-    "project.team.manage",
-  );
   const canUpdateTasks = hasAnyPermission(permissionKeys, [
     "task.update",
     "task.comment",
@@ -117,7 +92,8 @@ export function resolveProjectUiCapabilities({
   const canUpdateTask = canManageProjectTasks || canUpdateOwnTask;
   const canExecuteWork =
     canReadProject && hasPermission(permissionKeys, "task.update");
-  const canAccessToday = canExecuteWork;
+  const canAccessToday =
+    hasPermission(permissionKeys, "work.update") || canExecuteWork;
   const canAccessDailyReview = hasStandupLeadershipRole && canExecuteWork;
   const canAccessDelivery = canExecuteWork;
   // Nav uses permission keys so tabs work before project membership hydrates.
@@ -153,7 +129,10 @@ export function resolveProjectUiCapabilities({
     canExecuteAssignedTask: canUpdateOwnTask || canManageProjectTasks,
     canManageDocuments: canManageProject,
     canManageProjectTasks,
-    canManageTeam: canManageTeamPermission && canManageProject,
+    canManageTeam:
+      roleNames.some((roleName) =>
+        ["ADMIN", "PLATFORM_ADMIN"].includes(normalizeRoleName(roleName)),
+      ) || hasProjectExecutionAuthority,
     canReassignTask:
       (canManageProjectTasks || canUpdateOwnTask) && canReassignTasks,
     canUpdateTask,
@@ -210,7 +189,7 @@ export function resolveTaskUiCapabilities({
   const mutable =
     Boolean(currentUserId) &&
     identityType !== "SERVICE" &&
-    !roles.some((role) => role === "CUSTOMER" || role === "EXECUTIVE") &&
+    !roles.some((role) => role === "EXECUTIVE") &&
     project.status !== "archived" &&
     !task?.deletedAt;
   const membership = members.find((member) => member.userId === currentUserId);

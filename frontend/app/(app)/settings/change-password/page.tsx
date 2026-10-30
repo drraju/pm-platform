@@ -97,7 +97,7 @@ export default function ChangePasswordPage() {
   }
 
   function handleCancel() {
-    router.push("/dashboard");
+    router.push("/start");
   }
 
   return (

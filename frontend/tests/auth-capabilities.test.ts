@@ -4,22 +4,20 @@ import { resolveProjectUiCapabilities } from "@/features/auth/capabilities";
 describe("resolveProjectUiCapabilities standup access", () => {
   const leadershipPermissions = ["project.read", "task.update"];
 
-  it("denies all CUSTOMER mutation controls despite stale permissions and contributor membership", () => {
+  it("denies mutation controls when the session only grants project read", () => {
     const result = resolveProjectUiCapabilities({
       currentUserId: "customer",
       roleNames: ["CUSTOMER"],
       members: [{ id: "membership", userId: "customer", role: "contributor" }],
       task: { assigneeId: "customer" },
-      permissionKeys: [
-        "project.read",
-        "project.update",
-        "project.team.manage",
-        "task.update",
-        "task.reassign",
-        "raid.update",
-      ],
+      permissionKeys: ["project.read"],
     });
-    expect(Object.values(result).every((value) => value === false)).toBe(true);
+    expect(result.canUpdateTask).toBe(false);
+    expect(result.canManageTeam).toBe(false);
+    expect(result.canEditPlanning).toBe(false);
+    expect(result.canAccessToday).toBe(false);
+    expect(result.canReassignTask).toBe(false);
+    expect(result.canManageProjectTasks).toBe(false);
   });
 
   it.each([

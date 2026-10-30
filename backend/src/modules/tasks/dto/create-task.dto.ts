@@ -97,6 +97,11 @@ export class CreateTaskDto {
   @IsDateString()
   dueDate?: string | null;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  nextStep?: string | null;
+
   @ApiProperty({ format: 'date', required: false })
   @IsOptional()
   @IsDateString()

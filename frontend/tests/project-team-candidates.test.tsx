@@ -120,8 +120,10 @@ describe("Project membership candidates", () => {
       target: { value: "internal" },
     });
     expect(
-      within(screen.getByLabelText("Role in project")).getAllByRole("option"),
-    ).toHaveLength(4);
+      within(screen.getByLabelText("Role in project"))
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Lead", "Contributor", "Viewer"]);
   });
   it("reports candidate search failures without enabling an invalid selection", async () => {
     mocks.candidates.mockRejectedValue(new Error("Search failed"));

@@ -54,6 +54,13 @@ export const PermissionKey = {
   TaskReassign: 'task.reassign',
   TaskComment: 'task.comment',
   UserManage: 'user.manage',
+  CustomerRead: 'customer.read',
+  CustomerManage: 'customer.manage',
+  CustomerSuccessView: 'customer_success.view',
+  ProgramView: 'program.view',
+  AuthConfigure: 'auth.configure',
+  WorkUpdate: 'work.update',
+  ProjectLead: 'project.lead',
 } as const;
 
 export type PermissionKey = (typeof PermissionKey)[keyof typeof PermissionKey];

@@ -23,4 +23,9 @@ export {
   type ProjectUiCapabilities,
 } from "./capabilities";
 export { hasAnyPermission, hasPermission } from "./permissions";
-export { getDefaultDashboardPath } from "./default-dashboard";
+export {
+  getDefaultDashboardPath,
+  getLandingPath,
+  holdingExplanation,
+  isExternalContact,
+} from "./default-dashboard";

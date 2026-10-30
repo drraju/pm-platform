@@ -26,6 +26,15 @@ export class CreateProjectDto {
   @IsDateString()
   targetEndDate?: string | null;
 
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  customerId: string;
+
+  @ApiProperty({ format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
+  leadUserId?: string | null;
+
   @ApiProperty({ format: 'uuid', required: false })
   @IsOptional()
   @IsUUID()

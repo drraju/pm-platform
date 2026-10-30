@@ -36,6 +36,8 @@ services:
     build: ./backend
     environment:
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      # Local compose only. Production must not copy this opt-in.
+      PM_ALLOW_INSECURE_BOOTSTRAP: ${PM_ALLOW_INSECURE_BOOTSTRAP:-true}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-pm_platform}

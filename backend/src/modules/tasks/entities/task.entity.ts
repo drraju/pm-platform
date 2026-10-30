@@ -55,6 +55,12 @@ export class Task extends AuditableEntity {
   @Column({ name: 'due_date', type: 'date', nullable: true })
   dueDate?: string | null;
 
+  @Column({ name: 'overdue_alerted_on', type: 'date', nullable: true })
+  overdueAlertedOn?: string | null;
+
+  @Column({ name: 'next_step', type: 'text', nullable: true })
+  nextStep?: string | null;
+
   @Column({ name: 'planned_start_date', type: 'date', nullable: true })
   plannedStartDate?: string | null;
 

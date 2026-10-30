@@ -16,6 +16,12 @@ export class Notification extends AuditableEntity {
   @Column({ default: 'info' })
   type: string;
 
+  @Column({ name: 'task_id', type: 'uuid', nullable: true })
+  taskId?: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  reason?: string | null;
+
   @Column({ name: 'read_at', type: 'timestamptz', nullable: true })
   readAt?: Date | null;
 

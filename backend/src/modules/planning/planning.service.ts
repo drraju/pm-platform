@@ -1215,16 +1215,6 @@ export class PlanningService {
       );
     }
 
-    if (task.parentTaskId) {
-      const parentTask = await this.findProjectTask(
-        projectId,
-        task.parentTaskId,
-      );
-      if (parentTask.taskKind === TaskKind.Standard) {
-        throw new BadRequestException('Subtasks cannot contain child tasks');
-      }
-    }
-
     if (childTaskId) {
       await this.ensureTaskHasNoChildren(projectId, childTaskId);
     }

@@ -29,15 +29,14 @@ vi.mock("@/features/auth", () => ({
     const permissionKeys = authMe.permissions.map(
       (permission) => permission.key,
     );
-    if (permissionKeys.includes("executive.view")) {
-      return "/executive";
+    if (
+      permissionKeys.includes("work.update") ||
+      permissionKeys.includes("task.update")
+    ) {
+      return "/today";
     }
 
-    if (permissionKeys.includes("portfolio.view")) {
-      return "/portfolio";
-    }
-
-    return "/dashboard";
+    return "/start";
   },
   login: authMocks.login,
   startGoogleOidcLogin: authMocks.startGoogleOidcLogin,
@@ -141,7 +140,7 @@ describe("Login page", () => {
     expect(authMocks.startGoogleOidcLogin).not.toHaveBeenCalled();
   });
 
-  it("routes executive users to the executive dashboard after login", async () => {
+  it("routes an executive with no delivery work to the holding page", async () => {
     authMocks.getAuthMe.mockResolvedValue({
       permissions: [{ id: "permission-executive", key: "executive.view" }],
       roles: [{ id: "role-executive", name: "EXECUTIVE", permissions: [] }],
@@ -166,11 +165,11 @@ describe("Login page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
 
     await waitFor(() => {
-      expect(routerPush).toHaveBeenCalledWith("/executive");
+      expect(routerPush).toHaveBeenCalledWith("/start");
     });
   });
 
-  it("routes portfolio managers to the portfolio dashboard after login", async () => {
+  it("routes a portfolio manager with no delivery work to the holding page", async () => {
     authMocks.getAuthMe.mockResolvedValue({
       permissions: [{ id: "permission-portfolio", key: "portfolio.view" }],
       roles: [
@@ -201,7 +200,7 @@ describe("Login page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
 
     await waitFor(() => {
-      expect(routerPush).toHaveBeenCalledWith("/portfolio");
+      expect(routerPush).toHaveBeenCalledWith("/start");
     });
   });
 

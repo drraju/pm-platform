@@ -66,6 +66,7 @@ describe('TasksService', () => {
   let projectMembersRepository: MockRepository<ProjectMember>;
   let authorizationPolicyService: {
     getActorRoleName: jest.Mock;
+    isCustomerOnly: jest.Mock;
     canManageProject: jest.Mock;
     canManageTask: jest.Mock;
     canMutateProjectDomain: jest.Mock;
@@ -138,6 +139,7 @@ describe('TasksService', () => {
     };
     authorizationPolicyService = {
       getActorRoleName: jest.fn().mockResolvedValue(UserRole.ProjectManager),
+      isCustomerOnly: jest.fn().mockResolvedValue(false),
       canManageProject: jest.fn().mockResolvedValue(true),
       canManageTask: jest.fn().mockResolvedValue(true),
       canMutateProjectDomain: jest.fn().mockResolvedValue(true),
@@ -218,6 +220,7 @@ describe('TasksService', () => {
     authorizationPolicyService.getActorRoleName.mockResolvedValue(
       UserRole.Customer,
     );
+    authorizationPolicyService.isCustomerOnly.mockResolvedValue(true);
     authorizationPolicyService.isExternalActor.mockResolvedValue(true);
     const ownTask = {
       id: taskId,
@@ -721,32 +724,32 @@ describe('TasksService', () => {
     );
   });
 
-  it('rejects child task creation under a subtask', async () => {
-    tasksRepository.findOne
-      ?.mockResolvedValueOnce({
-        id: 'subtask-id',
-        parentTaskId: 'parent-task-id',
-        projectId,
-        taskKind: TaskKind.Standard,
-      })
-      .mockResolvedValueOnce({
-        id: 'parent-task-id',
-        parentTaskId: null,
-        projectId,
-        taskKind: TaskKind.Standard,
-      });
+  it('creates a subtask under a task that already has a parent', async () => {
+    tasksRepository.findOne?.mockResolvedValueOnce({
+      id: 'subtask-id',
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+    });
 
-    await expect(
-      service.create(
-        {
-          parentTaskId: 'subtask-id',
-          projectId,
-          taskKind: TaskKind.Standard,
-          title: 'Nested child',
-        },
-        managerActor,
-      ),
-    ).rejects.toThrow('Subtasks cannot contain child tasks');
+    await service.create(
+      {
+        parentTaskId: 'subtask-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Nested child',
+      },
+      managerActor,
+    );
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: 'subtask-id',
+        projectId,
+        taskKind: TaskKind.Standard,
+        title: 'Nested child',
+      }),
+    );
   });
 
   it('rejects milestone creation when planned dates are explicitly conflicting', async () => {

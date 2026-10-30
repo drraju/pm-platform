@@ -28,6 +28,7 @@ import { Task } from '../../tasks/entities/task.entity';
 import { Role } from '../../users/entities/role.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectMember } from '../entities/project-member.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 import { Project } from '../entities/project.entity';
 import { ProjectVisibilityService } from '../project-visibility.service';
 import { ProjectsService } from '../projects.service';
@@ -62,6 +63,7 @@ describe('ProjectsService', () => {
   let authorizationPolicyService: {
     canDeleteProject: jest.Mock;
     getActorRoleName: jest.Mock;
+    isCustomerOnly: jest.Mock;
     canManageProject: jest.Mock;
     canManageTask: jest.Mock;
     canMutateProjectDomain: jest.Mock;
@@ -195,6 +197,7 @@ describe('ProjectsService', () => {
     };
     authorizationPolicyService = {
       getActorRoleName: jest.fn().mockResolvedValue(UserRole.ProjectManager),
+      isCustomerOnly: jest.fn().mockResolvedValue(false),
       canDeleteProject: jest.fn().mockResolvedValue(true),
       canManageProject: jest.fn().mockResolvedValue(true),
       canManageTask: jest.fn().mockResolvedValue(true),
@@ -264,6 +267,12 @@ describe('ProjectsService', () => {
           useValue: usersRepository,
         },
         {
+          provide: getRepositoryToken(Customer),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue({ id: 'customer-1' }),
+          },
+        },
+        {
           provide: getRepositoryToken(Role),
           useValue: rolesRepository,
         },
@@ -298,6 +307,7 @@ describe('ProjectsService', () => {
     authorizationPolicyService.getActorRoleName.mockResolvedValue(
       UserRole.Customer,
     );
+    authorizationPolicyService.isCustomerOnly.mockResolvedValue(true);
     projectVisibilityService.getVisibleProjects.mockResolvedValue([
       { id: projectId, status: 'active' },
     ]);
@@ -310,6 +320,7 @@ describe('ProjectsService', () => {
     authorizationPolicyService.getActorRoleName.mockResolvedValue(
       UserRole.Customer,
     );
+    authorizationPolicyService.isCustomerOnly.mockResolvedValue(true);
     authorizationPolicyService.isExternalActor.mockResolvedValue(true);
     expect(
       await service.findProjectTasks(
@@ -323,7 +334,7 @@ describe('ProjectsService', () => {
 
   it('authorizes candidate discovery before touching the user directory', async () => {
     usersRepository.createQueryBuilder = jest.fn();
-    authorizationPolicyService.hasPermission.mockResolvedValue(false);
+    authorizationPolicyService.canManageProject.mockResolvedValue(false);
     await expect(
       service.findMemberCandidates(projectId, {}, actor),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -369,9 +380,10 @@ describe('ProjectsService', () => {
       { search: 'Client' },
       actor,
     );
-    expect(query.where).toHaveBeenCalledWith('candidate.status = :status', {
-      status: 'active',
-    });
+    expect(query.where).toHaveBeenCalledWith(
+      'candidate.status IN (:...statuses)',
+      { statuses: ['active', 'first_login_pending'] },
+    );
     expect(query.andWhere).toHaveBeenCalledWith(
       expect.stringContaining('membership.deleted_at IS NULL'),
       { projectId },
@@ -402,6 +414,7 @@ describe('ProjectsService', () => {
         description: 'Finance platform delivery',
         status: 'active',
         targetEndDate: '2026-09-30',
+        customerId: 'customer-1',
       },
       actor,
     );
@@ -409,6 +422,7 @@ describe('ProjectsService', () => {
     expect(projectsRepository.create).toHaveBeenCalledWith({
       name: 'ERP Modernization',
       description: 'Finance platform delivery',
+      customerId: 'customer-1',
       ownerId: userId,
       status: 'active',
       targetEndDate: '2026-09-30',
@@ -464,12 +478,14 @@ describe('ProjectsService', () => {
       {
         name: 'ERP Modernization',
         ownerId: 'different-user-id',
+        customerId: 'customer-1',
       },
       actor,
     );
 
     expect(projectsRepository.create).toHaveBeenCalledWith({
       name: 'ERP Modernization',
+      customerId: 'customer-1',
       ownerId: userId,
     });
   });
@@ -517,6 +533,7 @@ describe('ProjectsService', () => {
       service.create(
         {
           name: 'ERP Modernization',
+          customerId: 'customer-1',
         },
         actor,
       ),
@@ -639,6 +656,7 @@ describe('ProjectsService', () => {
       relations: {
         assumptions: { owner: true },
         businessOwner: true,
+        customer: true,
         dependencies: { owner: true },
         deliveryLead: true,
         executiveSponsor: true,
@@ -662,17 +680,42 @@ describe('ProjectsService', () => {
         assumptions: [{ id: 'assumption-1', title: 'Internal assumption' }],
         businessOwner: { email: 'business-owner@example.com', id: 'owner-1' },
         createdAt: new Date('2026-01-01T00:00:00Z'),
+        customer: {
+          commercialNote: 'secret commercial',
+          id: 'customer-1',
+          name: 'Northwind',
+          successNote: 'secret success',
+        },
         dependencies: [],
         description: 'Approved project description',
         id: projectId,
         issues: [{ id: 'issue-1', title: 'Internal issue' }],
-        members: [{ id: 'member-1', userId: userId }],
+        members: [
+          {
+            id: 'member-1',
+            role: ProjectRole.Viewer,
+            userId,
+            user: {
+              email: 'staff@example.com',
+              firstName: 'Staff',
+              id: userId,
+              lastName: 'Member',
+            },
+          },
+        ],
         name: 'ERP Modernization',
         risks: [{ id: 'risk-1', title: 'Internal risk' }],
         startDate: '2026-01-01',
         status: 'active',
         targetEndDate: '2026-12-31',
-        tasks: [{ id: taskId, projectId, title: 'Internal task detail' }],
+        tasks: [
+          {
+            id: taskId,
+            projectId,
+            remarks: 'Internal remarks',
+            title: 'Customer action',
+          },
+        ],
         updatedAt: new Date('2026-02-01T00:00:00Z'),
       });
 
@@ -681,27 +724,39 @@ describe('ProjectsService', () => {
         userId: externalUserId,
       });
 
-      expect(result.health.status).toEqual(expect.any(String));
-      expect(result).toEqual({
-        createdAt: new Date('2026-01-01T00:00:00Z'),
-        description: 'Approved project description',
-        health: {
-          reasons: [],
-          status: result.health.status,
-        },
-        id: projectId,
-        name: 'ERP Modernization',
-        startDate: '2026-01-01',
-        status: 'active',
-        targetEndDate: '2026-12-31',
-        updatedAt: new Date('2026-02-01T00:00:00Z'),
-      });
-      expect(result).not.toHaveProperty('members');
+      expect(result.health.reasons).toEqual([]);
+      expect(result.customer).toEqual({ id: 'customer-1', name: 'Northwind' });
+      expect(result.tasks).toEqual([
+        expect.objectContaining({ id: taskId, title: 'Customer action' }),
+      ]);
+      expect(result.tasks?.[0]).not.toHaveProperty('remarks');
+      expect(result.members?.[0]?.user).not.toHaveProperty('email');
+      expect(JSON.stringify(result)).not.toContain('secret commercial');
+      expect(JSON.stringify(result)).not.toContain('secret success');
+      expect(JSON.stringify(result)).not.toContain('Internal risk');
+      expect(JSON.stringify(result)).not.toContain('Internal issue');
+      expect(JSON.stringify(result)).not.toContain('Internal assumption');
+      expect(JSON.stringify(result)).not.toContain('staff@example.com');
       expect(result).not.toHaveProperty('risks');
-      expect(result).not.toHaveProperty('tasks');
+      expect(result).not.toHaveProperty('issues');
+      expect(result).not.toHaveProperty('assumptions');
       expect(result).not.toHaveProperty('businessOwner');
     },
   );
+
+  it('answers a contact with the missing-project response when they are not on it', async () => {
+    authorizationPolicyService.isExternalActor.mockResolvedValue(true);
+    projectVisibilityService.canViewProject.mockResolvedValue(false);
+
+    await expect(
+      service.findOne(projectId, { roleId: 'customer-role', userId: 'customer-1' }),
+    ).rejects.toThrow(new NotFoundException(`Project ${projectId} not found`));
+
+    authorizationPolicyService.isExternalActor.mockResolvedValue(false);
+    await expect(service.findOne(projectId, actor)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
 
   it('throws when project details are missing', async () => {
     projectsRepository.findOne?.mockResolvedValue(null);
@@ -736,6 +791,7 @@ describe('ProjectsService', () => {
       relations: {
         assumptions: { owner: true },
         businessOwner: true,
+        customer: true,
         dependencies: { owner: true },
         deliveryLead: true,
         executiveSponsor: true,
@@ -1278,7 +1334,7 @@ describe('ProjectsService', () => {
     });
   });
 
-  it('limits external project member reads to the caller membership', async () => {
+  it('shows a contact the team names and only the lead email', async () => {
     authorizationPolicyService.isExternalActor.mockResolvedValue(true);
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
     projectMembersRepository.find?.mockResolvedValue([
@@ -1287,14 +1343,39 @@ describe('ProjectsService', () => {
         projectId,
         role: ProjectRole.Viewer,
         userId: 'customer-1',
-        user: { id: 'customer-1', role: { name: UserRole.Customer } },
+        user: {
+          email: 'contact@example.com',
+          firstName: 'Casey',
+          id: 'customer-1',
+          lastName: 'Ng',
+          role: { name: UserRole.Customer },
+        },
       },
       {
-        id: 'internal-member',
+        id: 'lead-member',
         projectId,
         role: ProjectRole.Manager,
-        userId: userId,
-        user: { id: userId, role: { name: UserRole.ProjectManager } },
+        userId,
+        user: {
+          email: 'lead@example.com',
+          firstName: 'Lead',
+          id: userId,
+          lastName: 'One',
+          role: { name: UserRole.ProjectManager },
+        },
+      },
+      {
+        id: 'staff-member',
+        projectId,
+        role: ProjectRole.Contributor,
+        userId: 'staff-1',
+        user: {
+          email: 'staff@example.com',
+          firstName: 'Staff',
+          id: 'staff-1',
+          lastName: 'Two',
+          role: { name: UserRole.TeamMember },
+        },
       },
     ]);
 
@@ -1303,10 +1384,15 @@ describe('ProjectsService', () => {
       userId: 'customer-1',
     });
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual(
-      expect.objectContaining({ id: 'customer-member', userId: 'customer-1' }),
-    );
+    expect(result.map((member) => member.user?.firstName)).toEqual([
+      'Casey',
+      'Lead',
+      'Staff',
+    ]);
+    expect(result[0]?.user).toMatchObject({ email: 'contact@example.com' });
+    expect(result[1]?.user).toMatchObject({ email: 'lead@example.com' });
+    expect(result[2]?.user).not.toHaveProperty('email');
+    expect(JSON.stringify(result[2])).not.toContain('staff@example.com');
   });
 
   it('updates a project member role', async () => {
@@ -1696,33 +1782,33 @@ describe('ProjectsService', () => {
     );
   });
 
-  it('rejects child project task creation under a subtask', async () => {
+  it('creates a project subtask under a task that already has a parent', async () => {
     projectsRepository.findOne?.mockResolvedValue({ id: projectId });
-    tasksRepository.findOne
-      ?.mockResolvedValueOnce({
-        id: 'subtask-id',
-        parentTaskId: 'parent-task-id',
-        projectId,
-        taskKind: TaskKind.Standard,
-      })
-      .mockResolvedValueOnce({
-        id: 'parent-task-id',
-        parentTaskId: null,
-        projectId,
-        taskKind: TaskKind.Standard,
-      });
+    tasksRepository.findOne?.mockResolvedValueOnce({
+      id: 'subtask-id',
+      parentTaskId: 'parent-task-id',
+      projectId,
+      taskKind: TaskKind.Standard,
+    });
 
-    await expect(
-      service.createProjectTask(
+    await service.createProjectTask(
+      projectId,
+      {
+        parentTaskId: 'subtask-id',
+        taskKind: TaskKind.Standard,
+        title: 'Nested child',
+      },
+      actor,
+    );
+
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentTaskId: 'subtask-id',
         projectId,
-        {
-          parentTaskId: 'subtask-id',
-          taskKind: TaskKind.Standard,
-          title: 'Nested child',
-        },
-        actor,
-      ),
-    ).rejects.toThrow('Subtasks cannot contain child tasks');
+        taskKind: TaskKind.Standard,
+        title: 'Nested child',
+      }),
+    );
   });
 
   it('rejects milestone project task creation when planned dates do not match', async () => {

@@ -17,3 +17,4 @@ export type {
   ApiRole,
   ApiUser,
 } from "@/lib/api/client";
+export { isHumanRole, roleHint, roleLabel } from "./role-labels";

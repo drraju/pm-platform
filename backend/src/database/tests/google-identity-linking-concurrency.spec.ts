@@ -118,18 +118,11 @@ describe('Google identity PostgreSQL race reconciliation', () => {
     expect(source).not.toMatch(/catch[\s\S]{0,200}23505/);
   });
 
-  it('uses conflict-safe insertion and an authoritative re-read for JIT users', () => {
+  it('does not insert a user for an email that was not invited', () => {
     const source = readFileSync(servicePath, 'utf8');
-    const userInsert = source.indexOf('.into(User)');
-    const conflictSuppression = source.indexOf('.orIgnore()', userInsert);
-    const authoritativeRead = source.indexOf(
-      'findUserByNormalizedEmailForUpdate(',
-      conflictSuppression,
-    );
 
-    expect(userInsert).toBeGreaterThan(-1);
-    expect(conflictSuppression).toBeGreaterThan(userInsert);
-    expect(authoritativeRead).toBeGreaterThan(conflictSuppression);
+    expect(source).not.toContain('.into(User)');
+    expect(source).toContain('throw new GoogleIdentityLinkingRejectedError()');
   });
 
   it('treats the winner of an identical concurrent insert as idempotent', async () => {

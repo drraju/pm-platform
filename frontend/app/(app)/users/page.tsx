@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   adminResetUserPassword,
@@ -9,6 +9,9 @@ import {
   enableUser,
   getRoles,
   getUsers,
+  isHumanRole,
+  roleHint,
+  roleLabel,
   updateUser,
   type ApiRole,
   type ApiUser,
@@ -17,12 +20,16 @@ import { getAuthMe } from "@/features/auth";
 
 const canonicalRoleOrder = [
   "PLATFORM_ADMIN",
+  "ADMIN",
   "PORTFOLIO_MANAGER",
+  "PROGRAM_MANAGER",
   "PROJECT_MANAGER",
-  "TEAM_MEMBER",
+  "CUSTOMER_SUCCESS_MANAGER",
   "EXECUTIVE",
-  "CUSTOMER",
+  "SALES",
+  "TEAM_MEMBER",
   "PARTNER",
+  "CUSTOMER",
 ];
 
 const statusOptions = ["active", "first_login_pending", "disabled"];
@@ -100,7 +107,7 @@ export default function UsersPage() {
           : true,
       )
       .filter((user) =>
-        roleFilter === "all" ? true : user.role?.name === roleFilter,
+        roleFilter === "all" || userRoleNames(user).includes(roleFilter),
       )
       .filter((user) =>
         statusFilter === "all" ? true : user.status === statusFilter,
@@ -132,18 +139,30 @@ export default function UsersPage() {
     setToast(null);
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const roleIds = formData.getAll("roleIds").map(String).filter(Boolean);
+    const password = String(formData.get("password") ?? "");
+    if (roleIds.length === 0) {
+      setIsSaving(false);
+      setError("Choose at least one role.");
+      return;
+    }
 
     try {
       await createUser({
         email: String(formData.get("email") ?? ""),
         firstName: String(formData.get("firstName") ?? ""),
         lastName: String(formData.get("lastName") ?? ""),
-        password: String(formData.get("password") ?? ""),
-        roleId: String(formData.get("roleId") ?? ""),
+        roleId: roleIds[0],
+        roleIds,
+        ...(password ? { password } : {}),
       });
       form.reset();
       await loadData();
-      setToast("User created. First login password change is required.");
+      setToast(
+        password
+          ? "User created. First login password change is required."
+          : "Invitation created. The user signs in with Google.",
+      );
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to create user");
     } finally {
@@ -158,13 +177,20 @@ export default function UsersPage() {
     setError(null);
     setToast(null);
     const formData = new FormData(event.currentTarget);
+    const roleIds = formData.getAll("roleIds").map(String).filter(Boolean);
+    if (roleIds.length === 0) {
+      setIsSaving(false);
+      setError("Choose at least one role.");
+      return;
+    }
 
     try {
       await updateUser(editingUser.id, {
         email: String(formData.get("email") ?? ""),
         firstName: String(formData.get("firstName") ?? ""),
         lastName: String(formData.get("lastName") ?? ""),
-        roleId: String(formData.get("roleId") ?? ""),
+        roleId: roleIds[0],
+        roleIds,
       });
       setEditingUserId(null);
       await loadData();
@@ -222,9 +248,9 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        description="Centralized lifecycle administration for enterprise identities."
+        description="Invite people, assign the roles they hold, and manage their access."
         eyebrow="Administration"
-        title="User Administration"
+        title="People"
       />
 
       {error ? (
@@ -251,23 +277,25 @@ export default function UsersPage() {
 
           <section className="rounded-md border border-slate-200 bg-white p-5 shadow-soft">
             <h2 className="text-lg font-semibold text-slate-950">Create User</h2>
-            <form className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_1.2fr_1fr_1fr_auto] lg:items-end" onSubmit={handleCreateUser}>
-              <TextField label="First Name" name="firstName" required />
-              <TextField label="Last Name" name="lastName" required />
-              <TextField label="Email" name="email" required type="email" />
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Role</span>
-                <select className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20" name="roleId" required>
-                  <option value="">Choose role</option>
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>{role.name}</option>
-                  ))}
-                </select>
-              </label>
-              <TextField label="Temporary Password" minLength={8} name="password" required type="password" />
-              <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-70" disabled={isSaving || roles.length === 0} type="submit">
-                Create User
-              </button>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+              Leave the password blank to invite someone who signs in with Google. A password creates a local account.
+            </p>
+            <form className="mt-5 space-y-5" onSubmit={handleCreateUser}>
+              <div className="grid gap-4 md:grid-cols-3">
+                <TextField label="First Name" name="firstName" required />
+                <TextField label="Last Name" name="lastName" required />
+                <TextField label="Email" name="email" required type="email" />
+              </div>
+              <RoleChecklist roles={roles} />
+              <div className="flex flex-col gap-4 border-t border-slate-100 pt-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="w-full max-w-sm">
+                  <TextField autoComplete="new-password" label="Temporary Password" minLength={8} name="password" type="password" />
+                  <p className="mt-1.5 text-xs leading-5 text-slate-500">Optional. At least 8 characters when set.</p>
+                </div>
+                <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-70" disabled={isSaving || roles.filter((role) => isHumanRole(role.name)).length === 0} type="submit">
+                  Create User
+                </button>
+              </div>
             </form>
           </section>
 
@@ -275,7 +303,15 @@ export default function UsersPage() {
             <div className="space-y-4">
               <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-soft md:grid-cols-4">
                 <TextField label="Search" name="search" onChange={setSearchTerm} type="search" value={searchTerm} />
-                <FilterSelect label="Role Filter" onChange={setRoleFilter} options={["all", ...roles.map((role) => role.name)]} value={roleFilter} />
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Role</span>
+                  <select className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20" onChange={(event) => setRoleFilter(event.target.value)} value={roleFilter}>
+                    <option value="all">All roles</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.name}>{roleLabel(role.name)}</option>
+                    ))}
+                  </select>
+                </label>
                 <FilterSelect label="Status Filter" onChange={setStatusFilter} options={["all", ...statusOptions]} value={statusFilter} />
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">Sort</span>
@@ -288,18 +324,18 @@ export default function UsersPage() {
               </section>
 
               <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-soft">
-                <div className="hidden grid-cols-[1fr_1.3fr_1fr_0.8fr_0.9fr_0.9fr_210px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
-                  <span>Name</span><span>Email</span><span>Role</span><span>Status</span><span>Last Login</span><span>Created Date</span><span>Actions</span>
+                <div className="hidden grid-cols-[1fr_1.2fr_1.3fr_0.8fr_0.8fr_0.8fr_210px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
+                  <span>Name</span><span>Email</span><span>Roles</span><span>Status</span><span>Last Login</span><span>Created</span><span>Actions</span>
                 </div>
                 <div className="divide-y divide-slate-100">
                   {isLoading ? <p className="px-4 py-6 text-sm text-slate-500">Loading users...</p> : null}
                   {!isLoading && filteredUsers.length === 0 ? <p className="px-4 py-6 text-sm text-slate-500">No users match the current filters.</p> : null}
                   {filteredUsers.map((user) => (
-                    <article className="grid gap-2 px-4 py-4 text-sm lg:grid-cols-[1fr_1.3fr_1fr_0.8fr_0.9fr_0.9fr_210px] lg:items-center" key={user.id}>
+                    <article className="grid gap-2 px-4 py-4 text-sm lg:grid-cols-[1fr_1.2fr_1.3fr_0.8fr_0.8fr_0.8fr_210px] lg:items-center" key={user.id}>
                       <button className="text-left font-semibold text-slate-950 hover:text-brand" onClick={() => setSelectedUserId(user.id)} type="button">{displayName(user)}</button>
-                      <span className="text-slate-600">{user.email}</span>
-                      <span className="text-slate-600">{user.role?.name ?? "Unassigned"}</span>
-                      <span className="capitalize text-slate-700">{formatStatus(user.status)}</span>
+                      <span className="break-all text-slate-600">{user.email}</span>
+                      <RoleChips names={userRoleNames(user)} />
+                      <StatusBadge status={user.status} />
                       <span className="text-slate-600">{formatDate(user.lastLoginAt)}</span>
                       <span className="text-slate-600">{formatDate(user.createdAt)}</span>
                       <span className="flex flex-wrap gap-2">
@@ -323,8 +359,14 @@ export default function UsersPage() {
                 <div className="mt-4 space-y-5 text-sm">
                   <Detail label="Profile" value={displayName(selectedUser)} />
                   <Detail label="Contact Information" value={selectedUser.email} />
-                  <Detail label="Role" value={selectedUser.role?.name ?? "Unassigned"} />
-                  <Detail label="Status" value={formatStatus(selectedUser.status)} />
+                  <div>
+                    <p className="font-medium text-slate-700">Roles</p>
+                    <div className="mt-2"><RoleChips names={userRoleNames(selectedUser)} /></div>
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-700">Status</p>
+                    <div className="mt-2"><StatusBadge status={selectedUser.status} /></div>
+                  </div>
                   <Detail label="Last Login" value={formatDate(selectedUser.lastLoginAt)} />
                   <div>
                     <p className="font-medium text-slate-700">Account History</p>
@@ -346,13 +388,19 @@ export default function UsersPage() {
           <form className="grid gap-4 md:grid-cols-2" onSubmit={handleEditUser}>
             <TextField defaultValue={editingUser.firstName} label="First Name" name="firstName" required />
             <TextField defaultValue={editingUser.lastName} label="Last Name" name="lastName" required />
-            <TextField defaultValue={editingUser.email} label="Email" name="email" required type="email" />
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">Role</span>
-              <select className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20" defaultValue={editingUser.roleId ?? editingUser.role?.id ?? ""} name="roleId" required>
-                {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
-              </select>
-            </label>
+            <div className="md:col-span-2">
+              <TextField defaultValue={editingUser.email} label="Email" name="email" required type="email" />
+            </div>
+            <div className="md:col-span-2">
+              <RoleChecklist
+                mode="edit"
+                roles={roles}
+                selectedIds={
+                  editingUser.roles?.map((role) => role.id) ??
+                  [editingUser.roleId ?? editingUser.role?.id ?? ""].filter(Boolean)
+                }
+              />
+            </div>
             <div className="flex justify-end gap-3 md:col-span-2">
               <button className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700" onClick={() => setEditingUserId(null)} type="button">Cancel</button>
               <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" disabled={isSaving} type="submit">Save User</button>
@@ -376,11 +424,11 @@ export default function UsersPage() {
   );
 }
 
-function TextField({ defaultValue, label, minLength, name, onChange, required, type = "text", value }: { defaultValue?: string; label: string; minLength?: number; name: string; onChange?: (value: string) => void; required?: boolean; type?: string; value?: string }) {
+function TextField({ autoComplete, defaultValue, label, minLength, name, onChange, required, type = "text", value }: { autoComplete?: string; defaultValue?: string; label: string; minLength?: number; name: string; onChange?: (value: string) => void; required?: boolean; type?: string; value?: string }) {
   return (
     <label className="block">
       <span className="text-sm font-medium text-slate-700">{label}</span>
-      <input className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20" defaultValue={defaultValue} minLength={minLength} name={name} onChange={onChange ? (event) => onChange(event.target.value) : undefined} required={required} type={type} value={value} />
+      <input autoComplete={autoComplete} className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20" defaultValue={defaultValue} minLength={minLength} name={name} onChange={onChange ? (event) => onChange(event.target.value) : undefined} required={required} type={type} value={value} />
     </label>
   );
 }
@@ -403,7 +451,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 function ActionPanel({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
   return (
     <section className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 py-6">
-      <div className="w-full max-w-2xl rounded-md border border-slate-200 bg-white p-5 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-md border border-slate-200 bg-white p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
           <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700" onClick={onClose} type="button">Close</button>
@@ -414,8 +462,85 @@ function ActionPanel({ children, onClose, title }: { children: React.ReactNode; 
   );
 }
 
+function userRoleNames(user: ApiUser) {
+  if (user.roles?.length) {
+    return user.roles.map((role) => role.name);
+  }
+  return user.role?.name ? [user.role.name] : [];
+}
+
+function RoleChecklist({
+  mode = "create",
+  roles,
+  selectedIds = [],
+}: {
+  mode?: "create" | "edit";
+  roles: ApiRole[];
+  selectedIds?: string[];
+}) {
+  const visibleRoles = roles.filter(
+    (role) => isHumanRole(role.name) || (mode === "edit" && selectedIds.includes(role.id)),
+  );
+
+  return (
+    <fieldset>
+      <legend className="text-sm font-medium text-slate-700">Roles</legend>
+      <p className="mt-1 text-xs leading-5 text-slate-500">Select every role this person holds. Access is the combination of those roles.</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {visibleRoles.map((role) => (
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 px-3 py-2.5 transition hover:border-slate-300 has-[:checked]:border-brand has-[:checked]:bg-teal-50" key={role.id}>
+            <input
+              className="mt-0.5 accent-brand"
+              defaultChecked={selectedIds.includes(role.id)}
+              name="roleIds"
+              type="checkbox"
+              value={role.id}
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-slate-900">{roleLabel(role.name)}</span>
+              {roleHint(role.name) ? <span className="mt-0.5 block text-xs leading-5 text-slate-500">{roleHint(role.name)}</span> : null}
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function RoleChips({ names }: { names: string[] }) {
+  if (names.length === 0) {
+    return <span className="text-sm text-slate-400">Unassigned</span>;
+  }
+
+  return (
+    <span className="flex flex-wrap gap-1">
+      {names.map((name) => (
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700" key={name}>
+          {roleLabel(name)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const tone =
+    status === "active"
+      ? "bg-emerald-50 text-emerald-700"
+      : status === "disabled"
+        ? "bg-slate-100 text-slate-600"
+        : "bg-amber-50 text-amber-800";
+
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>{formatStatus(status)}</span>;
+}
+
 function orderRoles(roles: ApiRole[]) {
-  return [...roles].sort((left, right) => canonicalRoleOrder.indexOf(left.name) - canonicalRoleOrder.indexOf(right.name));
+  return [...roles].sort((left, right) => roleSortIndex(left.name) - roleSortIndex(right.name));
+}
+
+function roleSortIndex(name: string) {
+  const index = canonicalRoleOrder.indexOf(name);
+  return index === -1 ? canonicalRoleOrder.length : index;
 }
 
 function compareUsers(left: ApiUser, right: ApiUser, sortMode: SortMode) {
@@ -444,5 +569,10 @@ function dateValue(value?: string | null) {
 }
 
 function formatStatus(value: string) {
-  return value.replaceAll("_", " ");
+  const labels: Record<string, string> = {
+    active: "Active",
+    disabled: "Disabled",
+    first_login_pending: "First login pending",
+  };
+  return labels[value] ?? value.replaceAll("_", " ");
 }

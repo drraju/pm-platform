@@ -1,10 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsEmail,
   IsOptional,
   IsString,
   IsUUID,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateUserDto {
@@ -20,14 +23,23 @@ export class CreateUserDto {
   @IsString()
   lastName: string;
 
-  @ApiProperty({ minLength: 8 })
+  @ApiPropertyOptional({ minLength: 8 })
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  password: string;
+  password?: string;
 
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({ format: 'uuid' })
+  @ValidateIf((dto: CreateUserDto) => !dto.roleIds?.length)
   @IsUUID()
-  roleId: string;
+  roleId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID('4', { each: true })
+  roleIds?: string[];
 
   @ApiProperty({ default: 'first_login_pending', required: false })
   @IsOptional()

@@ -18,8 +18,7 @@ type ProjectWorkspaceTeamProps = {
 };
 
 const projectRoles = [
-  { label: "Owner", value: "owner" },
-  { label: "Manager", value: "manager" },
+  { label: "Lead", value: "owner" },
   { label: "Contributor", value: "contributor" },
   { label: "Viewer", value: "viewer" },
 ];
@@ -42,8 +41,7 @@ export function ProjectWorkspaceTeam({
   );
 
   const selectedUser = usersToAdd.find((user) => user.id === userId);
-  const allowedRoles =
-    selectedUser?.allowedProjectRoles ?? projectRoles.map((item) => item.value);
+  const allowedRoles = normalizeMembershipRoles(selectedUser?.allowedProjectRoles);
   const effectiveRole = allowedRoles.includes(role)
     ? role
     : (allowedRoles[0] ?? "viewer");
@@ -150,9 +148,7 @@ export function ProjectWorkspaceTeam({
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
                 Email
               </p>
-              <p className="text-slate-600">
-                {member.user?.email ?? "No email"}
-              </p>
+              <p className="text-slate-600">{member.user?.email ?? ""}</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 md:hidden">
@@ -165,19 +161,13 @@ export function ProjectWorkspaceTeam({
                   onChange={(event) =>
                     onUpdateMember(member.id, { role: event.target.value })
                   }
-                  value={member.role}
+                  value={member.role === "manager" ? "owner" : member.role}
                 >
-                  {projectRoles
-                    .filter(
-                      (item) =>
-                        member.user?.role !== "CUSTOMER" ||
-                        item.value === "viewer",
-                    )
-                    .map((projectRole) => (
-                      <option key={projectRole.value} value={projectRole.value}>
-                        {projectRole.label}
-                      </option>
-                    ))}
+                  {projectRoles.map((projectRole) => (
+                    <option key={projectRole.value} value={projectRole.value}>
+                      {projectRole.label}
+                    </option>
+                  ))}
                 </select>
               ) : (
                 <span className="capitalize text-slate-600">
@@ -220,7 +210,14 @@ export function ProjectWorkspaceTeam({
   );
 }
 
+function normalizeMembershipRoles(roles?: string[]) {
+  const source = roles ?? projectRoles.map((item) => item.value);
+  const normalized = source.map((role) => (role === "manager" ? "owner" : role));
+  return [...new Set(normalized)];
+}
+
 function formatLabel(value: string) {
+  if (value === "owner" || value === "manager") return "Lead";
   return value.replaceAll("_", " ");
 }
 

@@ -324,73 +324,28 @@ describe('GoogleIdentityLinkingService', () => {
     expect(user).toMatchObject(original);
   });
 
-  it('provisions one active passwordless TEAM_MEMBER HUMAN with no memberships or history', async () => {
+  it('refuses an email that was not invited', async () => {
     const harness = new PersistenceHarness({ users: [] });
     const service = new GoogleIdentityLinkingService(harness.repository);
 
     await expect(
       service.resolveAndRecordAuthentication(input),
-    ).resolves.toEqual({
-      principal: {
-        email: input.normalizedEmail,
-        id: 'user-1',
-        identityType: UserIdentityType.Human,
-        passwordChangedAt: null,
-        roleId: 'role-human',
-      },
-      status: 'active',
-    });
-
-    expect(harness.userInsertAttempts).toEqual([
-      expect.objectContaining({
-        accountHistory: [],
-        email: input.normalizedEmail,
-        firstName: 'Ada',
-        identityType: UserIdentityType.Human,
-        lastName: 'Lovelace',
-        passwordChangedAt: null,
-        passwordHash: null,
-        roleId: 'role-human',
-        status: 'active',
-      }),
-    ]);
-    expect(harness.users).toHaveLength(1);
-    expect(harness.users[0].projectMemberships).toBeUndefined();
-    expect(harness.identities).toEqual([
-      expect.objectContaining({
-        emailAtLastAuthentication: input.normalizedEmail,
-        issuer: input.issuer,
-        provider: ExternalIdentityProvider.Google,
-        subject: input.subject,
-        userId: 'user-1',
-      }),
-    ]);
-    expect(harness.users[0].lastLoginAt).toEqual(
-      new Date('2026-09-04T12:00:00.000Z'),
-    );
-    expect(harness.identities[0].lastAuthenticatedAt).toEqual(
-      new Date('2026-09-04T12:00:00.000Z'),
-    );
-    expect(harness.manager.findOne).toHaveBeenCalledWith(
-      Role,
-      expect.objectContaining({ where: { name: UserRole.TeamMember } }),
-    );
+    ).rejects.toBeInstanceOf(GoogleIdentityLinkingRejectedError);
+    expect(harness.users).toHaveLength(0);
+    expect(harness.identities).toHaveLength(0);
+    expect(harness.userInsertAttempts).toHaveLength(0);
   });
 
-  it('provisions a valid JIT user with null names', async () => {
-    const harness = new PersistenceHarness({ users: [] });
+  it('refuses an invited email when the account is local-only', async () => {
+    const harness = new PersistenceHarness({
+      users: [humanUser({ localOnly: true })],
+    });
     const service = new GoogleIdentityLinkingService(harness.repository);
 
-    await service.resolveAndRecordAuthentication({
-      ...input,
-      firstName: null,
-      lastName: null,
-    });
-
-    expect(harness.users[0]).toMatchObject({
-      firstName: null,
-      lastName: null,
-    });
+    await expect(
+      service.resolveAndRecordAuthentication(input),
+    ).rejects.toBeInstanceOf(GoogleIdentityLinkingRejectedError);
+    expect(harness.identities).toHaveLength(0);
   });
 
   it('preserves names and skips JIT role resolution for an existing email user', async () => {
@@ -411,13 +366,13 @@ describe('GoogleIdentityLinkingService', () => {
     );
   });
 
-  it('fails safely without creating a user when TEAM_MEMBER is unavailable', async () => {
+  it('fails safely without creating a user when the email was not invited', async () => {
     const harness = new PersistenceHarness({ roles: [], users: [] });
     const service = new GoogleIdentityLinkingService(harness.repository);
 
     await expect(
       service.resolveAndRecordAuthentication(input),
-    ).rejects.toBeInstanceOf(GoogleIdentityLinkingPersistenceError);
+    ).rejects.toBeInstanceOf(GoogleIdentityLinkingRejectedError);
     expect(harness.users).toHaveLength(0);
     expect(harness.identities).toHaveLength(0);
   });
@@ -552,18 +507,17 @@ describe('GoogleIdentityLinkingService', () => {
     expect(harness.users[0].lastLoginAt).toBeUndefined();
   });
 
-  it.each([
-    ['user insertion', { failUserInsert: true }],
-    ['identity insertion', { failIdentityInsert: true }],
-    ['identity metadata update', { failIdentityUpdate: true }],
-    ['lastLoginAt update', { failUserUpdate: true }],
-  ])('rolls back a JIT user after a %s failure', async (_label, failure) => {
-    const harness = new PersistenceHarness({ ...failure, users: [] });
+  it('does not create a user when an unknown email hits a persistence failure flag', async () => {
+    const harness = new PersistenceHarness({
+      failIdentityInsert: true,
+      failUserInsert: true,
+      users: [],
+    });
     const service = new GoogleIdentityLinkingService(harness.repository);
 
     await expect(
       service.resolveAndRecordAuthentication(input),
-    ).rejects.toBeInstanceOf(GoogleIdentityLinkingPersistenceError);
+    ).rejects.toBeInstanceOf(GoogleIdentityLinkingRejectedError);
     expect(harness.users).toHaveLength(0);
     expect(harness.identities).toHaveLength(0);
   });

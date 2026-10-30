@@ -10,6 +10,8 @@ import { getDeliveryHref } from "@/components/delivery/delivery-views";
 
 export type ProjectWorkspaceTabId =
   | "overview"
+  | "plan"
+  | "board"
   | "planning"
   | "delivery"
   | "govern"
@@ -40,15 +42,18 @@ function getProjectWorkspaceTabs(projectId: string): ProjectWorkspaceTab[] {
 
   return [
     { href: basePath, id: "overview", label: "Overview" },
-    { href: `${basePath}/planning`, id: "planning", label: "Planning" },
+    { href: `${basePath}/plan`, id: "plan", label: "Plan" },
+    { href: `${basePath}/board`, id: "board", label: "Board" },
+    { href: `${basePath}/planning`, id: "planning", label: "Planning", visible: false },
     {
       href: getDeliveryHref(projectId, "list"),
       id: "delivery",
       label: "Delivery",
+      visible: false,
     },
-    { href: `${basePath}/govern`, id: "govern", label: "Govern" },
+    { href: `${basePath}/govern`, id: "govern", label: "Govern", visible: false },
     { href: `${basePath}/team`, id: "resources", label: "Team" },
-    { href: `${basePath}/documents`, id: "documents", label: "Documents" },
+    { href: `${basePath}/documents`, id: "documents", label: "Documents", visible: false },
     // Legacy ids retained for activeTab highlighting during redirects.
     {
       href: getDeliveryHref(projectId, "today"),

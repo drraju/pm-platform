@@ -1643,8 +1643,7 @@ function InlineAssigneeSelect({
             column === "owner" &&
             ((Boolean(member.user?.status) &&
               member.user?.status !== "active") ||
-              member.user?.role === "PARTNER" ||
-              (member.user?.role === "CUSTOMER" && member.role !== "viewer"))
+              member.user?.role === "PARTNER")
           }
         >
           {formatMemberName(member)}

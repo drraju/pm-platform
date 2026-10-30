@@ -7,6 +7,7 @@ import { Issue } from '../../raid/entities/issue.entity';
 import { Risk } from '../../raid/entities/risk.entity';
 import { Assumption } from '../../raid/entities/assumption.entity';
 import { Task } from '../../tasks/entities/task.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 import { User } from '../../users/entities/user.entity';
 import { ProjectBaseline } from './project-baseline.entity';
 import { ProjectMember } from './project-member.entity';
@@ -33,6 +34,34 @@ export class Project extends AuditableEntity {
   @ApiPropertyOptional({ format: 'date', example: '2026-09-30' })
   @Column({ name: 'target_end_date', type: 'date', nullable: true })
   targetEndDate?: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @Column({ name: 'customer_id', type: 'uuid', nullable: true })
+  customerId?: string | null;
+
+  @Column({ name: 'program_id', type: 'uuid', nullable: true })
+  programId?: string | null;
+
+  @Column({
+    name: 'slack_webhook_url',
+    type: 'text',
+    nullable: true,
+    select: false,
+  })
+  slackWebhookUrl?: string | null;
+
+  @Column({
+    name: 'slack_channel_id',
+    type: 'varchar',
+    length: 80,
+    nullable: true,
+    select: false,
+  })
+  slackChannelId?: string | null;
+
+  @ManyToOne(() => Customer, { nullable: true })
+  @JoinColumn({ name: 'customer_id' })
+  customer?: Customer | null;
 
   @ApiPropertyOptional({ format: 'uuid' })
   @Column({ name: 'owner_id', type: 'uuid', nullable: true })

@@ -42,7 +42,7 @@ const projects = [
 ];
 
 describe("ProjectTable", () => {
-  it("renders compact Name / Health / Action rows", () => {
+  it("renders name, customer, lead, status, and finish", () => {
     render(
       <ProjectTable
         emptyMessage="No projects"
@@ -56,22 +56,18 @@ describe("ProjectTable", () => {
     );
 
     expect(screen.getByText("Name")).toBeInTheDocument();
-    expect(screen.getByText("Health")).toBeInTheDocument();
-    expect(screen.getByText("Action")).toBeInTheDocument();
-    expect(screen.queryByText("Owner")).not.toBeInTheDocument();
-    expect(screen.queryByText("Team")).not.toBeInTheDocument();
-    expect(screen.queryByText("Created")).not.toBeInTheDocument();
+    expect(screen.getByText("Customer")).toBeInTheDocument();
+    expect(screen.getByText("Lead")).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("Finish")).toBeInTheDocument();
+    expect(screen.queryByText("Health")).not.toBeInTheDocument();
+    expect(screen.queryByText("Amber")).not.toBeInTheDocument();
+    expect(screen.getByText("Ava Patel")).toBeInTheDocument();
+    expect(screen.getByText("at risk")).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAccessibleName(
       "Open Customer Experience Platform Upgrade",
     );
     expect(screen.getByRole("button", { name: /open/i })).toBeInTheDocument();
-    expect(screen.getByText("Amber")).toBeInTheDocument();
-    expect(screen.getByText("Amber").closest("span")).toHaveAttribute(
-      "title",
-      "1 high risk open",
-    );
-    expect(screen.queryByText("Ava Patel")).not.toBeInTheDocument();
-    expect(screen.queryByText("Jun 01, 2026")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /archive/i }),

@@ -1,9 +1,9 @@
-import { UserRole } from '../../common/enums/user-role.enum';
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -39,6 +39,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskExecutionUpdate } from './entities/task-execution-update.entity';
 import { Task } from './entities/task.entity';
 import { TaskAssignmentService } from './task-assignment.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { decoratePlanningTasks, getOperationalTasks } from './planning-rollup';
 import {
   MilestoneQuery,
@@ -48,7 +49,13 @@ import { MilestoneProjectionPage } from './milestone-projection';
 
 type AuthenticatedActor = AuthorizationActor;
 const taskPriorities = new Set(['low', 'medium', 'high', 'critical']);
-const taskExecutionFields = new Set(['percentComplete', 'remarks', 'status']);
+const taskExecutionFields = new Set([
+  'dueDate',
+  'nextStep',
+  'percentComplete',
+  'remarks',
+  'status',
+]);
 const taskNonCapabilityFields = new Set(['assigneeId']);
 const externalEditableTaskFields = new Set([
   'remarks',
@@ -65,6 +72,8 @@ const externalExecutionUpdateFields = new Set([
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
@@ -79,6 +88,8 @@ export class TasksService {
     private readonly taskAssignmentService: TaskAssignmentService,
     @Optional()
     private readonly milestoneQueryService?: MilestoneQueryService,
+    @Optional()
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   findProjectMilestones(
@@ -175,6 +186,7 @@ export class TasksService {
         );
       },
     );
+    await this.publishWorkChange({ assigneeId: null, status: null }, task.id);
     return this.decorateTask(task);
   }
 
@@ -341,6 +353,7 @@ export class TasksService {
     );
     const sourceProjectId = task.projectId;
     const originalAssigneeId = task.assigneeId ?? null;
+    const previousStatus = task.status;
     const targetProjectId = normalizedInput.projectId ?? task.projectId;
     const projectChanged = targetProjectId !== sourceProjectId;
     await this.tasksRepository.manager.transaction(async (entityManager) => {
@@ -382,6 +395,10 @@ export class TasksService {
     if (!savedTask) {
       throw new NotFoundException(`Task ${id} not found`);
     }
+    await this.publishWorkChange(
+      { assigneeId: originalAssigneeId, status: previousStatus },
+      savedTask.id,
+    );
     return this.decorateTaskWithLatest(savedTask);
   }
 
@@ -391,6 +408,8 @@ export class TasksService {
     actor?: AuthenticatedActor,
   ): Promise<Task> {
     const task = await this.findTaskForMutation(id);
+    const previousAssigneeId = task.assigneeId ?? null;
+    const previousStatus = task.status;
     if (task.taskKind === TaskKind.Summary) {
       throw new BadRequestException(
         'Summary tasks cannot receive execution updates',
@@ -470,7 +489,46 @@ export class TasksService {
         });
       },
     );
+    await this.publishWorkChange(
+      { assigneeId: previousAssigneeId, status: previousStatus },
+      id,
+    );
     return this.projectTaskForActor(updatedTask, actor);
+  }
+
+  async addComment(
+    id: string,
+    body: string,
+    actor?: AuthenticatedActor,
+  ): Promise<TaskExecutionUpdateDto> {
+    const task = await this.findTaskForMutation(id);
+    if (task.taskKind === TaskKind.Summary) {
+      throw new BadRequestException('A container does not take comments');
+    }
+    await this.ensureTaskCapability('task.record_update', task, actor, [
+      'updateNotes',
+    ]);
+    const note = body.trim();
+    if (!note) {
+      throw new BadRequestException('Write a comment');
+    }
+
+    const saved = await this.taskExecutionUpdatesRepository.save(
+      this.taskExecutionUpdatesRepository.create({
+        assigneeId: task.assigneeId ?? null,
+        createdById: actor?.userId,
+        nextStep: task.nextStep ?? null,
+        percentComplete: task.percentComplete ?? 0,
+        priority: task.priority,
+        projectId: task.projectId,
+        status: task.status,
+        taskId: task.id,
+        updateNotes: note,
+        updatedById: actor?.userId,
+      }),
+    );
+
+    return this.toExecutionUpdateDto(saved);
   }
 
   async attachLatestExecutionUpdates<T extends Task>(tasks: T[]): Promise<T[]> {
@@ -539,6 +597,7 @@ export class TasksService {
     return this.tasksRepository
       .createQueryBuilder('task')
       .innerJoinAndSelect('task.project', 'project')
+      .leftJoinAndSelect('project.customer', 'customer')
       .leftJoinAndSelect('task.assignee', 'assignee');
   }
 
@@ -833,8 +892,7 @@ export class TasksService {
     actor?: ProjectVisibilityActor,
   ): Promise<Task[]> {
     if (
-      (await this.authorizationPolicyService.getActorRoleName(actor)) !==
-        UserRole.Customer ||
+      !(await this.authorizationPolicyService.isCustomerOnly(actor)) ||
       !actor
     ) {
       return tasks;
@@ -963,15 +1021,6 @@ export class TasksService {
       );
     }
 
-    if (parentTask.parentTaskId) {
-      const grandparentTask = await this.findPlanningTask(
-        parentTask.parentTaskId,
-      );
-      if (grandparentTask?.taskKind === TaskKind.Standard) {
-        throw new BadRequestException('Subtasks cannot contain child tasks');
-      }
-    }
-
     if (existingTask) {
       await this.ensureTaskHasNoChildren(existingTask.id);
     }
@@ -1096,6 +1145,22 @@ export class TasksService {
     const task = await this.findOne(id, actor);
     if (task.taskKind !== TaskKind.Milestone) {
       throw new BadRequestException(`Task ${id} is not a milestone`);
+    }
+  }
+
+  private async publishWorkChange(
+    previous: { assigneeId: string | null; status: string | null },
+    taskId: string,
+  ) {
+    if (!this.notificationsService) {
+      return;
+    }
+    try {
+      await this.notificationsService.afterSave(previous, taskId);
+    } catch (error) {
+      this.logger.warn(
+        `Work alert was not recorded for ${taskId}: ${error instanceof Error ? error.message : 'unknown'}`,
+      );
     }
   }
 }

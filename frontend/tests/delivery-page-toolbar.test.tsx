@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "project-1" }),
   useRouter: () => ({ replace: mocks.replace }),
-  useSearchParams: () => new URLSearchParams("view=board"),
+  useSearchParams: () => new URLSearchParams("view=list"),
 }));
 
 vi.mock("@/features/auth", () => ({
@@ -107,7 +107,7 @@ describe("Delivery page toolbar hierarchy", () => {
     mocks.readPersistedWorkspaceState.mockReturnValue({
       activeFilter: "all",
       searchTerm: "",
-      view: "board",
+      view: "list",
     });
     mocks.getAuthMe.mockResolvedValue({
       permissions: [{ key: "project.read" }, { key: "task.update" }],
@@ -156,7 +156,7 @@ describe("Delivery page toolbar hierarchy", () => {
     });
 
     expect(screen.getByLabelText("Delivery views")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -204,7 +204,7 @@ describe("Delivery page toolbar hierarchy", () => {
           activeFilter: "mine",
           owner: "mine",
           status: "all",
-          view: "board",
+          view: "list",
         }),
       );
     });

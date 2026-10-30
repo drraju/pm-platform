@@ -1,52 +1,22 @@
 "use client";
 
-import React, { Suspense, useEffect, useState, useRef } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { TodayList } from "@/components/today/today-list";
+import { getAuthMe, storeAuthMe } from "@/features/auth";
+import { getProject, getProjects, type ApiProject, type ApiProjectMember, type ApiTask } from "@/features/projects";
 import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  WorkspaceLayout,
-} from "@/components/foundation";
-import { TodayWorkspace } from "@/components/today/today-workspace";
-import {
-  getAuthMe,
-  resolveProjectUiCapabilities,
-  storeAuthMe,
-} from "@/features/auth";
-import {
-  getProject,
-  getProjectTasks,
-  getProjectMembers,
-  getProjects,
-  recordProjectTaskExecutionUpdate,
-  type ApiProject,
-  type ApiProjectDetails,
-} from "@/features/projects";
-import { decorateProjectPlan } from "@/features/projects/planning";
-import { getTaskExecutionUpdates } from "@/features/tasks";
-import { useProjectMembers } from "@/hooks/use-project-members";
-import {
-  readPersistedWorkspaceState,
-  writePersistedWorkspaceState,
-} from "@/lib/workspace/persisted-workspace-state";
-
-type TodayPrefs = {
-  searchTerm: string;
-  selectedProjectId: string;
-};
-
-const TODAY_PREFS_KEY = "today";
+  addTaskComment,
+  createTask,
+  getMyTasks,
+  getTaskExecutionUpdates,
+  updateTask,
+} from "@/features/tasks";
+import { countWork, isWorkContainer, todayDate, workLeaves } from "@/features/work/work-count";
 
 export default function TodayPage() {
   return (
-    <Suspense
-      fallback={
-        <WorkspaceLayout spacing="compact">
-          <LoadingState label="Loading Today" rows={4} />
-        </WorkspaceLayout>
-      }
-    >
+    <Suspense fallback={<p className="text-sm text-slate-500">Loading Today...</p>}>
       <TodayPageContent />
     </Suspense>
   );
@@ -54,237 +24,143 @@ export default function TodayPage() {
 
 function TodayPageContent() {
   const searchParams = useSearchParams();
-  const projectIdFromQuery = searchParams.get("projectId")?.trim() ?? "";
+  const requestedProjectId = searchParams.get("projectId")?.trim() ?? "";
+  const requestedWorkId = searchParams.get("work")?.trim() ?? "";
+  const [scope, setScope] = useState(requestedProjectId || "mine");
   const [projects, setProjects] = useState<ApiProject[]>([]);
-  const [project, setProject] = useState<ApiProjectDetails | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const activeProjectId = useRef(selectedProjectId);
-  activeProjectId.current = selectedProjectId;
-  const [identityType, setIdentityType] = useState<
-    "HUMAN" | "SERVICE" | undefined
-  >();
+  const [tasks, setTasks] = useState<ApiTask[]>([]);
+  const [members, setMembers] = useState<ApiProjectMember[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
-  const [roles, setRoles] = useState<string[]>([]);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isProjectLoading, setIsProjectLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [prefsProjectReady, setPrefsProjectReady] = useState(false);
+  const today = todayDate();
+
+  const load = useCallback(async (nextScope: string, userId: string | null) => {
+    if (nextScope === "mine") {
+      const mine = await getMyTasks();
+      setMembers([]);
+      setTasks(mine.filter((task) => !userId || task.assigneeId === userId || isWorkContainer(task, mine)));
+      return;
+    }
+    const project = await getProject(nextScope);
+    setMembers(project.members ?? []);
+    setTasks(
+      (project.tasks ?? []).map((task) => ({
+        ...task,
+        project: task.project ?? {
+          id: project.id,
+          name: project.name,
+          customer: project.customer,
+          status: project.status,
+        },
+      })),
+    );
+  }, []);
 
   useEffect(() => {
-    const prefs = readPersistedWorkspaceState<TodayPrefs>(TODAY_PREFS_KEY, {
-      searchTerm: "",
-      selectedProjectId: "",
-    });
-    setSearchTerm(prefs.searchTerm);
-    setPrefsProjectReady(true);
-
     let mounted = true;
     Promise.all([getProjects(), getAuthMe()])
-      .then(([projectData, authMe]) => {
+      .then(async ([projectData, authMe]) => {
         if (!mounted) return;
         storeAuthMe(authMe);
-        const activeProjects = projectData.filter(
-          (candidate) => candidate.status !== "archived",
-        );
-        setProjects(activeProjects);
-        setPermissionKeys(
-          authMe.permissions.map((permission) => permission.key),
-        );
-        setRoles(authMe.roles.map((role) => role.name));
-        setCurrentUserId(authMe.user.id);
-        setIdentityType(authMe.user.identityType);
-        const fromQuery = activeProjects.find(
-          (candidate) => candidate.id === projectIdFromQuery,
-        );
-        const persisted = activeProjects.find(
-          (candidate) => candidate.id === prefs.selectedProjectId,
-        );
-        setSelectedProjectId(
-          fromQuery?.id ?? persisted?.id ?? activeProjects[0]?.id ?? "",
-        );
+        const active = projectData.filter((project) => project.status !== "archived");
+        setProjects(active);
+        const userId = authMe.user.id;
+        setCurrentUserId(userId);
+        setIsPlatformAdmin(authMe.roles.some((role) => role.name === "PLATFORM_ADMIN"));
+        const initial = requestedProjectId && active.some((project) => project.id === requestedProjectId)
+          ? requestedProjectId
+          : "mine";
+        setScope(initial);
+        await load(initial, userId);
       })
-      .catch((requestError) => {
-        if (mounted) {
-          setError(getErrorMessage(requestError, "Unable to load Today"));
-        }
-      })
-      .finally(() => {
-        if (mounted) setIsLoading(false);
+      .catch((requestError: unknown) => {
+        if (mounted) setError(requestError instanceof Error ? requestError.message : "Unable to load Today");
       });
-
     return () => {
       mounted = false;
     };
-  }, [projectIdFromQuery]);
+  }, [load, requestedProjectId]);
 
-  useEffect(() => {
-    if (!prefsProjectReady) {
-      return;
-    }
-    writePersistedWorkspaceState(TODAY_PREFS_KEY, {
-      searchTerm,
-      selectedProjectId,
-    });
-  }, [prefsProjectReady, searchTerm, selectedProjectId]);
+  const leaves = useMemo(() => workLeaves(tasks), [tasks]);
+  const rows = useMemo(
+    () => (scope === "mine" ? leaves.filter((task) => task.assigneeId === currentUserId) : leaves),
+    [currentUserId, leaves, scope],
+  );
+  const containers = useMemo(
+    () => tasks.filter((task) => isWorkContainer(task, tasks)),
+    [tasks],
+  );
+  const count = useMemo(
+    () => countWork(scope === "mine" ? rows : tasks, today),
+    [rows, scope, tasks, today],
+  );
+  const isLead = members.some(
+    (member) => member.userId === currentUserId && (member.role === "owner" || member.role === "manager"),
+  );
 
-  useEffect(() => {
-    if (!selectedProjectId) {
-      setProject(null);
-      return;
-    }
-
-    let mounted = true;
-    setIsProjectLoading(true);
-    setError(null);
-    Promise.all([
-      getProject(selectedProjectId),
-      getProjectMembers(selectedProjectId).catch(() => []),
-    ])
-      .then(([projectData, members]) => {
-        if (!mounted) return;
-        setProject(decorateProjectPlan({ ...projectData, members }));
-      })
-      .catch((requestError) => {
-        if (mounted) {
-          setError(
-            getErrorMessage(requestError, "Unable to load selected project"),
-          );
-        }
-      })
-      .finally(() => {
-        if (mounted) setIsProjectLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [selectedProjectId]);
-
-  const {
-    error: memberError,
-    isLoading: areMembersLoading,
-    members,
-  } = useProjectMembers(selectedProjectId, project?.members ?? []);
-
-  const capabilities = resolveProjectUiCapabilities({
-    currentUserId,
-    members,
-    permissionKeys,
-    project,
-    roleNames: roles,
-  });
-
-  async function handleExecutionUpdate(
-    taskId: string,
-    input: Parameters<typeof recordProjectTaskExecutionUpdate>[2],
-  ) {
-    if (!project) {
-      throw new Error("No project selected");
-    }
-    setIsSaving(true);
-    setError(null);
-    try {
-      const updatedTask = await recordProjectTaskExecutionUpdate(
-        project.id,
-        taskId,
-        input,
-      );
-      // Patch only the changed task so memoized rows keep stable references.
-      setProject((current) =>
-        current && current.id === project.id
-          ? {
-              ...current,
-              tasks: (current.tasks ?? []).map((task) =>
-                task.id === taskId ? { ...task, ...updatedTask } : task,
-              ),
-            }
-          : current,
-      );
-      return updatedTask;
-    } catch (requestError) {
-      if (activeProjectId.current === project.id)
-        setError(
-          getErrorMessage(requestError, "Unable to save execution update"),
-        );
-      throw requestError;
-    } finally {
-      if (activeProjectId.current === project.id) setIsSaving(false);
-    }
+  function canEdit(task: ApiTask) {
+    if (isWorkContainer(task, tasks)) return false;
+    if (isPlatformAdmin || isLead) return true;
+    return Boolean(currentUserId && task.assigneeId === currentUserId);
   }
 
-  if (isLoading) {
-    return (
-      <WorkspaceLayout spacing="compact">
-        <LoadingState label="Loading Today" rows={4} />
-      </WorkspaceLayout>
-    );
-  }
-
-  if (!capabilities.canAccessToday) {
-    return (
-      <WorkspaceLayout spacing="compact">
-        <ErrorState
-          message="Today is available to project members with task update access."
-          title="Today access required"
-        />
-      </WorkspaceLayout>
-    );
+  async function refresh() {
+    await load(scope, currentUserId);
   }
 
   return (
-    <WorkspaceLayout spacing="compact">
-      <h1 className="text-xl font-semibold tracking-tight text-slate-950">
-        Today
-      </h1>
-
-      {error ? <ErrorState message={error} /> : null}
-      {memberError ? <ErrorState message={memberError} /> : null}
-
-      {isProjectLoading || areMembersLoading ? (
-        <LoadingState label="Loading project work" rows={5} />
-      ) : null}
-
-      {!isProjectLoading && !areMembersLoading && !project ? (
-        <EmptyState
-          description="Select a project to begin the stand-up."
-          title="No project selected"
-        />
-      ) : null}
-
-      {!isProjectLoading && !areMembersLoading && project ? (
-        <TodayWorkspace
-          key={project.id}
-          roleNames={roles}
-          identityType={identityType}
-          currentUserId={currentUserId}
-          isSaving={isSaving}
-          members={members}
-          onLoadHistory={getTaskExecutionUpdates}
-          onRefreshTasks={async () => {
-            const refreshed = await getProjectTasks(project.id);
-            setProject((current) =>
-              current?.id === project.id
-                ? { ...current, tasks: refreshed }
-                : current,
-            );
-            return refreshed;
-          }}
-          onRecordExecutionUpdate={handleExecutionUpdate}
-          onSearchTermChange={setSearchTerm}
-          onSelectedProjectIdChange={setSelectedProjectId}
-          project={project}
-          projects={projects}
-          searchTerm={searchTerm}
-          selectedProjectId={selectedProjectId}
-        />
-      ) : null}
-    </WorkspaceLayout>
+    <TodayList
+      canAdd={isPlatformAdmin || isLead}
+      canEdit={canEdit}
+      containers={scope === "mine" ? [] : containers}
+      count={count}
+      error={error}
+      isSaving={isSaving}
+      onAdd={async (input) => {
+        setIsSaving(true);
+        setError(null);
+        try {
+          await createTask({ ...input, assigneeId: currentUserId ?? undefined, status: "todo" });
+          if (scope === "mine") setScope(input.projectId);
+          await load(input.projectId, currentUserId);
+          if (scope === "mine") setScope(input.projectId);
+        } catch (requestError) {
+          setError(requestError instanceof Error ? requestError.message : "Unable to add work");
+        } finally {
+          setIsSaving(false);
+        }
+      }}
+      onComment={async (taskId, body) => {
+        await addTaskComment(taskId, body);
+      }}
+      onLoadComments={getTaskExecutionUpdates}
+      openTaskId={requestedWorkId || null}
+      onScopeChange={(nextScope) => {
+        setScope(nextScope);
+        setError(null);
+        void load(nextScope, currentUserId).catch((requestError: unknown) => {
+          setError(requestError instanceof Error ? requestError.message : "Unable to load Today");
+        });
+      }}
+      onUpdate={async (task, patch) => {
+        setIsSaving(true);
+        setError(null);
+        try {
+          const saved = await updateTask(task.id, patch);
+          setTasks((current) => current.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)));
+          if (patch.status === "done" || patch.dueDate !== undefined) await refresh();
+        } catch (requestError) {
+          setError(requestError instanceof Error ? requestError.message : "Unable to update work");
+        } finally {
+          setIsSaving(false);
+        }
+      }}
+      projects={projects}
+      rows={rows}
+      scope={scope}
+      tasks={scope === "mine" ? rows : tasks}
+    />
   );
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
 }

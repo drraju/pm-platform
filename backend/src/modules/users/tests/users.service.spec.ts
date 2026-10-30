@@ -8,6 +8,7 @@ import { UserRole } from '../../../common/enums/user-role.enum';
 import { ProjectMember } from '../../projects/entities/project-member.entity';
 import { Permission } from '../entities/permission.entity';
 import { Role } from '../entities/role.entity';
+import { UserRoleAssignment } from '../entities/user-role-assignment.entity';
 import { User } from '../entities/user.entity';
 import { UsersService } from '../users.service';
 
@@ -21,6 +22,7 @@ describe('UsersService', () => {
   let permissionsRepository: MockRepository<Permission>;
   let usersRepository: MockRepository<User>;
   let projectMembersRepository: MockRepository<ProjectMember>;
+  let userRolesRepository: MockRepository<UserRoleAssignment>;
   let authorizationPolicyService: {
     canManageRolePermissions: jest.Mock;
     canManageRoles: jest.Mock;
@@ -63,6 +65,12 @@ describe('UsersService', () => {
     projectMembersRepository = {
       find: jest.fn().mockResolvedValue([]),
     };
+    userRolesRepository = {
+      create: jest.fn((input: Partial<UserRoleAssignment>) => input),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn((input: unknown) => Promise.resolve(input)),
+    };
     authorizationPolicyService = {
       canManageRolePermissions: jest.fn().mockResolvedValue(false),
       canManageRoles: jest.fn().mockResolvedValue(false),
@@ -84,6 +92,10 @@ describe('UsersService', () => {
         {
           provide: getRepositoryToken(ProjectMember),
           useValue: projectMembersRepository,
+        },
+        {
+          provide: getRepositoryToken(UserRoleAssignment),
+          useValue: userRolesRepository,
         },
         {
           provide: AuthorizationPolicyService,
@@ -109,8 +121,21 @@ describe('UsersService', () => {
       email: 'user@example.com',
       firstName: 'Ava',
       lastName: 'Patel',
-      role: null,
+      role: {
+        description: null,
+        id: 'role-1',
+        name: UserRole.TeamMember,
+        permissions: [],
+      },
       roleId: 'role-1',
+      roles: [
+        {
+          description: null,
+          id: 'role-1',
+          name: UserRole.TeamMember,
+          permissions: [],
+        },
+      ],
       accountHistory: [],
       createdAt: undefined,
       lastLoginAt: null,
@@ -153,6 +178,7 @@ describe('UsersService', () => {
         lastName: 'Patel',
         role: null,
         roleId: 'role-1',
+        roles: [],
         accountHistory: [],
         createdAt: undefined,
         lastLoginAt: null,

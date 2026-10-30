@@ -2,21 +2,14 @@
 
 import React, { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { LoadingState, WorkspaceLayout } from "@/components/foundation";
-import { getDeliveryHref } from "@/components/delivery/delivery-views";
-
-/** Legacy project Tasks route — merged into Delivery List. */
+/** Legacy project Tasks route lands on Today for that project. */
 export default function ProjectTasksRedirectPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(getDeliveryHref(params.id, "list"));
+    router.replace(`/today?projectId=${params.id}`);
   }, [params.id, router]);
 
-  return (
-    <WorkspaceLayout spacing="compact">
-      <LoadingState label="Opening Delivery workspace" rows={3} />
-    </WorkspaceLayout>
-  );
+  return <p className="text-sm text-slate-500">Opening Today...</p>;
 }

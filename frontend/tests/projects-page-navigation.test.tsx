@@ -452,7 +452,12 @@ vi.mock("@/features/projects", () => ({
 }));
 
 vi.mock("@/features/tasks", () => ({
+  addTaskComment: vi.fn(),
+  createTask: vi.fn(),
+  getMyTasks: vi.fn(async () => []),
   getTaskExecutionUpdates: vi.fn(async () => []),
+  getTasks: vi.fn(async () => []),
+  updateTask: vi.fn(),
 }));
 
 vi.mock("@/features/users", () => ({
@@ -594,20 +599,11 @@ describe("Projects List navigation", () => {
         })
         .closest("header"),
     ).toHaveClass("shadow-ui-subtle");
-    expect(
-      screen.getByRole("heading", { name: "Timeline Snapshot" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Executive Overview")).not.toBeInTheDocument();
-    expect(screen.getByText("Attention")).toBeInTheDocument();
-    expect(screen.getByText("Delivery Summary")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Open Risks: 1" }),
-    ).toHaveAttribute("href", "/projects/project-123/govern");
-    expect(
-      screen.getByRole("link", { name: "Open Issues: 1" }),
-    ).toHaveAttribute("href", "/projects/project-123/govern");
-    expect(screen.queryByText("RAID Summary")).not.toBeInTheDocument();
-    expect(screen.queryByText("Team Summary")).not.toBeInTheDocument();
+    expect(screen.getByText("Workspace loaded from selected project id.")).toBeInTheDocument();
+    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(screen.getByText("Target finish")).toBeInTheDocument();
+    expect(screen.queryByText("Attention")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delivery Summary")).not.toBeInTheDocument();
   });
 
   it("opens the top-level Daily Review queue for project leadership", async () => {
@@ -630,33 +626,9 @@ describe("Projects List navigation", () => {
 
     render(<DailyReviewPage />);
 
-    expect(await screen.findByLabelText("Select project")).toHaveValue(
-      "project-123",
-    );
-    expect(await screen.findByRole("button", { name: /Today/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("Search execution queue")).toBeInTheDocument();
-    expect(screen.getByLabelText("Review progress")).toHaveTextContent("0 / 1");
-    expect(
-      screen.getByRole("toolbar", { name: /daily review filters/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Build workspace navigation"),
-    ).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Search execution queue"), {
-      target: { value: "does not exist" },
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/today");
     });
-    expect(
-      await screen.findByText("No tasks in this review queue"),
-    ).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Search execution queue"), {
-      target: { value: "" },
-    });
-    fireEvent.click(screen.getAllByRole("button", { name: /Blocked/i })[0]);
-    expect(
-      await screen.findByText("No tasks in this review queue"),
-    ).toBeInTheDocument();
   });
 
   it("keeps summary ancestors so child tasks render in the first project queue", async () => {
@@ -710,8 +682,9 @@ describe("Projects List navigation", () => {
 
     render(<DailyReviewPage />);
 
-    expect(await screen.findByText("Configure client integration")).toBeInTheDocument();
-    expect(screen.queryByText("No tasks yet.")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/today");
+    });
   });
 
   it("lets task-authorised project managers edit Today tasks without project creation ownership", async () => {
@@ -780,12 +753,16 @@ describe("Projects List navigation", () => {
 
     render(<TodayPage />);
 
-    expect(await screen.findByLabelText("Task scope")).toHaveValue("team");
+    expect(await screen.findByLabelText("Scope")).toHaveValue("mine");
+    expect(screen.queryByText("Update integration rollout")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Scope"), {
+      target: { value: "project-123" },
+    });
+
+    expect(await screen.findByText("Update integration rollout")).toBeInTheDocument();
     expect(
       screen.getByLabelText("Status for Update integration rollout"),
-    ).toBeEnabled();
-    expect(
-      screen.getByLabelText("Priority for Update integration rollout"),
     ).toBeEnabled();
   });
 
@@ -818,18 +795,17 @@ describe("Projects List navigation", () => {
       "aria-current",
       "page",
     );
-    expect(screen.getByRole("link", { name: "Planning" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Plan" })).toHaveAttribute(
       "href",
-      "/projects/project-123/planning",
+      "/projects/project-123/plan",
     );
-    expect(await screen.findByRole("link", { name: "Delivery" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Board" })).toHaveAttribute(
       "href",
-      "/projects/project-123/delivery",
+      "/projects/project-123/board",
     );
-    expect(screen.getByRole("link", { name: "Govern" })).toHaveAttribute(
-      "href",
-      "/projects/project-123/govern",
-    );
+    expect(screen.queryByRole("link", { name: "Planning" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Delivery" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Today" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tasks" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "RAID" })).not.toBeInTheDocument();
@@ -837,10 +813,7 @@ describe("Projects List navigation", () => {
       "href",
       "/projects/project-123/team",
     );
-    expect(screen.getByRole("link", { name: "Documents" })).toHaveAttribute(
-      "href",
-      "/projects/project-123/documents",
-    );
+    expect(screen.queryByRole("link", { name: "Documents" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Calendar" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "AI (future)" }),
@@ -848,621 +821,29 @@ describe("Projects List navigation", () => {
     expect(
       screen.queryByRole("link", { name: "Resources" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Attention")).toBeInTheDocument();
+    expect(screen.queryByText("Attention")).not.toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   });
 
-  it("loads the Planning route inside the Project Workspace", async () => {
+  it("redirects the legacy Planning route into Plan", async () => {
     window.history.pushState({}, "", "/projects/project-123/planning");
-    window.localStorage.setItem(
-      "pm_platform_permissions",
-      JSON.stringify([
-        "project.read",
-        "project.update",
-        "task.update",
-        "raid.read",
-      ]),
-    );
-    window.localStorage.setItem(
-      "pm_platform_role_names",
-      JSON.stringify(["PROJECT_MANAGER"]),
-    );
 
     render(<ProjectPlanningPage />);
 
     await waitFor(() => {
-      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledWith(
-        "project-123",
-      );
+      expect(window.location.pathname).toBe("/projects/project-123/plan");
     });
-    expect(screen.getByRole("link", { name: "Planning" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(
-      await screen.findByText("Selected Project Workspace planning workspace"),
-    ).toBeInTheDocument();
-    expect(
-      screen
-        .getByRole("heading", {
-          level: 1,
-          name: /Selected Project Workspace/,
-        })
-        .closest("header"),
-    ).toHaveClass("shadow-ui-subtle");
+    expect(screen.getByText("Opening Plan...")).toBeInTheDocument();
   });
 
-  it("loads authoritative Forecast and Active Baseline references for Planning", async () => {
-    window.history.pushState({}, "", "/projects/project-123/planning");
-    const forecastOverview = {
-      activeBaseline: {
-        capturedAt: "2026-06-01T09:00:00.000Z",
-        capturedBy: null,
-        id: "baseline-2",
-        isCurrent: true,
-        milestoneCount: 0,
-        name: "Approved plan",
-        projectFinishDate: "2026-07-20",
-        projectId: "project-123",
-        projectStartDate: "2026-07-01",
-        status: "approved",
-        taskCount: 1,
-        unscheduledExecutableTaskCount: 0,
-        versionNumber: 2,
-      },
-      availability: {
-        activeBaseline: true,
-        currentForecast: true,
-        originalBaseline: true,
-        previousForecast: false,
-      },
-      currentForecast: {
-        calculatedAt: "2026-07-02T09:00:00.000Z",
-        calculationStatus: "calculated" as const,
-        criticalTaskCount: 0,
-        generatedBy: null,
-        isCurrent: true,
-        milestoneCount: 0,
-        projectFinishDate: "2026-07-21",
-        projectId: "project-123",
-        projectStartDate: "2026-07-01",
-        scheduleAnchorDate: "2026-07-01",
-        scheduleVersion: 2,
-        snapshotId: "forecast-2",
-        taskCount: 1,
-        unscheduledExecutableTaskCount: 0,
-      },
-      finishVarianceFromCurrentActiveBaselineDays: 1,
-      finishVarianceFromPreviousDays: null,
-      originalBaseline: null,
-      previousForecast: null,
-      projectId: "project-123",
-      warnings: [],
-      workingOutputState: "not_requested" as const,
-    };
-    const latestSchedule = {
-      calculationStatus: "calculated" as const,
-      id: "forecast-2",
-      projectId: "project-123",
-      scheduleVersion: 2,
-      taskSchedules: [],
-    };
-    const baseline = {
-      capturedAt: "2026-06-01T09:00:00.000Z",
-      capturedById: "user-1",
-      id: "baseline-2",
-      isCurrent: true,
-      name: "Approved plan",
-      projectId: "project-123",
-      status: "approved",
-      tasks: [],
-      versionNumber: 2,
-    };
-    planningMocks.getProjectForecastOverview.mockResolvedValue(
-      forecastOverview,
-    );
-    planningMocks.getLatestPlanningSchedule.mockResolvedValue(latestSchedule);
-    planningMocks.getProjectBaseline.mockResolvedValue(baseline);
-
-    render(<ProjectPlanningPage />);
-
-    await waitFor(() => {
-      expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
-        latestSchedule,
-      );
-      expect(planningWorkspaceCapture.current?.activeBaseline).toEqual(
-        baseline,
-      );
-    });
-    expect(planningMocks.getLatestPlanningSchedule).toHaveBeenCalledWith(
-      "project-123",
-    );
-    expect(planningMocks.getProjectBaseline).toHaveBeenCalledWith(
-      "project-123",
-      "baseline-2",
-    );
-  });
-
-  it("loads one selected historical Forecast without replacing live Planning state", async () => {
-    window.history.pushState({}, "", "/projects/project-123/planning");
-    const currentForecast = {
-      calculationStatus: "calculated" as const,
-      id: "forecast-current-3",
-      projectId: "project-123",
-      scheduleVersion: 3,
-      taskSchedules: [],
-    };
-    const currentForecastSummary = {
-      ...forecastSnapshotDetail({
-        scheduleVersion: 3,
-        snapshotId: "forecast-current-3",
-        taskSchedules: [],
-      }).snapshot,
-      isCurrent: true,
-    };
-    const historicalSummary = forecastHistoryItem({
-      scheduleVersion: 2,
-      snapshotId: "historical-snapshot-2",
-    });
-    const historicalSnapshot = forecastSnapshotDetail({
-      scheduleVersion: 2,
-      snapshotId: "historical-snapshot-2",
-      taskSchedules: [
-        {
-          durationDays: 9,
-          isCritical: true,
-          milestoneCategory: null,
-          parentTaskId: null,
-          scheduledEndDate: "2026-08-12",
-          scheduledStartDate: "2026-08-03",
-          sequenceNumber: 1,
-          taskId: null,
-          taskKind: "standard" as const,
-          taskTitle: "Captured deleted task",
-        },
-      ],
-    });
-    const deferred = createDeferred<typeof historicalSnapshot>();
-    planningMocks.getLatestPlanningSchedule.mockResolvedValue(currentForecast);
-    planningMocks.getProjectForecastOverview.mockResolvedValue({
-      activeBaseline: null,
-      availability: {
-        activeBaseline: false,
-        currentForecast: true,
-        originalBaseline: false,
-        previousForecast: false,
-      },
-      currentForecast: currentForecastSummary,
-      finishVarianceFromCurrentActiveBaselineDays: null,
-      finishVarianceFromPreviousDays: null,
-      originalBaseline: null,
-      previousForecast: null,
-      projectId: "project-123",
-      warnings: [],
-      workingOutputState: "not_requested",
-    });
-    planningMocks.getProjectForecastHistory.mockResolvedValue({
-      hasMore: false,
-      items: [historicalSummary],
-      nextCursor: null,
-    });
-    planningMocks.getProjectForecastSnapshot.mockReturnValue(deferred.promise);
-
-    render(<ProjectPlanningPage />);
-    await waitFor(() => {
-      expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
-        currentForecast,
-      );
-    });
-    const workingSchedule = planningWorkspaceCapture.current?.workspace;
-
-    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "View Schedule v2" }),
-    );
-
-    expect(planningMocks.getProjectForecastSnapshot).toHaveBeenCalledWith(
-      "project-123",
-      "historical-snapshot-2",
-    );
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(
-      await screen.findByText("Loading Schedule v2 historical Forecast"),
-    ).toBeInTheDocument();
-    expect(planningWorkspaceCapture.current?.workspace).toBe(workingSchedule);
-    expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
-      currentForecast,
-    );
-    expect(
-      planningWorkspaceCapture.current?.selectedHistoricalForecast,
-    ).toBeNull();
-
-    await act(async () => deferred.resolve(historicalSnapshot));
-
-    await waitFor(() => {
-      expect(
-        planningWorkspaceCapture.current?.selectedHistoricalForecast,
-      ).toEqual(historicalSnapshot);
-    });
-    const selected = planningWorkspaceCapture.current
-      ?.selectedHistoricalForecast as typeof historicalSnapshot;
-    expect(selected.snapshot.snapshotId).toBe("historical-snapshot-2");
-    expect(selected.snapshot.scheduleVersion).toBe(2);
-    expect(selected.taskSchedules[0]?.taskId).toBeNull();
-    expect(planningWorkspaceCapture.current?.currentForecast).toEqual(
-      currentForecast,
-    );
-    expect(planningWorkspaceCapture.current?.workspace).toBe(workingSchedule);
-    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(1);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("historical-reference-layer")).toBeInTheDocument();
-    });
-    expect(screen.getByLabelText("Tracking legend")).toHaveTextContent(
-      "Historical Forecast v2",
-    );
-    fireEvent.click(screen.getByRole("button", { name: /^Tracking/ }));
-    const historicalToggle = screen.getByRole("menuitemcheckbox", {
-      name: "Historical Forecast version 2",
-    });
-    expect(historicalToggle).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(historicalToggle);
-    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
-    fireEvent.click(historicalToggle);
-    expect(screen.getByTestId("historical-reference-layer")).toBeInTheDocument();
-    expect(planningMocks.getProjectForecastSnapshot).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Back to Current Forecast" }),
-    );
-    await waitFor(() => {
-      expect(
-        planningWorkspaceCapture.current?.selectedHistoricalForecast,
-      ).toBeNull();
-    });
-    expect(screen.queryByTestId("historical-reference-layer")).toBeNull();
-    expect(screen.getByLabelText("Tracking legend")).not.toHaveTextContent(
-      "Historical Forecast",
-    );
-    expect(
-      screen.queryByRole("menuitemcheckbox", {
-        name: "Historical Forecast version 2",
-      }),
-    ).toBeNull();
-  });
-
-  it("retries a failed historical Forecast load and accepts an empty snapshot", async () => {
-    window.history.pushState({}, "", "/projects/project-123/planning");
-    const historicalSummary = forecastHistoryItem({
-      scheduleVersion: 1,
-      snapshotId: "historical-snapshot-1",
-    });
-    const emptySnapshot = forecastSnapshotDetail({
-      scheduleVersion: 1,
-      snapshotId: "historical-snapshot-1",
-      taskSchedules: [],
-    });
-    planningMocks.getProjectForecastHistory.mockResolvedValue({
-      hasMore: false,
-      items: [historicalSummary],
-      nextCursor: null,
-    });
-    planningMocks.getProjectForecastSnapshot
-      .mockRejectedValueOnce(new Error("database detail must stay hidden"))
-      .mockResolvedValueOnce(emptySnapshot);
-
-    render(<ProjectPlanningPage />);
-    await screen.findByText("Selected Project Workspace planning workspace");
-    fireEvent.click(screen.getByRole("button", { name: "Forecast History" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "View Schedule v1" }),
-    );
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(
-      "Historical Forecast could not be loaded. Try again.",
-    );
-    expect(alert).not.toHaveTextContent("database");
-    expect(
-      planningWorkspaceCapture.current?.selectedHistoricalForecast,
-    ).toBeNull();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Retry historical Forecast" }),
-    );
-    await waitFor(() => {
-      expect(
-        planningWorkspaceCapture.current?.selectedHistoricalForecast,
-      ).toEqual(emptySnapshot);
-    });
-    expect(emptySnapshot.taskSchedules).toEqual([]);
-    expect(planningMocks.getProjectForecastSnapshot).toHaveBeenNthCalledWith(
-      2,
-      "project-123",
-      "historical-snapshot-1",
-    );
-    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps Planning mounted while applying one coherent background workspace refresh", async () => {
-    window.history.pushState({}, "", "/projects/project-123/planning");
-    const initialWorkspace = await planningMocks.getPlanningWorkspace(
-      "project-123",
-    );
-    planningMocks.getPlanningWorkspace.mockClear();
-    const scheduleDefaults = {
-      durationDays: 1,
-      isCritical: false,
-      percentComplete: 0,
-      projectId: "project-123",
-      taskKind: "standard",
-      taskType: "task",
-    };
-    const coherentWorkspace = {
-      ...initialWorkspace,
-      schedules: [
-        {
-          ...scheduleDefaults,
-          id: "task-1",
-          snapshotId: "working-2",
-          taskId: "task-1",
-          taskTitle: "Task one",
-        },
-        {
-          ...scheduleDefaults,
-          id: "task-2",
-          snapshotId: "working-2",
-          taskId: "task-2",
-          taskTitle: "Task two",
-        },
-      ],
-      snapshot: {
-        ...initialWorkspace.snapshot,
-        id: "working-2",
-        isOfficial: false,
-        versionNumber: 0,
-      },
-    };
-    const refresh = createDeferred<typeof coherentWorkspace>();
-    planningMocks.getPlanningWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockReturnValueOnce(refresh.promise);
-    planningMocks.updatePlanningTaskSchedule.mockReset();
-    planningMocks.updatePlanningTaskSchedule.mockResolvedValue({
-      id: "task-1",
-      snapshotId: "discarded-mutation-result",
-      taskId: "task-1",
-    });
-
-    render(<ProjectPlanningPage />);
-    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
-    const gantt = screen.getByLabelText("Interactive Gantt timeline");
-    const update = planningWorkspaceCapture.current?.onUpdateSchedule as (
-      taskId: string,
-      input: Record<string, unknown>,
-    ) => Promise<unknown>;
-    let updatePromise!: Promise<unknown>;
-    await act(async () => {
-      updatePromise = update("task-1", { durationDays: 3 });
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
-    });
-    expect(screen.queryByText("Loading planning workspace")).toBeNull();
-    expect(screen.getByLabelText("Interactive Gantt timeline")).toBe(gantt);
-    expect(gantt).toBeInTheDocument();
-
-    await act(async () => {
-      refresh.resolve(coherentWorkspace);
-      await updatePromise;
-    });
-
-    const workspace = planningWorkspaceCapture.current?.workspace as {
-      schedules: Array<{ snapshotId: string }>;
-      snapshot: { id: string };
-    };
-    expect(workspace.snapshot.id).toBe("working-2");
-    expect(new Set(workspace.schedules.map((row) => row.snapshotId))).toEqual(
-      new Set(["working-2"]),
-    );
-    expect(screen.getByText("Task one")).toBeInTheDocument();
-    expect(screen.getByLabelText("Interactive Gantt timeline")).toBe(gantt);
-    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
-  });
-
-  it("ignores an older Planning workspace refresh that resolves last", async () => {
-    window.history.pushState({}, "", "/projects/project-123/planning");
-    const initialWorkspace = await planningMocks.getPlanningWorkspace(
-      "project-123",
-    );
-    planningMocks.getPlanningWorkspace.mockReset();
-    const workspaceA = {
-      ...initialWorkspace,
-      snapshot: { ...initialWorkspace.snapshot, id: "working-a" },
-    };
-    const workspaceB = {
-      ...initialWorkspace,
-      snapshot: { ...initialWorkspace.snapshot, id: "working-b" },
-    };
-    const refreshA = createDeferred<typeof workspaceA>();
-    const refreshB = createDeferred<typeof workspaceB>();
-    planningMocks.getPlanningWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockReturnValueOnce(refreshA.promise)
-      .mockReturnValueOnce(refreshB.promise);
-    planningMocks.updatePlanningTaskSchedule.mockReset();
-    planningMocks.updatePlanningTaskSchedule.mockResolvedValue({
-      id: "task-1",
-      snapshotId: "discarded-mutation-result",
-      taskId: "task-1",
-    });
-
-    render(<ProjectPlanningPage />);
-    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
-    const update = planningWorkspaceCapture.current?.onUpdateSchedule as (
-      taskId: string,
-      input: Record<string, unknown>,
-    ) => Promise<unknown>;
-    let updateAPromise!: Promise<unknown>;
-    let updateBPromise!: Promise<unknown>;
-
-    await act(async () => {
-      updateAPromise = update("task-1", { ownerId: "user-a" });
-      await Promise.resolve();
-    });
-    await waitFor(() => {
-      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(2);
-    });
-    await act(async () => {
-      updateBPromise = update("task-1", { ownerId: "user-b" });
-      await Promise.resolve();
-    });
-    await waitFor(() => {
-      expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(3);
-    });
-
-    await act(async () => {
-      refreshB.resolve(workspaceB);
-      await updateBPromise;
-    });
-    expect(
-      (planningWorkspaceCapture.current?.workspace as typeof workspaceB).snapshot.id,
-    ).toBe("working-b");
-
-    await act(async () => {
-      refreshA.resolve(workspaceA);
-      await updateAPromise;
-    });
-    expect(
-      (planningWorkspaceCapture.current?.workspace as typeof workspaceB).snapshot.id,
-    ).toBe("working-b");
-  });
-
-  it("retains the last good Planning workspace when a background refresh fails", async () => {
-    window.history.pushState({}, "", "/projects/project-123/planning");
-    const initialWorkspace = await planningMocks.getPlanningWorkspace(
-      "project-123",
-    );
-    planningMocks.getPlanningWorkspace.mockReset();
-    planningMocks.getPlanningWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockRejectedValueOnce(new Error("Unable to refresh planning workspace"));
-    planningMocks.updatePlanningTaskSchedule.mockReset();
-    planningMocks.updatePlanningTaskSchedule.mockResolvedValue({
-      id: "task-1",
-      snapshotId: "discarded-mutation-result",
-      taskId: "task-1",
-    });
-
-    render(<ProjectPlanningPage />);
-    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
-    const gantt = screen.getByLabelText("Interactive Gantt timeline");
-    const update = planningWorkspaceCapture.current?.onUpdateSchedule as (
-      taskId: string,
-      input: Record<string, unknown>,
-    ) => Promise<unknown>;
-
-    await act(async () => {
-      await update("task-1", { plannedStartDate: "2026-07-01" });
-    });
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Unable to refresh planning workspace",
-    );
-    expect(planningWorkspaceCapture.current?.workspace).toBe(initialWorkspace);
-    expect(screen.queryByText("Loading planning workspace")).toBeNull();
-    expect(screen.getByLabelText("Interactive Gantt timeline")).toBe(gantt);
-  });
-
-  it("reloads complete workspaces after task creation and dependency mutation", async () => {
-    window.history.pushState({}, "", "/projects/project-123/planning");
-    const initialWorkspace = await planningMocks.getPlanningWorkspace(
-      "project-123",
-    );
-    planningMocks.getPlanningWorkspace.mockClear();
-    const schedule = (taskId: string, snapshotId: string) => ({
-      durationDays: 1,
-      id: taskId,
-      isCritical: false,
-      percentComplete: 0,
-      projectId: "project-123",
-      snapshotId,
-      taskId,
-      taskKind: "standard",
-      taskTitle: taskId,
-      taskType: "task",
-    });
-    const afterTask = {
-      ...initialWorkspace,
-      schedules: [schedule("task-1", "working-task")],
-      snapshot: {
-        ...initialWorkspace.snapshot,
-        id: "working-task",
-        isOfficial: false,
-        versionNumber: 0,
-      },
-    };
-    const afterDependency = {
-      ...afterTask,
-      schedules: [
-        schedule("task-1", "working-dependency"),
-        schedule("task-2", "working-dependency"),
-      ],
-      snapshot: { ...afterTask.snapshot, id: "working-dependency" },
-    };
-    planningMocks.getPlanningWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(afterTask)
-      .mockResolvedValueOnce(afterDependency);
-    planningMocks.createPlanningTask.mockResolvedValue(
-      schedule("task-1", "discarded-row"),
-    );
-    planningMocks.createPlanningDependency.mockResolvedValue({ id: "dep-1" });
-
-    render(<ProjectPlanningPage />);
-    await waitFor(() => expect(planningWorkspaceCapture.current).not.toBeNull());
-    await act(async () => {
-      const createTask = planningWorkspaceCapture.current?.onCreateTask as (
-        input: Record<string, unknown>,
-      ) => Promise<unknown>;
-      await createTask({ title: "Task one" });
-    });
-    expect(
-      (planningWorkspaceCapture.current?.workspace as { snapshot: { id: string } })
-        .snapshot.id,
-    ).toBe("working-task");
-
-    await act(async () => {
-      const createDependency = planningWorkspaceCapture.current
-        ?.onCreateDependency as (
-        input: Record<string, unknown>,
-      ) => Promise<void>;
-      await createDependency({
-        dependencyType: "FS",
-        predecessorTaskId: "task-1",
-        successorTaskId: "task-2",
-      });
-    });
-    const workspace = planningWorkspaceCapture.current?.workspace as {
-      schedules: Array<{ snapshotId: string }>;
-      snapshot: { id: string };
-    };
-    expect(workspace.snapshot.id).toBe("working-dependency");
-    expect(new Set(workspace.schedules.map((row) => row.snapshotId))).toEqual(
-      new Set(["working-dependency"]),
-    );
-    expect(planningMocks.getPlanningWorkspace).toHaveBeenCalledTimes(3);
-  });
-
-  it("redirects legacy Tasks route into Delivery", async () => {
+  it("redirects legacy Tasks route into Today", async () => {
     window.history.pushState({}, "", "/projects/project-123/tasks");
 
     render(<ProjectTasksPage />);
 
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/projects/project-123/delivery");
+      expect(window.location.pathname).toBe("/today");
+      expect(window.location.search).toBe("?projectId=project-123");
     });
   });
 
@@ -1578,10 +959,7 @@ describe("Projects List navigation", () => {
         name: /Selected Project Workspace/,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Delivery" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.queryByRole("link", { name: "Delivery" })).not.toBeInTheDocument();
     expect(
       await screen.findByRole("group", { name: "Delivery toolbar" }),
     ).toBeInTheDocument();
@@ -1603,10 +981,10 @@ describe("Projects List navigation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Board" }));
 
-    expect(await screen.findByTestId("execution-kanban-board")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("columnheader", { name: "Owner" }),
-    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/project-123/board");
+    });
+    expect(screen.queryByTestId("execution-kanban-board")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "List" }));
 
@@ -1624,7 +1002,7 @@ describe("Projects List navigation", () => {
     expect(screen.getAllByText("Resolve vendor blocker").length).toBeGreaterThan(0);
   });
 
-  it("keeps completed tasks visible in the default Delivery Board Done column", async () => {
+  it("opens the project board from the delivery board URL", async () => {
     window.history.pushState({}, "", "/projects/project-123/delivery?view=board");
     window.localStorage.setItem(
       "pm_platform_permissions",
@@ -1660,73 +1038,18 @@ describe("Projects List navigation", () => {
     });
     projectMocks.getProject.mockResolvedValueOnce({
       id: "project-123",
-      members: [
-        {
-          id: "member-1",
-          projectId: "project-123",
-          role: "manager",
-          user: {
-            email: "project.manager@example.com",
-            firstName: "Project",
-            id: "user-1",
-            lastName: "Manager",
-            status: "active",
-          },
-          userId: "user-1",
-        },
-      ],
+      members: [],
       name: "Selected Project Workspace",
       status: "active",
-      tasks: [
-        {
-          assigneeId: "user-1",
-          id: "task-active",
-          percentComplete: 40,
-          priority: "high",
-          projectId: "project-123",
-          status: "todo",
-          title: "Still open delivery task",
-        },
-        {
-          assigneeId: "user-1",
-          id: "task-done",
-          percentComplete: 100,
-          priority: "medium",
-          projectId: "project-123",
-          status: "done",
-          title: "Completed delivery task",
-        },
-      ],
+      tasks: [],
     });
 
     render(<ProjectDeliveryPage />);
 
-    expect(await screen.findByTestId("execution-kanban-board")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    const doneColumn = screen.getByRole("region", { name: "Done column" });
-    expect(within(doneColumn).getByText("Completed delivery task")).toBeInTheDocument();
-    expect(within(doneColumn).getByText("1")).toBeInTheDocument();
-
-    const deliveryToolbar = screen.getByRole("group", {
-      name: "Delivery toolbar",
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/project-123/board");
     });
-    const statusFilter = within(deliveryToolbar).getByLabelText("Status");
-    fireEvent.change(statusFilter, { target: { value: "active" } });
-    expect(
-      within(screen.getByRole("region", { name: "Done column" })).queryByText(
-        "Completed delivery task",
-      ),
-    ).not.toBeInTheDocument();
-
-    fireEvent.change(statusFilter, { target: { value: "completed" } });
-    expect(
-      within(screen.getByRole("region", { name: "Done column" })).getByText(
-        "Completed delivery task",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByTestId("execution-kanban-board")).not.toBeInTheDocument();
   });
 
   it("keeps summary ancestors so Delivery List can render nested active tasks", async () => {
@@ -1926,10 +1249,8 @@ describe("Projects List navigation", () => {
     expect(
       await screen.findByRole("group", { name: "Delivery toolbar" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Delivery" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.queryByRole("link", { name: "Delivery" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Plan" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Planning" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
     expect(screen.getByText("Assigned contributor task")).toBeInTheDocument();
@@ -1958,10 +1279,7 @@ describe("Projects List navigation", () => {
       await screen.findByText("Supplier onboarding delay"),
     ).toBeInTheDocument();
     expect(screen.getByText("Integration outage")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Govern" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
 
     cleanup();
     window.history.pushState({}, "", "/projects/project-123/raid");
@@ -2040,10 +1358,7 @@ describe("Projects List navigation", () => {
     expect(
       screen.getByRole("link", { name: "Open Delivery Plan in a new tab" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Documents" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.queryByRole("link", { name: "Documents" })).not.toBeInTheDocument();
   });
 
   it("navigates to Project Workspace when the Open button is clicked", async () => {

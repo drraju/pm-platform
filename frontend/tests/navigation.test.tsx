@@ -15,13 +15,12 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
-    className,
+    ...props
   }: {
     children: React.ReactNode;
     href: string;
-    className?: string;
-  }) => (
-    <a className={className} href={href}>
+  } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...props}>
       {children}
     </a>
   ),
@@ -34,9 +33,18 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+vi.mock("@/features/notifications", () => ({
+  getUnreadNotificationCount: vi.fn(async () => 0),
+}));
+
 vi.mock("@/features/auth", () => ({
   clearSession: vi.fn(),
   getAuthMe: authMocks.getAuthMe,
+  getLandingPath: (permissionKeys: string[]) =>
+    permissionKeys.includes("work.update") ||
+    permissionKeys.includes("task.update")
+      ? "/today"
+      : "/start",
   getStoredPermissionKeys: vi.fn(() => []),
   getStoredRoleNames: authMocks.getStoredRoleNames,
   useStoredAuthSession: () => ({
@@ -164,72 +172,32 @@ describe("AppShell", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("PORTFOLIO_MANAGER")).toBeInTheDocument();
+      expect(screen.getByText("Portfolio Manager")).toBeInTheDocument();
     });
 
-    expect(
-      screen.getByRole("link", { name: /pm platform enterprise workspace/i }),
-    ).toHaveAttribute("href", "/dashboard");
-    expect(screen.getByRole("link", { name: /dashboard/i })).toHaveAttribute(
-      "href",
-      "/executive",
-    );
-    expect(screen.getByRole("link", { name: /projects/i })).toHaveAttribute(
-      "href",
-      "/projects",
-    );
     expect(screen.getByRole("link", { name: /^today$/i })).toHaveAttribute(
       "href",
       "/today",
     );
-    expect(
-      screen.getByRole("link", { name: /daily review/i }),
-    ).toHaveAttribute("href", "/daily-review");
-    expect(screen.getByRole("link", { name: /my tasks/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^projects$/i })).toHaveAttribute(
       "href",
-      "/tasks",
-    );
-    expect(screen.getByRole("link", { name: /risks/i })).toHaveAttribute(
-      "href",
-      "/risks",
-    );
-    expect(screen.getByRole("link", { name: /issues/i })).toHaveAttribute(
-      "href",
-      "/issues",
+      "/projects",
     );
     expect(
-      screen.getByRole("link", { name: /notifications/i }),
-    ).toHaveAttribute("href", "/notifications");
-    expect(screen.getByText("Administration")).toBeInTheDocument();
-    expect(screen.getByText("Workspaces")).toBeInTheDocument();
-    expect(screen.getByText("Work queues")).toBeInTheDocument();
-    expect(
-      screen.getByText("Planning").closest("[aria-disabled='true']"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Resources").closest("[aria-disabled='true']"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /enterprise calendars/i }),
-    ).toHaveAttribute("href", "/calendar");
-    expect(
-      screen.getByRole("button", { name: /open command palette/i }),
-    ).toHaveAttribute("aria-haspopup", "dialog");
-    expect(
-      screen.getByRole("button", { name: /ai assistant/i }),
-    ).toHaveAttribute("aria-disabled", "true");
-    expect(
-      screen.getByRole("navigation", { name: /breadcrumb/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("navigation", { name: /breadcrumb/i }),
-    ).toHaveTextContent("Home");
-    expect(
-      screen.queryByLabelText("Current workspace: Home"),
+      screen.queryByRole("link", { name: /^people$/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("PM")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^customers$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /programs|dashboard|daily review|risks|issues|calendars/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ai assistant/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open command palette/i })).not.toBeInTheDocument();
+    expect(document.querySelector("[aria-disabled='true']")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
     expect(screen.getByText("Workspace content")).toBeInTheDocument();
+    expect(
+      screen.getByRole("complementary", { name: /application navigation/i }),
+    ).toHaveClass("lg:block");
   });
 
   it("shows team member navigation without executive-only links", async () => {
@@ -259,55 +227,89 @@ describe("AppShell", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("TEAM_MEMBER")).toBeInTheDocument();
+      expect(screen.getByText("Team Member")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("link", { name: /projects/i })).toHaveAttribute(
-      "href",
-      "/projects",
-    );
-    expect(screen.getByRole("link", { name: /my tasks/i })).toHaveAttribute(
-      "href",
-      "/tasks",
-    );
-    expect(screen.getByRole("link", { name: /risks/i })).toHaveAttribute(
-      "href",
-      "/risks",
-    );
-    expect(screen.getByRole("link", { name: /issues/i })).toHaveAttribute(
-      "href",
-      "/issues",
-    );
-    expect(
-      screen.getByRole("link", { name: /notifications/i }),
-    ).toHaveAttribute("href", "/notifications");
-    expect(
-      screen.queryByRole("link", { name: /^dashboard$/i }),
-    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^today$/i })).toHaveAttribute(
       "href",
       "/today",
     );
-    expect(
-      screen.queryByRole("link", { name: /daily review/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /portfolio/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^projects$/i })).toHaveAttribute(
+      "href",
+      "/projects",
+    );
+    expect(screen.queryByRole("link", { name: /^people$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^customers$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^notifications$/i })).toHaveAttribute(
+      "href",
+      "/notifications",
+    );
+    expect(screen.queryByRole("link", { name: /^programs$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("TEAM_MEMBER")).not.toBeInTheDocument();
+  });
+
+  it("shows People to an admin and still hides rooms that are not ready", async () => {
+    authMocks.getAuthMe.mockResolvedValue({
+      permissions: [
+        { id: "permission-work", key: "work.update" },
+        { id: "permission-project-read", key: "project.read" },
+        { id: "permission-users", key: "user.manage" },
+        { id: "permission-customers", key: "customer.read" },
+        { id: "permission-programs", key: "program.view" },
+        { id: "permission-auth", key: "auth.configure" },
+      ],
+      roles: [{ id: "role-admin", name: "PLATFORM_ADMIN", permissions: [] }],
+      user: {
+        email: "admin@example.com",
+        firstName: "Asha",
+        id: "user-admin",
+        lastName: "Rao",
+        role: { id: "role-admin", name: "PLATFORM_ADMIN", permissions: [] },
+        status: "active",
+      },
+    });
+
+    render(
+      <AppShell>
+        <h1>Admin workspace</h1>
+      </AppShell>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Asha Rao")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("link", { name: /^people$/i })).toHaveAttribute(
+      "href",
+      "/users",
+    );
+    expect(screen.getByRole("link", { name: /^customers$/i })).toHaveAttribute(
+      "href",
+      "/customers",
+    );
+    expect(screen.getByRole("link", { name: /^programs$/i })).toHaveAttribute(
+      "href",
+      "/programs",
+    );
+    expect(screen.getByRole("combobox", { name: /search customers, projects, and work/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /notifications/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /sign-in/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("PLATFORM_ADMIN")).not.toBeInTheDocument();
   });
 });
 
 describe("workspace route context", () => {
-  it("maps project planning routes to the Planning workspace", () => {
-    expect(getWorkspaceContext("/projects/project-1/planning")).toEqual({
+  it("maps the project plan route to Plan", () => {
+    expect(getWorkspaceContext("/projects/project-1/plan")).toEqual({
       breadcrumbs: [
         { href: "/projects", label: "Projects" },
         { href: "/projects/project-1", label: "Project" },
-        { label: "Planning" },
+        { label: "Plan" },
       ],
-      description: "Project plan authoring and analysis",
-      title: "Planning",
+      description: "Schedule for this project",
+      title: "Plan",
     });
+    expect(getWorkspaceContext("/projects/project-1/board").title).toBe("Board");
   });
 
   it("preserves the project overview link on deep project routes", () => {
@@ -326,7 +328,7 @@ describe("workspace route context", () => {
   it("maps project queues without losing their Projects workspace context", () => {
     expect(getWorkspaceContext("/risks").title).toBe("Projects");
     expect(getWorkspaceContext("/tasks").breadcrumbs.at(-1)?.label).toBe(
-      "My Tasks",
+      "Today",
     );
     expect(getWorkspaceContext("/today")).toEqual({
       breadcrumbs: [{ label: "Today" }],
@@ -335,30 +337,24 @@ describe("workspace route context", () => {
     });
   });
 
-  it("labels the executive workspace as Dashboard without changing the route", () => {
-    expect(getWorkspaceContext("/executive")).toEqual({
-      breadcrumbs: [{ label: "Dashboard" }, { label: "Executive overview" }],
-      description: "Cross-project insight",
-      title: "Dashboard",
+  it("labels Programs without calling it Dashboard", () => {
+    expect(getWorkspaceContext("/programs")).toEqual({
+      breadcrumbs: [{ label: "Programs" }],
+      description: "Projects grouped for leadership",
+      title: "Programs",
     });
+    expect(getWorkspaceContext("/executive").title).toBe("Programs");
+    expect(getWorkspaceContext("/programs").title).not.toMatch(/dashboard/i);
   });
 
-  it("marks Planning instead of Projects active on a planning route", () => {
-    expect(
-      isNavigationItemActive("/projects/project-1/planning", {
-        id: "planning",
-        label: "Planning",
-        permissions: ["project.read"],
-        section: "Workspaces",
-      }),
-    ).toBe(true);
+  it("does not mark Projects active inside a project plan", () => {
     expect(
       isNavigationItemActive("/projects/project-1/planning", {
         href: "/projects",
         id: "projects",
         label: "Projects",
         permissions: ["project.read"],
-        section: "Workspaces",
+        section: "Delivery",
       }),
     ).toBe(false);
   });

@@ -7,7 +7,6 @@ import {
 } from '../../common/authz/user-identity-role-policy';
 import { ExternalIdentityProvider } from '../../common/enums/external-identity-provider.enum';
 import { UserIdentityType } from '../../common/enums/user-identity-type.enum';
-import { UserRole } from '../../common/enums/user-role.enum';
 import { ExternalIdentity } from './entities/external-identity.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
@@ -111,11 +110,10 @@ export class GoogleIdentityLinkingService {
       manager,
       input.normalizedEmail,
     );
-    const user = await this.ensureEligibleHuman(
-      manager,
-      existingUser ??
-        (await this.provisionOrReconcileUser(manager, input, authenticatedAt)),
-    );
+    if (!existingUser) {
+      throw new GoogleIdentityLinkingRejectedError();
+    }
+    const user = await this.ensureEligibleHuman(manager, existingUser);
 
     let identity = await this.reconcileMappings(manager, user, input);
     if (!identity) {
@@ -212,6 +210,7 @@ export class GoogleIdentityLinkingService {
         email: true,
         id: true,
         identityType: true,
+        localOnly: true,
         passwordChangedAt: true,
         roleId: true,
         status: true,
@@ -230,6 +229,7 @@ export class GoogleIdentityLinkingService {
         'user.email',
         'user.id',
         'user.identityType',
+        'user.localOnly',
         'user.passwordChangedAt',
         'user.roleId',
         'user.status',
@@ -239,57 +239,13 @@ export class GoogleIdentityLinkingService {
       .getOne();
   }
 
-  private async provisionOrReconcileUser(
-    manager: EntityManager,
-    input: GoogleIdentityLinkingInput,
-    authenticatedAt: Date,
-  ): Promise<User> {
-    const role = await manager.findOne(Role, {
-      select: { id: true, name: true },
-      where: { name: UserRole.TeamMember },
-    });
-    if (
-      !role ||
-      !isUserIdentityRoleAssignmentAllowed(UserIdentityType.Human, role.name)
-    ) {
-      throw new GoogleIdentityLinkingPersistenceError();
-    }
-
-    await manager
-      .createQueryBuilder()
-      .insert()
-      .into(User)
-      .values({
-        accountHistory: [],
-        email: input.normalizedEmail,
-        firstName: input.firstName,
-        identityType: UserIdentityType.Human,
-        lastLoginAt: authenticatedAt,
-        lastName: input.lastName,
-        passwordChangedAt: null,
-        passwordHash: null,
-        roleId: role.id,
-        status: 'active',
-      })
-      .orIgnore()
-      .execute();
-
-    const user = await this.findUserByNormalizedEmailForUpdate(
-      manager,
-      input.normalizedEmail,
-    );
-    if (!user) {
-      throw new GoogleIdentityLinkingPersistenceError();
-    }
-    return user;
-  }
-
   private async ensureEligibleHuman(
     manager: EntityManager,
     user: User | null,
   ): Promise<User> {
     if (
       !user ||
+      user.localOnly ||
       user.identityType !== UserIdentityType.Human ||
       !isUserAuthenticationStatusAllowed(user.identityType, user.status)
     ) {

@@ -25,6 +25,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
+import { UserRoleAssignment } from './entities/user-role-assignment.entity';
 import { User } from './entities/user.entity';
 
 export type UserAdministrationActor = {
@@ -37,8 +38,10 @@ export type CreateUserPersistenceInput = {
   email: string;
   firstName: string;
   lastName: string;
-  passwordHash: string;
+  passwordHash: string | null;
   roleId: string;
+  roleIds?: string[];
+  localOnly?: boolean;
   status?: string;
 };
 
@@ -60,6 +63,21 @@ const externalUserRoleNames = new Set<string>([
   UserRole.Partner,
 ]);
 
+const rolePrivilegeOrder = [
+  UserRole.PlatformAdmin,
+  UserRole.Admin,
+  UserRole.PortfolioManager,
+  UserRole.ProgramManager,
+  UserRole.ProjectManager,
+  UserRole.CustomerSuccessManager,
+  UserRole.Executive,
+  UserRole.Sales,
+  UserRole.TeamMember,
+  UserRole.Partner,
+  UserRole.Customer,
+  UserRole.ServiceUser,
+];
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -74,6 +92,8 @@ export class UsersService {
     @InjectRepository(ProjectMember)
     private readonly projectMembersRepository: Repository<ProjectMember>,
     private readonly authorizationPolicyService: AuthorizationPolicyService,
+    @InjectRepository(UserRoleAssignment)
+    private readonly userRolesRepository?: Repository<UserRoleAssignment>,
   ) {}
 
   async create(
@@ -83,11 +103,19 @@ export class UsersService {
     if (actor) {
       await this.ensurePlatformAdmin(actor);
     }
-    if (!createUserDto.passwordHash) {
+    const localOnly = createUserDto.localOnly ?? Boolean(createUserDto.passwordHash);
+    if (!createUserDto.passwordHash && localOnly) {
       throw new BadRequestException('Password is required');
     }
-    const role = await this.ensureCanonicalRole(createUserDto.roleId);
-    this.ensureIdentityRoleAssignment(UserIdentityType.Human, role);
+    const roles = await this.resolveRequestedRoles(
+      createUserDto.roleIds?.length
+        ? createUserDto.roleIds
+        : [createUserDto.roleId],
+    );
+    for (const role of roles) {
+      this.ensureIdentityRoleAssignment(UserIdentityType.Human, role);
+    }
+    const primaryRole = this.primaryRole(roles);
 
     const user = this.usersRepository.create({
       email: createUserDto.email,
@@ -95,15 +123,20 @@ export class UsersService {
       lastName: createUserDto.lastName,
       passwordHash: createUserDto.passwordHash,
       identityType: UserIdentityType.Human,
-      roleId: createUserDto.roleId,
-      status: createUserDto.status ?? 'first_login_pending',
+      localOnly,
+      role: primaryRole,
+      roleId: primaryRole.id,
+      status:
+        createUserDto.status ??
+        (localOnly ? 'first_login_pending' : 'active'),
       accountHistory: actor
         ? [this.createHistoryEntry('UserCreated', actor.userId)]
         : [],
     });
     const savedUser = await this.usersRepository.save(user);
+    await this.replaceRoleAssignments(savedUser.id, roles);
     this.recordUserAdministrationAudit('UserCreated', savedUser.id, actor);
-    return this.toUserResponse(savedUser);
+    return this.toUserResponse(savedUser, roles);
   }
 
   async createServiceAccount(
@@ -129,15 +162,17 @@ export class UsersService {
       passwordHash: input.passwordHash,
       role,
       roleId: role.id,
+      localOnly: true,
       status: 'disabled',
     });
     const savedUser = await this.usersRepository.save(user);
+    await this.replaceRoleAssignments(savedUser.id, [role]);
     this.recordServiceAccountAdministrationAudit(
       'ServiceAccountCreated',
       savedUser.id,
       actor,
     );
-    return this.toUserResponse(savedUser);
+    return this.toUserResponse(savedUser, [role]);
   }
 
   async findServiceAccounts(
@@ -265,7 +300,10 @@ export class UsersService {
       order: { createdAt: 'DESC', email: 'ASC' },
       relations: { role: { permissions: true } },
     });
-    return users.map((user) => this.toUserResponse(user));
+    const rolesByUserId = await this.rolesForUsers(users);
+    return users.map((user) =>
+      this.toUserResponse(user, rolesByUserId.get(user.id) ?? []),
+    );
   }
 
   async findAssignableUsers(
@@ -488,7 +526,10 @@ export class UsersService {
     if (actor) {
       await this.ensurePlatformAdmin(actor);
     }
-    if (actor?.userId === id && updateUserDto.roleId) {
+    if (
+      actor?.userId === id &&
+      (updateUserDto.roleId || updateUserDto.roleIds?.length)
+    ) {
       throw new ForbiddenException('Users cannot modify their own role');
     }
     if (actor?.userId === id && updateUserDto.status) {
@@ -503,12 +544,23 @@ export class UsersService {
         'Service account lifecycle must use the dedicated administration API',
       );
     }
+    const requestedRoleIds = updateUserDto.roleIds?.length
+      ? updateUserDto.roleIds
+      : updateUserDto.roleId
+        ? [updateUserDto.roleId]
+        : [];
     const roleChanged =
-      Boolean(updateUserDto.roleId) && updateUserDto.roleId !== user.roleId;
-    let updatedRole: Role | undefined;
-    if (updateUserDto.roleId) {
-      updatedRole = await this.ensureCanonicalRole(updateUserDto.roleId);
-      this.ensureIdentityRoleAssignment(user.identityType, updatedRole);
+      requestedRoleIds.length > 0 &&
+      (requestedRoleIds.length !== 1 || requestedRoleIds[0] !== user.roleId);
+    let updatedRoles: Role[] = [];
+    if (requestedRoleIds.length > 0) {
+      updatedRoles = await this.resolveRequestedRoles(requestedRoleIds);
+      for (const role of updatedRoles) {
+        this.ensureIdentityRoleAssignment(user.identityType, role);
+      }
+      const primaryRole = this.primaryRole(updatedRoles);
+      user.role = primaryRole;
+      user.roleId = primaryRole.id;
     } else {
       this.ensureCurrentIdentityRoleAssignment(user);
     }
@@ -521,14 +573,8 @@ export class UsersService {
     if (updateUserDto.lastName !== undefined) {
       user.lastName = updateUserDto.lastName;
     }
-    if (updateUserDto.roleId !== undefined) {
-      user.roleId = updateUserDto.roleId;
-    }
     if (updateUserDto.status !== undefined) {
       user.status = updateUserDto.status;
-    }
-    if (updatedRole) {
-      user.role = updatedRole;
     }
     const auditAction =
       user.identityType === UserIdentityType.Service
@@ -541,6 +587,9 @@ export class UsersService {
       this.createHistoryEntry(auditAction, actor?.userId),
     ];
     const savedUser = await this.usersRepository.save(user);
+    if (updatedRoles.length > 0) {
+      await this.replaceRoleAssignments(savedUser.id, updatedRoles);
+    }
     if (user.identityType === UserIdentityType.Service && actor) {
       this.recordServiceAccountAdministrationAudit(auditAction, id, actor);
     } else {
@@ -638,15 +687,26 @@ export class UsersService {
       throw new NotFoundException(`User ${userId} not found`);
     }
 
-    const role = user.role ? this.toRoleResponse(user.role) : null;
+    const rolesByUserId = await this.rolesForUsers([user]);
+    const roles = rolesByUserId.get(user.id) ?? [];
+    const permissions = new Map<string, PermissionResponseDto>();
+    for (const role of roles) {
+      for (const permission of this.toRoleResponse(role).permissions) {
+        permissions.set(permission.key, permission);
+      }
+    }
     return {
-      user: this.toUserResponse(user),
-      roles: role ? [role] : [],
-      permissions: role?.permissions ?? [],
+      user: this.toUserResponse(user, roles),
+      roles: roles.map((role) => this.toRoleResponse(role)),
+      permissions: [...permissions.values()].sort((left, right) =>
+        left.key.localeCompare(right.key),
+      ),
     };
   }
 
-  private toUserResponse(user: User): UserResponseDto {
+  private toUserResponse(user: User, assignedRoles?: Role[]): UserResponseDto {
+    const roles = assignedRoles ?? (user.role ? [user.role] : []);
+    const primary = roles.length > 0 ? this.primaryRole(roles) : null;
     return {
       id: user.id,
       email: user.email,
@@ -660,7 +720,8 @@ export class UsersService {
       accountHistory: user.accountHistory ?? [],
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt ?? null,
-      role: user.role ? this.toRoleResponse(user.role) : null,
+      role: primary ? this.toRoleResponse(primary) : null,
+      roles: roles.map((role) => this.toRoleResponse(role)),
     };
   }
 
@@ -785,12 +846,98 @@ export class UsersService {
   }
 
   async ensurePlatformAdmin(actor: UserAdministrationActor): Promise<void> {
+    const policy = this.authorizationPolicyService;
+    if (
+      typeof policy?.isPlatformAdministrator === 'function' &&
+      (await policy.isPlatformAdministrator(actor))
+    ) {
+      return;
+    }
     const role = await this.rolesRepository.findOne({
       where: { id: actor.roleId, name: UserRole.PlatformAdmin },
     });
     if (!role) {
       throw new ForbiddenException('Platform administrator access is required');
     }
+  }
+
+  private primaryRole(roles: Role[]): Role {
+    return [...roles].sort(
+      (left, right) =>
+        this.rolePrivilege(left.name) - this.rolePrivilege(right.name),
+    )[0];
+  }
+
+  private rolePrivilege(roleName: string): number {
+    const index = rolePrivilegeOrder.indexOf(roleName as UserRole);
+    return index === -1 ? rolePrivilegeOrder.length : index;
+  }
+
+  private async resolveRequestedRoles(roleIds: string[]): Promise<Role[]> {
+    const uniqueRoleIds = [...new Set(roleIds.filter(Boolean))];
+    if (uniqueRoleIds.length === 0) {
+      throw new BadRequestException('At least one role is required');
+    }
+    const roles: Role[] = [];
+    for (const roleId of uniqueRoleIds) {
+      roles.push(await this.ensureCanonicalRole(roleId));
+    }
+    return roles;
+  }
+
+  private async replaceRoleAssignments(
+    userId: string,
+    roles: Role[],
+  ): Promise<void> {
+    if (!this.userRolesRepository) {
+      return;
+    }
+    const userRolesRepository = this.userRolesRepository;
+    await userRolesRepository.delete({ userId });
+    if (roles.length === 0) {
+      return;
+    }
+    await userRolesRepository.save(
+      roles.map((role) =>
+        userRolesRepository.create({ roleId: role.id, userId }),
+      ),
+    );
+  }
+
+  private async rolesForUsers(users: User[]): Promise<Map<string, Role[]>> {
+    const rolesByUserId = new Map<string, Role[]>();
+    if (!this.userRolesRepository) {
+      for (const user of users) {
+        rolesByUserId.set(user.id, user.role ? [user.role] : []);
+      }
+      return rolesByUserId;
+    }
+    const userRolesRepository = this.userRolesRepository;
+    if (users.length === 0) {
+      return rolesByUserId;
+    }
+    const assignments = await userRolesRepository.find({
+      where: { userId: In(users.map((user) => user.id)) },
+    });
+    const roleIds = [...new Set(assignments.map((assignment) => assignment.roleId))];
+    const roles = roleIds.length
+      ? await this.rolesRepository.find({
+          relations: { permissions: true },
+          where: { id: In(roleIds) },
+        })
+      : [];
+    const rolesById = new Map(roles.map((role) => [role.id, role]));
+    for (const user of users) {
+      const assigned = assignments
+        .filter((assignment) => assignment.userId === user.id)
+        .map((assignment) => rolesById.get(assignment.roleId))
+        .filter((role): role is Role => Boolean(role));
+      rolesByUserId.set(
+        user.id,
+        assigned.length > 0 ? assigned : user.role ? [user.role] : [],
+      );
+    }
+    return rolesByUserId;
   }
 
   private createHistoryEntry(action: string, administratorId = 'system') {

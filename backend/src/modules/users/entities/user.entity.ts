@@ -54,6 +54,9 @@ export class User extends TimestampedEntity {
   @Column({ name: 'role_id', type: 'uuid' })
   roleId: string;
 
+  @Column({ default: false, name: 'local_only' })
+  localOnly?: boolean;
+
   @Column({ default: 'active' })
   status: string;
 

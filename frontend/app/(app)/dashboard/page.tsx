@@ -50,7 +50,7 @@ function PageContent() {
         const authMe = await getAuthMe();
         storeAuthMe(authMe);
 
-        const defaultDashboardPath = getDefaultDashboardPath(authMe);
+        const defaultDashboardPath: string = getDefaultDashboardPath(authMe);
         if (defaultDashboardPath !== "/dashboard") {
           router.replace(defaultDashboardPath);
           return;
@@ -61,7 +61,7 @@ function PageContent() {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "Unable to load dashboard",
+            : "Unable to load home",
         );
       } finally {
         setIsLoading(false);
@@ -81,7 +81,7 @@ function PageContent() {
         {isLoading ? <DashboardLoadingState /> : null}
 
         {!isLoading && error ? (
-          <ErrorState message={error} title="Unable to load dashboard" />
+          <ErrorState message={error} title="Unable to load home" />
         ) : null}
 
         {!isLoading && !error && dashboard ? (

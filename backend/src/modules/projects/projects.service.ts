@@ -10,7 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import {
   AuthorizationActor,
   AuthorizationPolicyService,
@@ -50,6 +50,7 @@ import { Assumption } from '../raid/entities/assumption.entity';
 import { Dependency } from '../raid/entities/dependency.entity';
 import { Issue } from '../raid/entities/issue.entity';
 import { Risk } from '../raid/entities/risk.entity';
+import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../users/entities/role.entity';
 import { CreateProjectMemberDto } from './dto/create-project-member.dto';
@@ -85,7 +86,11 @@ const mutableProjectStatuses = new Set([
   'at_risk',
   'blocked',
   'complete',
+  'done',
+  'paused',
+  'planned',
 ]);
+const leadMembershipRoles = new Set([ProjectRole.Owner, ProjectRole.Manager]);
 const taskExecutionFields = new Set(['percentComplete', 'remarks', 'status']);
 const taskNonCapabilityFields = new Set(['assigneeId']);
 const externalEditableTaskFields = new Set([
@@ -113,6 +118,8 @@ export class ProjectsService {
     private readonly taskDependenciesRepository: Repository<TaskDependency>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(Customer)
+    private readonly customersRepository: Repository<Customer>,
     @InjectRepository(Role)
     private readonly rolesRepository: Repository<Role>,
     private readonly projectHealthService: ProjectHealthService,
@@ -136,13 +143,24 @@ export class ProjectsService {
       throw new ForbiddenException('Authenticated user is required');
     }
 
-    const normalizedInput = {
-      ...createProjectDto,
-      ownerId: actor.userId,
-    };
     const creator = await this.findUserForProjectMembership(actor.userId);
-    this.ensureProjectRoleEligible(creator, ProjectRole.Owner);
-    this.validateMutableProjectStatus(normalizedInput.status);
+    const leadUserId = createProjectDto.leadUserId || actor.userId;
+    const lead = leadUserId === actor.userId
+      ? creator
+      : await this.findUserForProjectMembership(leadUserId);
+    this.ensureProjectRoleEligible(lead, ProjectRole.Owner);
+    if (leadUserId !== actor.userId) {
+      this.ensureProjectRoleEligible(creator, ProjectRole.Contributor);
+    }
+    this.validateMutableProjectStatus(createProjectDto.status);
+    await this.requireCustomer(createProjectDto.customerId);
+    const { leadUserId: omittedLeadUserId, ...projectInput } = createProjectDto;
+    void omittedLeadUserId;
+    const normalizedInput = {
+      ...projectInput,
+      customerId: createProjectDto.customerId,
+      ownerId: leadUserId,
+    };
     await this.validateGovernanceUsers(normalizedInput);
 
     return this.projectsRepository.manager.transaction(
@@ -159,9 +177,21 @@ export class ProjectsService {
             projectId: project.id,
             role: ProjectRole.Owner,
             updatedById: actor.userId,
-            userId: actor.userId,
+            userId: leadUserId,
           }),
         );
+        if (leadUserId !== actor.userId) {
+          await transactionalEntityManager.save(
+            ProjectMember,
+            this.projectMembersRepository.create({
+              createdById: actor.userId,
+              projectId: project.id,
+              role: ProjectRole.Contributor,
+              updatedById: actor.userId,
+              userId: actor.userId,
+            }),
+          );
+        }
 
         return project;
       },
@@ -174,10 +204,7 @@ export class ProjectsService {
   ): Promise<ProjectWithHealth[]> {
     let projects =
       await this.projectVisibilityService.getVisibleProjects(actor);
-    if (
-      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
-      UserRole.Customer
-    ) {
+    if (actor && (await this.authorizationPolicyService.isCustomerOnly(actor))) {
       const visible = await Promise.all(
         projects.map((project) =>
           this.projectVisibilityService.canViewProject(project.id, actor),
@@ -193,6 +220,9 @@ export class ProjectsService {
       const isArchived = project.status === archivedProjectStatus;
       return lifecycle === 'archived' ? isArchived : !isArchived;
     });
+    if (actor && (await this.authorizationPolicyService.isExternalActor(actor))) {
+      return this.presentExternalProjects(filteredProjects, actor);
+    }
     return Promise.all(
       filteredProjects.map((project) =>
         this.projectForActor(
@@ -213,6 +243,7 @@ export class ProjectsService {
       relations: {
         assumptions: { owner: true },
         businessOwner: true,
+        customer: true,
         dependencies: { owner: true },
         deliveryLead: true,
         executiveSponsor: true,
@@ -247,10 +278,18 @@ export class ProjectsService {
   ): Promise<Project> {
     await this.ensureCanManageProject(id, actor);
     this.validateMutableProjectStatus(updateProjectDto.status);
-    await this.validateGovernanceUsers(updateProjectDto);
+    if (updateProjectDto.customerId) {
+      await this.requireCustomer(updateProjectDto.customerId);
+    }
+    const { leadUserId, ...projectFields } = updateProjectDto;
+    await this.validateGovernanceUsers(projectFields);
     const project = await this.findProjectEntity(id);
-    Object.assign(project, updateProjectDto);
-    return this.projectsRepository.save(project);
+    Object.assign(project, projectFields);
+    const saved = await this.projectsRepository.save(project);
+    if (leadUserId) {
+      await this.assignLead(id, leadUserId, actor);
+    }
+    return saved;
   }
 
   async remove(id: string, actor?: AuthenticatedActor): Promise<void> {
@@ -297,22 +336,14 @@ export class ProjectsService {
     query: ProjectMemberCandidateQueryDto,
     actor: AuthenticatedActor,
   ): Promise<ProjectMemberCandidateResponseDto[]> {
-    if (
-      !(await this.authorizationPolicyService.hasPermission(
-        actor,
-        PermissionKey.ProjectTeamManage,
-      ))
-    ) {
-      throw new ForbiddenException(
-        'Project team management access is required',
-      );
-    }
     await this.ensureCanManageProject(projectId, actor);
     await this.ensureProjectExists(projectId);
     const candidates = this.usersRepository
       .createQueryBuilder('candidate')
       .leftJoinAndSelect('candidate.role', 'role')
-      .where('candidate.status = :status', { status: 'active' })
+      .where('candidate.status IN (:...statuses)', {
+        statuses: ['active', 'first_login_pending'],
+      })
       .andWhere('(role.name IS NULL OR role.name <> :partner)', {
         partner: UserRole.Partner,
       })
@@ -381,6 +412,9 @@ export class ProjectsService {
 
       const restoredMember =
         await this.projectMembersRepository.save(existingMember);
+      if (leadMembershipRoles.has(projectRole)) {
+        await this.demoteOtherLeads(projectId, createProjectMemberDto.userId, actor?.userId);
+      }
       return this.toProjectMemberResponse(
         await this.findMember(projectId, restoredMember.id),
       );
@@ -396,6 +430,9 @@ export class ProjectsService {
     });
 
     const savedMember = await this.projectMembersRepository.save(member);
+    if (leadMembershipRoles.has(projectRole)) {
+      await this.demoteOtherLeads(projectId, createProjectMemberDto.userId, actor?.userId);
+    }
     return this.toProjectMemberResponse(
       await this.findMember(projectId, savedMember.id),
     );
@@ -414,11 +451,15 @@ export class ProjectsService {
       where: { projectId },
     });
 
-    const visibleMembers =
-      (await this.authorizationPolicyService.isExternalActor(actor))
-        ? members.filter((member) => member.userId === actor!.userId)
-        : members;
-    return visibleMembers.map((member) => this.toProjectMemberResponse(member));
+    const external = await this.authorizationPolicyService.isExternalActor(actor);
+    return members.map((member) =>
+      this.toProjectMemberResponse(member, {
+        includeEmail:
+          !external ||
+          leadMembershipRoles.has(member.role) ||
+          member.userId === actor?.userId,
+      }),
+    );
   }
 
   async updateMember(
@@ -435,6 +476,9 @@ export class ProjectsService {
     member.role = updateProjectMemberDto.role;
 
     const savedMember = await this.projectMembersRepository.save(member);
+    if (leadMembershipRoles.has(updateProjectMemberDto.role)) {
+      await this.demoteOtherLeads(projectId, member.userId, actor?.userId);
+    }
     return this.toProjectMemberResponse(
       await this.findMember(projectId, savedMember.id),
     );
@@ -463,9 +507,7 @@ export class ProjectsService {
 
     const external =
       await this.authorizationPolicyService.isExternalActor(actor);
-    const customer =
-      (await this.authorizationPolicyService.getActorRoleName(actor)) ===
-      UserRole.Customer;
+    const customer = await this.authorizationPolicyService.isCustomerOnly(actor);
     if (customer && query.assigneeId && query.assigneeId !== actor!.userId) {
       return [];
     }
@@ -1153,6 +1195,10 @@ export class ProjectsService {
       return;
     }
 
+    if (actor && (await this.authorizationPolicyService.isExternalActor(actor))) {
+      throw new NotFoundException(`Project ${projectId} not found`);
+    }
+
     throw new ForbiddenException('Project access is restricted');
   }
 
@@ -1443,6 +1489,76 @@ export class ProjectsService {
     throw new ConflictException('Project purge integrity verification failed');
   }
 
+  private async requireCustomer(customerId?: string | null) {
+    if (!customerId) {
+      throw new BadRequestException('Choose a customer');
+    }
+    const customer = await this.customersRepository.findOne({
+      select: { id: true },
+      where: { id: customerId },
+    });
+    if (!customer) {
+      throw new BadRequestException('Choose a customer');
+    }
+  }
+
+  private async assignLead(
+    projectId: string,
+    leadUserId: string,
+    actor?: AuthenticatedActor,
+  ) {
+    const lead = await this.findUserForProjectMembership(leadUserId);
+    this.ensureProjectRoleEligible(lead, ProjectRole.Owner);
+    const existing = await this.projectMembersRepository.findOne({
+      withDeleted: true,
+      where: { projectId, userId: leadUserId },
+    });
+    if (existing) {
+      existing.role = ProjectRole.Owner;
+      existing.deletedAt = null;
+      existing.deletedById = null;
+      existing.updatedById = actor?.userId;
+      await this.projectMembersRepository.save(existing);
+    } else {
+      await this.projectMembersRepository.save(
+        this.projectMembersRepository.create({
+          createdById: actor?.userId,
+          projectId,
+          role: ProjectRole.Owner,
+          updatedById: actor?.userId,
+          userId: leadUserId,
+        }),
+      );
+    }
+    await this.demoteOtherLeads(projectId, leadUserId, actor?.userId);
+  }
+
+  private async demoteOtherLeads(
+    projectId: string,
+    leadUserId: string,
+    actorId?: string,
+  ) {
+    const leads =
+      (await this.projectMembersRepository.find({
+        where: {
+          projectId,
+          role: In([ProjectRole.Owner, ProjectRole.Manager]),
+        },
+      })) ?? [];
+    const previous = leads.filter((member) => member.userId !== leadUserId);
+    for (const member of previous) {
+      member.role = ProjectRole.Contributor;
+      member.updatedById = actorId;
+      await this.projectMembersRepository.save(member);
+    }
+    if (this.projectsRepository.update) {
+      await this.projectsRepository.update(
+        { id: projectId },
+        { ownerId: leadUserId, updatedById: actorId },
+      );
+    }
+  }
+
   private async ensureUserExists(userId: string): Promise<void> {
     const user = await this.usersRepository.findOne({
       select: { id: true },
@@ -1508,7 +1624,7 @@ export class ProjectsService {
 
     if (!mutableProjectStatuses.has(status)) {
       throw new BadRequestException(
-        'Project status must be active, at_risk, blocked, or complete',
+        'Project status must be planned, active, paused, done, or an existing delivery status',
       );
     }
   }
@@ -1698,16 +1814,6 @@ export class ProjectsService {
       throw new BadRequestException(
         'Tasks can only contain executable subtasks',
       );
-    }
-
-    if (parentTask.parentTaskId) {
-      const grandparentTask = await this.findPlanningTask(
-        projectId,
-        parentTask.parentTaskId,
-      );
-      if (grandparentTask?.taskKind === TaskKind.Standard) {
-        throw new BadRequestException('Subtasks cannot contain child tasks');
-      }
     }
 
     if (existingTask) {
@@ -1957,30 +2063,32 @@ export class ProjectsService {
 
   private toProjectMemberResponse(
     member: ProjectMember,
+    options?: { includeEmail?: boolean },
   ): ProjectMemberResponseDto {
-    const displayName = member.user
-      ? [member.user.firstName, member.user.lastName]
-          .filter(Boolean)
-          .join(' ')
-          .trim() || member.user.email
-      : undefined;
+    const includeEmail = options?.includeEmail !== false;
+    const named = member.user
+      ? [member.user.firstName, member.user.lastName].filter(Boolean).join(' ').trim()
+      : '';
+    const displayName = named || (includeEmail ? member.user?.email : 'Team member');
+
+    const user = member.user
+      ? {
+          id: member.user.id,
+          firstName: member.user.firstName ?? '',
+          lastName: member.user.lastName ?? '',
+          displayName: displayName || 'Team member',
+          role: includeEmail ? (member.user.role?.name ?? null) : null,
+          ...(includeEmail ? { email: member.user.email } : {}),
+        }
+      : null;
 
     return {
       id: member.id,
       projectId: member.projectId,
       userId: member.userId,
       role: member.role,
-      user: member.user
-        ? {
-            id: member.user.id,
-            email: member.user.email,
-            firstName: member.user.firstName ?? '',
-            lastName: member.user.lastName ?? '',
-            displayName: displayName ?? member.user.email,
-            role: member.user.role?.name ?? null,
-          }
-        : null,
-    };
+      user,
+    } as ProjectMemberResponseDto;
   }
 
   private withHealth(project: Project): ProjectWithHealth {
@@ -2006,6 +2114,34 @@ export class ProjectsService {
     return decoratePlanningTasks([task])[0];
   }
 
+  private async presentExternalProjects(
+    projects: Project[],
+    actor: ProjectVisibilityActor,
+  ): Promise<ProjectWithHealth[]> {
+    const ids = projects.map((project) => project.id);
+    if (ids.length === 0) {
+      return [];
+    }
+    const loaded = await this.projectsRepository.find({
+      relations: {
+        customer: true,
+        members: { user: true },
+        owner: true,
+        tasks: true,
+      },
+      where: { id: In(ids) },
+    });
+    const byId = new Map(loaded.map((project) => [project.id, project]));
+    return Promise.all(
+      ids.flatMap((id) => {
+        const project = byId.get(id);
+        return project
+          ? [this.projectForActor(this.decorateProject(this.withHealth(project)), actor)]
+          : [];
+      }),
+    );
+  }
+
   private async projectForActor(
     project: ProjectWithHealth,
     actor?: ProjectVisibilityActor,
@@ -2013,20 +2149,67 @@ export class ProjectsService {
     if (!(await this.authorizationPolicyService.isExternalActor(actor))) {
       return project;
     }
+
+    const lead = (project.members ?? []).find((member) =>
+      leadMembershipRoles.has(member.role),
+    );
+    const leadUser = lead?.user ?? project.owner ?? null;
+
     return {
       createdAt: project.createdAt,
+      customer: project.customer
+        ? { id: project.customer.id, name: project.customer.name }
+        : null,
+      customerId: project.customerId ?? null,
       description: project.description ?? null,
       health: {
         reasons: [],
-        status: project.health.status,
+        status: project.health?.status,
       },
       id: project.id,
+      members: (project.members ?? []).map((member) =>
+        this.toProjectMemberResponse(member, {
+          includeEmail:
+            leadMembershipRoles.has(member.role) || member.userId === actor?.userId,
+        }),
+      ),
       name: project.name,
+      owner: leadUser
+        ? {
+            email: leadUser.email,
+            firstName: leadUser.firstName ?? '',
+            id: leadUser.id,
+            lastName: leadUser.lastName ?? '',
+          }
+        : null,
+      ownerId: lead?.userId ?? project.ownerId ?? null,
       startDate: project.startDate ?? null,
       status: project.status,
       targetEndDate: project.targetEndDate ?? null,
+      tasks: (project.tasks ?? []).map((task) => this.presentExternalTask(task)),
       updatedAt: project.updatedAt,
     } as unknown as ProjectWithHealth;
+  }
+
+  private presentExternalTask(task: Task) {
+    return {
+      assignee: task.assignee
+        ? {
+            firstName: task.assignee.firstName ?? '',
+            id: task.assignee.id,
+            lastName: task.assignee.lastName ?? '',
+          }
+        : null,
+      assigneeId: task.assigneeId ?? null,
+      dueDate: task.dueDate ?? null,
+      id: task.id,
+      parentTaskId: task.parentTaskId ?? null,
+      projectId: task.projectId,
+      startDate: task.startDate ?? null,
+      status: task.status,
+      taskKind: task.taskKind,
+      title: task.title,
+    };
   }
 
   private async projectTaskForActor(
