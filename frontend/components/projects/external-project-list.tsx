@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import type { ApiProject } from "@/features/projects";
 import { countWork, todayDate } from "@/features/work/work-count";

@@ -168,4 +168,25 @@ describe("Plan outline", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add subtask" }));
     expect(onAdd).toHaveBeenCalledWith({ parentTaskId: "container", title: "Contract" });
   });
+
+  it("opens a work item without leaving the plan", () => {
+    const onOpen = vi.fn();
+    render(
+      <PlanOutline
+        canAdd={false}
+        canEditDates={false}
+        canEditStatus={() => false}
+        isSaving={false}
+        onAdd={vi.fn()}
+        onOpen={onOpen}
+        onReorder={vi.fn()}
+        onUpdate={vi.fn()}
+        tasks={tasks}
+        today="2026-10-29"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Read API" }));
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "mine" }));
+  });
 });

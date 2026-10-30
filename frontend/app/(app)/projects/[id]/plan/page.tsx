@@ -10,9 +10,10 @@ import {
 } from "@/components/foundation";
 import { PlanOutline } from "@/components/plan/plan-outline";
 import { CompactProjectWorkspaceLayout, ProjectLayout } from "@/components/project";
-import { getAuthMe, isExternalContact, storeAuthMe } from "@/features/auth";
+import { WorkPanel } from "@/components/work/work-panel";
+import { getAuthMe, hasPermission, isExternalContact, storeAuthMe } from "@/features/auth";
 import { getProject, type ApiProjectDetails, type ApiTask } from "@/features/projects";
-import { createTask, updateTask } from "@/features/tasks";
+import { addTaskComment, createTask, getTaskExecutionUpdates, updateTask } from "@/features/tasks";
 import { isWorkContainer, todayDate } from "@/features/work/work-count";
 import { reorderPlanSiblings } from "@/features/work/plan-outline";
 
@@ -23,6 +24,8 @@ export default function ProjectPlanPage() {
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [canEditDates, setCanEditDates] = useState(false);
+  const [canComment, setCanComment] = useState(false);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -40,7 +43,15 @@ export default function ProjectPlanPage() {
     setProject(details);
     setTasks(details.tasks ?? []);
     setCurrentUserId(userId);
-    setCanEditDates(isLead && !isExternalContact(authMe.roles));
+    const keys = authMe.permissions.map((permission) => permission.key);
+    const contact = isExternalContact(authMe.roles);
+    setCanEditDates(isLead && !contact);
+    setCanComment(
+      !contact &&
+        (hasPermission(keys, "task.comment") ||
+          hasPermission(keys, "task.update") ||
+          hasPermission(keys, "work.update")),
+    );
   }, [projectId]);
 
   useEffect(() => {
@@ -78,6 +89,7 @@ export default function ProjectPlanPage() {
     name: "Project",
     status: "active",
   };
+  const openTask = tasks.find((task) => task.id === openTaskId) ?? null;
 
   return (
     <ProjectLayout
@@ -93,6 +105,7 @@ export default function ProjectPlanPage() {
         canEditStatus={canEditStatus}
         isSaving={isSaving}
         members={project?.members ?? []}
+        onOpen={(task) => setOpenTaskId(task.id)}
         onAdd={async (input) => {
           setIsSaving(true);
           setError(null);
@@ -144,6 +157,33 @@ export default function ProjectPlanPage() {
         tasks={tasks}
         today={todayDate()}
       />
+      {openTask ? (
+        <WorkPanel
+          canAssign={canEditDates}
+          canComment={canComment && !isWorkContainer(openTask, tasks)}
+          canEditTitle={canEditDates || canEditStatus(openTask)}
+          members={project?.members ?? []}
+          isSaving={isSaving}
+          onClose={() => setOpenTaskId(null)}
+          onComment={async (taskId, body) => {
+            await addTaskComment(taskId, body);
+          }}
+          onLoadComments={getTaskExecutionUpdates}
+          onUpdate={async (task, patch) => {
+            setIsSaving(true);
+            setError(null);
+            try {
+              const saved = await updateTask(task.id, patch);
+              setTasks((current) => current.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)));
+            } catch (requestError) {
+              setError(requestError instanceof Error ? requestError.message : "Unable to update the plan");
+            } finally {
+              setIsSaving(false);
+            }
+          }}
+          task={openTask}
+        />
+      ) : null}
     </ProjectLayout>
   );
 }

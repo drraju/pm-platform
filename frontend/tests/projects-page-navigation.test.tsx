@@ -206,7 +206,7 @@ const navigationMocks = vi.hoisted(() => ({
 }));
 
 const authMocks = vi.hoisted(() => ({
-  getAuthMe: vi.fn(async () => ({
+  defaultAuthMe: () => ({
     permissions: [
       { id: "permission-project-read", key: "project.read" },
       { id: "permission-project-update", key: "project.update" },
@@ -227,7 +227,8 @@ const authMocks = vi.hoisted(() => ({
       roleId: "role-1",
       status: "active",
     },
-  })),
+  }),
+  getAuthMe: vi.fn(async () => authMocks.defaultAuthMe()),
   storeAuthMe: vi.fn(
     (authMe: {
       permissions: Array<{ key: string }>;
@@ -290,6 +291,11 @@ vi.mock("@/features/auth", () => ({
     requiredPermissions.some((permission) => permissionKeys.includes(permission)),
   hasPermission: (permissionKeys: string[], requiredPermission: string) =>
     permissionKeys.includes(requiredPermission),
+  isExternalContact: (roles: Array<{ name: string }> | undefined) =>
+    Boolean(roles?.length) &&
+    roles.every(
+      (role) => role.name === "CUSTOMER" || role.name === "PARTNER",
+    ),
   resolveProjectUiCapabilities: ({
     currentUserId,
     members = [],
@@ -515,7 +521,8 @@ describe("Projects List navigation", () => {
     );
     planningMocks.getProjectForecastSnapshot.mockReset();
     planningWorkspaceCapture.current = null;
-    authMocks.getAuthMe.mockClear();
+    authMocks.getAuthMe.mockReset();
+    authMocks.getAuthMe.mockImplementation(async () => authMocks.defaultAuthMe());
     authMocks.storeAuthMe.mockClear();
   });
 
@@ -808,7 +815,10 @@ describe("Projects List navigation", () => {
     expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Today" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tasks" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "RAID" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/raid",
+    );
     expect(screen.getByRole("link", { name: "Team" })).toHaveAttribute(
       "href",
       "/projects/project-123/team",
@@ -1275,90 +1285,32 @@ describe("Projects List navigation", () => {
 
     render(<ProjectGovernPage />);
 
-    expect(
-      await screen.findByText("Supplier onboarding delay"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Integration outage")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
+    expect(screen.getByText("Opening RAID...")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/project-123/raid");
+    });
 
     cleanup();
     window.history.pushState({}, "", "/projects/project-123/raid");
     render(<ProjectRaidPage />);
-    await waitFor(() => {
-      expect(window.location.pathname).toBe("/projects/project-123/govern");
-    });
+    expect(await screen.findByText("Supplier onboarding delay")).toBeInTheDocument();
+    expect(screen.getByText("Integration outage")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(window.location.pathname).toBe("/projects/project-123/raid");
   });
 
-  it("loads the project Documents route", async () => {
+  it("opens the project instead of a Documents room", async () => {
     window.history.pushState({}, "", "/projects/project-123/documents");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((url: string) => {
-        let responseBody: unknown = [
-          {
-            approvalStatus: "APPROVED",
-            category: "Project Management",
-            categoryId: "category-1",
-            documentType: "Project Charter",
-            documentTypeId: "type-1",
-            externalUrl: "https://example.com/delivery-plan",
-            id: "document-1",
-            linkStatus: "UNKNOWN",
-            owner: null,
-            projectId: "project-123",
-            reviewStatus: "NEVER_REVIEWED",
-            storageProvider: "SHAREPOINT",
-            storageProviderLabel: "SharePoint",
-            title: "Delivery Plan",
-          },
-        ];
-        if (url.endsWith("/documents/storage-providers")) {
-          responseBody = [
-            { label: "SharePoint", value: "SHAREPOINT" },
-            { label: "Other", value: "OTHER" },
-          ];
-        }
-        if (url.endsWith("/documents/document-types")) {
-          responseBody = [{ id: "type-1", name: "Project Charter" }];
-        }
-        if (url.endsWith("/documents/categories")) {
-          responseBody = [{ id: "category-1", name: "Project Management" }];
-        }
-        if (url.endsWith("/users/assignable")) {
-          responseBody = [];
-        }
-        if (url.endsWith("/documents/summary")) {
-          responseBody = {
-            approved: 1,
-            byCategory: { "Project Management": 1 },
-            byStorageProvider: { SharePoint: 1 },
-            draft: 0,
-            overdueReviews: 0,
-            totalDocuments: 1,
-            underReview: 0,
-          };
-        }
-
-        return Promise.resolve({
-          headers: { get: vi.fn(() => null) },
-          ok: true,
-          status: 200,
-          text: vi.fn().mockResolvedValue(JSON.stringify(responseBody)),
-        });
-      }),
-    );
 
     render(<ProjectDocumentsPage />);
 
-    expect(
-      await screen.findByRole("heading", {
-        name: "Documents",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Open Delivery Plan in a new tab" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Documents" })).not.toBeInTheDocument();
+    expect(screen.getByText("Opening the project...")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/project-123");
+    });
   });
 
   it("navigates to Project Workspace when the Open button is clicked", async () => {

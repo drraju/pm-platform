@@ -1,6 +1,8 @@
+"use client";
+
 import React from "react";
-import { CalendarList } from "@/features/calendar/components/CalendarList";
+import { OpenRoom } from "@/components/layout/open-room";
 
 export default function CalendarPage() {
-  return <CalendarList />;
+  return <OpenRoom href="/projects" label="Opening Projects..." />;
 }

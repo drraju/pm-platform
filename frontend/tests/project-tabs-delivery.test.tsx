@@ -75,7 +75,10 @@ describe("ProjectTabs Delivery consolidation", () => {
     expect(screen.queryByRole("link", { name: /^today$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Execution" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tasks" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "RAID" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/raid",
+    );
   });
 
   it("shows Delivery for Team Members but hides Planning and Govern", () => {
@@ -94,5 +97,25 @@ describe("ProjectTabs Delivery consolidation", () => {
     expect(screen.getByRole("link", { name: "Plan" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Planning" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Govern" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "RAID" })).toHaveAttribute(
+      "href",
+      "/projects/project-123/raid",
+    );
+  });
+
+  it("hides RAID from accounts that cannot read it", () => {
+    storage.set(
+      "pm_platform_permissions",
+      JSON.stringify(["project.read", "customer.read"]),
+    );
+    storage.set(
+      "pm_platform_role_names",
+      JSON.stringify(["CUSTOMER_SUCCESS_MANAGER"]),
+    );
+
+    render(<ProjectTabs activeTab="overview" projectId="project-123" />);
+
+    expect(screen.queryByRole("link", { name: "RAID" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
   });
 });

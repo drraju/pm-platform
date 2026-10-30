@@ -1,25 +1,36 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { statusTone, TodayProjectBoard, type TodayDependency } from "@/components/today/today-project-board";
+import { WorkPanel } from "@/components/work/work-panel";
 import type { ApiProject, ApiTask, ApiTaskExecutionUpdate } from "@/features/projects";
 import {
   containerProgress,
   isOverdueWork,
+  isWorkContainer,
   storedWorkStatus,
   todayDate,
-  workStatusLabel,
   workStatusOptions,
   type WorkCount,
 } from "@/features/work/work-count";
 
 type TodayListProps = {
   canAdd: boolean;
+  canAssign?: boolean;
   canEdit: (task: ApiTask) => boolean;
   containers: ApiTask[];
+  dependencies?: TodayDependency[];
   count: WorkCount;
   error: string | null;
   isSaving: boolean;
+  members?: Array<{
+    role?: string;
+    user?: { firstName?: string | null; lastName?: string | null } | null;
+    userId: string;
+  }>;
   onAdd: (input: { dueDate?: string; projectId: string; title: string }) => Promise<void>;
+  onAddDependency?: (input: { predecessorTaskId: string; successorTaskId: string }) => Promise<void>;
+  onAddSubtask?: (input: { parentTaskId: string; title: string }) => Promise<void>;
   onComment: (taskId: string, body: string) => Promise<void>;
   onLoadComments: (taskId: string) => Promise<ApiTaskExecutionUpdate[]>;
   openTaskId?: string | null;
@@ -33,12 +44,17 @@ type TodayListProps = {
 
 export function TodayList({
   canAdd,
+  canAssign = false,
   canEdit,
   containers,
+  dependencies = [],
   count,
   error,
   isSaving,
+  members,
   onAdd,
+  onAddDependency,
+  onAddSubtask,
   onComment,
   onLoadComments,
   openTaskId,
@@ -86,8 +102,28 @@ export function TodayList({
         <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       ) : null}
 
+      {scope === "mine" ? (
+        <p className="text-sm text-slate-600">
+          Choose a project to update its tasks, status, subtasks, and dependencies here.
+        </p>
+      ) : null}
+
       {canAdd ? <AddWork isSaving={isSaving} onAdd={onAdd} projects={projects} selectedProjectId={scope === "mine" ? "" : scope} /> : null}
 
+      {scope !== "mine" && onAddSubtask && onAddDependency ? (
+        <TodayProjectBoard
+          canAdd={canAdd}
+          canEdit={canEdit}
+          dependencies={dependencies}
+          isSaving={isSaving}
+          onAddDependency={onAddDependency}
+          onAddSubtask={onAddSubtask}
+          onOpen={(task) => setOpenId(task.id)}
+          onUpdate={onUpdate}
+          tasks={tasks}
+          today={today}
+        />
+      ) : (
       <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
         <div className="hidden border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid md:grid-cols-[minmax(0,1.5fr)_8rem_7.5rem_minmax(0,1fr)]">
           <span>Work</span>
@@ -115,8 +151,9 @@ export function TodayList({
           </ul>
         )}
       </section>
+      )}
 
-      {containers.length > 0 ? (
+      {scope === "mine" && containers.length > 0 ? (
         <section className="rounded-md border border-slate-200 bg-white">
           <button
             className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-slate-800"
@@ -144,8 +181,11 @@ export function TodayList({
 
       {openTask ? (
         <WorkPanel
-          canEdit={canEdit(openTask)}
+          canAssign={canAssign}
+          canComment={!isWorkContainer(openTask, tasks)}
+          canEditTitle={canEdit(openTask)}
           isSaving={isSaving}
+          members={members}
           onClose={() => setOpenId(null)}
           onComment={onComment}
           onLoadComments={onLoadComments}
@@ -187,7 +227,7 @@ function WorkRow({
       </div>
       <select
         aria-label={`Status for ${task.title}`}
-        className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:bg-slate-50"
+        className={`w-full rounded-md border px-2 py-1.5 text-sm font-semibold disabled:opacity-60 ${statusTone(task.status)}`}
         disabled={!canEdit || isSaving}
         onChange={(event) => void onUpdate(task, { status: storedWorkStatus(event.target.value) as ApiTask["status"] })}
         value={storedWorkStatus(task.status)}
@@ -281,108 +321,6 @@ function AddWork({
         Add
       </button>
     </form>
-  );
-}
-
-function WorkPanel({
-  canEdit,
-  isSaving,
-  onClose,
-  onComment,
-  onLoadComments,
-  onUpdate,
-  task,
-}: {
-  canEdit: boolean;
-  isSaving: boolean;
-  onClose: () => void;
-  onComment: TodayListProps["onComment"];
-  onLoadComments: TodayListProps["onLoadComments"];
-  onUpdate: TodayListProps["onUpdate"];
-  task: ApiTask;
-}) {
-  const [title, setTitle] = useState(task.title);
-  const [comment, setComment] = useState("");
-  const [comments, setComments] = useState<ApiTaskExecutionUpdate[] | null>(null);
-  const [commentError, setCommentError] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    let mounted = true;
-    setComments(null);
-    onLoadComments(task.id)
-      .then((updates) => {
-        if (mounted) setComments(updates.filter((update) => update.updateNotes?.trim()));
-      })
-      .catch(() => {
-        if (mounted) setComments([]);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [onLoadComments, task.id]);
-
-  return (
-    <aside className="fixed inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-950">Work</h2>
-        <button className="text-sm font-medium text-slate-600" onClick={onClose} type="button">Close</button>
-      </div>
-      <div className="space-y-4 overflow-y-auto px-4 py-4">
-        <label className="block text-sm font-medium text-slate-700">
-          Title
-          <input
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            disabled={!canEdit || isSaving}
-            onBlur={() => {
-              if (title.trim() && title !== task.title) void onUpdate(task, { title });
-            }}
-            onChange={(event) => setTitle(event.target.value)}
-            value={title}
-          />
-        </label>
-        <p className="text-sm text-slate-600">Owner: {personName(task.assignee)}</p>
-        <p className="text-sm text-slate-600">Status stays {workStatusLabel(task.status)} until you change it in the list.</p>
-        <form
-          className="space-y-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const note = comment.trim();
-            if (!note) return;
-            void onComment(task.id, note)
-              .then(() => onLoadComments(task.id))
-              .then((updates) => {
-                setComments(updates.filter((update) => update.updateNotes?.trim()));
-                setComment("");
-                setCommentError(null);
-              })
-              .catch((requestError: unknown) => {
-                setCommentError(requestError instanceof Error ? requestError.message : "Unable to save the comment");
-              });
-          }}
-        >
-          <label className="block text-sm font-medium text-slate-700">
-            Comment
-            <textarea
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              onChange={(event) => setComment(event.target.value)}
-              rows={3}
-              value={comment}
-            />
-          </label>
-          {commentError ? <p className="text-sm text-red-700">{commentError}</p> : null}
-          <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800" disabled={isSaving || !comment.trim()} type="submit">
-            Add comment
-          </button>
-        </form>
-        <ul className="space-y-2">
-          {(comments ?? []).map((update) => (
-            <li className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-800" key={update.id}>
-              {update.updateNotes}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </aside>
   );
 }
 

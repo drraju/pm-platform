@@ -21,12 +21,14 @@ export function ProjectBoard({
   canMove,
   isSaving,
   onMove,
+  onOpen,
   tasks,
   today,
 }: {
   canMove: (task: ApiTask) => boolean;
   isSaving: boolean;
   onMove: (task: ApiTask, move: BoardMove) => Promise<void>;
+  onOpen?: (task: ApiTask) => void;
   tasks: ApiTask[];
   today: string;
 }) {
@@ -99,6 +101,7 @@ export function ProjectBoard({
                     key={task.id}
                     onDragStart={() => setDraggedId(task.id)}
                     onMove={(status) => requestMove(task, status)}
+                    onOpen={onOpen}
                     overdue={isOverdueWork(task, tasks, today)}
                     task={task}
                   />
@@ -120,6 +123,7 @@ function BoardCard({
   isSaving,
   onDragStart,
   onMove,
+  onOpen,
   overdue,
   task,
 }: {
@@ -127,6 +131,7 @@ function BoardCard({
   isSaving: boolean;
   onDragStart: () => void;
   onMove: (status: ApiTask["status"]) => void;
+  onOpen?: (task: ApiTask) => void;
   overdue: boolean;
   task: ApiTask;
 }) {
@@ -144,7 +149,13 @@ function BoardCard({
         onDragStart();
       }}
     >
-      <h3 className="text-sm font-medium text-slate-900">{task.title}</h3>
+      {onOpen ? (
+        <button className="text-left text-sm font-medium text-slate-900" onClick={() => onOpen(task)} type="button">
+          {task.title}
+        </button>
+      ) : (
+        <h3 className="text-sm font-medium text-slate-900">{task.title}</h3>
+      )}
       <p className="mt-1 truncate text-xs text-slate-600">{owner}</p>
       <p className={`mt-1 text-xs ${overdue ? "font-medium text-red-700" : "text-slate-500"}`}>
         {formatPlanDate(task.dueDate) || "No finish"}

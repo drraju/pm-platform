@@ -744,6 +744,49 @@ describe('ProjectsService', () => {
     },
   );
 
+  it('omits the RAID register from people who cannot read it', async () => {
+    authorizationPolicyService.hasPermission.mockImplementation(
+      async (_actor: unknown, key: PermissionKey) => key !== PermissionKey.RaidRead,
+    );
+    projectsRepository.findOne?.mockResolvedValue({
+      assumptions: [{ id: 'assumption-1', title: 'Internal assumption' }],
+      dependencies: [{ id: 'dependency-1', title: 'Internal dependency' }],
+      id: projectId,
+      issues: [
+        {
+          id: 'issue-1',
+          severity: 'critical',
+          status: 'open',
+          title: 'Internal issue',
+        },
+      ],
+      members: [],
+      name: 'ERP Modernization',
+      risks: [
+        {
+          id: 'risk-1',
+          impact: 'high',
+          status: 'open',
+          title: 'Internal risk',
+        },
+      ],
+      tasks: [],
+    });
+
+    const result = await service.findOne(projectId, actor);
+
+    expect(result.name).toBe('ERP Modernization');
+    expect(result.risks).toEqual([]);
+    expect(result.issues).toEqual([]);
+    expect(result.assumptions).toEqual([]);
+    expect(result.dependencies).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain('Internal risk');
+    expect(JSON.stringify(result)).not.toContain('Internal issue');
+    expect(JSON.stringify(result)).not.toContain('Internal assumption');
+    expect(JSON.stringify(result)).not.toContain('Internal dependency');
+    expect(result.health.reasons.join(' ')).not.toMatch(/risk|issue/i);
+  });
+
   it('answers a contact with the missing-project response when they are not on it', async () => {
     authorizationPolicyService.isExternalActor.mockResolvedValue(true);
     projectVisibilityService.canViewProject.mockResolvedValue(false);

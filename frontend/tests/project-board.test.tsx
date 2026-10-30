@@ -93,4 +93,21 @@ describe("Project board", () => {
     expect(screen.getByRole("button", { name: "Move Test2" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Move Someone else" })).not.toBeInTheDocument();
   });
+
+  it("opens a card beside the board", () => {
+    const onOpen = vi.fn();
+    render(
+      <ProjectBoard
+        canMove={() => false}
+        isSaving={false}
+        onMove={vi.fn()}
+        onOpen={onOpen}
+        tasks={tasks}
+        today="2026-10-29"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Test2" }));
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "late" }));
+  });
 });

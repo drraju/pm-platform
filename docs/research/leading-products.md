@@ -35,7 +35,7 @@ Google is the everyday sign-in. Local passwords remain for tests and for a site 
 - The customer page is the shared table. Success is a tab, not a new database.
 - Search, when it arrives, finds customers, projects, and work items from the header. A command list is not the search box.
 - Detail opens beside the list. The person should not lose the queue to edit one date.
-- Unfinished work is absent from the menu. Linear shows Triage and Cycles only when a team has enabled them. We show a row only when its milestone has shipped.
+- Unfinished work is absent from the menu. Linear shows Triage and Cycles only when a team has enabled them. We show a row only when its milestone has shipped. Old addresses for portfolio, enterprise calendars, the AI playground, a global RAID register, project documents, and project reports open the room that replaced them.
 
 ## Status language
 

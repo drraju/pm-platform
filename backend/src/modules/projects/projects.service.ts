@@ -2101,6 +2101,24 @@ export class ProjectsService {
     });
   }
 
+  private projectWithoutRaid(project: ProjectWithHealth): ProjectWithHealth {
+    const reasons = (project.health?.reasons ?? []).filter(
+      (reason) => !/\brisks?\b|\bissues?\b/i.test(reason),
+    );
+
+    return {
+      ...project,
+      assumptions: [],
+      dependencies: [],
+      health: {
+        ...project.health,
+        reasons,
+      },
+      issues: [],
+      risks: [],
+    };
+  }
+
   private decorateProject(project: ProjectWithHealth): ProjectWithHealth {
     const tasks = decoratePlanningTasks(project.tasks ?? []);
 
@@ -2147,7 +2165,16 @@ export class ProjectsService {
     actor?: ProjectVisibilityActor,
   ): Promise<ProjectWithHealth> {
     if (!(await this.authorizationPolicyService.isExternalActor(actor))) {
-      return project;
+      if (
+        await this.authorizationPolicyService.hasPermission(
+          actor,
+          PermissionKey.RaidRead,
+        )
+      ) {
+        return project;
+      }
+
+      return this.projectWithoutRaid(project);
     }
 
     const lead = (project.members ?? []).find((member) =>

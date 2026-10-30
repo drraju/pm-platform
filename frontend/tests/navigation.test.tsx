@@ -317,7 +317,7 @@ describe("workspace route context", () => {
       [
         { href: "/projects", label: "Projects" },
         { href: "/projects/project-1", label: "Project" },
-        { label: "Govern" },
+        { label: "RAID" },
       ],
     );
     expect(getWorkspaceContext("/projects/project-1/delivery").title).toBe(

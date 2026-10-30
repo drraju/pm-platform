@@ -128,10 +128,10 @@ export function getWorkspaceContext(pathname: string, projectName?: string | nul
     }
 
     if (leaf === "govern" || leaf === "raid") {
-      return createContext("Govern", "Risks, issues, and control register", [
+      return createContext("RAID", "Risks, issues, assumptions, and dependencies", [
         { href: "/projects", label: "Projects" },
         { href: projectRoot, label: projectName || "Project" },
-        { label: "Govern" },
+        { label: "RAID" },
       ]);
     }
 

@@ -30,6 +30,7 @@ export function PlanOutline({
   isSaving,
   members,
   onAdd,
+  onOpen,
   onReorder,
   onUpdate,
   tasks,
@@ -41,6 +42,7 @@ export function PlanOutline({
   isSaving: boolean;
   members?: PlanMember[];
   onAdd: (input: { parentTaskId?: string; title: string }) => Promise<void>;
+  onOpen?: (task: ApiTask) => void;
   onReorder: (draggedId: string, targetId: string) => Promise<void>;
   onUpdate: (task: ApiTask, patch: PlanPatch) => Promise<void>;
   tasks: ApiTask[];
@@ -115,6 +117,7 @@ export function PlanOutline({
                     isContainer={container}
                     isSaving={isSaving}
                     onBeginSubtask={() => beginSubtask(task.id)}
+                    onOpen={onOpen}
                     onReorder={onReorder}
                     onToggle={() =>
                       setCollapsed((current) => {
@@ -171,6 +174,7 @@ function PlanRow({
   isContainer,
   isSaving,
   onBeginSubtask,
+  onOpen,
   onReorder,
   onToggle,
   onUpdate,
@@ -189,6 +193,7 @@ function PlanRow({
   isContainer: boolean;
   isSaving: boolean;
   onBeginSubtask: () => void;
+  onOpen?: (task: ApiTask) => void;
   onReorder: (draggedId: string, targetId: string) => Promise<void>;
   onToggle: () => void;
   onUpdate: (task: ApiTask, patch: PlanPatch) => Promise<void>;
@@ -247,9 +252,19 @@ function PlanRow({
           ) : (
             <span className="size-5 shrink-0" />
           )}
-          <p className={`min-w-0 flex-1 truncate ${isContainer ? "font-semibold text-slate-950" : done ? "text-slate-400 line-through" : "text-slate-800"}`}>
-            {task.title}
-          </p>
+          {onOpen ? (
+            <button
+              className={`min-w-0 flex-1 truncate text-left ${isContainer ? "font-semibold text-slate-950" : done ? "text-slate-400 line-through" : "text-slate-800"}`}
+              onClick={() => onOpen(task)}
+              type="button"
+            >
+              {task.title}
+            </button>
+          ) : (
+            <p className={`min-w-0 flex-1 truncate ${isContainer ? "font-semibold text-slate-950" : done ? "text-slate-400 line-through" : "text-slate-800"}`}>
+              {task.title}
+            </p>
+          )}
         </div>
       </td>
       <td className="px-1 py-1.5 align-middle">

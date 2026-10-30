@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React from "react";
 import {
+  hasPermission,
   resolveProjectUiCapabilities,
   useStoredAuthSession,
 } from "@/features/auth";
@@ -73,12 +74,7 @@ function getProjectWorkspaceTabs(projectId: string): ProjectWorkspaceTab[] {
       label: "Tasks",
       visible: false,
     },
-    {
-      href: `${basePath}/govern`,
-      id: "raid",
-      label: "RAID",
-      visible: false,
-    },
+    { href: `${basePath}/raid`, id: "raid", label: "RAID" },
     {
       href: `${basePath}/reports`,
       id: "calendar",
@@ -124,6 +120,9 @@ export function ProjectTabs({
     if (tab.id === "govern") {
       return capabilities.canAccessGovern;
     }
+    if (tab.id === "raid") {
+      return hasPermission(permissionKeys, "raid.read");
+    }
 
     return true;
   });
@@ -133,9 +132,7 @@ export function ProjectTabs({
     activeTab === "tasks" ||
     activeTab === "today"
       ? "delivery"
-      : activeTab === "raid"
-        ? "govern"
-        : activeTab;
+      : activeTab;
 
   return (
     <nav

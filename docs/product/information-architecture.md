@@ -61,6 +61,8 @@ Opened from Projects, or from a customer. Tabs, in order:
 
 Documents, RAID, forecast, and baseline are not tabs in this set. Add another tab only with a milestone that names it.
 
+Clicking a work item on Today, the plan, or the board opens the same panel beside the list. It does not navigate away. A comment does not change status. A container does not take comments. A customer contact does not see comments.
+
 The page title is the project name. The breadcrumb is Projects / project name / tab.
 
 ## Customer

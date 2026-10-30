@@ -20,5 +20,6 @@ Shared rules live in [principles](../product/principles.md), [roles and access](
 | 12 | [Sales handoff](M12-sales-handoff.md) | Turn a prospect into a customer and ask for a project |
 | 13 | [Search](M13-search.md) | Find a customer, project, or work item from anywhere |
 | 14 | [External customers](M14-external-customers.md) | Let a customer see their project and nothing internal |
+| 15 | [Work panel](M15-work-panel.md) | Open the same work item beside Today, the plan, and the board |
 
 RAID, forecast, baseline, resource leveling, the AI playground, and enterprise calendars are not in this queue. Leave them out of the menu.
