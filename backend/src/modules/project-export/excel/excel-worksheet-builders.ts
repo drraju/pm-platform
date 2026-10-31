@@ -1,26 +1,33 @@
-import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { ExcelWorksheetBuilder, displayUser, formatDate } from './excel-worksheet-builder';
 import { ProjectExportData } from '../project-export.types';
 import { Worksheet } from 'exceljs';
+import {
+  containerProgress,
+  isOverdueWork,
+  isWorkContainer,
+  localWorkDate,
+  projectStatusLabel,
+  workStatusCount,
+  workStatusLabel,
+} from './work-status';
 
 export class SummaryWorksheetBuilder extends ExcelWorksheetBuilder {
   readonly name = 'Project Summary';
   build(sheet: Worksheet, { project, tasks, documents }: ProjectExportData) {
-    const overdue = tasks.filter((task) => task.dueDate && new Date(task.dueDate) < new Date() && task.status !== TaskStatus.Done).length;
-    const blocked = tasks.filter((task) => task.status === TaskStatus.Blocked).length;
-    const completion = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + (task.percentComplete ?? 0), 0) / tasks.length) : 0;
+    const today = localWorkDate();
+    const count = workStatusCount(tasks, today);
     const openRaid = [...(project.risks ?? []), ...(project.issues ?? []), ...(project.assumptions ?? []), ...(project.dependencies ?? [])].filter((item) => item.status !== 'closed' && item.status !== 'resolved').length;
     const rows = [
-      ['Project Name', project.name], ['Description', project.description ?? ''], ['Status', project.status], ['Health', project.health?.status ?? ''], ['Owner', displayUser(project.owner)],
-      ['Start Date', formatDate(project.startDate)], ['Target End Date', formatDate(project.targetEndDate)], ['Completion %', completion], ['Total Tasks', tasks.length],
-      ['Completed Tasks', tasks.filter((task) => task.status === TaskStatus.Done).length], ['Overdue Tasks', overdue], ['Blocked Tasks', blocked], ['Open RAID Items', openRaid],
+      ['Project Name', project.name], ['Description', project.description ?? ''], ['Status', projectStatusLabel(project.status)], ['Health', count.health], ['Owner', displayUser(project.owner)],
+      ['Start Date', formatDate(project.startDate)], ['Target End Date', formatDate(project.targetEndDate)], ['Completion %', count.progress], ['Operational tasks', count.operational],
+      ['Done', count.done], ['Doing', count.doing], ['Not started', count.notStarted], ['Overdue', count.overdue], ['Blocked', count.blocked], ['Open RAID Items', openRaid],
       ['Document Count', documents.length], ['Last Updated', formatDate(project.updatedAt)],
     ];
     sheet.addRows(rows);
     sheet.getColumn(1).width = 24; sheet.getColumn(2).width = 48;
     sheet.getColumn(1).font = { bold: true, color: { argb: 'FF1F4E78' } };
-    [6, 7, 15].forEach((rowNumber) => {
+    [6, 7, 17].forEach((rowNumber) => {
       sheet.getCell(rowNumber, 2).numFmt = 'dd-mmm-yyyy';
     });
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
@@ -32,9 +39,27 @@ export class TasksWorksheetBuilder extends ExcelWorksheetBuilder {
   readonly name = 'Project Tasks';
   build(sheet: Worksheet, { tasks }: ProjectExportData) {
     const byId = new Map(tasks.map((task) => [task.id, task]));
-    this.table(sheet, ['Task ID', 'Task Name', 'Hierarchy', 'Owner', 'Status', 'Priority', 'Progress %', 'Start Date', 'Due Date', 'Actual Completion', 'Blocked', 'Next Action Owner', 'Last Execution Update'], tasks.map((task) => {
+    const today = localWorkDate();
+    this.table(sheet, ['Task ID', 'Task Name', 'Hierarchy', 'Owner', 'Status', 'Priority', 'Progress', 'Start Date', 'Due Date', 'Actual Completion', 'Blocked', 'Overdue', 'Next Action Owner', 'Last Execution Update'], tasks.map((task) => {
       const update = task.latestExecutionUpdate;
-      return [task.id, task.title, hierarchy(task, byId), displayUser(task.assignee), task.status, task.priority, task.percentComplete ?? 0, formatDate(task.startDate), formatDate(task.dueDate), formatDate(task.actualEndDate), task.status === TaskStatus.Blocked ? 'Yes' : 'No', update?.nextActionOwnerId ?? '', update?.updateNotes ?? ''];
+      const container = isWorkContainer(task, tasks);
+      const progress = container ? containerProgress(task.id, tasks) : null;
+      return [
+        task.id,
+        task.title,
+        hierarchy(task, byId),
+        displayUser(task.assignee),
+        container ? '' : workStatusLabel(task.status),
+        task.priority,
+        progress && progress.total > 0 ? `${progress.done}/${progress.total}` : '',
+        formatDate(task.startDate),
+        formatDate(task.dueDate),
+        formatDate(task.actualEndDate),
+        container ? '' : task.status === 'blocked' ? 'Yes' : 'No',
+        container ? '' : isOverdueWork(task, tasks, today) ? 'Yes' : 'No',
+        update?.nextActionOwnerId ?? '',
+        update?.updateNotes ?? '',
+      ];
     }));
   }
 }
@@ -42,7 +67,7 @@ export class TasksWorksheetBuilder extends ExcelWorksheetBuilder {
 export class MilestonesWorksheetBuilder extends ExcelWorksheetBuilder {
   readonly name = 'Milestones';
   build(sheet: Worksheet, { tasks }: ProjectExportData) {
-    this.table(sheet, ['Milestone', 'Status', 'Due Date', 'Completion'], tasks.filter((task) => task.taskKind === TaskKind.Milestone).map((task) => [task.title, task.status, formatDate(task.dueDate), task.percentComplete ?? 0]));
+    this.table(sheet, ['Milestone', 'Status', 'Due Date'], tasks.filter((task) => task.taskKind === TaskKind.Milestone).map((task) => [task.title, isWorkContainer(task, tasks) ? '' : workStatusLabel(task.status), formatDate(task.dueDate)]));
   }
 }
 
@@ -80,7 +105,7 @@ export class ExecutionHistoryWorksheetBuilder extends ExcelWorksheetBuilder {
   readonly name = 'Execution History';
   build(sheet: Worksheet, { executionHistory, tasks }: ProjectExportData) {
     const byId = new Map(tasks.map((task) => [task.id, task.title]));
-    this.table(sheet, ['Task', 'Date', 'Updated By', 'Previous Status', 'New Status', 'Progress', 'Comments'], executionHistory.map((update) => [byId.get(update.taskId) ?? update.taskId, formatDate(update.createdAt), update.updatedById ?? '', update.changes?.status?.previousValue ?? '', update.status, update.percentComplete, update.updateNotes ?? '']));
+    this.table(sheet, ['Task', 'Date', 'Updated By', 'Previous Status', 'New Status', 'Comments'], executionHistory.map((update) => [byId.get(update.taskId) ?? update.taskId, formatDate(update.createdAt), update.updatedById ?? '', update.changes?.status?.previousValue ? workStatusLabel(String(update.changes.status.previousValue)) : '', workStatusLabel(update.status), update.updateNotes ?? '']));
   }
 }
 
@@ -88,7 +113,8 @@ export class KpisWorksheetBuilder extends ExcelWorksheetBuilder {
   readonly name = 'KPIs';
   build(sheet: Worksheet, { project, tasks, documents }: ProjectExportData) {
     const raid = [...(project.risks ?? []), ...(project.issues ?? []), ...(project.assumptions ?? []), ...(project.dependencies ?? [])];
-    this.table(sheet, ['Metric', 'Value'], [['Tasks', tasks.length], ['Completed', tasks.filter((task) => task.status === TaskStatus.Done).length], ['Overdue', tasks.filter((task) => task.dueDate && new Date(task.dueDate) < new Date() && task.status !== TaskStatus.Done).length], ['Blocked', tasks.filter((task) => task.status === TaskStatus.Blocked).length], ['Milestones', tasks.filter((task) => task.taskKind === TaskKind.Milestone).length], ['RAID', raid.length], ['Documents', documents.length]]);
+    const count = workStatusCount(tasks);
+    this.table(sheet, ['Metric', 'Value'], [['Operational tasks', count.operational], ['Done', count.done], ['Doing', count.doing], ['Not started', count.notStarted], ['Overdue', count.overdue], ['Blocked', count.blocked], ['Health', count.health], ['Milestones', tasks.filter((task) => task.taskKind === TaskKind.Milestone).length], ['RAID', raid.length], ['Documents', documents.length]]);
   }
 }
 
