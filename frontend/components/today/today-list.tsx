@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { statusTone, TodayProjectBoard } from "@/components/today/today-project-board";
+import { statusTone, TodayProjectBoard, WaitingNotes } from "@/components/today/today-project-board";
 import { WorkPanel } from "@/components/work/work-panel";
 import type { ApiProject, ApiTask, ApiTaskExecutionUpdate } from "@/features/projects";
 import {
@@ -13,6 +13,7 @@ import {
   workStatusOptions,
   type WorkCount,
 } from "@/features/work/work-count";
+import { waitingLines, type WaitingDependency } from "@/features/work/waiting-on";
 
 type TodayListProps = {
   canAdd: boolean;
@@ -20,6 +21,7 @@ type TodayListProps = {
   canEdit: (task: ApiTask) => boolean;
   containers: ApiTask[];
   count: WorkCount;
+  dependencies?: WaitingDependency[];
   error: string | null;
   isSaving: boolean;
   members?: Array<{
@@ -46,6 +48,7 @@ export function TodayList({
   canEdit,
   containers,
   count,
+  dependencies = [],
   error,
   isSaving,
   members,
@@ -111,6 +114,7 @@ export function TodayList({
           canAdd={canAdd}
           canAssign={canAssign}
           canEdit={canEdit}
+          dependencies={dependencies}
           members={members}
           isSaving={isSaving}
           onAddSubtask={onAddSubtask}
@@ -136,12 +140,15 @@ export function TodayList({
             {rows.map((task) => (
               <WorkRow
                 canEdit={canEdit(task)}
+                dependencies={dependencies}
                 isSaving={isSaving}
                 key={task.id}
                 onOpen={() => setOpenId(task.id)}
                 onUpdate={onUpdate}
                 overdue={isOverdueWork(task, tasks, today)}
                 task={task}
+                tasks={tasks}
+                today={today}
               />
             ))}
           </ul>
@@ -195,18 +202,24 @@ export function TodayList({
 
 function WorkRow({
   canEdit,
+  dependencies,
   isSaving,
   onOpen,
   onUpdate,
   overdue,
   task,
+  tasks,
+  today,
 }: {
   canEdit: boolean;
+  dependencies: WaitingDependency[];
   isSaving: boolean;
   onOpen: () => void;
   onUpdate: TodayListProps["onUpdate"];
   overdue: boolean;
   task: ApiTask;
+  tasks: ApiTask[];
+  today: string;
 }) {
   const nextStep = task.nextStep || task.latestExecutionUpdate?.nextStep || "";
   const owner = personName(task.assignee);
@@ -220,6 +233,7 @@ function WorkRow({
         <p className="mt-0.5 truncate text-xs text-slate-500">
           {task.project?.name ?? "Project"} · {task.project?.customer?.name ?? "No customer"} · {owner}
         </p>
+        <WaitingNotes lines={waitingLines(task.id, dependencies, tasks, today)} />
       </div>
       <select
         aria-label={`Status for ${task.title}`}

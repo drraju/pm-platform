@@ -140,6 +140,49 @@ describe("Today project board", () => {
     );
   });
 
+  it("shows who the task is waiting on, and whether that work is blocked, overdue, or done", () => {
+    const late = task({
+      assignee: { email: "ava@example.com", firstName: "Ava", id: "user-1", lastName: "Patel" },
+      assigneeId: "user-1",
+      dueDate: "2026-10-01",
+      id: "task-late",
+      parentTaskId: "group-1",
+      status: "in_progress",
+      title: "Late review",
+    });
+    const finished = task({
+      assignee: { email: "ben@example.com", firstName: "Ben", id: "user-2", lastName: "Ng" },
+      assigneeId: "user-2",
+      id: "task-finished",
+      parentTaskId: "group-1",
+      status: "done",
+      title: "Signed off",
+    });
+    renderBoard({
+      dependencies: [
+        { id: "dep-blocked", predecessorTaskId: "task-2", successorTaskId: "task-1" },
+        { id: "dep-open", predecessorTaskId: "task-4", successorTaskId: "task-1" },
+        { id: "dep-late", predecessorTaskId: "task-late", successorTaskId: "task-4" },
+        { id: "dep-done", predecessorTaskId: "task-finished", successorTaskId: "task-3" },
+      ],
+      tasks: [...tasks, late, finished],
+    });
+
+    const readApi = screen.getByRole("button", { name: "Read API" }).closest("tr");
+    if (!readApi) throw new Error("Read API row is missing");
+    expect(within(readApi).getByText("Waiting on Test2 · Blocked · Unassigned")).toBeTruthy();
+    expect(within(readApi).getByText("Waiting on Client · On track · Unassigned")).toBeTruthy();
+    expect(within(readApi).queryByLabelText("Depends on for Read API")).toBeNull();
+
+    const client = screen.getByRole("button", { name: "Client" }).closest("tr");
+    if (!client) throw new Error("Client row is missing");
+    expect(within(client).getByText("Waiting on Late review · Overdue · Ava Patel")).toBeTruthy();
+
+    const fabrix = screen.getByRole("button", { name: "Fabrix Pipeline" }).closest("tr");
+    if (!fabrix) throw new Error("Fabrix Pipeline row is missing");
+    expect(within(fabrix).getByText("Waiting on Signed off · Done · Ben Ng")).toBeTruthy();
+  });
+
   it("adds a subtask and saves the next step", async () => {
     const { onAddSubtask, onUpdate } = renderBoard();
     fireEvent.click(screen.getByRole("button", { name: "Add subtask under Read API" }));

@@ -10,6 +10,7 @@ import {
   storedWorkStatus,
   workStatusOptions,
 } from "@/features/work/work-count";
+import { waitingLines, type WaitingDependency, type WaitingLine } from "@/features/work/waiting-on";
 
 type BoardMember = {
   role?: string;
@@ -41,6 +42,7 @@ type TodayProjectBoardProps = {
   canAdd: boolean;
   canAssign?: boolean;
   canEdit: (task: ApiTask) => boolean;
+  dependencies?: WaitingDependency[];
   isSaving: boolean;
   members?: BoardMember[];
   onAddSubtask: (input: { parentTaskId: string; title: string }) => Promise<void>;
@@ -97,6 +99,7 @@ export function TodayProjectBoard({
   canAdd,
   canAssign = false,
   canEdit,
+  dependencies = [],
   isSaving,
   members = [],
   onAddSubtask,
@@ -178,6 +181,7 @@ export function TodayProjectBoard({
                       canAdd={canAdd}
                       canAssign={canAssign}
                       canEdit={canEdit(task)}
+                      dependencies={dependencies}
                       depth={depth}
                       members={members}
                       drafting={draftParentId === task.id}
@@ -192,6 +196,7 @@ export function TodayProjectBoard({
                       overdue={isOverdueWork(task, tasks, today)}
                       task={task}
                       tasks={tasks}
+                      today={today}
                     />
                   ))}
                   {draftParentId === group.id ? (
@@ -220,6 +225,7 @@ function TaskLine({
   canAdd,
   canAssign,
   canEdit,
+  dependencies,
   depth,
   drafting,
   isContainer,
@@ -233,10 +239,12 @@ function TaskLine({
   overdue,
   task,
   tasks,
+  today,
 }: {
   canAdd: boolean;
   canAssign: boolean;
   canEdit: boolean;
+  dependencies: WaitingDependency[];
   depth: number;
   drafting: boolean;
   isContainer: boolean;
@@ -250,10 +258,12 @@ function TaskLine({
   overdue: boolean;
   task: ApiTask;
   tasks: ApiTask[];
+  today: string;
 }) {
   const nextStep = task.nextStep || task.latestExecutionUpdate?.nextStep || "";
   const childCount = tasks.filter((item) => item.parentTaskId === task.id).length;
   const assignable = members.filter((member) => member.role !== "viewer");
+  const waiting = waitingLines(task.id, dependencies, tasks, today);
 
   return (
     <>
@@ -276,6 +286,7 @@ function TaskLine({
                 Add subtask
               </button>
             ) : null}
+            <WaitingNotes lines={waiting} />
           </div>
         </td>
         <td className="px-2 py-2 align-middle">
@@ -372,6 +383,26 @@ function TaskLine({
       ) : null}
     </>
   );
+}
+
+export function WaitingNotes({ lines }: { lines: WaitingLine[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="mt-1 space-y-0.5">
+      {lines.map((line) => (
+        <p className={`truncate text-xs ${waitingTone(line.state)}`} key={line.id}>
+          {line.text}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function waitingTone(state: WaitingLine["state"]) {
+  if (state === "blocked") return "font-medium text-amber-800";
+  if (state === "overdue") return "font-medium text-rose-700";
+  if (state === "done") return "text-emerald-700";
+  return "text-slate-500";
 }
 
 function SubtaskDraft({

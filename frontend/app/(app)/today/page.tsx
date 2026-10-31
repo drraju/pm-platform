@@ -4,7 +4,15 @@ import React, { Suspense, useCallback, useEffect, useMemo, useState } from "reac
 import { useSearchParams } from "next/navigation";
 import { TodayList } from "@/components/today/today-list";
 import { getAuthMe, storeAuthMe } from "@/features/auth";
-import { getProject, getProjects, type ApiProject, type ApiProjectMember, type ApiTask } from "@/features/projects";
+import {
+  getProject,
+  getProjects,
+  getProjectTaskDependencies,
+  type ApiProject,
+  type ApiProjectMember,
+  type ApiTask,
+  type ApiTaskDependency,
+} from "@/features/projects";
 import {
   addTaskComment,
   createTask,
@@ -29,6 +37,7 @@ function TodayPageContent() {
   const [scope, setScope] = useState(requestedProjectId || "mine");
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [tasks, setTasks] = useState<ApiTask[]>([]);
+  const [dependencies, setDependencies] = useState<ApiTaskDependency[]>([]);
   const [members, setMembers] = useState<ApiProjectMember[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
@@ -39,11 +48,25 @@ function TodayPageContent() {
   const load = useCallback(async (nextScope: string, userId: string | null) => {
     if (nextScope === "mine") {
       const mine = await getMyTasks();
+      const visible = mine.filter((task) => !userId || task.assigneeId === userId || isWorkContainer(task, mine));
+      const projectIds = [...new Set(visible.map((task) => task.projectId).filter(Boolean))];
+      const links = (
+        await Promise.all(
+          projectIds.map((projectId) =>
+            getProjectTaskDependencies(projectId).catch(() => [] as ApiTaskDependency[]),
+          ),
+        )
+      ).flat();
       setMembers([]);
-      setTasks(mine.filter((task) => !userId || task.assigneeId === userId || isWorkContainer(task, mine)));
+      setDependencies(links);
+      setTasks(visible);
       return;
     }
-    const project = await getProject(nextScope);
+    const [project, links] = await Promise.all([
+      getProject(nextScope),
+      getProjectTaskDependencies(nextScope).catch(() => [] as ApiTaskDependency[]),
+    ]);
+    setDependencies(links);
     setMembers(project.members ?? []);
     setTasks(
       (project.tasks ?? []).map((task) => ({
@@ -117,6 +140,14 @@ function TodayPageContent() {
       canEdit={canEdit}
       containers={scope === "mine" ? [] : containers}
       count={count}
+      dependencies={dependencies
+        .map((dependency) => ({
+          id: dependency.id,
+          predecessorTask: dependency.predecessorTask ?? null,
+          predecessorTaskId: dependency.predecessorTaskId || dependency.predecessorTask?.id || "",
+          successorTaskId: dependency.successorTaskId || dependency.successorTask?.id || "",
+        }))
+        .filter((dependency) => dependency.predecessorTaskId && dependency.successorTaskId)}
       error={error}
       isSaving={isSaving}
       members={members}

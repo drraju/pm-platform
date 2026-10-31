@@ -30,3 +30,7 @@ Today is the only place a person updates work. The overdue number on Today and o
 - Marking Done clears the overdue mark the same day, on both screens.
 - A container with overdue children is not itself counted.
 - At 1280px the columns above fit, or the less important ones collapse into the side panel. The title, status, and due date stay on the row.
+
+## Shipped after this milestone
+
+Project scope columns are Task, Owner, Status, Due, and Next step, with the owner in the column beside the task. A task that is waiting shows each predecessor under its title: name, state, and owner. The state is On track, Blocked, Overdue, or Done. That line is read-only. The link is added on the Plan. See the [information architecture](../product/information-architecture.md).

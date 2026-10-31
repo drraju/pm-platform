@@ -63,6 +63,12 @@ Overdue, on every screen: operational, due date before today, status is not Done
 
 Blocked is a status the owner sets, with a next step. It is not inferred.
 
+## Dependency
+
+A finish-to-start link between two work items in the same project. The predecessor is the work that goes first. The successor is the work that is waiting. One successor can have many predecessors, and they stay on that successor. They are not extra rows of work.
+
+The Plan outline is where a lead adds the link. The Plan timeline draws it when both items have a start or a finish. Today reads it and does not create it. On Today the successor shows each predecessor by name, state, and owner. The state is On track, Blocked, Overdue, or Done. Blocked wins when the predecessor is both blocked and late. A container is not overdue.
+
 ## Membership
 
 Person + project + one of Lead, Contributor, Viewer. One row per person per project.

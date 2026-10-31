@@ -55,13 +55,15 @@ Opened from Projects, or from a customer. Tabs, in order:
 | Tab | Milestone | Contents |
 | --- | --- | --- |
 | Overview | Projects | Customer, lead, finish, health, overdue count, next milestone. The count uses the shared overdue rule |
-| Plan | Plan | The schedule of the same work items. Summary rows are containers |
+| Plan | Plan | Outline and Timeline of the same work items. Summary rows are containers. Depends on is a column on the outline |
 | Board | Board | The same work items in columns Not started, Doing, Blocked, Done |
 | Team | Projects | Lead, contributors, viewers |
 
 Documents, RAID, forecast, and baseline are not tabs in this set. Add another tab only with a milestone that names it.
 
 Clicking a work item on Today, the plan, or the board opens the same panel beside the list. It does not navigate away. A comment does not change status. A container does not take comments. A customer contact does not see comments.
+
+The Plan tab is two views, not a new tab. Outline columns are title, owner, start, finish, status, and Depends on. Finish is the Today due date. Depends on lists every predecessor of that task, and a lead adds a finish-to-start link on the row. Timeline draws a link when both tasks have a start or a finish, and says how many links are still waiting for a date. Cost and related files are not columns.
 
 The page title is the project name. The breadcrumb is Projects / project name / tab.
 
@@ -76,9 +78,13 @@ The page title is the project name. The breadcrumb is Projects / project name / 
 
 ## Today
 
-A single list. Scope is Mine by default. This project is a filter, not a second product. Columns: work, project, customer, owner, status, due, next step. No typed percent. Summary containers are collapsed and excluded from the overdue chip. The chip count equals the executive and overview count.
+Scope is Mine by default. Choosing a project is a filter, not a second product. No typed percent. The overdue chip equals the executive and overview count. A comment does not change status.
 
-Inline edit is for status, due date, and next step. Everything else opens a side panel. The panel does not navigate away.
+Mine is one list. Columns: work, project, customer, owner, status, due, next step. Status, due date, and next step are edited on the row. The title opens the side panel.
+
+A project is a working table. Columns, in order: Task, Owner, Status, Due, Next step. Owner is the column beside the task. A lead sets the owner, the status, the due date, and the next step on the row, and adds a subtask on the task. Summary containers are grouped, show completed leaves over operational leaves, and are excluded from the overdue chip. At 1280px the table does not scroll sideways.
+
+Under a task that is waiting, each predecessor is one read-only line: the predecessor name, its state, and its owner. The state is On track, Blocked, Overdue, or Done. Blocked uses the warning color. Overdue is the due-date mark, used when the predecessor is late and not Blocked. Done means that predecessor is finished. Adding or changing the link is done on the Plan, in Depends on. Mine shows the same line on the person's own tasks.
 
 ## Programs
 
