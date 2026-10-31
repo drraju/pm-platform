@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countWork, isOverdueWork } from "@/features/work/work-count";
+import { containerStatusMix, countWork, isOverdueWork, statusMix } from "@/features/work/work-count";
 
 const today = "2026-10-29";
 
@@ -59,5 +59,22 @@ describe("work count", () => {
       task.id === "overdue" ? { ...task, status: "done" } : task,
     );
     expect(countWork(finished, today).line).toBe("1 of 4 overdue");
+  });
+
+  it("counts the four statuses on the leaves of a group", () => {
+    expect(containerStatusMix("parent", tasks)).toEqual({
+      blocked: 0,
+      doing: 1,
+      done: 1,
+      notStarted: 0,
+      total: 2,
+    });
+    expect(statusMix([{ id: "a", status: "blocked" }, { id: "b", status: "todo" }])).toEqual({
+      blocked: 1,
+      doing: 0,
+      done: 0,
+      notStarted: 1,
+      total: 2,
+    });
   });
 });

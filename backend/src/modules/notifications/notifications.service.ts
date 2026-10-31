@@ -115,6 +115,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       overdue: isOverdueLeaf({ dueDate: task.dueDate, status: task.status, today }),
       previous,
     });
+    let tellWaiters: 'blocked' | 'overdue' | null = null;
     for (const reason of reasons) {
       if (reason === 'overdue') {
         const claimed = await this.claimOverdue(task.id, task.dueDate?.slice(0, 10) ?? today);
@@ -123,6 +124,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         }
         try {
           await this.record(task, reason);
+          if (tellWaiters !== 'blocked') tellWaiters = 'overdue';
         } catch (error) {
           await this.clearOverdue(task.id);
           throw error;
@@ -130,7 +132,24 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       await this.record(task, reason);
+      if (reason === 'blocked') tellWaiters = 'blocked';
     }
+    if (tellWaiters) {
+      await this.notifyWaiters(task, tellWaiters);
+    }
+  }
+
+  async afterDependency(predecessorId: string, successorId: string, today = localWorkDate()) {
+    const predecessor = await this.loadTask(predecessorId);
+    const successor = await this.loadTask(successorId);
+    if (!predecessor || !successor || (await this.isContainer(predecessor))) {
+      return;
+    }
+    const kind = waitingKind(predecessor, today);
+    if (!kind) {
+      return;
+    }
+    await this.writeWaiting(predecessor, successor, kind);
   }
 
   async sweepOverdue(today = localWorkDate()) {
@@ -184,6 +203,47 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
+  private async notifyWaiters(predecessor: Task, kind: 'blocked' | 'overdue') {
+    const rows = (await this.tasksRepository.query(
+      `SELECT successor.id
+       FROM task_dependencies link
+       JOIN tasks successor ON successor.id = link.successor_task_id
+       WHERE link.predecessor_task_id = $1
+         AND link.deleted_at IS NULL
+         AND successor.deleted_at IS NULL
+         AND successor.status <> 'done'
+         AND successor.assignee_id IS NOT NULL
+         AND ($2::uuid IS NULL OR successor.assignee_id <> $2::uuid)`,
+      [predecessor.id, predecessor.assigneeId ?? null],
+    )) as Array<{ id: string }>;
+
+    for (const row of rows) {
+      const successor = await this.loadTask(row.id);
+      if (!successor) continue;
+      await this.writeWaiting(predecessor, successor, kind);
+    }
+  }
+
+  private async writeWaiting(predecessor: Task, successor: Task, kind: 'blocked' | 'overdue') {
+    if (!successor.assigneeId || successor.assigneeId === predecessor.assigneeId) return;
+    if (successor.status === TaskStatus.Done) return;
+    const reason = kind === 'blocked' ? 'waiting_blocked' : 'waiting_overdue';
+    await this.notificationsRepository.save(
+      this.notificationsRepository.create({
+        body: `Waiting on ${predecessor.title}`,
+        reason,
+        taskId: successor.id,
+        title: `${successor.title} is waiting on ${predecessor.title}`,
+        type: reason,
+        userId: successor.assigneeId,
+      }),
+    );
+    await this.slackService.deliver(
+      successor.projectId,
+      waitingSlackText(predecessor, successor, kind),
+    );
+  }
+
   private async loadTask(taskId: string) {
     return this.tasksRepository.findOne({
       relations: { assignee: true, project: true },
@@ -235,6 +295,26 @@ function present(row: Notification): NotificationView {
     taskId: row.taskId ?? null,
     title: row.title,
   };
+}
+
+function waitingKind(task: Task, today: string): 'blocked' | 'overdue' | null {
+  if (task.status === TaskStatus.Blocked) return 'blocked';
+  if (isOverdueLeaf({ dueDate: task.dueDate, status: task.status, today })) return 'overdue';
+  return null;
+}
+
+function waitingSlackText(predecessor: Task, successor: Task, kind: 'blocked' | 'overdue') {
+  const origin = (process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000').replace(/\/$/, '');
+  const headline = kind === 'blocked' ? 'Waiting · Blocked' : 'Waiting · Overdue';
+  return [
+    `${headline}: ${successor.title}`,
+    successor.project?.name ?? predecessor.project?.name ?? 'Project',
+    `Waiting on ${predecessor.title}`,
+    `Status: ${statusLabel(successor.status)}`,
+    `Owner: ${personName(successor.assignee)}`,
+    `Due: ${formatDue(successor.dueDate)}`,
+    `${origin}/today?work=${successor.id}`,
+  ].join('\n');
 }
 
 function eventBody(reason: WorkEventReason, projectName?: string | null) {

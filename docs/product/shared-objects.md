@@ -69,6 +69,8 @@ A finish-to-start link between two work items in the same project. The predecess
 
 The Plan outline is where a lead adds the link. The Plan timeline draws it when both items have a start or a finish. Today reads it and does not create it. On Today the successor shows each predecessor by name, state, and owner. The state is On track, Blocked, Overdue, or Done. Blocked wins when the predecessor is both blocked and late. A container is not overdue.
 
+When a predecessor becomes Blocked, or becomes Overdue and is not Blocked, each successor owner gets one unread notification. Adding or changing a link onto a predecessor that is already Blocked or Overdue tells that successor owner once. Blocked wins when both are true. The row names the predecessor and opens the successor on Today. The same event posts to the project Slack channel when Slack is on. The predecessor owner already has their own alert and does not get a second one. A finished successor is not told. The overdue notice follows the same once-per-episode rule as the predecessor's own overdue alert.
+
 ## Membership
 
 Person + project + one of Lead, Contributor, Viewer. One row per person per project.

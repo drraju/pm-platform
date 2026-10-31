@@ -16,7 +16,15 @@ export type WaitingDependency = {
   id: string;
   predecessorTask?: WaitingTask | null;
   predecessorTaskId: string;
+  successorTask?: WaitingTask | null;
   successorTaskId: string;
+};
+
+export type HoldingLine = {
+  id: string;
+  owner: string | null;
+  text: string;
+  title: string;
 };
 
 export type WaitingLine = {
@@ -54,6 +62,25 @@ export function waitingLines(
         ? `Waiting on ${title} · ${stateLabel[state]} · ${owner}`
         : `Waiting on ${title} · ${stateLabel[state]}`;
       return { id: dependency.id, owner, state, text, title };
+    });
+}
+
+export function holdingLines(
+  taskId: string,
+  dependencies: readonly WaitingDependency[],
+  tasks: readonly WaitingTask[],
+): HoldingLine[] {
+  return dependencies
+    .filter((dependency) => dependency.predecessorTaskId === taskId && dependency.successorTaskId)
+    .map((dependency) => {
+      const successor =
+        tasks.find((task) => task.id === dependency.successorTaskId) ??
+        dependency.successorTask ??
+        null;
+      const title = successor?.title?.trim() || "Task";
+      const owner = successor ? ownerName(successor) : null;
+      const text = owner ? `Holding up ${title} · ${owner}` : `Holding up ${title}`;
+      return { id: dependency.id, owner, text, title };
     });
 }
 

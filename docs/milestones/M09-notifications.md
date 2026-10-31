@@ -25,3 +25,7 @@ The owner of a work item hears when it is assigned, blocked, or becomes overdue.
 - Setting Blocked creates one row for the owner. If the actor is the owner, still record it, and do not toast a second copy in the page they are looking at.
 - The header link is absent for a person with no notification permission, and present for anyone who can own work.
 - Reloading does not duplicate the overdue alert.
+
+## Shipped after this milestone
+
+When a predecessor becomes Blocked, or becomes Overdue and is not Blocked, the owner of each unfinished task that depends on it gets one unread row. Adding or changing the link onto a predecessor that is already Blocked or Overdue sends that row once. The row names the predecessor and opens that waiting task on Today. The predecessor's owner does not get a second row. A second sweep does not repeat the overdue notice. See [shared objects](../product/shared-objects.md).

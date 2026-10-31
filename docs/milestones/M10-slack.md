@@ -23,3 +23,7 @@ A project can name a Slack channel. The events from milestone 09 are posted ther
 - A blocked item posts once to the configured channel and once to the in-app list.
 - A project with no Slack configuration posts nothing externally and does not show an error to the contributor who changed the status.
 - The webhook value is write-only after save.
+
+## Shipped after this milestone
+
+A waiting notice uses this same post. One message names the successor, the predecessor, and the link to the waiting task on Today. The predecessor's own Blocked or Overdue post is still a single message. Slack off leaves the in-app row in place.

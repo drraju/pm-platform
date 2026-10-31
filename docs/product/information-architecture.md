@@ -84,7 +84,7 @@ Mine is one list. Columns: work, project, customer, owner, status, due, next ste
 
 A project is a working table. Columns, in order: Task, Owner, Status, Due, Next step. Owner is the column beside the task. A lead sets the owner, the status, the due date, and the next step on the row, and adds a subtask on the task. Summary containers are grouped, show completed leaves over operational leaves, and are excluded from the overdue chip. At 1280px the table does not scroll sideways.
 
-Under a task that is waiting, each predecessor is one read-only line: the predecessor name, its state, and its owner. The state is On track, Blocked, Overdue, or Done. Blocked uses the warning color. Overdue is the due-date mark, used when the predecessor is late and not Blocked. Done means that predecessor is finished. Adding or changing the link is done on the Plan, in Depends on. Mine shows the same line on the person's own tasks.
+Under a task that is waiting, each predecessor is one read-only line: the predecessor name, its state, and its owner. The state is On track, Blocked, Overdue, or Done. Blocked uses the warning color. Overdue is the due-date mark, used when the predecessor is late and not Blocked. Done means that predecessor is finished. Adding or changing the link is done on the Plan, in Depends on. Mine shows the same line on the person's own tasks. When a predecessor becomes Blocked or Overdue, the successor's owner gets one notification that names the predecessor and opens the waiting task. Adding the link onto a predecessor that is already Blocked or Overdue sends that same notice. The predecessor's owner is not notified again. Slack posts the same event when the project channel is on.
 
 ## Programs
 

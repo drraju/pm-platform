@@ -181,6 +181,11 @@ describe("Today project board", () => {
     const fabrix = screen.getByRole("button", { name: "Fabrix Pipeline" }).closest("tr");
     if (!fabrix) throw new Error("Fabrix Pipeline row is missing");
     expect(within(fabrix).getByText("Waiting on Signed off · Done · Ben Ng")).toBeTruthy();
+
+    const test2 = screen.getByRole("button", { name: "Test2" }).closest("tr");
+    if (!test2) throw new Error("Test2 row is missing");
+    expect(within(test2).getByText("Holding up Read API · Ben Ng")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "2 Done, 2 Doing, 1 Blocked" })).toBeTruthy();
   });
 
   it("adds a subtask and saves the next step", async () => {

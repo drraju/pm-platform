@@ -27,7 +27,9 @@ export function markAllNotificationsRead() {
 
 export function notificationReason(reason: ApiNotification["reason"]) {
   if (reason === "assigned") return "Assigned";
+  if (reason === "waiting_blocked") return "Waiting · Blocked";
   if (reason === "blocked") return "Blocked";
+  if (reason === "waiting_overdue") return "Waiting · Overdue";
   if (reason === "overdue") return "Overdue";
   return "Update";
 }

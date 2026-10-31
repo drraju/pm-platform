@@ -16,6 +16,7 @@ import { Project } from './entities/project.entity';
 import { ProjectVisibilityService } from './project-visibility.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { PlanningSnapshotModule } from '../planning/planning-snapshot.module';
 import { ForecastController } from './forecast.controller';
@@ -24,6 +25,7 @@ import { ForecastQueryService } from './forecast-query.service';
 @Module({
   imports: [
     HealthModule,
+    NotificationsModule,
     PlanningSnapshotModule,
     forwardRef(() => TasksModule),
     TypeOrmModule.forFeature([

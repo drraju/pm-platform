@@ -69,6 +69,7 @@ import {
   ProjectVisibilityActor,
   ProjectVisibilityService,
 } from './project-visibility.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { TasksService } from '../tasks/tasks.service';
 import { TaskAssignmentService } from '../tasks/task-assignment.service';
 import { PlanningSnapshotService } from '../planning/planning-snapshot.service';
@@ -132,6 +133,8 @@ export class ProjectsService {
     @Inject(forwardRef(() => TasksService))
     @Optional()
     private readonly canonicalTasksService?: TasksService,
+    @Optional()
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async create(
@@ -1089,7 +1092,12 @@ export class ProjectsService {
       updatedById: actor?.userId,
     });
 
-    return this.taskDependenciesRepository.save(dependency);
+    const saved = await this.taskDependenciesRepository.save(dependency);
+    await this.notificationsService?.afterDependency(
+      saved.predecessorTaskId,
+      saved.successorTaskId,
+    );
+    return saved;
   }
 
   async updateProjectTaskDependency(
@@ -1119,12 +1127,23 @@ export class ProjectsService {
 
     await this.validateTaskDependency(projectId, nextInput, dependency.id);
 
+    const pairChanged =
+      nextInput.predecessorTaskId !== dependency.predecessorTaskId ||
+      nextInput.successorTaskId !== dependency.successorTaskId;
+
     Object.assign(dependency, updateTaskDependencyDto, {
       lagDays: updateTaskDependencyDto.lagDays ?? dependency.lagDays,
       updatedById: actor?.userId,
     });
 
-    return this.taskDependenciesRepository.save(dependency);
+    const saved = await this.taskDependenciesRepository.save(dependency);
+    if (pairChanged) {
+      await this.notificationsService?.afterDependency(
+        saved.predecessorTaskId,
+        saved.successorTaskId,
+      );
+    }
+    return saved;
   }
 
   async removeProjectTaskDependency(

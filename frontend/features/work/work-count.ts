@@ -72,6 +72,30 @@ export function containerProgress(
   };
 }
 
+export type StatusMix = {
+  blocked: number;
+  doing: number;
+  done: number;
+  notStarted: number;
+  total: number;
+};
+
+export function statusMix(leaves: readonly WorkCountTask[]): StatusMix {
+  const mix: StatusMix = { blocked: 0, doing: 0, done: 0, notStarted: 0, total: leaves.length };
+  for (const leaf of leaves) {
+    const status = storedWorkStatus(leaf.status);
+    if (status === "done") mix.done += 1;
+    else if (status === "in_progress") mix.doing += 1;
+    else if (status === "blocked") mix.blocked += 1;
+    else mix.notStarted += 1;
+  }
+  return mix;
+}
+
+export function containerStatusMix(containerId: string, tasks: readonly WorkCountTask[]) {
+  return statusMix(descendantLeaves(containerId, tasks));
+}
+
 function descendantLeaves(
   containerId: string,
   tasks: readonly WorkCountTask[],

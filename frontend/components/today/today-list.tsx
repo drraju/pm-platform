@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { statusTone, TodayProjectBoard, WaitingNotes } from "@/components/today/today-project-board";
+import { HoldingNotes, statusTone, TodayProjectBoard, WaitingNotes } from "@/components/today/today-project-board";
 import { WorkPanel } from "@/components/work/work-panel";
 import type { ApiProject, ApiTask, ApiTaskExecutionUpdate } from "@/features/projects";
 import {
@@ -13,7 +13,7 @@ import {
   workStatusOptions,
   type WorkCount,
 } from "@/features/work/work-count";
-import { waitingLines, type WaitingDependency } from "@/features/work/waiting-on";
+import { holdingLines, waitingLines, type WaitingDependency } from "@/features/work/waiting-on";
 
 type TodayListProps = {
   canAdd: boolean;
@@ -234,6 +234,7 @@ function WorkRow({
           {task.project?.name ?? "Project"} · {task.project?.customer?.name ?? "No customer"} · {owner}
         </p>
         <WaitingNotes lines={waitingLines(task.id, dependencies, tasks, today)} />
+        <HoldingNotes lines={holdingLines(task.id, dependencies, tasks)} />
       </div>
       <select
         aria-label={`Status for ${task.title}`}

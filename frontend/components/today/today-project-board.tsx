@@ -5,12 +5,21 @@ import type { ApiTask } from "@/features/projects";
 import { outlinePlan } from "@/features/work/plan-outline";
 import {
   containerProgress,
+  containerStatusMix,
   isOverdueWork,
   isWorkContainer,
+  statusMix,
   storedWorkStatus,
   workStatusOptions,
+  type StatusMix,
 } from "@/features/work/work-count";
-import { waitingLines, type WaitingDependency, type WaitingLine } from "@/features/work/waiting-on";
+import {
+  holdingLines,
+  waitingLines,
+  type HoldingLine,
+  type WaitingDependency,
+  type WaitingLine,
+} from "@/features/work/waiting-on";
 
 type BoardMember = {
   role?: string;
@@ -121,6 +130,10 @@ export function TodayProjectBoard({
       {groups.map((group, index) => {
         const accent = groupAccents[index % groupAccents.length];
         const progress = group.id === "work" ? null : containerProgress(group.id, tasks);
+        const mix =
+          group.id === "work"
+            ? statusMix(group.rows.map((row) => row.task).filter((task) => !isWorkContainer(task, tasks)))
+            : containerStatusMix(group.id, tasks);
         const hidden = collapsed.has(group.id);
         return (
           <section
@@ -157,6 +170,7 @@ export function TodayProjectBoard({
                 </button>
               ) : null}
             </header>
+            <StatusMixBar mix={mix} />
             {hidden ? null : (
               <table className="w-full table-fixed border-t border-slate-100 text-sm">
                 <colgroup>
@@ -264,6 +278,7 @@ function TaskLine({
   const childCount = tasks.filter((item) => item.parentTaskId === task.id).length;
   const assignable = members.filter((member) => member.role !== "viewer");
   const waiting = waitingLines(task.id, dependencies, tasks, today);
+  const holding = holdingLines(task.id, dependencies, tasks);
 
   return (
     <>
@@ -287,6 +302,7 @@ function TaskLine({
               </button>
             ) : null}
             <WaitingNotes lines={waiting} />
+            <HoldingNotes lines={holding} />
           </div>
         </td>
         <td className="px-2 py-2 align-middle">
@@ -393,6 +409,40 @@ export function WaitingNotes({ lines }: { lines: WaitingLine[] }) {
         <p className={`truncate text-xs ${waitingTone(line.state)}`} key={line.id}>
           {line.text}
         </p>
+      ))}
+    </div>
+  );
+}
+
+export function HoldingNotes({ lines }: { lines: HoldingLine[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="mt-1 space-y-0.5">
+      {lines.map((line) => (
+        <p className="truncate text-xs text-slate-600" key={line.id}>
+          {line.text}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function StatusMixBar({ mix }: { mix: StatusMix }) {
+  if (mix.total === 0) return null;
+  const parts = [
+    { className: "bg-emerald-600", count: mix.done, label: "Done" },
+    { className: "bg-sky-600", count: mix.doing, label: "Doing" },
+    { className: "bg-amber-400", count: mix.blocked, label: "Blocked" },
+    { className: "bg-slate-300", count: mix.notStarted, label: "Not started" },
+  ].filter((part) => part.count > 0);
+  return (
+    <div
+      aria-label={parts.map((part) => `${part.count} ${part.label}`).join(", ")}
+      className="mx-3 mb-2 flex h-1.5 overflow-hidden rounded-full bg-slate-100"
+      role="img"
+    >
+      {parts.map((part) => (
+        <span className={`h-full ${part.className}`} key={part.label} style={{ flexGrow: part.count }} />
       ))}
     </div>
   );

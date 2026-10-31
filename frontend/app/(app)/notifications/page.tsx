@@ -28,7 +28,7 @@ export default function NotificationsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Notifications</h1>
-        <p className="mt-1 text-sm text-slate-600">Assignments, blocked work, and overdue work.</p>
+        <p className="mt-1 text-sm text-slate-600">Assignments, blocked work, overdue work, and work that is waiting.</p>
       </div>
       {error ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>

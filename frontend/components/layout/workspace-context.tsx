@@ -183,7 +183,7 @@ export function getWorkspaceContext(pathname: string, projectName?: string | nul
   }
 
   if (pathname.startsWith("/notifications")) {
-    return createContext("Notifications", "Assignments, blocked work, and overdue work", [
+    return createContext("Notifications", "Assignments, blocked work, overdue work, and work that is waiting", [
       { label: "Notifications" },
     ]);
   }

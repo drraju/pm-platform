@@ -145,6 +145,7 @@ function TodayPageContent() {
           id: dependency.id,
           predecessorTask: dependency.predecessorTask ?? null,
           predecessorTaskId: dependency.predecessorTaskId || dependency.predecessorTask?.id || "",
+          successorTask: dependency.successorTask ?? null,
           successorTaskId: dependency.successorTaskId || dependency.successorTask?.id || "",
         }))
         .filter((dependency) => dependency.predecessorTaskId && dependency.successorTaskId)}

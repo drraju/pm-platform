@@ -24,8 +24,8 @@ export function ProjectSlack({
       <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">Slack</h2>
       <p className="mt-2 text-sm text-slate-700">
         {setting.configured
-          ? "Slack is on. Assignments, blocked work, and overdue work also post to the project channel."
-          : "Slack is off. Assignments, blocked work, and overdue work stay in Notifications."}
+          ? "Slack is on. Assignments, blocked work, overdue work, and work that is waiting also post to the project channel."
+          : "Slack is off. Assignments, blocked work, overdue work, and work that is waiting stay in Notifications."}
       </p>
       {canEdit ? (
         <form
