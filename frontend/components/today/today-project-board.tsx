@@ -11,11 +11,16 @@ import {
   workStatusOptions,
 } from "@/features/work/work-count";
 
-export type TodayDependency = {
-  id: string;
-  predecessorTaskId: string;
-  successorTaskId: string;
+type BoardMember = {
+  role?: string;
+  user?: { email?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  userId: string;
 };
+
+function personName(person?: { email?: string | null; firstName?: string | null; lastName?: string | null } | null) {
+  const name = [person?.firstName, person?.lastName].filter(Boolean).join(" ").trim();
+  return name || person?.email || "Unassigned";
+}
 
 const groupAccents = [
   { bar: "border-l-fuchsia-500", title: "text-fuchsia-700" },
@@ -34,15 +39,20 @@ export function statusTone(status?: string | null) {
 
 type TodayProjectBoardProps = {
   canAdd: boolean;
+  canAssign?: boolean;
   canEdit: (task: ApiTask) => boolean;
-  dependencies: TodayDependency[];
   isSaving: boolean;
-  onAddDependency: (input: { predecessorTaskId: string; successorTaskId: string }) => Promise<void>;
+  members?: BoardMember[];
   onAddSubtask: (input: { parentTaskId: string; title: string }) => Promise<void>;
   onOpen: (task: ApiTask) => void;
   onUpdate: (
     task: ApiTask,
-    patch: { dueDate?: string | null; nextStep?: string | null; status?: ApiTask["status"] },
+    patch: {
+      assigneeId?: string | null;
+      dueDate?: string | null;
+      nextStep?: string | null;
+      status?: ApiTask["status"];
+    },
   ) => Promise<void>;
   tasks: ApiTask[];
   today: string;
@@ -85,10 +95,10 @@ function projectGroups(tasks: ApiTask[]): Group[] {
 
 export function TodayProjectBoard({
   canAdd,
+  canAssign = false,
   canEdit,
-  dependencies,
   isSaving,
-  onAddDependency,
+  members = [],
   onAddSubtask,
   onOpen,
   onUpdate,
@@ -146,27 +156,34 @@ export function TodayProjectBoard({
             </header>
             {hidden ? null : (
               <table className="w-full table-fixed border-t border-slate-100 text-sm">
+                <colgroup>
+                  <col className="w-[32%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[18%]" />
+                </colgroup>
                 <thead>
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     <th className="px-3 py-2 font-semibold">Task</th>
-                    <th className="w-32 px-2 py-2 font-semibold">Status</th>
-                    <th className="w-28 px-2 py-2 font-semibold">Due</th>
-                    <th className="w-36 px-2 py-2 font-semibold">Depends on</th>
-                    <th className="w-40 px-2 py-2 font-semibold">Next step</th>
+                    <th className="px-2 py-2 font-semibold">Owner</th>
+                    <th className="px-2 py-2 font-semibold">Status</th>
+                    <th className="px-2 py-2 font-semibold">Due</th>
+                    <th className="px-2 py-2 font-semibold">Next step</th>
                   </tr>
                 </thead>
                 <tbody>
                   {group.rows.map(({ depth, task }) => (
                     <TaskLine
                       canAdd={canAdd}
+                      canAssign={canAssign}
                       canEdit={canEdit(task)}
                       depth={depth}
-                      dependencies={dependencies.filter((item) => item.successorTaskId === task.id)}
+                      members={members}
                       drafting={draftParentId === task.id}
                       isContainer={isWorkContainer(task, tasks)}
                       isSaving={isSaving}
                       key={task.id}
-                      onAddDependency={onAddDependency}
                       onAddSubtask={onAddSubtask}
                       onBeginSubtask={() => setDraftParentId(task.id)}
                       onCancelSubtask={() => setDraftParentId(null)}
@@ -201,13 +218,13 @@ export function TodayProjectBoard({
 
 function TaskLine({
   canAdd,
+  canAssign,
   canEdit,
   depth,
-  dependencies,
   drafting,
   isContainer,
   isSaving,
-  onAddDependency,
+  members,
   onAddSubtask,
   onBeginSubtask,
   onCancelSubtask,
@@ -218,13 +235,13 @@ function TaskLine({
   tasks,
 }: {
   canAdd: boolean;
+  canAssign: boolean;
   canEdit: boolean;
   depth: number;
-  dependencies: TodayDependency[];
   drafting: boolean;
   isContainer: boolean;
   isSaving: boolean;
-  onAddDependency: TodayProjectBoardProps["onAddDependency"];
+  members: BoardMember[];
   onAddSubtask: TodayProjectBoardProps["onAddSubtask"];
   onBeginSubtask: () => void;
   onCancelSubtask: () => void;
@@ -236,11 +253,7 @@ function TaskLine({
 }) {
   const nextStep = task.nextStep || task.latestExecutionUpdate?.nextStep || "";
   const childCount = tasks.filter((item) => item.parentTaskId === task.id).length;
-  const predecessors = new Set(dependencies.map((item) => item.predecessorTaskId));
-  const choices = tasks.filter(
-    (item) => item.id !== task.id && !isWorkContainer(item, tasks) && !predecessors.has(item.id),
-  );
-  const [predecessorId, setPredecessorId] = useState("");
+  const assignable = members.filter((member) => member.role !== "viewer");
 
   return (
     <>
@@ -264,6 +277,29 @@ function TaskLine({
               </button>
             ) : null}
           </div>
+        </td>
+        <td className="px-2 py-2 align-middle">
+          {canAssign && assignable.length > 0 ? (
+            <select
+              aria-label={`Owner for ${task.title}`}
+              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-900"
+              disabled={isSaving}
+              onChange={(event) => void onUpdate(task, { assigneeId: event.target.value || null })}
+              value={task.assigneeId ?? ""}
+            >
+              <option value="">Unassigned</option>
+              {task.assigneeId && !assignable.some((member) => member.userId === task.assigneeId) ? (
+                <option value={task.assigneeId}>{personName(task.assignee)}</option>
+              ) : null}
+              {assignable.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {personName(member.user)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="block truncate text-xs text-slate-700">{personName(task.assignee)}</span>
+          )}
         </td>
         <td className="px-2 py-2">
           {isContainer ? (
@@ -304,41 +340,6 @@ function TaskLine({
               type="date"
               value={task.dueDate?.slice(0, 10) ?? ""}
             />
-          )}
-        </td>
-        <td className="px-2 py-2">
-          {task.taskKind === "summary" ? null : (
-            <div className="min-w-0 space-y-1">
-              {dependencies.map((dependency) => {
-                const name = tasks.find((item) => item.id === dependency.predecessorTaskId)?.title ?? "Task";
-                return (
-                  <span className="mr-1 inline-block max-w-full truncate rounded bg-sky-100 px-1.5 text-xs text-sky-900" key={dependency.id}>
-                    {name}
-                  </span>
-                );
-              })}
-              {canAdd && choices.length > 0 ? (
-                <select
-                  aria-label={`Depends on for ${task.title}`}
-                  className="w-full rounded border border-slate-300 px-1 py-0.5 text-xs"
-                  onChange={(event) => {
-                    const predecessorTaskId = event.target.value;
-                    setPredecessorId("");
-                    if (predecessorTaskId) {
-                      void onAddDependency({ predecessorTaskId, successorTaskId: task.id });
-                    }
-                  }}
-                  value={predecessorId}
-                >
-                  <option value="">Add dependency</option>
-                  {choices.map((choice) => (
-                    <option key={choice.id} value={choice.id}>
-                      {choice.title}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
           )}
         </td>
         <td className="px-2 py-2">

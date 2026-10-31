@@ -9,10 +9,18 @@ import {
   WorkspaceLayout,
 } from "@/components/foundation";
 import { PlanOutline } from "@/components/plan/plan-outline";
+import { PlanTimeline } from "@/components/plan/plan-timeline";
 import { CompactProjectWorkspaceLayout, ProjectLayout } from "@/components/project";
 import { WorkPanel } from "@/components/work/work-panel";
 import { getAuthMe, hasPermission, isExternalContact, storeAuthMe } from "@/features/auth";
-import { getProject, type ApiProjectDetails, type ApiTask } from "@/features/projects";
+import {
+  createProjectTaskDependency,
+  getProject,
+  getProjectTaskDependencies,
+  type ApiProjectDetails,
+  type ApiTask,
+  type ApiTaskDependency,
+} from "@/features/projects";
 import { addTaskComment, createTask, getTaskExecutionUpdates, updateTask } from "@/features/tasks";
 import { isWorkContainer, todayDate } from "@/features/work/work-count";
 import { reorderPlanSiblings } from "@/features/work/plan-outline";
@@ -22,6 +30,8 @@ export default function ProjectPlanPage() {
   const projectId = params.id;
   const [project, setProject] = useState<ApiProjectDetails | null>(null);
   const [tasks, setTasks] = useState<ApiTask[]>([]);
+  const [dependencies, setDependencies] = useState<ApiTaskDependency[]>([]);
+  const [view, setView] = useState<"outline" | "timeline">("outline");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [canEditDates, setCanEditDates] = useState(false);
   const [canComment, setCanComment] = useState(false);
@@ -31,7 +41,11 @@ export default function ProjectPlanPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const [details, authMe] = await Promise.all([getProject(projectId), getAuthMe()]);
+    const [details, authMe, links] = await Promise.all([
+      getProject(projectId),
+      getAuthMe(),
+      getProjectTaskDependencies(projectId).catch(() => [] as ApiTaskDependency[]),
+    ]);
     storeAuthMe(authMe);
     const userId = authMe.user.id;
     const isPlatformAdmin = authMe.roles.some((role) => role.name === "PLATFORM_ADMIN");
@@ -41,6 +55,7 @@ export default function ProjectPlanPage() {
         (member) => member.userId === userId && (member.role === "owner" || member.role === "manager"),
       );
     setProject(details);
+    setDependencies(links);
     setTasks(details.tasks ?? []);
     setCurrentUserId(userId);
     const keys = authMe.permissions.map((permission) => permission.key);
@@ -99,11 +114,62 @@ export default function ProjectPlanPage() {
       renderHeader={(content) => <WorkspaceHeader density="compact" {...content} />}
     >
       {error ? <ErrorState message={error} /> : null}
+      <div className="mb-3 flex gap-2">
+        <button
+          aria-pressed={view === "outline"}
+          className={`rounded-md px-3 py-1.5 text-sm font-semibold ${view === "outline" ? "bg-slate-950 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
+          onClick={() => setView("outline")}
+          type="button"
+        >
+          Outline
+        </button>
+        <button
+          aria-pressed={view === "timeline"}
+          className={`rounded-md px-3 py-1.5 text-sm font-semibold ${view === "timeline" ? "bg-slate-950 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
+          onClick={() => setView("timeline")}
+          type="button"
+        >
+          Timeline
+        </button>
+      </div>
+      {view === "timeline" ? (
+        <PlanTimeline
+          dependencies={dependencies.map((dependency) => ({
+            id: dependency.id,
+            predecessorTaskId: dependency.predecessorTaskId || dependency.predecessorTask?.id || "",
+            successorTaskId: dependency.successorTaskId || dependency.successorTask?.id || "",
+          })).filter((dependency) => dependency.predecessorTaskId && dependency.successorTaskId)}
+          tasks={tasks}
+          today={todayDate()}
+        />
+      ) : (
       <PlanOutline
         canAdd={canEditDates}
         canEditDates={canEditDates}
         canEditStatus={canEditStatus}
+        dependencies={dependencies.map((dependency) => ({
+          id: dependency.id,
+          predecessorTaskId: dependency.predecessorTaskId || dependency.predecessorTask?.id || "",
+          successorTaskId: dependency.successorTaskId || dependency.successorTask?.id || "",
+        })).filter((dependency) => dependency.predecessorTaskId && dependency.successorTaskId)}
         isSaving={isSaving}
+        onAddDependency={async ({ predecessorTaskId, successorTaskId }) => {
+          setIsSaving(true);
+          setError(null);
+          try {
+            await createProjectTaskDependency(projectId, {
+              dependencyType: "FS",
+              lagDays: 0,
+              predecessorTaskId,
+              successorTaskId,
+            });
+            await load();
+          } catch (requestError) {
+            setError(requestError instanceof Error ? requestError.message : "Unable to add the dependency");
+          } finally {
+            setIsSaving(false);
+          }
+        }}
         members={project?.members ?? []}
         onOpen={(task) => setOpenTaskId(task.id)}
         onAdd={async (input) => {
@@ -157,6 +223,7 @@ export default function ProjectPlanPage() {
         tasks={tasks}
         today={todayDate()}
       />
+      )}
       {openTask ? (
         <WorkPanel
           canAssign={canEditDates}

@@ -23,13 +23,21 @@ type PlanPatch = {
 
 type PlanMember = Pick<ApiProjectMember, "role" | "user" | "userId">;
 
+export type PlanDependency = {
+  id: string;
+  predecessorTaskId: string;
+  successorTaskId: string;
+};
+
 export function PlanOutline({
   canAdd,
   canEditDates,
   canEditStatus,
+  dependencies = [],
   isSaving,
   members,
   onAdd,
+  onAddDependency,
   onOpen,
   onReorder,
   onUpdate,
@@ -39,9 +47,11 @@ export function PlanOutline({
   canAdd: boolean;
   canEditDates: boolean;
   canEditStatus: (task: ApiTask) => boolean;
+  dependencies?: PlanDependency[];
   isSaving: boolean;
   members?: PlanMember[];
   onAdd: (input: { parentTaskId?: string; title: string }) => Promise<void>;
+  onAddDependency?: (input: { predecessorTaskId: string; successorTaskId: string }) => Promise<void>;
   onOpen?: (task: ApiTask) => void;
   onReorder: (draggedId: string, targetId: string) => Promise<void>;
   onUpdate: (task: ApiTask, patch: PlanPatch) => Promise<void>;
@@ -79,8 +89,9 @@ export function PlanOutline({
           <col className="w-14" />
           <col className="w-40" />
           <col className="w-40" />
+          <col className="w-36" />
+          <col className="w-28" />
           <col className="w-44" />
-          <col className="w-32" />
         </colgroup>
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500">
@@ -91,12 +102,13 @@ export function PlanOutline({
             <th className="px-2 py-2 font-medium">Start</th>
             <th className="px-2 py-2 font-medium">Finish</th>
             <th className="px-2 py-2 font-medium">Status</th>
+            <th className="px-2 py-2 font-medium">Depends on</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td className="px-3 py-8 text-sm text-slate-600" colSpan={7}>
+              <td className="px-3 py-8 text-sm text-slate-600" colSpan={8}>
                 {canAdd ? "Nothing is on this plan yet. Add the first line, then set the owner and dates." : "This project has no work items yet."}
                 {canAdd ? <AddWork isSaving={isSaving} onAdd={onAdd} /> : null}
               </td>
@@ -116,6 +128,8 @@ export function PlanOutline({
                     dragOver={dragOverId === task.id}
                     isContainer={container}
                     isSaving={isSaving}
+                    dependencies={dependencies.filter((item) => item.successorTaskId === task.id)}
+                    onAddDependency={onAddDependency}
                     onBeginSubtask={() => beginSubtask(task.id)}
                     onOpen={onOpen}
                     onReorder={onReorder}
@@ -132,6 +146,7 @@ export function PlanOutline({
                     progress={container ? containerProgress(task.id, tasks) : null}
                     setDragOverId={setDragOverId}
                     task={task}
+                    tasks={tasks}
                   />
                   {index + 1 === draftAfter && draftParentId ? (
                     <DraftRow
@@ -151,7 +166,7 @@ export function PlanOutline({
           {rows.length > 0 && canAdd ? (
             <tr className="border-t border-slate-100">
               <td />
-              <td className="px-2" colSpan={6}>
+              <td className="px-2" colSpan={7}>
                 <AddWork isSaving={isSaving} onAdd={onAdd} />
               </td>
             </tr>
@@ -168,11 +183,13 @@ function PlanRow({
   canAdd,
   canEditDates,
   canEditStatus,
+  dependencies,
   collapsed,
   depth,
   dragOver,
   isContainer,
   isSaving,
+  onAddDependency,
   onBeginSubtask,
   onOpen,
   onReorder,
@@ -182,16 +199,19 @@ function PlanRow({
   progress,
   setDragOverId,
   task,
+  tasks,
 }: {
   assignable: PlanMember[];
   canAdd: boolean;
   canEditDates: boolean;
   canEditStatus: boolean;
+  dependencies: PlanDependency[];
   collapsed: boolean;
   depth: number;
   dragOver: boolean;
   isContainer: boolean;
   isSaving: boolean;
+  onAddDependency?: (input: { predecessorTaskId: string; successorTaskId: string }) => void | Promise<void>;
   onBeginSubtask: () => void;
   onOpen?: (task: ApiTask) => void;
   onReorder: (draggedId: string, targetId: string) => Promise<void>;
@@ -201,6 +221,7 @@ function PlanRow({
   progress: { done: number; total: number } | null;
   setDragOverId: (id: string | null) => void;
   task: ApiTask;
+  tasks: ApiTask[];
 }) {
   const done = storedWorkStatus(task.status) === "done";
 
@@ -327,7 +348,74 @@ function PlanRow({
           <StatusMark status={task.status} />
         )}
       </td>
+      <td className="px-2 py-1.5 align-middle">
+        <DependsOn
+          canAdd={canAdd && task.taskKind !== "summary"}
+          dependencies={dependencies}
+          isSaving={isSaving}
+          onAdd={onAddDependency}
+          task={task}
+          tasks={tasks}
+        />
+      </td>
     </tr>
+  );
+}
+
+function DependsOn({
+  canAdd,
+  dependencies,
+  isSaving,
+  onAdd,
+  task,
+  tasks,
+}: {
+  canAdd: boolean;
+  dependencies: PlanDependency[];
+  isSaving: boolean;
+  onAdd?: (input: { predecessorTaskId: string; successorTaskId: string }) => void | Promise<void>;
+  task: ApiTask;
+  tasks: ApiTask[];
+}) {
+  const [predecessorId, setPredecessorId] = useState("");
+  const linked = new Set(dependencies.map((item) => item.predecessorTaskId));
+  const choices = tasks.filter(
+    (item) => item.id !== task.id && !isWorkContainer(item, tasks) && !linked.has(item.id),
+  );
+  if (dependencies.length === 0 && (!canAdd || !onAdd || choices.length === 0)) {
+    return null;
+  }
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      {dependencies.map((dependency) => {
+        const name = tasks.find((item) => item.id === dependency.predecessorTaskId)?.title ?? "Task";
+        return (
+          <span className="max-w-full truncate rounded bg-sky-100 px-1.5 text-xs text-sky-900" key={dependency.id}>
+            {name}
+          </span>
+        );
+      })}
+      {canAdd && onAdd && choices.length > 0 ? (
+        <select
+          aria-label={`Depends on for ${task.title}`}
+          className="max-w-full rounded border border-slate-300 bg-white px-1 py-1 text-xs"
+          disabled={isSaving}
+          onChange={(event) => {
+            const predecessorTaskId = event.target.value;
+            setPredecessorId("");
+            if (predecessorTaskId) void onAdd({ predecessorTaskId, successorTaskId: task.id });
+          }}
+          value={predecessorId}
+        >
+          <option value="">Add dependency</option>
+          {choices.map((choice) => (
+            <option key={choice.id} value={choice.id}>
+              {choice.title}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
   );
 }
 
@@ -409,7 +497,7 @@ function DraftRow({
   return (
     <tr className="border-t border-slate-100 bg-teal-50/40">
       <td />
-      <td className="px-2 py-1.5" colSpan={6}>
+      <td className="px-2 py-1.5" colSpan={7}>
         <form
           className="flex items-center gap-2"
           style={{ paddingLeft: depth * 16 }}

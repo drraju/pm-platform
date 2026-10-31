@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { statusTone, TodayProjectBoard, type TodayDependency } from "@/components/today/today-project-board";
+import { statusTone, TodayProjectBoard } from "@/components/today/today-project-board";
 import { WorkPanel } from "@/components/work/work-panel";
 import type { ApiProject, ApiTask, ApiTaskExecutionUpdate } from "@/features/projects";
 import {
@@ -19,7 +19,6 @@ type TodayListProps = {
   canAssign?: boolean;
   canEdit: (task: ApiTask) => boolean;
   containers: ApiTask[];
-  dependencies?: TodayDependency[];
   count: WorkCount;
   error: string | null;
   isSaving: boolean;
@@ -29,7 +28,6 @@ type TodayListProps = {
     userId: string;
   }>;
   onAdd: (input: { dueDate?: string; projectId: string; title: string }) => Promise<void>;
-  onAddDependency?: (input: { predecessorTaskId: string; successorTaskId: string }) => Promise<void>;
   onAddSubtask?: (input: { parentTaskId: string; title: string }) => Promise<void>;
   onComment: (taskId: string, body: string) => Promise<void>;
   onLoadComments: (taskId: string) => Promise<ApiTaskExecutionUpdate[]>;
@@ -47,13 +45,11 @@ export function TodayList({
   canAssign = false,
   canEdit,
   containers,
-  dependencies = [],
   count,
   error,
   isSaving,
   members,
   onAdd,
-  onAddDependency,
   onAddSubtask,
   onComment,
   onLoadComments,
@@ -104,19 +100,19 @@ export function TodayList({
 
       {scope === "mine" ? (
         <p className="text-sm text-slate-600">
-          Choose a project to update its tasks, status, subtasks, and dependencies here.
+          Choose a project to update its tasks, owner, status, and subtasks here.
         </p>
       ) : null}
 
       {canAdd ? <AddWork isSaving={isSaving} onAdd={onAdd} projects={projects} selectedProjectId={scope === "mine" ? "" : scope} /> : null}
 
-      {scope !== "mine" && onAddSubtask && onAddDependency ? (
+      {scope !== "mine" && onAddSubtask ? (
         <TodayProjectBoard
           canAdd={canAdd}
+          canAssign={canAssign}
           canEdit={canEdit}
-          dependencies={dependencies}
+          members={members}
           isSaving={isSaving}
-          onAddDependency={onAddDependency}
           onAddSubtask={onAddSubtask}
           onOpen={(task) => setOpenId(task.id)}
           onUpdate={onUpdate}

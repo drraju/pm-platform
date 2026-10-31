@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PlanOutline } from "@/components/plan/plan-outline";
 import type { ApiTask } from "@/features/projects";
@@ -188,5 +188,42 @@ describe("Plan outline", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Read API" }));
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "mine" }));
+  });
+
+  it("adds a dependency on the plan row", () => {
+    const onAddDependency = vi.fn().mockResolvedValue(undefined);
+    const followUp = {
+      id: "follow-up",
+      priority: "medium",
+      projectId: "project-1",
+      status: "todo",
+      taskKind: "standard",
+      title: "Follow up",
+    } as ApiTask;
+    render(
+      <PlanOutline
+        canAdd
+        canEditDates
+        canEditStatus={() => true}
+        dependencies={[{ id: "dep-1", predecessorTaskId: "theirs", successorTaskId: "mine" }]}
+        isSaving={false}
+        onAdd={vi.fn()}
+        onAddDependency={onAddDependency}
+        onReorder={vi.fn()}
+        onUpdate={vi.fn()}
+        tasks={[...tasks, followUp]}
+        today="2026-10-29"
+      />,
+    );
+
+    const select = screen.getByLabelText("Depends on for Read API");
+    const row = select.closest("tr");
+    if (!row) throw new Error("Read API row is missing");
+    expect(within(row).getByText("Other work")).toBeTruthy();
+    fireEvent.change(select, { target: { value: "follow-up" } });
+    expect(onAddDependency).toHaveBeenCalledWith({
+      predecessorTaskId: "follow-up",
+      successorTaskId: "mine",
+    });
   });
 });

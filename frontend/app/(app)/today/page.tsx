@@ -4,16 +4,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useState } from "reac
 import { useSearchParams } from "next/navigation";
 import { TodayList } from "@/components/today/today-list";
 import { getAuthMe, storeAuthMe } from "@/features/auth";
-import {
-  createProjectTaskDependency,
-  getProject,
-  getProjects,
-  getProjectTaskDependencies,
-  type ApiProject,
-  type ApiProjectMember,
-  type ApiTask,
-  type ApiTaskDependency,
-} from "@/features/projects";
+import { getProject, getProjects, type ApiProject, type ApiProjectMember, type ApiTask } from "@/features/projects";
 import {
   addTaskComment,
   createTask,
@@ -38,7 +29,6 @@ function TodayPageContent() {
   const [scope, setScope] = useState(requestedProjectId || "mine");
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [tasks, setTasks] = useState<ApiTask[]>([]);
-  const [dependencies, setDependencies] = useState<ApiTaskDependency[]>([]);
   const [members, setMembers] = useState<ApiProjectMember[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
@@ -50,15 +40,10 @@ function TodayPageContent() {
     if (nextScope === "mine") {
       const mine = await getMyTasks();
       setMembers([]);
-      setDependencies([]);
       setTasks(mine.filter((task) => !userId || task.assigneeId === userId || isWorkContainer(task, mine)));
       return;
     }
-    const [project, projectDependencies] = await Promise.all([
-      getProject(nextScope),
-      getProjectTaskDependencies(nextScope).catch(() => []),
-    ]);
-    setDependencies(projectDependencies);
+    const project = await getProject(nextScope);
     setMembers(project.members ?? []);
     setTasks(
       (project.tasks ?? []).map((task) => ({
@@ -131,7 +116,6 @@ function TodayPageContent() {
       canAssign={isPlatformAdmin || isLead}
       canEdit={canEdit}
       containers={scope === "mine" ? [] : containers}
-      dependencies={dependencies}
       count={count}
       error={error}
       isSaving={isSaving}
@@ -146,24 +130,6 @@ function TodayPageContent() {
           if (scope === "mine") setScope(input.projectId);
         } catch (requestError) {
           setError(requestError instanceof Error ? requestError.message : "Unable to add work");
-        } finally {
-          setIsSaving(false);
-        }
-      }}
-      onAddDependency={async ({ predecessorTaskId, successorTaskId }) => {
-        if (scope === "mine") return;
-        setIsSaving(true);
-        setError(null);
-        try {
-          await createProjectTaskDependency(scope, {
-            dependencyType: "FS",
-            lagDays: 0,
-            predecessorTaskId,
-            successorTaskId,
-          });
-          await load(scope, currentUserId);
-        } catch (requestError) {
-          setError(requestError instanceof Error ? requestError.message : "Unable to add the dependency");
         } finally {
           setIsSaving(false);
         }
@@ -198,7 +164,22 @@ function TodayPageContent() {
         setError(null);
         try {
           const saved = await updateTask(task.id, patch);
-          setTasks((current) => current.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)));
+          setTasks((current) =>
+            current.map((item) => {
+              if (item.id !== saved.id) return item;
+              const next = { ...item, ...saved, assignee: saved.assignee ?? item.assignee };
+              if (patch.assigneeId !== undefined) {
+                const member = members.find((entry) => entry.userId === patch.assigneeId);
+                next.assigneeId = patch.assigneeId;
+                next.assignee = member?.user
+                  ? { ...member.user, id: member.user.id ?? member.userId }
+                  : patch.assigneeId
+                    ? next.assignee
+                    : null;
+              }
+              return next;
+            }),
+          );
           if (patch.status === "done" || patch.dueDate !== undefined) await refresh();
         } catch (requestError) {
           setError(requestError instanceof Error ? requestError.message : "Unable to update work");
