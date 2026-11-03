@@ -15,6 +15,7 @@ import { WorkPanel } from "@/components/work/work-panel";
 import { getAuthMe, hasPermission, isExternalContact, storeAuthMe } from "@/features/auth";
 import {
   createProjectTaskDependency,
+  deleteProjectTask,
   getProject,
   getProjectTaskDependencies,
   type ApiProjectDetails,
@@ -22,8 +23,9 @@ import {
   type ApiTaskDependency,
 } from "@/features/projects";
 import { addTaskComment, createTask, getTaskExecutionUpdates, updateTask } from "@/features/tasks";
+import { outlineRoleOf } from "@/features/work/outline-role";
 import { isWorkContainer, todayDate } from "@/features/work/work-count";
-import { reorderPlanSiblings } from "@/features/work/plan-outline";
+import { describePlanDrop } from "@/features/work/plan-outline";
 
 export default function ProjectPlanPage() {
   const params = useParams<{ id: string }>();
@@ -145,6 +147,7 @@ export default function ProjectPlanPage() {
       ) : (
       <PlanOutline
         canAdd={canEditDates}
+        canDelete={canEditDates}
         canEditDates={canEditDates}
         canEditStatus={canEditStatus}
         dependencies={dependencies.map((dependency) => ({
@@ -171,16 +174,29 @@ export default function ProjectPlanPage() {
           }
         }}
         members={project?.members ?? []}
+        onDelete={async (taskId) => {
+          setIsSaving(true);
+          setError(null);
+          try {
+            await deleteProjectTask(projectId, taskId);
+            await load();
+          } catch (requestError) {
+            setError(requestError instanceof Error ? requestError.message : "Unable to delete the task");
+          } finally {
+            setIsSaving(false);
+          }
+        }}
         onOpen={(task) => setOpenTaskId(task.id)}
         onAdd={async (input) => {
           setIsSaving(true);
           setError(null);
           try {
             await createTask({
+              outlineRole: input.outlineRole,
               parentTaskId: input.parentTaskId,
               projectId,
-              status: "todo",
               title: input.title,
+              ...(input.outlineRole === "work" ? { status: "todo" as const } : {}),
             });
             await load();
           } catch (requestError) {
@@ -190,20 +206,33 @@ export default function ProjectPlanPage() {
           }
         }}
         onReorder={async (draggedId, targetId) => {
-          const changes = reorderPlanSiblings(tasks, draggedId, targetId);
-          if (changes.length === 0) return;
+          const drop = describePlanDrop(tasks, draggedId, targetId);
+          if (drop.type === "none" || (drop.type === "reorder" && drop.changes.length === 0)) return;
+          if (drop.type === "invalid") {
+            setError(drop.message);
+            return;
+          }
           setIsSaving(true);
           setError(null);
           try {
-            await Promise.all(changes.map((change) => updateTask(change.id, { sequenceNumber: change.sequenceNumber })));
-            setTasks((current) =>
-              current.map((task) => {
-                const change = changes.find((item) => item.id === task.id);
-                return change ? { ...task, sequenceNumber: change.sequenceNumber } : task;
-              }),
-            );
+            if (drop.type === "reparent") {
+              const dragged = tasks.find((task) => task.id === draggedId);
+              await updateTask(draggedId, {
+                outlineRole: dragged ? outlineRoleOf(dragged) : "work",
+                parentTaskId: drop.parentTaskId,
+              });
+              await load();
+            } else {
+              await Promise.all(drop.changes.map((change) => updateTask(change.id, { sequenceNumber: change.sequenceNumber })));
+              setTasks((current) =>
+                current.map((task) => {
+                  const change = drop.changes.find((item) => item.id === task.id);
+                  return change ? { ...task, sequenceNumber: change.sequenceNumber } : task;
+                }),
+              );
+            }
           } catch (requestError) {
-            setError(requestError instanceof Error ? requestError.message : "Unable to reorder work");
+            setError(requestError instanceof Error ? requestError.message : "Unable to move work");
           } finally {
             setIsSaving(false);
           }

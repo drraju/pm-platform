@@ -1,9 +1,19 @@
+import { outlineRoleOf, placementErrorForDrop, type OutlineRole } from "@/features/work/outline-role";
+
 export type PlanTask = {
   id: string;
+  outlineRole?: OutlineRole | string | null;
   parentTaskId?: string | null;
   sequenceNumber?: number | null;
+  taskKind?: string | null;
   title: string;
 };
+
+export type PlanDrop =
+  | { changes: Array<{ id: string; sequenceNumber: number }>; type: "reorder" }
+  | { parentTaskId: string; type: "reparent" }
+  | { message: string; type: "invalid" }
+  | { type: "none" };
 
 export type PlanRow<T extends PlanTask> = {
   depth: number;
@@ -88,4 +98,42 @@ export function reorderPlanSiblings<T extends PlanTask>(
     const sequenceNumber = index + 1;
     return task.sequenceNumber === sequenceNumber ? [] : [{ id: task.id, sequenceNumber }];
   });
+}
+
+export function describePlanDrop<T extends PlanTask>(
+  tasks: readonly T[],
+  draggedId: string,
+  targetId: string,
+): PlanDrop {
+  const dragged = tasks.find((task) => task.id === draggedId);
+  const target = tasks.find((task) => task.id === targetId);
+  if (!dragged || !target || dragged.id === target.id) {
+    return { type: "none" };
+  }
+  if (planParentId(dragged, tasks) === planParentId(target, tasks)) {
+    return { changes: reorderPlanSiblings(tasks, draggedId, targetId), type: "reorder" };
+  }
+  if ((dragged.parentTaskId ?? null) === target.id) {
+    return { type: "none" };
+  }
+  if (isDescendant(tasks, target.id, dragged.id)) {
+    return { message: "Task hierarchy cannot contain cycles", type: "invalid" };
+  }
+  if (outlineRoleOf(target) === "work" && outlineRoleOf(dragged) !== "work") {
+    return { message: "A work item can contain only a subtask.", type: "invalid" };
+  }
+  const message = placementErrorForDrop(tasks, dragged, target);
+  if (message) {
+    return { message, type: "invalid" };
+  }
+  return { parentTaskId: target.id, type: "reparent" };
+}
+
+function isDescendant<T extends PlanTask>(tasks: readonly T[], taskId: string, ancestorId: string) {
+  let current: string | null = taskId;
+  while (current) {
+    if (current === ancestorId) return true;
+    current = tasks.find((task) => task.id === current)?.parentTaskId ?? null;
+  }
+  return false;
 }

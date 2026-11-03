@@ -1,6 +1,7 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { AuditableEntity } from '../../../common/entities/auditable.entity';
 import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
+import { OutlineRole } from '../../../common/enums/outline-role.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { Project } from '../../projects/entities/project.entity';
@@ -35,6 +36,13 @@ export class Task extends AuditableEntity {
 
   @Column({ name: 'task_kind', type: 'varchar', default: TaskKind.Standard })
   taskKind: TaskKind;
+
+  @Column({
+    name: 'outline_role',
+    type: 'varchar',
+    default: OutlineRole.Work,
+  })
+  outlineRole: OutlineRole;
 
   @Column({
     name: 'milestone_category',

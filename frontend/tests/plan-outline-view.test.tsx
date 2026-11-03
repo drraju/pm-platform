@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PlanOutline } from "@/components/plan/plan-outline";
 import type { ApiTask } from "@/features/projects";
@@ -53,12 +53,12 @@ describe("Plan outline", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Add work" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add phase" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Status for Integration")).not.toBeInTheDocument();
     expect(screen.getByText("2 of 2 overdue · 1 container")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Finish for Read API"), { target: { value: "2026-11-15" } });
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: "mine" }), { dueDate: "2026-11-15" });
-    expect(screen.getByLabelText("Reorder Read API")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move Read API")).toBeInTheDocument();
   });
 
   it("lets a contributor change only their own status", () => {
@@ -81,7 +81,7 @@ describe("Plan outline", () => {
     expect(screen.queryByLabelText("Finish for Other work")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Finish for Read API")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Reorder/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add work" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add phase" })).not.toBeInTheDocument();
     expect(screen.getByText("11 Oct")).toBeInTheDocument();
     expect(screen.getAllByText("Overdue").length).toBeGreaterThan(0);
   });
@@ -107,7 +107,7 @@ describe("Plan outline", () => {
     expect(screen.getByRole("button", { name: "Show Integration" })).toBeInTheDocument();
   });
 
-  it("offers Add work when the plan is empty", () => {
+  it("offers Add phase when the plan is empty", () => {
     render(
       <PlanOutline
         canAdd
@@ -122,12 +122,12 @@ describe("Plan outline", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Add work" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add phase" })).toBeDisabled();
     expect(screen.getByText("0 of 0 overdue · 0 containers")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Regenerate/i })).not.toBeInTheDocument();
   });
 
-  it("assigns a project member and starts a subtask under a row", () => {
+  it("assigns a project member and starts a subtask under a row", async () => {
     const onAdd = vi.fn().mockResolvedValue(undefined);
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     render(
@@ -163,10 +163,12 @@ describe("Plan outline", () => {
     fireEvent.click(screen.getByRole("option", { name: /Ada Lovelace/ }));
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: "theirs" }), { assigneeId: "user-2" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add subtask under Integration" }));
-    fireEvent.change(screen.getByLabelText("Subtask title"), { target: { value: "Contract" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add subtask" }));
-    expect(onAdd).toHaveBeenCalledWith({ parentTaskId: "container", title: "Contract" });
+    fireEvent.change(screen.getByLabelText("Add under Integration"), { target: { value: "work" } });
+    fireEvent.change(screen.getByLabelText("Work title"), { target: { value: "Contract" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add work" }));
+    });
+    expect(onAdd).toHaveBeenCalledWith({ outlineRole: "work", parentTaskId: "container", title: "Contract" });
   });
 
   it("opens a work item without leaving the plan", () => {
@@ -225,5 +227,36 @@ describe("Plan outline", () => {
       predecessorTaskId: "follow-up",
       successorTaskId: "mine",
     });
+  });
+
+  it("deletes a task after confirmation and keeps a parent that still has subtasks", () => {
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    render(
+      <PlanOutline
+        canAdd
+        canDelete
+        canEditDates
+        canEditStatus={() => true}
+        isSaving={false}
+        onAdd={vi.fn()}
+        onDelete={onDelete}
+        onReorder={vi.fn()}
+        onUpdate={vi.fn()}
+        tasks={tasks}
+        today="2026-10-29"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Integration" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Move or delete its subtasks first.");
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Other work" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Other work" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith("theirs");
   });
 });

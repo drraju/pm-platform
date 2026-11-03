@@ -33,7 +33,7 @@ const tasks: ApiTask[] = [
   task({
     dueDate: "2026-10-01",
     id: "task-2",
-    parentTaskId: "task-1",
+    parentTaskId: "group-1",
     status: "blocked",
     title: "Test2",
   }),
@@ -92,7 +92,7 @@ describe("Today project board", () => {
   it("shows the group, the subtask, and the colored status", () => {
     renderBoard();
 
-    expect(screen.getByRole("button", { name: /Planning/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Planning/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Read API" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Test2" })).toBeTruthy();
 
@@ -107,7 +107,25 @@ describe("Today project board", () => {
     expect(done.className).toContain("bg-emerald-600");
 
     expect(screen.queryByLabelText("Status for Planning")).toBeNull();
-    expect(screen.queryByLabelText("Status for Read API")).toBeNull();
+    expect(screen.getByLabelText("Status for Read API")).toHaveValue("in_progress");
+  });
+
+  it("lists the subtask and leaves out the phase, the summary, the gate, and the package", () => {
+    renderBoard({
+      tasks: [
+        ...tasks,
+        task({ id: "phase", outlineRole: "phase", taskKind: "summary", title: "Phase 1" }),
+        task({ id: "gate", outlineRole: "gate", taskKind: "milestone", title: "Acceptance" }),
+        task({ id: "package", parentTaskId: "group-1", title: "Integration 1" }),
+        task({ id: "child", parentTaskId: "package", title: "Map source fields" }),
+      ],
+    });
+
+    expect(screen.queryByText("Phase 1")).toBeNull();
+    expect(screen.queryByText("Planning")).toBeNull();
+    expect(screen.queryByText("Acceptance")).toBeNull();
+    expect(screen.queryByText("Integration 1")).toBeNull();
+    expect(screen.getByRole("button", { name: "Map source fields" })).toBeTruthy();
   });
 
   it("marks an overdue date without changing the status color", () => {
@@ -185,7 +203,7 @@ describe("Today project board", () => {
     const test2 = screen.getByRole("button", { name: "Test2" }).closest("tr");
     if (!test2) throw new Error("Test2 row is missing");
     expect(within(test2).getByText("Holding up Read API · Ben Ng")).toBeTruthy();
-    expect(screen.getByRole("img", { name: "2 Done, 2 Doing, 1 Blocked" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "2 Done, 3 Doing, 1 Blocked" })).toBeTruthy();
   });
 
   it("adds a subtask and saves the next step", async () => {

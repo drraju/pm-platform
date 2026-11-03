@@ -11,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { MilestoneCategory } from '../../../common/enums/milestone-category.enum';
+import { OutlineRole } from '../../../common/enums/outline-role.enum';
 import { TaskKind } from '../../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../../common/enums/task-status.enum';
 import { TaskType } from '../../../common/enums/task-type.enum';
@@ -54,6 +55,11 @@ export class CreateProjectTaskDto {
   @IsOptional()
   @IsEnum(TaskKind)
   taskKind?: TaskKind;
+
+  @ApiProperty({ enum: OutlineRole, required: false })
+  @IsOptional()
+  @IsEnum(OutlineRole)
+  outlineRole?: OutlineRole;
 
   @ApiProperty({ enum: TaskType, default: TaskType.Task, required: false })
   @IsOptional()

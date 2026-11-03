@@ -882,8 +882,8 @@ describe('TasksService', () => {
       { userId },
     );
     expect(taskQueryBuilder.andWhere).toHaveBeenCalledWith(
-      'task.task_kind IN (:...taskKinds)',
-      { taskKinds: [TaskKind.Standard, TaskKind.Milestone] },
+      'task.task_kind = :operationalKind',
+      { operationalKind: TaskKind.Standard },
     );
     expect(taskQueryBuilder.andWhere).toHaveBeenCalledWith(
       'task.status = :status',
@@ -1045,7 +1045,7 @@ describe('TasksService', () => {
       'task.assignee_id = :userId',
       { userId },
     );
-    expect(taskQueryBuilder.andWhere).toHaveBeenCalledTimes(1);
+    expect(taskQueryBuilder.andWhere).toHaveBeenCalledTimes(2);
   });
 
   it('intersects all-task listing with visible project ids', async () => {

@@ -1,6 +1,7 @@
 export type WorkCountTask = {
   dueDate?: string | null;
   id: string;
+  outlineRole?: string | null;
   parentTaskId?: string | null;
   status?: string | null;
   taskKind?: string | null;
@@ -21,7 +22,10 @@ export function isWorkContainer(
   task: WorkCountTask,
   tasks: readonly WorkCountTask[],
 ): boolean {
-  if (task.taskKind === "summary") {
+  if (task.taskKind === "summary" || task.taskKind === "milestone") {
+    return true;
+  }
+  if (task.outlineRole && task.outlineRole !== "work") {
     return true;
   }
 

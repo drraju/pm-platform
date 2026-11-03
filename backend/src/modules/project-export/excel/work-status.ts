@@ -4,6 +4,7 @@ import { TaskKind } from '../../../common/enums/task-kind.enum';
 type StatusTask = {
   dueDate?: string | null;
   id: string;
+  outlineRole?: string | null;
   parentTaskId?: string | null;
   status?: string | null;
   taskKind?: string | null;
@@ -35,7 +36,8 @@ export function localWorkDate(now = new Date()) {
 }
 
 export function isWorkContainer(task: StatusTask, tasks: readonly StatusTask[]) {
-  if (task.taskKind === TaskKind.Summary) return true;
+  if (task.taskKind === TaskKind.Summary || task.taskKind === TaskKind.Milestone) return true;
+  if (task.outlineRole && task.outlineRole !== "work") return true;
   return tasks.some((other) => other.parentTaskId === task.id);
 }
 

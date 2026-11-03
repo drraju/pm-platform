@@ -29,6 +29,12 @@ import { ProjectRole } from '../../common/enums/project-role.enum';
 import { TaskDependencyType } from '../../common/enums/task-dependency-type.enum';
 import { TaskKind } from '../../common/enums/task-kind.enum';
 import { TaskStatus } from '../../common/enums/task-status.enum';
+import {
+  outlinePlacementError,
+  outlineRoleFromTaskKind,
+  resolveOutlineRole,
+  withExplicitOutline,
+} from '../../common/scheduling/outline-role';
 import { applyTaskCompletionTransition } from '../../common/scheduling/task-completion-transition';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { SchedulingFoundationService } from '../../common/scheduling/scheduling-foundation.service';
@@ -543,13 +549,17 @@ export class ProjectsService {
   ): Promise<Task> {
     await this.ensureProjectExists(projectId);
     await this.ensureTaskCapabilityForProject(projectId, 'task.create', actor);
+    const explicitOutline = this.hasExplicitOutline(createProjectTaskDto.outlineRole);
+    const outlineInput = explicitOutline
+      ? withExplicitOutline(createProjectTaskDto)
+      : createProjectTaskDto;
     const requestedKind = this.schedulingFoundationService.normalizeTaskKind(
-      createProjectTaskDto,
+      outlineInput,
       TaskKind.Standard,
     );
     if (requestedKind === TaskKind.Milestone && this.canonicalTasksService) {
       return this.canonicalTasksService.create(
-        { ...createProjectTaskDto, projectId },
+        { ...outlineInput, projectId },
         actor,
       );
     }
@@ -561,7 +571,7 @@ export class ProjectsService {
       createProjectTaskDto.startDate,
       createProjectTaskDto.dueDate,
     ].some((value) => value != null);
-    let input = { ...createProjectTaskDto };
+    let input = { ...outlineInput };
     if (requestedKind === TaskKind.Standard && !hasExplicitDates) {
       const forecast =
         await this.planningSnapshotService.calculateOperationalForecast(
@@ -588,10 +598,20 @@ export class ProjectsService {
       this.schedulingFoundationService.normalizeTaskMutation(
         applyTaskCompletionTransition(input),
       );
+    if (!explicitOutline) {
+      normalizedMutation.outlineRole = outlineRoleFromTaskKind(
+        normalizedMutation.taskKind,
+      );
+    }
     const requestedAssigneeId = normalizedMutation.assigneeId;
     const normalizedInput = { ...normalizedMutation };
     delete normalizedInput.assigneeId;
-    await this.validateTaskPlanningFields(projectId, normalizedInput);
+    await this.validateTaskPlanningFields(
+      projectId,
+      normalizedInput,
+      undefined,
+      explicitOutline,
+    );
     const savedTask = await this.projectsRepository.manager.transaction(
       async (entityManager) => {
         const tasksRepository = entityManager.getRepository(Task);
@@ -628,8 +648,12 @@ export class ProjectsService {
     await this.ensureProjectExists(projectId);
     const task = await this.findProjectTask(projectId, taskId);
     await this.ensureCanUpdateTask(task, updateProjectTaskDto, actor);
+    const explicitOutline = this.hasExplicitOutline(updateProjectTaskDto.outlineRole);
+    const outlineInput = explicitOutline
+      ? withExplicitOutline(updateProjectTaskDto)
+      : updateProjectTaskDto;
     const requestedKind = this.schedulingFoundationService.normalizeTaskKind(
-      updateProjectTaskDto,
+      outlineInput,
       task.taskKind,
     );
     if (
@@ -639,7 +663,7 @@ export class ProjectsService {
     ) {
       return this.canonicalTasksService.update(
         taskId,
-        { ...updateProjectTaskDto, projectId },
+        { ...outlineInput, projectId },
         actor,
       );
     }
@@ -647,12 +671,17 @@ export class ProjectsService {
     const requestedAssigneeId = updateProjectTaskDto.assigneeId ?? null;
     const normalizedMutation =
       this.schedulingFoundationService.normalizeTaskMutation(
-        applyTaskCompletionTransition(updateProjectTaskDto, task),
+        applyTaskCompletionTransition(outlineInput, task),
         task,
       );
     const normalizedInput = { ...normalizedMutation };
     delete normalizedInput.assigneeId;
-    await this.validateTaskPlanningFields(projectId, normalizedInput, task);
+    await this.validateTaskPlanningFields(
+      projectId,
+      normalizedInput,
+      task,
+      explicitOutline,
+    );
     const savedTask = await this.projectsRepository.manager.transaction(
       async (entityManager) => {
         const tasksRepository = entityManager.getRepository(Task);
@@ -1709,10 +1738,15 @@ export class ProjectsService {
     return dependency;
   }
 
+  private hasExplicitOutline(outlineRole?: string | null) {
+    return typeof outlineRole === 'string' && outlineRole.length > 0;
+  }
+
   private async validateTaskPlanningFields(
     projectId: string,
     input: Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
     existingTask?: Task,
+    explicitOutline = false,
   ) {
     const effectiveTaskKind =
       this.schedulingFoundationService.normalizeTaskKind(
@@ -1733,6 +1767,16 @@ export class ProjectsService {
       await this.ensureTaskHasNoChildren(projectId, existingTask.id);
     }
 
+    if (explicitOutline) {
+      await this.ensureOutlinePlacement(
+        projectId,
+        input,
+        effectiveTaskKind,
+        effectiveParentTaskId,
+        existingTask,
+      );
+    }
+
     if (!effectiveParentTaskId) {
       return;
     }
@@ -1751,12 +1795,14 @@ export class ProjectsService {
       );
     }
 
-    await this.ensureParentCanContainPlanningChild(
-      projectId,
-      parentTask,
-      effectiveTaskKind,
-      existingTask,
-    );
+    if (!explicitOutline) {
+      await this.ensureParentCanContainPlanningChild(
+        projectId,
+        parentTask,
+        effectiveTaskKind,
+        existingTask,
+      );
+    }
 
     if (existingTask) {
       await this.ensureNoHierarchyCycle(
@@ -1815,6 +1861,47 @@ export class ProjectsService {
     }
   }
 
+  private async ensureOutlinePlacement(
+    projectId: string,
+    input: Partial<CreateProjectTaskDto | UpdateProjectTaskDto>,
+    effectiveTaskKind: TaskKind,
+    parentTaskId?: string | null,
+    existingTask?: Task,
+  ) {
+    const childRole = resolveOutlineRole({
+      outlineRole: input.outlineRole,
+      taskKind: effectiveTaskKind,
+    });
+    const parentTask = parentTaskId
+      ? await this.findPlanningTask(projectId, parentTaskId)
+      : null;
+    if (parentTaskId && !parentTask) {
+      throw new NotFoundException(
+        `Parent task ${parentTaskId} not found for project ${projectId}`,
+      );
+    }
+    const grandparent = parentTask?.parentTaskId
+      ? await this.findPlanningTask(projectId, parentTask.parentTaskId)
+      : null;
+    const childHasChildren = existingTask
+      ? Boolean(
+          await this.tasksRepository.findOne({
+            select: { id: true },
+            where: { parentTaskId: existingTask.id, projectId },
+          }),
+        )
+      : false;
+    const message = outlinePlacementError({
+      childHasChildren,
+      childRole,
+      parentParentRole: grandparent ? resolveOutlineRole(grandparent) : null,
+      parentRole: parentTask ? resolveOutlineRole(parentTask) : null,
+    });
+    if (message) {
+      throw new BadRequestException(message);
+    }
+  }
+
   private async ensureParentCanContainPlanningChild(
     projectId: string,
     parentTask: Task,
@@ -1864,6 +1951,7 @@ export class ProjectsService {
     return this.tasksRepository.findOne({
       select: {
         id: true,
+        outlineRole: true,
         parentTaskId: true,
         projectId: true,
         taskKind: true,

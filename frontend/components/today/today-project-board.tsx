@@ -76,32 +76,11 @@ type Group = {
 };
 
 function projectGroups(tasks: ApiTask[]): Group[] {
-  const groups: Group[] = [];
-  const loose: Group["rows"] = [];
-  let current: Group | null = null;
-
-  for (const row of outlinePlan(tasks)) {
-    if (row.depth === 0 && isWorkContainer(row.task, tasks)) {
-      current = { id: row.task.id, rows: [], title: row.task.title };
-      groups.push(current);
-      continue;
-    }
-    if (row.depth === 0) {
-      current = null;
-      loose.push(row);
-      continue;
-    }
-    if (current) {
-      current.rows.push({ depth: row.depth - 1, task: row.task });
-    } else {
-      loose.push(row);
-    }
-  }
-
-  if (loose.length > 0) {
-    groups.unshift({ id: "work", rows: loose, title: "Work" });
-  }
-  return groups;
+  const rows = outlinePlan(tasks)
+    .filter(({ task }) => !isWorkContainer(task, tasks))
+    .map(({ task }) => ({ depth: 0, task }));
+  if (rows.length === 0) return [];
+  return [{ id: "work", rows, title: "Work" }];
 }
 
 export function TodayProjectBoard({

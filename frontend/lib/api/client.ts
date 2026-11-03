@@ -162,6 +162,7 @@ export type ApiTask = {
   status: "backlog" | "todo" | "in_progress" | "blocked" | "done";
   priority: string;
   remarks?: string | null;
+  outlineRole?: "phase" | "milestone" | "summary" | "work" | "gate";
   taskKind?: "standard" | "summary" | "milestone";
   milestoneCategory?: ApiMilestoneCategory | null;
   percentComplete?: number;
@@ -1887,6 +1888,7 @@ export function getTaskExecutionUpdates(taskId: string) {
 export function createTask(input: {
   projectId: string;
   title: string;
+  outlineRole?: "phase" | "milestone" | "summary" | "work" | "gate";
   parentTaskId?: string | null;
   description?: string;
   assigneeId?: string;
@@ -1912,6 +1914,8 @@ export function updateTask(
   input: {
     projectId?: string;
     title?: string;
+    outlineRole?: ApiTask["outlineRole"];
+    parentTaskId?: string | null;
     description?: string;
     assigneeId?: string | null;
     status?: ApiTask["status"];
