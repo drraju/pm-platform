@@ -38,7 +38,7 @@ describe("plan outline", () => {
     });
     expect(describePlanDrop(rows, "container", "child-a").type).toBe("invalid");
     expect(describePlanDrop(rows, "child-a", "mark")).toEqual({
-      message: "A gate cannot contain other rows.",
+      message: "A milestone cannot contain other rows.",
       type: "invalid",
     });
     expect(describePlanDrop(rows, "child-b", "child-a").type).toBe("reorder");

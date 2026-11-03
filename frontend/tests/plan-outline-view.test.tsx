@@ -163,10 +163,15 @@ describe("Plan outline", () => {
     fireEvent.click(screen.getByRole("option", { name: /Ada Lovelace/ }));
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: "theirs" }), { assigneeId: "user-2" });
 
+    expect(screen.getByRole("img", { name: "Group" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: "Task" }).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Work")).not.toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText("Add under Integration"), { target: { value: "work" } });
-    fireEvent.change(screen.getByLabelText("Work title"), { target: { value: "Contract" } });
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Contract" } });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Add work" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add task" }));
     });
     expect(onAdd).toHaveBeenCalledWith({ outlineRole: "work", parentTaskId: "container", title: "Contract" });
   });
@@ -248,7 +253,7 @@ describe("Plan outline", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Delete Integration" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Move or delete its subtasks first.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Move or delete the rows inside it first.");
     expect(onDelete).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete Other work" }));
@@ -258,5 +263,49 @@ describe("Plan outline", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete Other work" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
     expect(onDelete).toHaveBeenCalledWith("theirs");
+  });
+
+  it("uses a diamond for a milestone and keeps the type names in the add menu", () => {
+    const rows = [
+      { id: "phase", outlineRole: "phase", projectId: "project-1", taskKind: "summary", title: "Build" },
+      { id: "section", outlineRole: "milestone", parentTaskId: "phase", projectId: "project-1", taskKind: "summary", title: "Design" },
+      { id: "checkpoint", outlineRole: "gate", parentTaskId: "phase", projectId: "project-1", taskKind: "milestone", title: "Go live" },
+      { id: "parent", outlineRole: "work", parentTaskId: "section", projectId: "project-1", title: "Write the brief" },
+      { id: "child", outlineRole: "work", parentTaskId: "parent", projectId: "project-1", title: "First draft" },
+    ] as ApiTask[];
+
+    render(
+      <PlanOutline
+        canAdd
+        canEditDates={false}
+        canEditStatus={() => false}
+        isSaving={false}
+        onAdd={vi.fn()}
+        onReorder={vi.fn()}
+        onUpdate={vi.fn()}
+        tasks={rows}
+        today="2026-10-29"
+      />,
+    );
+
+    expect(screen.getAllByRole("img", { name: "Phase" })[0]).toHaveAttribute("title", "Phase");
+    expect(screen.getByRole("img", { name: "Section" })).toHaveAttribute(
+      "title",
+      "Section. A band of work inside a phase.",
+    );
+    expect(screen.getByRole("img", { name: "Milestone" })).toHaveAttribute(
+      "title",
+      "Milestone. One date, no duration.",
+    );
+    expect(screen.getByRole("img", { name: "Subtask" })).toBeInTheDocument();
+    expect(screen.queryByText("Gate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Summary")).not.toBeInTheDocument();
+
+    const menu = screen.getByLabelText("Add under Build");
+    expect(within(menu).getByRole("option", { name: "Section" })).toBeInTheDocument();
+    expect(within(menu).getByRole("option", { name: "Group" })).toBeInTheDocument();
+    expect(within(menu).getByRole("option", { name: "Milestone" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("option", { name: "Gate" })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("option", { name: "Work" })).not.toBeInTheDocument();
   });
 });

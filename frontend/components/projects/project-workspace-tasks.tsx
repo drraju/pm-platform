@@ -195,8 +195,8 @@ const taskKinds: Array<{
     value: "standard",
   },
   {
-    description: "Summary container for child tasks and milestones.",
-    label: "Summary",
+    description: "Group. Holds tasks and milestones.",
+    label: "Group",
     value: "summary",
   },
   {
@@ -649,7 +649,7 @@ export function ProjectWorkspaceTasks({
                   onClick={() => openCreateDialog({ kind: "summary" })}
                   type="button"
                 >
-                  Create Summary
+                  Create group
                 </button>
                 <button
                   className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 transition hover:bg-sky-100"
@@ -2811,7 +2811,7 @@ function getDialogTitle(
 ) {
   if (dialogMode === "create") {
     if (form.taskKind === "summary") {
-      return "Create Summary";
+      return "Create group";
     }
 
     if (form.taskKind === "milestone") {

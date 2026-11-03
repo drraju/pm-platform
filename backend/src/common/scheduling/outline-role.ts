@@ -87,7 +87,7 @@ export function outlinePlacementError(input: {
   }
 
   if (parentRole === OutlineRole.Gate) {
-    return 'A gate cannot contain other rows.';
+    return 'A milestone cannot contain other rows.';
   }
 
   if (parentRole === OutlineRole.Work) {
@@ -95,7 +95,7 @@ export function outlinePlacementError(input: {
       return 'A subtask cannot contain other rows.';
     }
     if (childRole !== OutlineRole.Work || childHasChildren) {
-      return 'Tasks with child tasks cannot become subtasks or milestones';
+      return 'Move or delete the rows inside this one first.';
     }
     return null;
   }
@@ -108,7 +108,7 @@ export function outlinePlacementError(input: {
     ) {
       return null;
     }
-    return 'A phase holds milestones, summaries, and gates.';
+    return 'A phase holds sections, groups, and milestones.';
   }
 
   if (
@@ -123,5 +123,5 @@ export function outlinePlacementError(input: {
     return 'A phase sits on the project.';
   }
 
-  return 'A milestone sits under a phase.';
+  return 'A section sits under a phase.';
 }

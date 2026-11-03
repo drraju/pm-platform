@@ -12,10 +12,10 @@ import {
   ActionToolbar,
   EmptyState,
   ErrorState,
-  StatusBadge,
   WorkspaceContent,
   WorkspaceSection,
 } from "@/components/foundation";
+import { OutlineMark } from "@/components/plan/outline-mark";
 import { DisclosureButton } from "@/components/ui/disclosure-button";
 import {
   buildExecutionUpdatePayload,
@@ -32,6 +32,7 @@ import type {
   ApiTask,
   ApiTaskExecutionUpdate,
 } from "@/features/projects";
+import { outlineRoleOf } from "@/features/work/outline-role";
 import { includeTaskAncestors } from "@/lib/tasks/include-task-ancestors";
 import { includePersonalWorkContext } from "@/lib/tasks/personal-work-context";
 import {
@@ -1172,9 +1173,7 @@ const TodayTaskRow = memo(function TodayTaskRow({
   const statusCell = (
     <div role="cell">
       {isSummary ? (
-        <StatusBadge size="sm" tone="neutral">
-          Summary
-        </StatusBadge>
+        <OutlineMark role={outlineRoleOf(task)} />
       ) : (
         <InlineSelect
           column="status"

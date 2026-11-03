@@ -120,7 +120,7 @@ export function describePlanDrop<T extends PlanTask>(
     return { message: "Task hierarchy cannot contain cycles", type: "invalid" };
   }
   if (outlineRoleOf(target) === "work" && outlineRoleOf(dragged) !== "work") {
-    return { message: "A work item can contain only a subtask.", type: "invalid" };
+    return { message: "A task can contain only a subtask.", type: "invalid" };
   }
   const message = placementErrorForDrop(tasks, dragged, target);
   if (message) {

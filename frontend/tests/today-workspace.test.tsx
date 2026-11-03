@@ -187,7 +187,7 @@ describe("TodayWorkspace", () => {
       screen.getByRole("button", { name: "Expand Observability Tools" }),
     );
 
-    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Group" })).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Status for Observability Tools"),
     ).not.toBeInTheDocument();

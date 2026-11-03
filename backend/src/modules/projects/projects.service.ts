@@ -1856,7 +1856,7 @@ export class ProjectsService {
 
     if (childTask) {
       throw new BadRequestException(
-        'Tasks with child tasks cannot become subtasks or milestones',
+        'Move or delete the rows inside this one first.',
       );
     }
   }
@@ -1918,7 +1918,7 @@ export class ProjectsService {
 
     if (childTaskKind !== TaskKind.Standard) {
       throw new BadRequestException(
-        'Tasks can only contain executable subtasks',
+        'A task can contain only a subtask.',
       );
     }
 

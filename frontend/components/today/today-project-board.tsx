@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import type { ApiTask } from "@/features/projects";
-import { isSubtask } from "@/features/work/outline-role";
+import { OutlineMark } from "@/components/plan/outline-mark";
+import { isSubtask, outlineRoleOf } from "@/features/work/outline-role";
 import {
   countTodayFilters,
   doneContainerIds,
@@ -305,6 +306,7 @@ function TaskLine({
             ) : depth > 0 ? (
               <span className="inline-block w-3 shrink-0" />
             ) : null}
+            <OutlineMark role={outlineRoleOf(task)} subtask={isSubtask(task, tasks)} />
             <button className="truncate text-left font-medium text-slate-950" onClick={onOpen} type="button">
               {task.title}
             </button>
@@ -504,11 +506,12 @@ function SubtaskDraft({
         void onSubmit(next).then(() => setTitle(""));
       }}
     >
+      <OutlineMark role="work" subtask />
       <input
         aria-label={`Subtask under ${parentTitle}`}
         className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-sm"
         onChange={(event) => setTitle(event.target.value)}
-        placeholder="Subtask"
+        placeholder="Subtask title"
         value={title}
       />
       <button

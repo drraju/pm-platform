@@ -31,7 +31,7 @@ describe("today outline", () => {
 
   it("keeps a summary as the folder and hides a finished subtask when the filter is open", () => {
     const sections = todaySections(tasks, "open", new Set(), today);
-    expect(sections.map((section) => section.title)).toEqual(["Integrations", "Work"]);
+    expect(sections.map((section) => section.title)).toEqual(["Integrations", "Tasks"]);
     expect(sections[0].rows.map((row) => [row.depth, row.task.title, row.foldable])).toEqual([
       [0, "Ansible", true],
       [1, "Prod", false],

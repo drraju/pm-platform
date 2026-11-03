@@ -1211,7 +1211,7 @@ export class PlanningService {
 
     if (childTaskKind !== TaskKind.Standard) {
       throw new BadRequestException(
-        'Tasks can only contain executable subtasks',
+        'A task can contain only a subtask.',
       );
     }
 

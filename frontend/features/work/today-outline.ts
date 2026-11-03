@@ -170,12 +170,12 @@ export function todaySections<T extends OutlineTask>(
     if (foldable) {
       if (!hasMatchingDescendant(task.id, tasks, today, filter)) continue;
       if (parent && outlineRoleOf(parent) === "work" && collapsed.has(parent.id)) continue;
-      ensure(sectionId, folder?.title ?? "Work").rows.push({ depth: workDepth(task), foldable: true, task });
+      ensure(sectionId, folder?.title ?? "Tasks").rows.push({ depth: workDepth(task), foldable: true, task });
       continue;
     }
     if (!matchesTodayFilter(task, tasks, today, filter)) continue;
     if (parent && outlineRoleOf(parent) === "work" && collapsed.has(parent.id)) continue;
-    ensure(sectionId, folder?.title ?? "Work").rows.push({ depth: workDepth(task), foldable: false, task });
+    ensure(sectionId, folder?.title ?? "Tasks").rows.push({ depth: workDepth(task), foldable: false, task });
   }
 
   return order.flatMap((id) => {

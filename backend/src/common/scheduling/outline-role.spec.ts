@@ -72,7 +72,7 @@ describe('outline role', () => {
         parentParentRole: null,
         parentRole: OutlineRole.Phase,
       }),
-    ).toBe('A phase holds milestones, summaries, and gates.');
+    ).toBe('A phase holds sections, groups, and milestones.');
     expect(
       outlinePlacementError({
         childHasChildren: false,
@@ -80,7 +80,7 @@ describe('outline role', () => {
         parentParentRole: null,
         parentRole: OutlineRole.Gate,
       }),
-    ).toBe('A gate cannot contain other rows.');
+    ).toBe('A milestone cannot contain other rows.');
     expect(
       outlinePlacementError({
         childHasChildren: false,
@@ -96,6 +96,6 @@ describe('outline role', () => {
         parentParentRole: OutlineRole.Summary,
         parentRole: OutlineRole.Work,
       }),
-    ).toBe('Tasks with child tasks cannot become subtasks or milestones');
+    ).toBe('Move or delete the rows inside this one first.');
   });
 });

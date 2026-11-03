@@ -12,6 +12,7 @@ import {
   workStatusOptions,
 } from "@/features/work/work-count";
 import { outlinePlan, planParentId } from "@/features/work/plan-outline";
+import { OutlineMark } from "@/components/plan/outline-mark";
 import {
   addChoices,
   isSubtask,
@@ -150,7 +151,7 @@ export function PlanOutline({
                     onDelete={() => {
                       if (tasks.some((item) => item.parentTaskId === task.id)) {
                         setPendingDelete(null);
-                        setDeleteMessage("Move or delete its subtasks first.");
+                        setDeleteMessage("Move or delete the rows inside it first.");
                         return;
                       }
                       setDeleteMessage(null);
@@ -178,6 +179,12 @@ export function PlanOutline({
                       depth={depthOf(tasks, draft.parentTaskId) + 1}
                       isSaving={isSaving}
                       label={draftLabel(draft.outlineRole, draft.parentTaskId, tasks)}
+                      mark={
+                        <OutlineMark
+                          role={draft.outlineRole}
+                          subtask={draftIsSubtask(draft.parentTaskId, tasks)}
+                        />
+                      }
                       onCancel={() => setDraft(null)}
                       onSave={async (title) => {
                         await onAdd({ outlineRole: draft.outlineRole, parentTaskId: draft.parentTaskId ?? undefined, title });
@@ -337,9 +344,7 @@ function PlanRow({
           ) : (
             <span className="size-5 shrink-0" />
           )}
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            {outlineRoleLabel(role, subtask)}
-          </span>
+          <OutlineMark role={role} subtask={subtask} />
           {onOpen ? (
             <button
               className={`min-w-0 flex-1 truncate text-left ${isContainer ? "font-semibold text-slate-950" : done ? "text-slate-400 line-through" : "text-slate-800"}`}
@@ -596,12 +601,14 @@ function DraftRow({
   depth,
   isSaving,
   label,
+  mark,
   onCancel,
   onSave,
 }: {
   depth: number;
   isSaving: boolean;
   label: string;
+  mark: React.ReactNode;
   onCancel: () => void;
   onSave: (title: string) => Promise<void>;
 }) {
@@ -620,6 +627,7 @@ function DraftRow({
             void onSave(title.trim());
           }}
         >
+          {mark}
           <input
             aria-label={`${label} title`}
             className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
@@ -765,6 +773,7 @@ function AddRow({
         void onAdd(title.trim()).then(() => setTitle(""));
       }}
     >
+      <OutlineMark role="phase" />
       <input
         aria-label={`${label} title`}
         className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1 text-sm"
@@ -780,8 +789,12 @@ function AddRow({
 }
 
 function draftLabel(role: OutlineRole, parentTaskId: string, tasks: readonly ApiTask[]) {
+  return outlineRoleLabel(role, draftIsSubtask(parentTaskId, tasks));
+}
+
+function draftIsSubtask(parentTaskId: string, tasks: readonly ApiTask[]) {
   const parent = tasks.find((task) => task.id === parentTaskId);
-  return outlineRoleLabel(role, Boolean(parent && outlineRoleOf(parent) === "work"));
+  return Boolean(parent && outlineRoleOf(parent) === "work");
 }
 
 function dateText(value?: string | null) {

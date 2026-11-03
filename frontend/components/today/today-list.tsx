@@ -132,7 +132,7 @@ export function TodayList({
       <StatusFilterBar counts={mineCounts} onChange={setMineFilter} value={mineFilter} />
       <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
         <div className="hidden border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid md:grid-cols-[minmax(0,1.5fr)_8rem_7.5rem_minmax(0,1fr)]">
-          <span>Work</span>
+          <span>Task</span>
           <span>Status</span>
           <span>Due</span>
           <span>Next step</span>

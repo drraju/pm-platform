@@ -24,29 +24,40 @@ export function isSubtask(task: OutlineTask, tasks: readonly OutlineTask[]): boo
   return parent ? outlineRoleOf(parent) === "work" : false;
 }
 
+// Stored values stay phase, milestone, summary, work, and gate.
+// The names below are the ones a project manager already uses.
 export function outlineRoleLabel(role: OutlineRole, subtask = false) {
   if (subtask) return "Subtask";
   if (role === "phase") return "Phase";
-  if (role === "milestone") return "Milestone";
-  if (role === "summary") return "Summary";
-  if (role === "gate") return "Gate";
-  return "Work";
+  if (role === "milestone") return "Section";
+  if (role === "summary") return "Group";
+  if (role === "gate") return "Milestone";
+  return "Task";
+}
+
+export function outlineRoleHint(role: OutlineRole, subtask = false) {
+  if (subtask) return "Subtask";
+  if (role === "phase") return "Phase";
+  if (role === "milestone") return "Section. A band of work inside a phase.";
+  if (role === "summary") return "Group. Holds tasks, and can hold other groups.";
+  if (role === "gate") return "Milestone. One date, no duration.";
+  return "Task";
 }
 
 export function addChoices(role: OutlineRole, subtask: boolean): Array<{ label: string; role: OutlineRole }> {
   if (role === "gate" || subtask) return [];
-  if (role === "work") return [{ label: "Subtask", role: "work" }];
+  if (role === "work") return [{ label: outlineRoleLabel("work", true), role: "work" }];
   if (role === "phase") {
     return [
-      { label: "Milestone", role: "milestone" },
-      { label: "Summary", role: "summary" },
-      { label: "Gate", role: "gate" },
+      { label: outlineRoleLabel("milestone"), role: "milestone" },
+      { label: outlineRoleLabel("summary"), role: "summary" },
+      { label: outlineRoleLabel("gate"), role: "gate" },
     ];
   }
   return [
-    { label: "Summary", role: "summary" },
-    { label: "Work", role: "work" },
-    { label: "Gate", role: "gate" },
+    { label: outlineRoleLabel("summary"), role: "summary" },
+    { label: outlineRoleLabel("work"), role: "work" },
+    { label: outlineRoleLabel("gate"), role: "gate" },
   ];
 }
 
@@ -60,21 +71,21 @@ export function outlinePlacementError(input: {
   if (parentRole === null) {
     return childRole === "phase" ? null : "Only a phase can sit on the project.";
   }
-  if (parentRole === "gate") return "A gate cannot contain other rows.";
+  if (parentRole === "gate") return "A milestone cannot contain other rows.";
   if (parentRole === "work") {
     if (parentParentRole === "work") return "A subtask cannot contain other rows.";
     if (childRole !== "work" || childHasChildren) {
-      return "Tasks with child tasks cannot become subtasks or milestones";
+      return "Move or delete the rows inside this one first.";
     }
     return null;
   }
   if (parentRole === "phase") {
     if (childRole === "milestone" || childRole === "summary" || childRole === "gate") return null;
-    return "A phase holds milestones, summaries, and gates.";
+    return "A phase holds sections, groups, and milestones.";
   }
   if (childRole === "summary" || childRole === "work" || childRole === "gate") return null;
   if (childRole === "phase") return "A phase sits on the project.";
-  return "A milestone sits under a phase.";
+  return "A section sits under a phase.";
 }
 
 type Identified = OutlineTask & { id: string };
