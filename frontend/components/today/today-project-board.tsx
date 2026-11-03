@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import type { ApiTask } from "@/features/projects";
-import { OutlineMark } from "@/components/plan/outline-mark";
+import { OutlineMark, PlusIcon } from "@/components/plan/outline-mark";
 import { isSubtask, outlineRoleOf } from "@/features/work/outline-role";
 import {
   countTodayFilters,
@@ -313,11 +313,12 @@ function TaskLine({
             {canAddSubtask ? (
               <button
                 aria-label={`Add subtask under ${task.title}`}
-                className="ml-2 text-xs font-semibold text-teal-800"
+                className="ml-1 grid size-6 shrink-0 place-items-center rounded text-teal-800 hover:bg-slate-50"
                 onClick={onBeginSubtask}
+                title="Add subtask"
                 type="button"
               >
-                Add subtask
+                <PlusIcon />
               </button>
             ) : null}
             <WaitingNotes lines={waiting} />
@@ -516,11 +517,12 @@ function SubtaskDraft({
       />
       <button
         aria-label={`Save subtask under ${parentTitle}`}
-        className="text-sm font-semibold text-teal-800 disabled:opacity-40"
+        className="grid size-8 place-items-center rounded text-teal-800 disabled:opacity-40"
         disabled={isSaving || !title.trim()}
+        title="Add subtask"
         type="submit"
       >
-        Add subtask
+        <PlusIcon />
       </button>
       <button className="text-sm text-slate-600" onClick={onCancel} type="button">
         Cancel

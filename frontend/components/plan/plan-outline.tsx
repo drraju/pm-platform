@@ -12,7 +12,7 @@ import {
   workStatusOptions,
 } from "@/features/work/work-count";
 import { outlinePlan, planParentId } from "@/features/work/plan-outline";
-import { OutlineMark } from "@/components/plan/outline-mark";
+import { OutlineMark, PlusIcon, TrashIcon } from "@/components/plan/outline-mark";
 import {
   addChoices,
   isSubtask,
@@ -113,7 +113,7 @@ export function PlanOutline({
           <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500">
             <th className="px-2 py-2"><span className="sr-only">Order</span></th>
             <th className="px-2 py-2 font-medium">Title</th>
-            <th className="px-1 py-2"><span className="sr-only">Subtask</span></th>
+            <th className="px-1 py-2"><span className="sr-only">Actions</span></th>
             <th className="px-2 py-2 font-medium">Owner</th>
             <th className="px-2 py-2 font-medium">Start</th>
             <th className="px-2 py-2 font-medium">Finish</th>
@@ -361,45 +361,20 @@ function PlanRow({
         </div>
       </td>
       <td className="px-1 py-1.5 align-middle">
-        <div className="flex flex-col items-start">
-          {canAdd && choices.length === 1 ? (
-            <button
-              aria-label={`Add ${choices[0].label.toLowerCase()} under ${task.title}`}
-              className="rounded px-1 py-0.5 text-xs font-semibold text-teal-800 hover:bg-white"
-              onClick={() => onBeginAdd(choices[0].role)}
-              type="button"
-            >
-              Add
-            </button>
-          ) : null}
-          {canAdd && choices.length > 1 ? (
-            <select
-              aria-label={`Add under ${task.title}`}
-              className="w-full rounded border border-slate-200 bg-white px-1 py-0.5 text-xs text-teal-800"
-              onChange={(event) => {
-                const outlineRole = event.target.value as OutlineRole;
-                event.target.value = "";
-                if (outlineRole) onBeginAdd(outlineRole);
-              }}
-              value=""
-            >
-              <option value="">Add</option>
-              {choices.map((choice) => (
-                <option key={choice.role} value={choice.role}>
-                  {choice.label}
-                </option>
-              ))}
-            </select>
+        <div className="flex items-center gap-0.5">
+          {canAdd && choices.length > 0 ? (
+            <AddChoice choices={choices} onBeginAdd={onBeginAdd} title={task.title} />
           ) : null}
           {canDelete ? (
             <button
               aria-label={`Delete ${task.title}`}
-              className="rounded px-1 py-0.5 text-xs font-semibold text-rose-700 hover:bg-white disabled:opacity-50"
+              className="grid size-6 place-items-center rounded text-rose-700 hover:bg-white disabled:opacity-50"
               disabled={isSaving}
               onClick={onDelete}
+              title="Delete"
               type="button"
             >
-              Delete
+              <TrashIcon />
             </button>
           ) : null}
         </div>
@@ -635,8 +610,14 @@ function DraftRow({
             placeholder={`${label} title`}
             value={title}
           />
-          <button className="text-sm font-semibold text-teal-800 disabled:opacity-40" disabled={isSaving || !title.trim()} type="submit">
-            Add {label.toLowerCase()}
+          <button
+            aria-label={`Add ${label.toLowerCase()}`}
+            className="grid size-7 place-items-center rounded text-teal-800 disabled:opacity-40"
+            disabled={isSaving || !title.trim()}
+            title={`Add ${label.toLowerCase()}`}
+            type="submit"
+          >
+            <PlusIcon />
           </button>
           <button className="text-sm text-slate-500" onClick={onCancel} type="button">
             Cancel
@@ -781,10 +762,81 @@ function AddRow({
         placeholder={`${label} name`}
         value={title}
       />
-      <button className="rounded-md px-2 py-1 text-sm font-semibold text-teal-800 disabled:opacity-40" disabled={isSaving || !title.trim()} type="submit">
-        Add {label.toLowerCase()}
+      <button
+        aria-label={`Add ${label.toLowerCase()}`}
+        className="grid size-7 place-items-center rounded-md text-teal-800 disabled:opacity-40"
+        disabled={isSaving || !title.trim()}
+        title={`Add ${label.toLowerCase()}`}
+        type="submit"
+      >
+        <PlusIcon />
       </button>
     </form>
+  );
+}
+
+function AddChoice({
+  choices,
+  onBeginAdd,
+  title,
+}: {
+  choices: Array<{ label: string; role: OutlineRole }>;
+  onBeginAdd: (outlineRole: OutlineRole) => void;
+  title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  if (choices.length === 1) {
+    const choice = choices[0];
+    const name = `Add ${choice.label.toLowerCase()} under ${title}`;
+    return (
+      <button
+        aria-label={name}
+        className="grid size-6 place-items-center rounded text-teal-800 hover:bg-white"
+        onClick={() => onBeginAdd(choice.role)}
+        title={name}
+        type="button"
+      >
+        <PlusIcon />
+      </button>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`Add under ${title}`}
+        className="grid size-6 place-items-center rounded text-teal-800 hover:bg-white"
+        onClick={() => setOpen((current) => !current)}
+        title="Add"
+        type="button"
+      >
+        <PlusIcon />
+      </button>
+      {open ? (
+        <ul className="absolute left-0 z-20 mt-1 w-40 rounded-md border border-slate-200 bg-white py-1 shadow-lg" role="menu">
+          {choices.map((choice) => (
+            <li key={choice.role}>
+              <button
+                className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-50"
+                onClick={() => {
+                  setOpen(false);
+                  onBeginAdd(choice.role);
+                }}
+                role="menuitem"
+                type="button"
+              >
+                <span aria-hidden="true">
+                  <OutlineMark role={choice.role} />
+                </span>
+                {choice.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 

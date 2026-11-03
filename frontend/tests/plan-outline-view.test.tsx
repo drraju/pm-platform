@@ -168,7 +168,8 @@ describe("Plan outline", () => {
     expect(screen.queryByText("Summary")).not.toBeInTheDocument();
     expect(screen.queryByText("Work")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Add under Integration"), { target: { value: "work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add under Integration" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Task" }));
     fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Contract" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add task" }));
@@ -265,7 +266,7 @@ describe("Plan outline", () => {
     expect(onDelete).toHaveBeenCalledWith("theirs");
   });
 
-  it("uses a diamond for a milestone and keeps the type names in the add menu", () => {
+  it("marks a milestone with a goal and names the choices in the add menu", () => {
     const rows = [
       { id: "phase", outlineRole: "phase", projectId: "project-1", taskKind: "summary", title: "Build" },
       { id: "section", outlineRole: "milestone", parentTaskId: "phase", projectId: "project-1", taskKind: "summary", title: "Design" },
@@ -301,11 +302,12 @@ describe("Plan outline", () => {
     expect(screen.queryByText("Gate")).not.toBeInTheDocument();
     expect(screen.queryByText("Summary")).not.toBeInTheDocument();
 
-    const menu = screen.getByLabelText("Add under Build");
-    expect(within(menu).getByRole("option", { name: "Section" })).toBeInTheDocument();
-    expect(within(menu).getByRole("option", { name: "Group" })).toBeInTheDocument();
-    expect(within(menu).getByRole("option", { name: "Milestone" })).toBeInTheDocument();
-    expect(within(menu).queryByRole("option", { name: "Gate" })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("option", { name: "Work" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add under Build" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "Section" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Group" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Milestone" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: "Gate" })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: "Work" })).not.toBeInTheDocument();
   });
 });

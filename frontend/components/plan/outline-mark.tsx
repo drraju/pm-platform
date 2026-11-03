@@ -49,8 +49,8 @@ function markShape(role: OutlineRole, subtask: boolean) {
   if (role === "phase") {
     return (
       <>
-        <path d="M4 2.2v11.6" {...stroke} />
-        <path d="M4 3.1h6.3L8.7 5.5 10.3 7.9H4" {...stroke} />
+        <path d="M3.4 2.2v11.6" {...stroke} />
+        <path d="M3.4 3.1h7.4v4.6H3.4" {...stroke} />
       </>
     );
   }
@@ -74,8 +74,32 @@ function markShape(role: OutlineRole, subtask: boolean) {
   }
 
   if (role === "gate") {
-    return <path d="M8 1.8 13.4 8 8 14.2 2.6 8Z" fill="currentColor" />;
+    return (
+      <>
+        <path d="M3 13.6V3.2M13 13.6V3.2M3 3.2h10" {...stroke} />
+        <path d="M4.4 3.2v3.4h7.2V3.2" {...stroke} />
+      </>
+    );
   }
 
   return <rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2" {...stroke} />;
+}
+
+export function PlusIcon() {
+  return (
+    <svg aria-hidden="true" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 16 16">
+      <path d="M8 3.2v9.6M3.2 8h9.6" />
+    </svg>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <svg aria-hidden="true" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 16 16">
+      <path d="M3.4 4.6h9.2" />
+      <path d="M6.2 4.5V3.1h3.6v1.4" />
+      <path d="M4.6 4.6l.5 8.3h6l.5-8.3" />
+      <path d="M7 6.6v4.2M9 6.6v4.2" />
+    </svg>
+  );
 }

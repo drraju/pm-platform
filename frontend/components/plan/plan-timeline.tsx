@@ -2,7 +2,9 @@
 
 import React from "react";
 import type { ApiTask } from "@/features/projects";
+import { OutlineMark } from "@/components/plan/outline-mark";
 import { outlinePlan } from "@/features/work/plan-outline";
+import { isSubtask, outlineRoleOf } from "@/features/work/outline-role";
 import { isWorkContainer, storedWorkStatus } from "@/features/work/work-count";
 import { buildTimeline, getBarGeometry } from "@/components/planning/timeline-geometry";
 
@@ -93,7 +95,9 @@ export function PlanTimeline({ dependencies, tasks, today }: PlanTimelineProps) 
               .map((dependency) => tasks.find((item) => item.id === dependency.predecessorTaskId)?.title)
               .filter((title): title is string => Boolean(title));
             return (
-              <div className="flex h-10 flex-col justify-center px-3" key={task.id} style={{ paddingLeft: 12 + depth * 12 }}>
+              <div className="flex h-10 items-center gap-1.5 px-3" key={task.id} style={{ paddingLeft: 12 + depth * 12 }}>
+                <OutlineMark role={outlineRoleOf(task)} subtask={isSubtask(task, tasks)} />
+                <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-slate-950">{task.title}</p>
                 {names.length > 0 ? (
                   <p className="truncate text-[11px] text-sky-800" title={names.join(", ")}>
@@ -101,6 +105,7 @@ export function PlanTimeline({ dependencies, tasks, today }: PlanTimelineProps) 
                     {names.join(" · ")}
                   </p>
                 ) : null}
+                </div>
               </div>
             );
           })}
@@ -139,6 +144,21 @@ export function PlanTimeline({ dependencies, tasks, today }: PlanTimelineProps) 
             if (!bar) return null;
             const dates = taskDates(task, tasks);
             const overdue = !isWorkContainer(task, tasks) && task.status !== "done" && Boolean(dates.finish && dates.finish < today);
+            if (outlineRoleOf(task) === "gate") {
+              const postX = bar.x + 8;
+              const crossY = bar.index * rowHeight + 10;
+              const baseY = bar.index * rowHeight + 28;
+              return (
+                <path
+                  d={`M ${postX - 7} ${baseY} V ${crossY} H ${postX + 7} V ${baseY} M ${postX - 5} ${crossY} v4 h10 v-4`}
+                  data-task-id={task.id}
+                  fill="none"
+                  key={task.id}
+                  stroke={overdue ? "#e11d48" : "#0f172a"}
+                  strokeWidth={1.6}
+                />
+              );
+            }
             return (
               <rect
                 data-task-id={task.id}
