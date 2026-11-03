@@ -289,12 +289,12 @@ describe("Plan outline", () => {
       />,
     );
 
-    expect(screen.getAllByRole("img", { name: "Phase" })[0]).toHaveAttribute("title", "Phase");
-    expect(screen.getByRole("img", { name: "Section" })).toHaveAttribute(
+    expect(screen.getAllByRole("img", { name: "Phase" })[0].parentElement).toHaveAttribute("title", "Phase");
+    expect(screen.getByRole("img", { name: "Section" }).parentElement).toHaveAttribute(
       "title",
       "Section. A band of work inside a phase.",
     );
-    expect(screen.getByRole("img", { name: "Milestone" })).toHaveAttribute(
+    expect(screen.getByRole("img", { name: "Milestone" }).parentElement).toHaveAttribute(
       "title",
       "Milestone. One date, no duration.",
     );

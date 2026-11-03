@@ -16,16 +16,17 @@ export function OutlineMark({
   const checkpoint = role === "gate" && !subtask;
 
   return (
-    <svg
-      aria-label={label}
-      className={`size-3.5 shrink-0 ${checkpoint ? "text-slate-800" : "text-slate-500"}`}
-      fill="none"
-      role="img"
-      title={outlineRoleHint(role, subtask)}
-      viewBox="0 0 16 16"
-    >
-      {markShape(role, subtask)}
-    </svg>
+    <span className="inline-flex shrink-0" title={outlineRoleHint(role, subtask)}>
+      <svg
+        aria-label={label}
+        className={`size-3.5 ${checkpoint ? "text-slate-800" : "text-slate-500"}`}
+        fill="none"
+        role="img"
+        viewBox="0 0 16 16"
+      >
+        {markShape(role, subtask)}
+      </svg>
+    </span>
   );
 }
 
