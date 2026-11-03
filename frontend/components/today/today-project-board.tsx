@@ -2,13 +2,20 @@
 
 import React, { useState } from "react";
 import type { ApiTask } from "@/features/projects";
-import { outlinePlan } from "@/features/work/plan-outline";
+import { isSubtask } from "@/features/work/outline-role";
+import {
+  countTodayFilters,
+  doneContainerIds,
+  todayContainerIds,
+  todayFilterLabel,
+  todayFilters,
+  todaySections,
+  type TodayFilter,
+} from "@/features/work/today-outline";
 import {
   containerProgress,
-  containerStatusMix,
   isOverdueWork,
   isWorkContainer,
-  statusMix,
   storedWorkStatus,
   workStatusOptions,
   type StatusMix,
@@ -69,18 +76,36 @@ type TodayProjectBoardProps = {
   today: string;
 };
 
-type Group = {
-  id: string;
-  rows: Array<{ depth: number; task: ApiTask }>;
-  title: string;
-};
-
-function projectGroups(tasks: ApiTask[]): Group[] {
-  const rows = outlinePlan(tasks)
-    .filter(({ task }) => !isWorkContainer(task, tasks))
-    .map(({ task }) => ({ depth: 0, task }));
-  if (rows.length === 0) return [];
-  return [{ id: "work", rows, title: "Work" }];
+export function StatusFilterBar({
+  counts,
+  onChange,
+  value,
+}: {
+  counts: Record<TodayFilter, number>;
+  onChange: (filter: TodayFilter) => void;
+  value: TodayFilter;
+}) {
+  return (
+    <div aria-label="Status" className="flex flex-wrap gap-1.5" role="group">
+      {todayFilters.map((filter) => {
+        const selected = filter === value;
+        return (
+          <button
+            aria-pressed={selected}
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              selected ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"
+            }`}
+            key={filter}
+            onClick={() => onChange(filter)}
+            type="button"
+          >
+            {todayFilterLabel[filter]}{" "}
+            <span className={`tabular-nums ${selected ? "text-slate-200" : "text-slate-500"}`}>{counts[filter]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function TodayProjectBoard({
@@ -96,60 +121,66 @@ export function TodayProjectBoard({
   tasks,
   today,
 }: TodayProjectBoardProps) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const containerKey = todayContainerIds(tasks).join("|");
+  const [knownContainers, setKnownContainers] = useState(containerKey);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(doneContainerIds(tasks)));
+  if (knownContainers !== containerKey) {
+    const previous = new Set(knownContainers ? knownContainers.split("|") : []);
+    const arrived = containerKey.split("|").filter((id) => id && !previous.has(id));
+    const done = new Set(doneContainerIds(tasks));
+    const present = new Set(containerKey ? containerKey.split("|") : []);
+    setKnownContainers(containerKey);
+    setCollapsed((current) => {
+      const next = new Set([...current].filter((id) => present.has(id)));
+      for (const id of arrived) {
+        if (done.has(id)) next.add(id);
+      }
+      return next;
+    });
+  }
   const [draftParentId, setDraftParentId] = useState<string | null>(null);
-  const groups = projectGroups(tasks);
+  const [filter, setFilter] = useState<TodayFilter>("open");
+  const counts = countTodayFilters(tasks, today);
+  const sections = todaySections(tasks, filter, collapsed, today);
 
-  if (groups.length === 0) {
-    return <p className="px-4 py-6 text-sm text-slate-500">This project has no work items yet.</p>;
+  function toggle(id: string) {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   return (
     <div className="space-y-4">
-      {groups.map((group, index) => {
+      <StatusFilterBar counts={counts} onChange={setFilter} value={filter} />
+      {sections.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-slate-500">{emptyTodayFilterCopy(filter, tasks.length === 0)}</p>
+      ) : null}
+      {sections.map((section, index) => {
         const accent = groupAccents[index % groupAccents.length];
-        const progress = group.id === "work" ? null : containerProgress(group.id, tasks);
-        const mix =
-          group.id === "work"
-            ? statusMix(group.rows.map((row) => row.task).filter((task) => !isWorkContainer(task, tasks)))
-            : containerStatusMix(group.id, tasks);
-        const hidden = collapsed.has(group.id);
+        const hidden = collapsed.has(section.id);
         return (
           <section
             className={`overflow-hidden rounded-md border border-slate-200 border-l-4 bg-white ${accent.bar}`}
-            key={group.id}
+            key={section.id}
           >
-            <header className="flex items-center justify-between gap-3 px-3 py-2">
+            <header className="flex items-center gap-2 px-3 py-2">
               <button
+                aria-expanded={!hidden}
+                aria-label={`${hidden ? "Show" : "Hide"} ${section.title}`}
                 className={`text-left text-sm font-semibold ${accent.title}`}
-                onClick={() =>
-                  setCollapsed((current) => {
-                    const next = new Set(current);
-                    if (next.has(group.id)) next.delete(group.id);
-                    else next.add(group.id);
-                    return next;
-                  })
-                }
+                onClick={() => toggle(section.id)}
                 type="button"
               >
-                {hidden ? "▸" : "▾"} {group.title}
-                {progress ? (
-                  <span className="ml-2 text-xs font-medium text-slate-500">
-                    {progress.done}/{progress.total}
-                  </span>
-                ) : null}
+                {hidden ? "▸" : "▾"} {section.title}
               </button>
-              {canAdd && group.id !== "work" ? (
-                <button
-                  className="text-xs font-semibold text-teal-800"
-                  onClick={() => setDraftParentId(group.id)}
-                  type="button"
-                >
-                  Add subtask
-                </button>
-              ) : null}
+              <span className="text-xs font-medium text-slate-500">
+                {section.done}/{section.total}
+              </span>
             </header>
-            <StatusMixBar mix={mix} />
+            {hidden ? null : <StatusMixBar mix={section.mix} />}
             {hidden ? null : (
               <table className="w-full table-fixed border-t border-slate-100 text-sm">
                 <colgroup>
@@ -169,15 +200,17 @@ export function TodayProjectBoard({
                   </tr>
                 </thead>
                 <tbody>
-                  {group.rows.map(({ depth, task }) => (
+                  {section.rows.map(({ depth, foldable, task }) => (
                     <TaskLine
                       canAdd={canAdd}
                       canAssign={canAssign}
                       canEdit={canEdit(task)}
+                      collapsed={collapsed.has(task.id)}
                       dependencies={dependencies}
                       depth={depth}
                       members={members}
                       drafting={draftParentId === task.id}
+                      foldable={foldable}
                       isContainer={isWorkContainer(task, tasks)}
                       isSaving={isSaving}
                       key={task.id}
@@ -185,6 +218,7 @@ export function TodayProjectBoard({
                       onBeginSubtask={() => setDraftParentId(task.id)}
                       onCancelSubtask={() => setDraftParentId(null)}
                       onOpen={() => onOpen(task)}
+                      onToggle={() => toggle(task.id)}
                       onUpdate={onUpdate}
                       overdue={isOverdueWork(task, tasks, today)}
                       task={task}
@@ -192,18 +226,6 @@ export function TodayProjectBoard({
                       today={today}
                     />
                   ))}
-                  {draftParentId === group.id ? (
-                    <tr>
-                      <td className="px-3 py-2" colSpan={5}>
-                        <SubtaskDraft
-                          isSaving={isSaving}
-                          onCancel={() => setDraftParentId(null)}
-                          onSubmit={(title) => onAddSubtask({ parentTaskId: group.id, title })}
-                          parentTitle={group.title}
-                        />
-                      </td>
-                    </tr>
-                  ) : null}
                 </tbody>
               </table>
             )}
@@ -218,9 +240,11 @@ function TaskLine({
   canAdd,
   canAssign,
   canEdit,
+  collapsed,
   dependencies,
   depth,
   drafting,
+  foldable,
   isContainer,
   isSaving,
   members,
@@ -228,6 +252,7 @@ function TaskLine({
   onBeginSubtask,
   onCancelSubtask,
   onOpen,
+  onToggle,
   onUpdate,
   overdue,
   task,
@@ -237,9 +262,11 @@ function TaskLine({
   canAdd: boolean;
   canAssign: boolean;
   canEdit: boolean;
+  collapsed: boolean;
   dependencies: WaitingDependency[];
   depth: number;
   drafting: boolean;
+  foldable: boolean;
   isContainer: boolean;
   isSaving: boolean;
   members: BoardMember[];
@@ -247,6 +274,7 @@ function TaskLine({
   onBeginSubtask: () => void;
   onCancelSubtask: () => void;
   onOpen: () => void;
+  onToggle: () => void;
   onUpdate: TodayProjectBoardProps["onUpdate"];
   overdue: boolean;
   task: ApiTask;
@@ -254,23 +282,33 @@ function TaskLine({
   today: string;
 }) {
   const nextStep = task.nextStep || task.latestExecutionUpdate?.nextStep || "";
-  const childCount = tasks.filter((item) => item.parentTaskId === task.id).length;
   const assignable = members.filter((member) => member.role !== "viewer");
   const waiting = waitingLines(task.id, dependencies, tasks, today);
   const holding = holdingLines(task.id, dependencies, tasks);
+  const canAddSubtask = canAdd && !isSubtask(task, tasks);
 
   return (
     <>
       <tr className="border-t border-slate-100">
         <td className="px-3 py-2">
-          <div className="min-w-0" style={{ paddingLeft: depth * 16 }}>
+          <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: depth * 16 }}>
+            {foldable ? (
+              <button
+                aria-expanded={!collapsed}
+                aria-label={`${collapsed ? "Show" : "Hide"} subtasks of ${task.title}`}
+                className="shrink-0 px-0.5 text-slate-500"
+                onClick={onToggle}
+                type="button"
+              >
+                {collapsed ? "▸" : "▾"}
+              </button>
+            ) : depth > 0 ? (
+              <span className="inline-block w-3 shrink-0" />
+            ) : null}
             <button className="truncate text-left font-medium text-slate-950" onClick={onOpen} type="button">
               {task.title}
             </button>
-            {childCount > 0 ? (
-              <span className="ml-2 rounded bg-slate-100 px-1.5 text-xs text-slate-600">{childCount}</span>
-            ) : null}
-            {canAdd ? (
+            {canAddSubtask ? (
               <button
                 aria-label={`Add subtask under ${task.title}`}
                 className="ml-2 text-xs font-semibold text-teal-800"
@@ -425,6 +463,16 @@ function StatusMixBar({ mix }: { mix: StatusMix }) {
       ))}
     </div>
   );
+}
+
+function emptyTodayFilterCopy(filter: TodayFilter, projectEmpty: boolean) {
+  if (projectEmpty || filter === "all") return "This project has no work items yet.";
+  if (filter === "open") return "Nothing is still open.";
+  if (filter === "todo") return "Nothing is waiting to start.";
+  if (filter === "in_progress") return "Nothing is in progress.";
+  if (filter === "blocked") return "Nothing is blocked.";
+  if (filter === "overdue") return "Nothing is overdue.";
+  return "Nothing is done.";
 }
 
 function waitingTone(state: WaitingLine["state"]) {

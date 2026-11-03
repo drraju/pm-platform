@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { HoldingNotes, statusTone, TodayProjectBoard, WaitingNotes } from "@/components/today/today-project-board";
+import { HoldingNotes, StatusFilterBar, statusTone, TodayProjectBoard, WaitingNotes } from "@/components/today/today-project-board";
+import { countTodayFilters, matchesTodayFilter, type TodayFilter } from "@/features/work/today-outline";
 import { WorkPanel } from "@/components/work/work-panel";
 import type { ApiProject, ApiTask, ApiTaskExecutionUpdate } from "@/features/projects";
 import {
@@ -65,12 +66,15 @@ export function TodayList({
   tasks,
 }: TodayListProps) {
   const today = todayDate();
+  const [mineFilter, setMineFilter] = useState<TodayFilter>("open");
   const [openId, setOpenId] = useState<string | null>(openTaskId ?? null);
   useEffect(() => {
     if (openTaskId) setOpenId(openTaskId);
   }, [openTaskId]);
   const [showContainers, setShowContainers] = useState(false);
   const openTask = tasks.find((task) => task.id === openId) ?? null;
+  const mineCounts = countTodayFilters(rows, today);
+  const mineRows = rows.filter((task) => matchesTodayFilter(task, tasks, today, mineFilter));
 
   return (
     <div className="space-y-4">
@@ -124,6 +128,8 @@ export function TodayList({
           today={today}
         />
       ) : (
+      <div className="space-y-3">
+      <StatusFilterBar counts={mineCounts} onChange={setMineFilter} value={mineFilter} />
       <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
         <div className="hidden border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid md:grid-cols-[minmax(0,1.5fr)_8rem_7.5rem_minmax(0,1fr)]">
           <span>Work</span>
@@ -131,13 +137,13 @@ export function TodayList({
           <span>Due</span>
           <span>Next step</span>
         </div>
-        {rows.length === 0 ? (
+        {mineRows.length === 0 ? (
           <p className="px-4 py-6 text-sm text-slate-500">
-            {scope === "mine" ? "Nothing is assigned to you." : "This project has no work items yet."}
+            {rows.length === 0 ? "Nothing is assigned to you." : mineEmptyCopy(mineFilter)}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {rows.map((task) => (
+            {mineRows.map((task) => (
               <WorkRow
                 canEdit={canEdit(task)}
                 dependencies={dependencies}
@@ -154,6 +160,7 @@ export function TodayList({
           </ul>
         )}
       </section>
+      </div>
       )}
 
       {scope === "mine" && containers.length > 0 ? (
@@ -289,6 +296,20 @@ function AddWork({
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState(selectedProjectId);
   const [dueDate, setDueDate] = useState("");
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        aria-expanded={false}
+        className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        Add work
+      </button>
+    );
+  }
 
   return (
     <form
@@ -328,11 +349,26 @@ function AddWork({
         type="date"
         value={dueDate}
       />
-      <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={isSaving || !title.trim()} type="submit">
-        Add
-      </button>
+      <div className="flex items-center gap-2">
+        <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={isSaving || !title.trim()} type="submit">
+          Add
+        </button>
+        <button className="rounded-md px-3 py-2 text-sm text-slate-600" onClick={() => setOpen(false)} type="button">
+          Cancel
+        </button>
+      </div>
     </form>
   );
+}
+
+function mineEmptyCopy(filter: TodayFilter) {
+  if (filter === "open") return "Nothing assigned to you is still open.";
+  if (filter === "todo") return "Nothing assigned to you is waiting to start.";
+  if (filter === "in_progress") return "Nothing assigned to you is in progress.";
+  if (filter === "blocked") return "Nothing assigned to you is blocked.";
+  if (filter === "overdue") return "Nothing assigned to you is overdue.";
+  if (filter === "done") return "Nothing assigned to you is done.";
+  return "Nothing is assigned to you.";
 }
 
 function personName(person?: { email?: string; firstName?: string; lastName?: string } | null) {

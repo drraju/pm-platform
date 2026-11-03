@@ -91,8 +91,9 @@ function renderBoard(overrides: Partial<React.ComponentProps<typeof TodayProject
 describe("Today project board", () => {
   it("shows the group, the subtask, and the colored status", () => {
     renderBoard();
+    fireEvent.click(screen.getByRole("button", { name: "All 4" }));
 
-    expect(screen.queryByRole("button", { name: /Planning/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Hide Planning" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Read API" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Test2" })).toBeTruthy();
 
@@ -110,21 +111,27 @@ describe("Today project board", () => {
     expect(screen.getByLabelText("Status for Read API")).toHaveValue("in_progress");
   });
 
-  it("lists the subtask and leaves out the phase, the summary, the gate, and the package", () => {
+  it("keeps the summary as a folder and folds a task's subtasks", () => {
     renderBoard({
       tasks: [
         ...tasks,
         task({ id: "phase", outlineRole: "phase", taskKind: "summary", title: "Phase 1" }),
         task({ id: "gate", outlineRole: "gate", taskKind: "milestone", title: "Acceptance" }),
         task({ id: "package", parentTaskId: "group-1", title: "Integration 1" }),
-        task({ id: "child", parentTaskId: "package", title: "Map source fields" }),
+        task({ id: "child", parentTaskId: "package", status: "todo", title: "Map source fields" }),
       ],
     });
 
     expect(screen.queryByText("Phase 1")).toBeNull();
-    expect(screen.queryByText("Planning")).toBeNull();
     expect(screen.queryByText("Acceptance")).toBeNull();
-    expect(screen.queryByText("Integration 1")).toBeNull();
+    expect(screen.getByRole("button", { name: "Hide Planning" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Integration 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Map source fields" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Fabrix Pipeline" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide subtasks of Integration 1" }));
+    expect(screen.queryByRole("button", { name: "Map source fields" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show subtasks of Integration 1" }));
     expect(screen.getByRole("button", { name: "Map source fields" })).toBeTruthy();
   });
 
@@ -185,6 +192,7 @@ describe("Today project board", () => {
       ],
       tasks: [...tasks, late, finished],
     });
+    fireEvent.click(screen.getByRole("button", { name: "All 6" }));
 
     const readApi = screen.getByRole("button", { name: "Read API" }).closest("tr");
     if (!readApi) throw new Error("Read API row is missing");
