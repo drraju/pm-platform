@@ -7,6 +7,7 @@ import { isSubtask, outlineRoleOf } from "@/features/work/outline-role";
 import {
   countTodayFilters,
   doneContainerIds,
+  tasksInPhase,
   todayContainerIds,
   todayFilterLabel,
   todayFilters,
@@ -55,6 +56,11 @@ export function statusTone(status?: string | null) {
   return "bg-slate-200 text-slate-800 border-slate-300";
 }
 
+export type TodayViewCommand = {
+  action: "collapse" | "expand";
+  id: number;
+};
+
 type TodayProjectBoardProps = {
   canAdd: boolean;
   canAssign?: boolean;
@@ -73,8 +79,10 @@ type TodayProjectBoardProps = {
       status?: ApiTask["status"];
     },
   ) => Promise<void>;
+  phaseId?: string;
   tasks: ApiTask[];
   today: string;
+  viewCommand?: TodayViewCommand | null;
 };
 
 export function StatusFilterBar({
@@ -119,12 +127,16 @@ export function TodayProjectBoard({
   onAddSubtask,
   onOpen,
   onUpdate,
+  phaseId = "all",
   tasks,
   today,
+  viewCommand = null,
 }: TodayProjectBoardProps) {
+  const scopedTasks = tasksInPhase(tasks, phaseId);
   const containerKey = todayContainerIds(tasks).join("|");
   const [knownContainers, setKnownContainers] = useState(containerKey);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(doneContainerIds(tasks)));
+  const [appliedCommandId, setAppliedCommandId] = useState(0);
   if (knownContainers !== containerKey) {
     const previous = new Set(knownContainers ? knownContainers.split("|") : []);
     const arrived = containerKey.split("|").filter((id) => id && !previous.has(id));
@@ -139,10 +151,24 @@ export function TodayProjectBoard({
       return next;
     });
   }
+  if (viewCommand && viewCommand.id !== appliedCommandId) {
+    const ids = todayContainerIds(scopedTasks);
+    setAppliedCommandId(viewCommand.id);
+    if (viewCommand.action === "collapse") {
+      setCollapsed((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+    } else {
+      const openIds = new Set(ids);
+      setCollapsed((current) => new Set([...current].filter((id) => !openIds.has(id))));
+    }
+  }
   const [draftParentId, setDraftParentId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TodayFilter>("open");
-  const counts = countTodayFilters(tasks, today);
-  const sections = todaySections(tasks, filter, collapsed, today);
+  const counts = countTodayFilters(scopedTasks, today);
+  const sections = todaySections(scopedTasks, filter, collapsed, today);
 
   function toggle(id: string) {
     setCollapsed((current) => {
@@ -157,7 +183,7 @@ export function TodayProjectBoard({
     <div className="space-y-4">
       <StatusFilterBar counts={counts} onChange={setFilter} value={filter} />
       {sections.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-slate-500">{emptyTodayFilterCopy(filter, tasks.length === 0)}</p>
+        <p className="px-4 py-6 text-sm text-slate-500">{emptyTodayFilterCopy(filter, scopedTasks.length === 0)}</p>
       ) : null}
       {sections.map((section, index) => {
         const accent = groupAccents[index % groupAccents.length];

@@ -51,6 +51,37 @@ export function todayContainerIds(tasks: readonly WorkCountTask[]): string[] {
     .sort();
 }
 
+export function phaseChoices<T extends OutlineTask>(tasks: readonly T[]): Array<{ id: string; title: string }> {
+  return tasksInOutlineOrder(tasks)
+    .filter((task) => outlineRoleOf(task) === "phase")
+    .map((task) => ({ id: task.id, title: task.title?.trim() || "Untitled phase" }));
+}
+
+export function tasksInPhase<T extends WorkCountTask>(tasks: readonly T[], phaseId: string): readonly T[] {
+  if (!phaseId || phaseId === "all" || !tasks.some((task) => task.id === phaseId)) {
+    return tasks;
+  }
+  const children = new Map<string, T[]>();
+  for (const task of tasks) {
+    if (!task.parentTaskId) continue;
+    const list = children.get(task.parentTaskId) ?? [];
+    list.push(task);
+    children.set(task.parentTaskId, list);
+  }
+  const keep = new Set<string>([phaseId]);
+  const pending = [phaseId];
+  while (pending.length > 0) {
+    const id = pending.pop();
+    if (!id) continue;
+    for (const child of children.get(id) ?? []) {
+      if (keep.has(child.id)) continue;
+      keep.add(child.id);
+      pending.push(child.id);
+    }
+  }
+  return tasks.filter((task) => keep.has(task.id));
+}
+
 export function matchesTodayFilter(
   task: WorkCountTask,
   tasks: readonly WorkCountTask[],

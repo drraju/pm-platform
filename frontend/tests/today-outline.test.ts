@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countTodayFilters, doneContainerIds, matchesTodayFilter, todaySections } from "@/features/work/today-outline";
+import { countTodayFilters, doneContainerIds, matchesTodayFilter, phaseChoices, tasksInPhase, todaySections } from "@/features/work/today-outline";
 
 const today = "2026-10-29";
 
@@ -38,6 +38,34 @@ describe("today outline", () => {
     ]);
     expect(sections[0]).toMatchObject({ done: 2, total: 3 });
     expect(sections[1].rows.map((row) => row.task.title)).toEqual(["Loose"]);
+  });
+
+  it("lists phases in plan order and limits work to the selected phase", () => {
+    const plan = [
+      { id: "integrations", outlineRole: "phase", title: "Integrations" },
+      { id: "oem", parentTaskId: "integrations", taskKind: "summary", title: "OEM Correlation" },
+      { id: "oem-task", parentTaskId: "oem", title: "OEM Staging Rules" },
+      { id: "use-cases", outlineRole: "phase", title: "Use cases" },
+      { id: "billing", parentTaskId: "use-cases", taskKind: "summary", title: "Billing" },
+      { id: "bill-task", parentTaskId: "billing", title: "Map invoices" },
+      { id: "blank", outlineRole: "phase", title: "   " },
+    ];
+    expect(phaseChoices(plan).map((phase) => phase.title)).toEqual([
+      "Integrations",
+      "Use cases",
+      "Untitled phase",
+    ]);
+    expect(tasksInPhase(plan, "use-cases").map((task) => task.id)).toEqual(["use-cases", "billing", "bill-task"]);
+    expect(tasksInPhase(plan, "missing")).toBe(plan);
+    expect(tasksInPhase(tasks, "phase").map((task) => task.title)).toEqual([
+      "Phase 1",
+      "Acceptance",
+      "Integrations",
+      "Ansible",
+      "Staging",
+      "Prod",
+      "Logs",
+    ]);
   });
 
   it("folds subtasks and starts a finished package collapsed", () => {

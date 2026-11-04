@@ -214,6 +214,97 @@ describe("Today project board", () => {
     expect(screen.getByRole("img", { name: "2 Done, 3 Doing, 1 Blocked" })).toBeTruthy();
   });
 
+  it("limits the board and its counts to one phase", () => {
+    renderBoard({
+      phaseId: "use-cases",
+      tasks: [
+        task({ id: "integrations", outlineRole: "phase", taskKind: "summary", title: "Integrations" }),
+        task({ id: "oem", outlineRole: "summary", parentTaskId: "integrations", taskKind: "summary", title: "OEM Correlation" }),
+        task({ id: "oem-task", parentTaskId: "oem", title: "OEM Staging Rules" }),
+        task({ id: "use-cases", outlineRole: "phase", taskKind: "summary", title: "Use cases" }),
+        task({ id: "billing", outlineRole: "summary", parentTaskId: "use-cases", taskKind: "summary", title: "Billing" }),
+        task({ id: "bill-task", parentTaskId: "billing", status: "in_progress", title: "Map invoices" }),
+      ],
+    });
+
+    expect(screen.getByRole("button", { name: "Open 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Hide Billing" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Map invoices" })).toBeTruthy();
+    expect(screen.queryByText("OEM Correlation")).toBeNull();
+    expect(screen.queryByRole("button", { name: "OEM Staging Rules" })).toBeNull();
+  });
+
+  it("collapses and expands only the groups in the current phase", () => {
+    const phased = [
+      task({ id: "integrations", outlineRole: "phase", taskKind: "summary", title: "Integrations" }),
+      task({ id: "oem", outlineRole: "summary", parentTaskId: "integrations", taskKind: "summary", title: "OEM Correlation" }),
+      task({ id: "oem-task", parentTaskId: "oem", title: "OEM Staging Rules" }),
+      task({ id: "child", parentTaskId: "oem-task", title: "Check the mapping" }),
+      task({ id: "use-cases", outlineRole: "phase", taskKind: "summary", title: "Use cases" }),
+      task({ id: "billing", outlineRole: "summary", parentTaskId: "use-cases", taskKind: "summary", title: "Billing" }),
+      task({ id: "bill-task", parentTaskId: "billing", title: "Map invoices" }),
+      task({ id: "finished", outlineRole: "summary", parentTaskId: "use-cases", taskKind: "summary", title: "Finished" }),
+      task({ id: "shipped", parentTaskId: "finished", status: "done", title: "Shipped" }),
+    ];
+    const { rerender } = render(
+      <TodayProjectBoard
+        canAdd
+        canEdit={() => true}
+        isSaving={false}
+        onAddSubtask={vi.fn()}
+        onOpen={vi.fn()}
+        onUpdate={vi.fn()}
+        phaseId="integrations"
+        tasks={phased}
+        today="2026-10-30"
+        viewCommand={{ action: "collapse", id: 1 }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Show OEM Correlation" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "OEM Staging Rules" })).toBeNull();
+
+    rerender(
+      <TodayProjectBoard
+        canAdd
+        canEdit={() => true}
+        isSaving={false}
+        onAddSubtask={vi.fn()}
+        onOpen={vi.fn()}
+        onUpdate={vi.fn()}
+        phaseId="integrations"
+        tasks={phased}
+        today="2026-10-30"
+        viewCommand={{ action: "expand", id: 2 }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Hide OEM Correlation" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "OEM Staging Rules" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Check the mapping" })).toBeTruthy();
+
+    rerender(
+      <TodayProjectBoard
+        canAdd
+        canEdit={() => true}
+        isSaving={false}
+        onAddSubtask={vi.fn()}
+        onOpen={vi.fn()}
+        onUpdate={vi.fn()}
+        phaseId="use-cases"
+        tasks={phased}
+        today="2026-10-30"
+        viewCommand={{ action: "expand", id: 2 }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Hide Billing" })).toBeTruthy();
+    expect(screen.queryByText("OEM Correlation")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "All 2" }));
+    expect(screen.getByRole("button", { name: "Show Finished" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Shipped" })).toBeNull();
+  });
+
   it("adds a subtask and saves the next step", async () => {
     const { onAddSubtask, onUpdate } = renderBoard();
     fireEvent.click(screen.getByRole("button", { name: "Add subtask under Read API" }));

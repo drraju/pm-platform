@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { HoldingNotes, StatusFilterBar, statusTone, TodayProjectBoard, WaitingNotes } from "@/components/today/today-project-board";
-import { countTodayFilters, matchesTodayFilter, type TodayFilter } from "@/features/work/today-outline";
+import React, { useEffect, useMemo, useState } from "react";
+import { HoldingNotes, StatusFilterBar, statusTone, TodayProjectBoard, WaitingNotes, type TodayViewCommand } from "@/components/today/today-project-board";
+import { countTodayFilters, matchesTodayFilter, phaseChoices, tasksInPhase, type TodayFilter } from "@/features/work/today-outline";
 import { WorkPanel } from "@/components/work/work-panel";
 import type { ApiProject, ApiTask, ApiTaskExecutionUpdate } from "@/features/projects";
 import {
   containerProgress,
+  countWork,
   isOverdueWork,
   isWorkContainer,
   storedWorkStatus,
@@ -67,12 +68,20 @@ export function TodayList({
 }: TodayListProps) {
   const today = todayDate();
   const [mineFilter, setMineFilter] = useState<TodayFilter>("open");
+  const [phaseId, setPhaseId] = useState("all");
+  const [viewCommand, setViewCommand] = useState<TodayViewCommand | null>(null);
   const [openId, setOpenId] = useState<string | null>(openTaskId ?? null);
   useEffect(() => {
     if (openTaskId) setOpenId(openTaskId);
   }, [openTaskId]);
   const [showContainers, setShowContainers] = useState(false);
   const openTask = tasks.find((task) => task.id === openId) ?? null;
+  const phases = useMemo(() => phaseChoices(tasks), [tasks]);
+  const activePhaseId = phaseId !== "all" && phases.some((phase) => phase.id === phaseId) ? phaseId : "all";
+  const headline = useMemo(() => {
+    if (scope === "mine" || activePhaseId === "all") return count.line;
+    return countWork(tasksInPhase(tasks, activePhaseId), today).line;
+  }, [activePhaseId, count.line, scope, tasks, today]);
   const mineCounts = countTodayFilters(rows, today);
   const mineRows = rows.filter((task) => matchesTodayFilter(task, tasks, today, mineFilter));
 
@@ -81,7 +90,7 @@ export function TodayList({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Today</h1>
-          <p className="mt-1 text-sm text-slate-600">{count.line}</p>
+          <p className="mt-1 text-sm text-slate-600">{headline}</p>
         </div>
         <label className="text-sm font-medium text-slate-700">
           Scope
@@ -111,7 +120,50 @@ export function TodayList({
         </p>
       ) : null}
 
-      {canAdd ? <AddWork isSaving={isSaving} onAdd={onAdd} projects={projects} selectedProjectId={scope === "mine" ? "" : scope} /> : null}
+      {scope === "mine" ? (
+        canAdd ? <AddWork isSaving={isSaving} onAdd={onAdd} projects={projects} selectedProjectId="" /> : null
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {canAdd ? <AddWork isSaving={isSaving} onAdd={onAdd} projects={projects} selectedProjectId={scope} /> : null}
+          {phases.length > 0 ? (
+            <label className="flex items-center gap-2 whitespace-nowrap text-sm font-medium text-slate-700">
+              Phase
+              <select
+                className="max-w-[16rem] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                onChange={(event) => setPhaseId(event.target.value)}
+                value={activePhaseId}
+              >
+                <option value="all">All phases</option>
+                {phases.map((phase) => (
+                  <option key={phase.id} value={phase.id}>
+                    {phase.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <div className="flex items-center gap-1">
+            <button
+              aria-label="Collapse all"
+              className="grid size-9 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+              onClick={() => setViewCommand((current) => ({ action: "collapse", id: (current?.id ?? 0) + 1 }))}
+              title="Collapse all"
+              type="button"
+            >
+              <CollapseAllIcon />
+            </button>
+            <button
+              aria-label="Expand all"
+              className="grid size-9 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+              onClick={() => setViewCommand((current) => ({ action: "expand", id: (current?.id ?? 0) + 1 }))}
+              title="Expand all"
+              type="button"
+            >
+              <ExpandAllIcon />
+            </button>
+          </div>
+        </div>
+      )}
 
       {scope !== "mine" && onAddSubtask ? (
         <TodayProjectBoard
@@ -124,8 +176,10 @@ export function TodayList({
           onAddSubtask={onAddSubtask}
           onOpen={(task) => setOpenId(task.id)}
           onUpdate={onUpdate}
+          phaseId={activePhaseId}
           tasks={tasks}
           today={today}
+          viewCommand={viewCommand}
         />
       ) : (
       <div className="space-y-3">
@@ -313,7 +367,7 @@ function AddWork({
 
   return (
     <form
-      className="grid gap-2 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_9rem_auto]"
+      className="grid min-w-[20rem] flex-1 gap-2 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_9rem_auto]"
       onSubmit={(event) => {
         event.preventDefault();
         const chosen = projectId || selectedProjectId;
@@ -358,6 +412,24 @@ function AddWork({
         </button>
       </div>
     </form>
+  );
+}
+
+function CollapseAllIcon() {
+  return (
+    <svg aria-hidden="true" className="size-4" viewBox="0 0 16 16">
+      <path d="M3.2 1.6h9.6L8 5.4z" fill="currentColor" />
+      <path d="M3.2 14.4h9.6L8 10.6z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ExpandAllIcon() {
+  return (
+    <svg aria-hidden="true" className="size-4" viewBox="0 0 16 16">
+      <path d="M3.2 6.2h9.6L8 2.4z" fill="currentColor" />
+      <path d="M3.2 9.8h9.6L8 13.6z" fill="currentColor" />
+    </svg>
   );
 }
 
